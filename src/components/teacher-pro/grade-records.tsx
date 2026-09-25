@@ -1260,7 +1260,7 @@ export function GradeRecordsView() {
       )}
 
       {serverGradesError && (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-300">
+        <div className="rounded-2xl border border-warning-line bg-warning-soft p-3 text-sm font-medium text-warning">
           {serverGradesError}
         </div>
       )}
@@ -1301,13 +1301,13 @@ export function GradeRecordsView() {
                     <GradeNoteBanner notes={grade.notes} className="mt-2" />
                   ) : null}
                   {!isExamOnOrAfterStudentRegistration(student, exam) && (
-                    <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium leading-5 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
+                    <div className="mt-2 rounded-xl border border-info-line bg-info-soft px-3 py-2 text-xs font-medium leading-5 text-info">
                       محفوظة للمتابعة فقط ولا تخصم؛ تاريخ الامتحان يسبق تاريخ
                       تسجيل الطالب في الدورة.
                     </div>
                   )}
                   {!getExamEntryAvailability(exam).available && (
-                    <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-medium leading-5 text-violet-800 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-200">
+                    <div className="mt-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium leading-5 text-primary">
                       غير محتسبة حالياً: {getExamEntryAvailability(exam).reason}
                     </div>
                   )}
@@ -1402,12 +1402,12 @@ export function GradeRecordsView() {
                         {cls.text}
                       </Badge>
                       {!isExamOnOrAfterStudentRegistration(student, exam) && (
-                        <p className="mt-1 text-[11px] font-medium text-sky-700 dark:text-sky-300">
+                        <p className="mt-1 text-[11px] font-medium text-info">
                           لا تخصم: الامتحان سابق للتسجيل.
                         </p>
                       )}
                       {!getExamEntryAvailability(exam).available && (
-                        <p className="mt-1 text-[11px] font-medium text-violet-700 dark:text-violet-300">
+                        <p className="mt-1 text-[11px] font-medium text-primary">
                           غير محتسبة: {getExamEntryAvailability(exam).reason}
                         </p>
                       )}

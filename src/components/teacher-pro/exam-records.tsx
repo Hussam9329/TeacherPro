@@ -155,8 +155,8 @@ function buildExamDetails({
         <span
           className={
             entryAvailable
-              ? "text-emerald-600 dark:text-emerald-400"
-              : "text-rose-600 dark:text-rose-400"
+              ? "text-success"
+              : "text-danger"
           }
         >
           {entryAnswer} - {entryReason}
@@ -197,26 +197,26 @@ function renderExamDetailsPanel(
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2 text-center md:grid-cols-4">
-        <div className="rounded bg-emerald-50 p-2 dark:bg-emerald-950/40">
-          <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+        <div className="rounded bg-success-soft p-2">
+          <p className="text-lg font-bold text-success">
             {stats.pass}
           </p>
           <p className="text-[10px] text-muted-foreground">ناجح</p>
         </div>
-        <div className="rounded bg-rose-50 p-2 dark:bg-rose-950/40">
-          <p className="text-lg font-bold text-rose-600 dark:text-rose-400">
+        <div className="rounded bg-danger-soft p-2">
+          <p className="text-lg font-bold text-danger">
             {stats.notPassed}
           </p>
           <p className="text-[10px] text-muted-foreground">محاسب/غائب</p>
         </div>
-        <div className="rounded bg-cyan-50 p-2 dark:bg-cyan-950/40">
-          <p className="text-lg font-bold text-cyan-600 dark:text-cyan-400">
+        <div className="rounded bg-info-soft p-2">
+          <p className="text-lg font-bold text-info">
             {stats.protected}
           </p>
           <p className="text-[10px] text-muted-foreground">سماح/إجازة</p>
         </div>
-        <div className="rounded bg-sky-50 p-2 dark:bg-sky-950/40">
-          <p className="text-lg font-bold text-sky-600 dark:text-sky-400">
+        <div className="rounded bg-info-soft p-2">
+          <p className="text-lg font-bold text-info">
             {stats.total}
           </p>
           <p className="text-[10px] text-muted-foreground">إجمالي</p>
@@ -1143,7 +1143,7 @@ export function ExamRecordsView() {
               <div className="space-y-2 text-sm text-muted-foreground">
                 <p>الامتحان: &quot;{deleteDialog.name}&quot;</p>
                 {deleteDialog.gradeCount === null ? (
-                  <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                  <p className="rounded-lg border border-warning-line bg-warning-soft p-3 font-semibold text-warning">
                     جاري التحقق من السجلات المرتبطة بالامتحان...
                   </p>
                 ) : deleteDialog.gradeCount > 0 ? (

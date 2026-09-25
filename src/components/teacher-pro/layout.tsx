@@ -1145,7 +1145,7 @@ export function TeacherProLayout() {
         <button
           type="button"
           aria-label="إغلاق القائمة الجانبية"
-          className="tp-sidebar-overlay fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+          className="tp-sidebar-overlay fixed inset-0 z-40 bg-overlay backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -1166,11 +1166,11 @@ export function TeacherProLayout() {
                 className="text-xl font-extrabold tracking-tight md:text-2xl"
                 style={{
                   background:
-                    "linear-gradient(135deg, oklch(0.75 0.18 300), oklch(0.88 0.14 288), oklch(0.80 0.12 255))",
+                    "linear-gradient(135deg, #CD938F, #FBF9EB, #E6E3D9)",
                   WebkitBackgroundClip: "text",
                   backgroundClip: "text",
                   color: "transparent",
-                  filter: "drop-shadow(0 1px 3px oklch(0.70 0.22 300 / 0.3))",
+                  filter: "drop-shadow(0 1px 3px color-mix(in srgb, #CD938F 30%, transparent))",
                 }}
               >
                 TeacherPro
@@ -1186,7 +1186,7 @@ export function TeacherProLayout() {
               <X className="w-5 h-5" />
             </Button>
           </div>
-          <div className="mt-3 flex min-w-0 items-center gap-2 rounded-xl border border-sidebar-border bg-white/[0.04] px-2.5 py-2">
+          <div className="mt-3 flex min-w-0 items-center gap-2 rounded-xl border border-sidebar-border bg-sidebar-foreground/[0.04] px-2.5 py-2">
             <div
               className={cn(
                 "tp-connection-dot",
@@ -1201,7 +1201,7 @@ export function TeacherProLayout() {
             </p>
             <Badge
               variant="secondary"
-              className="min-h-5 max-w-24 shrink border-white/10 bg-white/10 px-1.5 text-[10px] leading-4 text-sidebar-foreground"
+              className="min-h-5 max-w-24 shrink border-sidebar-border bg-sidebar-foreground/10 px-1.5 text-[10px] leading-4 text-sidebar-foreground"
             >
               {user?.role || "-"}
             </Badge>
@@ -1220,7 +1220,7 @@ export function TeacherProLayout() {
             </Button>
           </div>
           {!dbLoading && !dbConnected && (
-            <div className="mt-2 rounded-xl border border-amber-300/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-5 text-amber-100">
+            <div className="mt-2 rounded-xl border border-tp-soft/30 bg-tp-soft/10 px-2.5 py-1.5 text-[11px] leading-5 text-tp-soft">
               غير متصل بالنظام؛ قد تبقى التغييرات محليًا حتى عودة الاتصال.
             </div>
           )}
@@ -1253,8 +1253,8 @@ export function TeacherProLayout() {
                       className={cn(
                         "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
                         isActive
-                          ? "bg-white/16"
-                          : "bg-white/[0.04] group-hover:bg-white/[0.08]",
+                          ? "bg-sidebar-primary-foreground/10"
+                          : "bg-sidebar-foreground/[0.04] group-hover:bg-sidebar-foreground/[0.08]",
                       )}
                     >
                       <Icon
@@ -1284,7 +1284,7 @@ export function TeacherProLayout() {
               return (
                 <div
                   key={family.title}
-                  className="rounded-2xl border border-sidebar-border/60 bg-white/[0.02] p-1.5"
+                  className="rounded-2xl border border-sidebar-border/60 bg-sidebar-foreground/[0.02] p-1.5"
                 >
                   <button
                     type="button"
@@ -1302,7 +1302,7 @@ export function TeacherProLayout() {
                     </span>
                     <Badge
                       variant="secondary"
-                      className="inline-grid size-7 shrink-0 place-items-center flex-nowrap border-white/10 bg-white/10 p-0 text-center text-[11px] font-black leading-none whitespace-nowrap tabular-nums text-sidebar-foreground"
+                      className="inline-grid size-7 shrink-0 place-items-center flex-nowrap border-sidebar-border bg-sidebar-foreground/10 p-0 text-center text-[11px] font-black leading-none whitespace-nowrap tabular-nums text-sidebar-foreground"
                     >
                       <span className="block leading-none">
                         {family.items.length}
@@ -1340,8 +1340,8 @@ export function TeacherProLayout() {
                               className={cn(
                                 "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
                                 isActive
-                                  ? "bg-white/16"
-                                  : "bg-white/[0.04] group-hover:bg-white/[0.08]",
+                                  ? "bg-sidebar-primary-foreground/10"
+                                  : "bg-sidebar-foreground/[0.04] group-hover:bg-sidebar-foreground/[0.08]",
                               )}
                             >
                               <Icon
@@ -1387,8 +1387,8 @@ export function TeacherProLayout() {
                     className={cn(
                       "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
                       isActive
-                        ? "bg-white/16"
-                        : "bg-white/[0.04] group-hover:bg-white/[0.08]",
+                        ? "bg-sidebar-primary-foreground/10"
+                        : "bg-sidebar-foreground/[0.04] group-hover:bg-sidebar-foreground/[0.08]",
                     )}
                   >
                     <Icon
@@ -1411,7 +1411,7 @@ export function TeacherProLayout() {
           </nav>
         </div>
 
-        <div className="relative shrink-0 border-t border-sidebar-border bg-black/[0.08] p-2.5">
+        <div className="relative shrink-0 border-t border-sidebar-border bg-sidebar-foreground/[0.03] p-2.5">
           <Button
             variant="ghost"
             size="sm"
@@ -1564,7 +1564,7 @@ export function TeacherProLayout() {
         </header>
 
         {!dbLoading && !dbConnected && (
-          <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100 md:px-6">
+          <div className="border-b border-warning-line bg-warning-soft px-4 py-3 text-sm font-semibold text-warning md:px-6">
             تعذر إكمال تحميل البيانات.
             <Button className="ms-3" variant="outline" size="sm" onClick={() => void loadFromServer()}>
               إعادة المحاولة

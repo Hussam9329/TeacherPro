@@ -1035,7 +1035,7 @@ export function OpportunitiesView() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
-              className="bg-emerald-600 text-white hover:bg-emerald-700"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
               disabled={
                 bulkTargetLoading || bulkEligibleWithActiveChapterCount === 0
               }
@@ -1076,7 +1076,7 @@ export function OpportunitiesView() {
           <CardTitle>فرص الطلاب</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
+          <div className="@container space-y-2">
             {studentsLoading ? (
               <p className="empty-state py-8">
                 جاري تحميل الطلاب...
@@ -1095,7 +1095,7 @@ export function OpportunitiesView() {
                 return (
                   <div
                     key={student.id}
-                    className="flex flex-col gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm transition-[border-color,box-shadow,background-color] duration-200 hover:border-primary/30 hover:shadow-lg lg:flex-row lg:items-center"
+                    className="flex flex-col gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm transition-[border-color,box-shadow,background-color] duration-200 hover:border-primary/30 hover:shadow-lg @3xl:flex-row @3xl:items-center"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -1157,10 +1157,10 @@ export function OpportunitiesView() {
                           <div
                             className={`h-full rounded-full transition-all ${
                               oppPercent > 50
-                                ? "bg-emerald-500"
+                                ? "bg-success"
                                 : oppPercent > 0
-                                  ? "bg-amber-500"
-                                  : "bg-rose-500"
+                                  ? "bg-warning"
+                                  : "bg-danger"
                             }`}
                             style={{ width: `${oppPercent}%` }}
                           />
@@ -1169,10 +1169,10 @@ export function OpportunitiesView() {
                       <span
                         className={`font-bold text-sm ${
                           student.opportunities === 0
-                            ? "text-rose-600"
+                            ? "text-danger"
                             : student.opportunities <= 2
-                              ? "text-amber-600"
-                              : "text-emerald-600"
+                              ? "text-warning"
+                              : "text-success"
                         }`}
                       >
                         {formatOpportunityBalance(student)}
@@ -1180,7 +1180,7 @@ export function OpportunitiesView() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex flex-wrap gap-1 lg:justify-end">
+                    <div className="flex flex-wrap gap-1 @3xl:justify-end">
                       <Button
                         variant="default"
                         size="sm"
@@ -1200,7 +1200,7 @@ export function OpportunitiesView() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-xs text-emerald-600"
+                        className="text-xs text-success"
                         disabled={!hasChapter}
                         onClick={() => {
                           setReason(student.status === "مفصول" ? DEFAULT_MANUAL_RESTORATION_REASON : "");
@@ -1218,7 +1218,7 @@ export function OpportunitiesView() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-xs text-rose-600"
+                        className="text-xs text-danger"
                         disabled={!hasChapter || student.status === "مفصول"}
                         onClick={() =>
                           setActionDialog({
@@ -1291,7 +1291,7 @@ export function OpportunitiesView() {
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-8">
             <Card>
               <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                <p className="text-2xl font-bold text-success">
                   {statsHasOpportunities}
                   {statsSuffix}
                 </p>
@@ -1300,7 +1300,7 @@ export function OpportunitiesView() {
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                <p className="text-2xl font-bold text-warning">
                   {statsNoOpportunities}
                   {statsSuffix}
                 </p>
@@ -1309,7 +1309,7 @@ export function OpportunitiesView() {
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-rose-600 dark:text-rose-400">
+                <p className="text-2xl font-bold text-danger">
                   {statsDismissed}
                   {statsSuffix}
                 </p>
@@ -1329,7 +1329,7 @@ export function OpportunitiesView() {
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                <p className="text-2xl font-bold text-warning">
                   {statsNoActiveChapter}
                 </p>
                 <p className="text-xs text-muted-foreground">طلاب بلا فصل نشط</p>
@@ -1353,7 +1353,7 @@ export function OpportunitiesView() {
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                <p className="text-2xl font-bold text-warning">
                   {statsBelowFullOpportunities}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -1478,7 +1478,7 @@ export function OpportunitiesView() {
               </div>
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="rounded-2xl border bg-card p-3 text-center">
-                  <p className="text-xl font-black text-rose-600">
+                  <p className="text-xl font-black text-danger">
                     {selectedDetailsStats.deducted}
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -1486,7 +1486,7 @@ export function OpportunitiesView() {
                   </p>
                 </div>
                 <div className="rounded-2xl border bg-card p-3 text-center">
-                  <p className="text-xl font-black text-emerald-600">
+                  <p className="text-xl font-black text-success">
                     {selectedDetailsStats.added}
                   </p>
                   <p className="text-xs text-muted-foreground">إجمالي المضاف</p>
@@ -1663,7 +1663,7 @@ export function OpportunitiesView() {
                 </div>
               )}
               {bulkInvalidOpportunitySourceCount > 0 ? (
-                <p className="mt-2 text-xs font-semibold text-amber-600">
+                <p className="mt-2 text-xs font-semibold text-warning">
                   سيتم تجاوز {bulkInvalidOpportunitySourceCount} طالب بسبب إعدادات الفصل أو الفرص
                   {bulkSkippedNoActiveChapterCount > 0
                     ? ` • بلا فصل نشط: ${bulkSkippedNoActiveChapterCount}`
@@ -1678,13 +1678,13 @@ export function OpportunitiesView() {
                 </p>
               ) : null}
               {bulkExcludedDismissedCount > 0 ? (
-                <p className="text-xs font-semibold text-amber-600">
+                <p className="text-xs font-semibold text-warning">
                   سيتم استثناء {bulkExcludedDismissedCount} طالب مفصول حسب خيار
                   العدا.
                 </p>
               ) : null}
               {bulkExcludedFullOpportunitiesCount > 0 ? (
-                <p className="text-xs font-semibold text-amber-600">
+                <p className="text-xs font-semibold text-warning">
                   سيتم استثناء {bulkExcludedFullOpportunitiesCount} طالب لديهم
                   فرص كاملة.
                 </p>

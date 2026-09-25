@@ -462,7 +462,7 @@ export function ExamEditDialog({
               />
             </div>
 
-            <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3 md:col-span-2 dark:border-sky-900/50 dark:bg-sky-950/20">
+            <div className="rounded-xl border border-info-line bg-info-soft/60 p-3 md:col-span-2">
               <label className="flex cursor-pointer items-start gap-3 text-sm">
                 <Checkbox
                   checked={noDiscount}
@@ -516,12 +516,12 @@ export function ExamEditDialog({
                 }
               />
               {noDiscount && (
-                <p className="text-xs text-sky-600">
+                <p className="text-xs text-info">
                   معطل لأن الامتحان بدون خصم.
                 </p>
               )}
               {isFinalExam && !noDiscount && (
-                <p className="text-xs text-amber-600">
+                <p className="text-xs text-warning">
                   معطل في الفاينل؛ الحكم يكون من درجة الفصل.
                 </p>
               )}
@@ -561,12 +561,12 @@ export function ExamEditDialog({
                 }
               />
               {noDiscount && (
-                <p className="text-xs text-sky-600">
+                <p className="text-xs text-info">
                   معطل لأن الامتحان بدون خصم.
                 </p>
               )}
               {isFinalExam && !noDiscount && (
-                <p className="text-xs text-amber-600">
+                <p className="text-xs text-warning">
                   معطل في الفاينل؛ يعالج الفصل من درجة الفصل أو الغياب/الغش.
                 </p>
               )}
@@ -602,7 +602,7 @@ export function ExamEditDialog({
                   }
                 />
                 {noDiscount && (
-                  <p className="text-xs text-sky-600">
+                  <p className="text-xs text-info">
                     معطل لأن الامتحان بدون خصم.
                   </p>
                 )}

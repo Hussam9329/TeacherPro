@@ -78,118 +78,182 @@
   --color-purple-brand: var(--purple-brand);
   --color-purple-soft: var(--purple-soft);
   --color-purple-ink: var(--purple-ink);
+  /* Palette as utilities: bg-tp-deep, text-tp-accent, border-tp-line/60 … */
+  --color-tp-bg: var(--tp-bg);
+  --color-tp-ink: var(--tp-ink);
+  --color-tp-muted: var(--tp-muted);
+  --color-tp-accent: var(--tp-accent);
+  --color-tp-soft: var(--tp-soft);
+  --color-tp-line: var(--tp-line);
+  --color-tp-deep: var(--tp-deep);
+  /* Meanings as utilities: text-success, bg-success-soft, border-success-line … */
+  --color-success: var(--status-success-fg);
+  --color-success-soft: var(--status-success-bg);
+  --color-success-line: var(--status-success-border);
+  --color-warning: var(--status-warning-fg);
+  --color-warning-soft: var(--status-warning-bg);
+  --color-warning-line: var(--status-warning-border);
+  --color-danger: var(--status-danger-fg);
+  --color-danger-soft: var(--status-danger-bg);
+  --color-danger-line: var(--status-danger-border);
+  --color-info: var(--status-info-fg);
+  --color-info-soft: var(--status-info-bg);
+  --color-info-line: var(--status-info-border);
+  --color-overlay: var(--overlay);
+}
+
+/* Tailwind's shadow scale, cast in Deep Dark (#0E1F36) instead of black. */
+@theme {
+  --shadow-2xs: 0 1px rgb(14 31 54 / 0.05);
+  --shadow-xs: 0 1px 2px 0 rgb(14 31 54 / 0.06);
+  --shadow-sm: 0 1px 3px 0 rgb(14 31 54 / 0.1), 0 1px 2px -1px rgb(14 31 54 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(14 31 54 / 0.1), 0 2px 4px -2px rgb(14 31 54 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(14 31 54 / 0.1), 0 4px 6px -4px rgb(14 31 54 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(14 31 54 / 0.1), 0 8px 10px -6px rgb(14 31 54 / 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgb(14 31 54 / 0.25);
+  --inset-shadow-2xs: inset 0 1px rgb(14 31 54 / 0.05);
+  --inset-shadow-xs: inset 0 1px 1px rgb(14 31 54 / 0.05);
+  --inset-shadow-sm: inset 0 2px 4px rgb(14 31 54 / 0.05);
+  --drop-shadow-xs: 0 1px 1px rgb(14 31 54 / 0.05);
+  --drop-shadow-sm: 0 1px 2px rgb(14 31 54 / 0.15);
+  --drop-shadow-md: 0 3px 3px rgb(14 31 54 / 0.12);
+  --drop-shadow-lg: 0 4px 4px rgb(14 31 54 / 0.15);
+  --drop-shadow-xl: 0 9px 7px rgb(14 31 54 / 0.1);
+  --drop-shadow-2xl: 0 25px 25px rgb(14 31 54 / 0.15);
+  --shadow: 0 1px 3px 0 rgb(14 31 54 / 0.1), 0 1px 2px -1px rgb(14 31 54 / 0.1);
+  --shadow-inner: inset 0 2px 4px 0 rgb(14 31 54 / 0.05);
+  --drop-shadow: 0 1px 2px rgb(14 31 54 / 0.1), 0 1px 1px rgb(14 31 54 / 0.06);
+}
+
+/* ═══════════════════════════════════════════════════════
+   TeacherPro palette — the only colours in the system.
+   Every token below is one of these seven values or a blend of them.
+   ═══════════════════════════════════════════════════════ */
+:root {
+  --tp-bg: #fbf9eb;      /* Background   */
+  --tp-ink: #19293a;     /* Primary Dark */
+  --tp-muted: #5b6674;   /* Secondary    */
+  --tp-accent: #d15049;  /* Accent       */
+  --tp-soft: #cd938f;    /* Soft Accent  */
+  --tp-line: #e6e3d9;    /* Border       */
+  --tp-deep: #0e1f36;    /* Deep Dark    */
 }
 
 :root {
   color-scheme: light;
   --radius: 1rem;
 
-  /* TeacherPro daytime identity: white + purple */
-  --background: oklch(0.985 0.006 295);
-  --foreground: oklch(0.18 0.035 292);
-  --card: oklch(0.998 0.003 295 / 0.92);
-  --card-foreground: oklch(0.18 0.035 292);
-  --popover: oklch(0.998 0.004 295);
-  --popover-foreground: oklch(0.18 0.035 292);
-  --primary: oklch(0.55 0.22 300);
-  --primary-foreground: oklch(0.99 0.006 295);
-  --secondary: oklch(0.95 0.025 298);
-  --secondary-foreground: oklch(0.32 0.12 300);
-  --muted: oklch(0.955 0.018 296);
-  --muted-foreground: oklch(0.49 0.045 292);
-  --accent: oklch(0.92 0.055 300);
-  --accent-foreground: oklch(0.29 0.12 300);
-  --destructive: oklch(0.58 0.23 25);
-  --destructive-foreground: oklch(0.99 0.004 295);
-  --border: oklch(0.89 0.023 296);
-  --input: oklch(0.9 0.025 296);
-  --ring: oklch(0.62 0.21 300);
-  --chart-1: oklch(0.56 0.22 300);
-  --chart-2: oklch(0.64 0.17 285);
-  --chart-3: oklch(0.58 0.16 250);
-  --chart-4: oklch(0.67 0.18 330);
-  --chart-5: oklch(0.72 0.14 70);
-  --sidebar: oklch(0.145 0.032 294);
-  --sidebar-foreground: oklch(0.965 0.012 296);
-  --sidebar-primary: oklch(0.62 0.23 300);
-  --sidebar-primary-foreground: oklch(0.99 0.004 295);
-  --sidebar-accent: oklch(0.23 0.055 296);
-  --sidebar-accent-foreground: oklch(0.98 0.009 295);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.66 0.22 300);
-  --purple-brand: oklch(0.55 0.22 300);
-  --purple-soft: oklch(0.92 0.055 300);
-  --purple-ink: oklch(0.26 0.12 300);
-  --shadow-soft: 0 18px 50px oklch(0.42 0.12 300 / 0.10);
-  --shadow-card: 0 12px 36px oklch(0.30 0.08 300 / 0.08);
-  --shadow-ring: 0 0 0 4px oklch(0.62 0.21 300 / 0.16);
-  --status-success-fg: oklch(0.43 0.14 152);
-  --status-success-bg: oklch(0.96 0.035 152);
-  --status-success-border: oklch(0.74 0.10 152);
-  --status-warning-fg: oklch(0.48 0.13 72);
-  --status-warning-bg: oklch(0.97 0.045 82);
-  --status-warning-border: oklch(0.78 0.11 76);
-  --status-danger-fg: oklch(0.50 0.20 25);
-  --status-danger-bg: oklch(0.96 0.035 25);
-  --status-danger-border: oklch(0.76 0.12 25);
-  --status-info-fg: oklch(0.45 0.14 245);
-  --status-info-bg: oklch(0.96 0.03 245);
-  --status-info-border: oklch(0.75 0.10 245);
+  /* Daytime: cream surfaces, navy ink */
+  --background: var(--tp-bg);
+  --foreground: var(--tp-ink);
+  --card: var(--tp-bg);
+  --card-foreground: var(--tp-ink);
+  --popover: var(--tp-bg);
+  --popover-foreground: var(--tp-ink);
+  --primary: var(--tp-ink);
+  --primary-foreground: var(--tp-bg);
+  --secondary: color-mix(in srgb, var(--tp-line) 60%, var(--tp-bg));
+  --secondary-foreground: var(--tp-ink);
+  --muted: color-mix(in srgb, var(--tp-line) 50%, var(--tp-bg));
+  --muted-foreground: var(--tp-muted);
+  --accent: color-mix(in srgb, var(--tp-line) 75%, var(--tp-bg));
+  --accent-foreground: var(--tp-ink);
+  --destructive: var(--tp-accent);
+  --destructive-foreground: var(--tp-bg);
+  --border: var(--tp-line);
+  --input: color-mix(in srgb, var(--tp-muted) 30%, var(--tp-line));
+  --ring: var(--tp-ink);
+  --chart-1: var(--tp-ink);
+  --chart-2: var(--tp-accent);
+  --chart-3: var(--tp-soft);
+  --chart-4: var(--tp-muted);
+  --chart-5: var(--tp-deep);
+  --sidebar: var(--tp-deep);
+  --sidebar-foreground: var(--tp-bg);
+  --sidebar-primary: var(--tp-bg);
+  --sidebar-primary-foreground: var(--tp-deep);
+  --sidebar-accent: var(--tp-ink);
+  --sidebar-accent-foreground: var(--tp-bg);
+  --sidebar-border: color-mix(in srgb, var(--tp-bg) 12%, transparent);
+  --sidebar-ring: color-mix(in srgb, var(--tp-bg) 55%, transparent);
+  /* Legacy names kept for existing classes; they now carry the palette. */
+  --purple-brand: var(--tp-ink);
+  --purple-soft: color-mix(in srgb, var(--tp-ink) 8%, var(--tp-bg));
+  --purple-ink: var(--tp-ink);
+  --shadow-soft: 0 18px 50px color-mix(in srgb, var(--tp-deep) 10%, transparent);
+  --shadow-card: 0 12px 36px color-mix(in srgb, var(--tp-deep) 8%, transparent);
+  --shadow-ring: 0 0 0 4px color-mix(in srgb, var(--tp-ink) 16%, transparent);
+  /* Meaning, the same on every page:
+     success = Primary Dark, warning = Soft Accent, danger = Accent, info = Secondary */
+  --status-success-fg: var(--tp-ink);
+  --status-success-bg: color-mix(in srgb, var(--tp-ink) 8%, var(--tp-bg));
+  --status-success-border: color-mix(in srgb, var(--tp-ink) 30%, var(--tp-line));
+  --status-warning-fg: color-mix(in srgb, var(--tp-accent) 55%, var(--tp-ink));
+  --status-warning-bg: color-mix(in srgb, var(--tp-soft) 20%, var(--tp-bg));
+  --status-warning-border: color-mix(in srgb, var(--tp-soft) 70%, var(--tp-line));
+  --status-danger-fg: color-mix(in srgb, var(--tp-accent) 88%, var(--tp-ink));
+  --status-danger-bg: color-mix(in srgb, var(--tp-accent) 10%, var(--tp-bg));
+  --status-danger-border: color-mix(in srgb, var(--tp-accent) 45%, var(--tp-line));
+  --status-info-fg: var(--tp-muted);
+  --status-info-bg: color-mix(in srgb, var(--tp-muted) 10%, var(--tp-bg));
+  --status-info-border: color-mix(in srgb, var(--tp-muted) 35%, var(--tp-line));
+  --overlay: color-mix(in srgb, var(--tp-deep) 60%, transparent);
 }
 
 .dark {
   color-scheme: dark;
-  /* TeacherPro night identity: black + purple */
-  --background: oklch(0.105 0.025 292);
-  --foreground: oklch(0.94 0.018 296);
-  --card: oklch(0.16 0.034 294 / 0.88);
-  --card-foreground: oklch(0.94 0.018 296);
-  --popover: oklch(0.155 0.034 294);
-  --popover-foreground: oklch(0.94 0.018 296);
-  --primary: oklch(0.70 0.23 300);
-  --primary-foreground: oklch(0.12 0.025 292);
-  --secondary: oklch(0.21 0.042 294);
-  --secondary-foreground: oklch(0.93 0.016 296);
-  --muted: oklch(0.205 0.037 294);
-  --muted-foreground: oklch(0.69 0.042 296);
-  --accent: oklch(0.25 0.068 296);
-  --accent-foreground: oklch(0.96 0.012 296);
-  --destructive: oklch(0.66 0.22 25);
-  --destructive-foreground: oklch(0.98 0.004 295);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 13%);
-  --ring: oklch(0.72 0.22 300);
-  --chart-1: oklch(0.70 0.23 300);
-  --chart-2: oklch(0.68 0.18 285);
-  --chart-3: oklch(0.66 0.18 245);
-  --chart-4: oklch(0.72 0.20 330);
-  --chart-5: oklch(0.74 0.15 70);
-  --sidebar: oklch(0.095 0.026 292);
-  --sidebar-foreground: oklch(0.94 0.014 296);
-  --sidebar-primary: oklch(0.70 0.23 300);
-  --sidebar-primary-foreground: oklch(0.12 0.025 292);
-  --sidebar-accent: oklch(0.18 0.047 296);
-  --sidebar-accent-foreground: oklch(0.96 0.012 296);
-  --sidebar-border: oklch(1 0 0 / 9%);
-  --sidebar-ring: oklch(0.72 0.22 300);
-  --purple-brand: oklch(0.70 0.23 300);
-  --purple-soft: oklch(0.25 0.068 296);
-  --purple-ink: oklch(0.86 0.11 300);
-  --shadow-soft: 0 22px 70px oklch(0.03 0.02 292 / 0.50);
-  --shadow-card: 0 16px 44px oklch(0.02 0.02 292 / 0.38);
-  --shadow-ring: 0 0 0 4px oklch(0.72 0.22 300 / 0.22);
-  --status-success-fg: oklch(0.78 0.14 152);
-  --status-success-bg: oklch(0.24 0.055 152);
-  --status-success-border: oklch(0.52 0.10 152);
-  --status-warning-fg: oklch(0.84 0.13 82);
-  --status-warning-bg: oklch(0.25 0.055 76);
-  --status-warning-border: oklch(0.55 0.11 76);
-  --status-danger-fg: oklch(0.80 0.15 25);
-  --status-danger-bg: oklch(0.24 0.06 25);
-  --status-danger-border: oklch(0.54 0.12 25);
-  --status-info-fg: oklch(0.80 0.12 245);
-  --status-info-bg: oklch(0.24 0.05 245);
-  --status-info-border: oklch(0.54 0.10 245);
+  /* Night: deep navy surfaces, cream ink */
+  --background: var(--tp-deep);
+  --foreground: var(--tp-bg);
+  --card: var(--tp-ink);
+  --card-foreground: var(--tp-bg);
+  --popover: var(--tp-ink);
+  --popover-foreground: var(--tp-bg);
+  --primary: var(--tp-bg);
+  --primary-foreground: var(--tp-deep);
+  --secondary: color-mix(in srgb, var(--tp-muted) 25%, var(--tp-ink));
+  --secondary-foreground: var(--tp-bg);
+  --muted: color-mix(in srgb, var(--tp-muted) 18%, var(--tp-ink));
+  --muted-foreground: color-mix(in srgb, var(--tp-line) 70%, var(--tp-muted));
+  --accent: color-mix(in srgb, var(--tp-muted) 32%, var(--tp-ink));
+  --accent-foreground: var(--tp-bg);
+  --destructive: var(--tp-accent);
+  --destructive-foreground: var(--tp-bg);
+  --border: color-mix(in srgb, var(--tp-muted) 42%, var(--tp-ink));
+  --input: color-mix(in srgb, var(--tp-muted) 55%, var(--tp-ink));
+  --ring: color-mix(in srgb, var(--tp-bg) 70%, var(--tp-deep));
+  --chart-1: var(--tp-bg);
+  --chart-2: var(--tp-accent);
+  --chart-3: var(--tp-soft);
+  --chart-4: color-mix(in srgb, var(--tp-line) 70%, var(--tp-muted));
+  --chart-5: var(--tp-line);
+  --sidebar: var(--tp-deep);
+  --sidebar-foreground: var(--tp-bg);
+  --sidebar-primary: var(--tp-bg);
+  --sidebar-primary-foreground: var(--tp-deep);
+  --sidebar-accent: var(--tp-ink);
+  --sidebar-accent-foreground: var(--tp-bg);
+  --sidebar-border: color-mix(in srgb, var(--tp-bg) 10%, transparent);
+  --sidebar-ring: color-mix(in srgb, var(--tp-bg) 55%, transparent);
+  --purple-brand: var(--tp-bg);
+  --purple-soft: color-mix(in srgb, var(--tp-bg) 10%, var(--tp-deep));
+  --purple-ink: var(--tp-bg);
+  --shadow-soft: 0 22px 70px color-mix(in srgb, var(--tp-deep) 70%, transparent);
+  --shadow-card: 0 16px 44px color-mix(in srgb, var(--tp-deep) 55%, transparent);
+  --shadow-ring: 0 0 0 4px color-mix(in srgb, var(--tp-bg) 22%, transparent);
+  --status-success-fg: var(--tp-bg);
+  --status-success-bg: color-mix(in srgb, var(--tp-bg) 10%, var(--tp-deep));
+  --status-success-border: color-mix(in srgb, var(--tp-bg) 30%, var(--tp-deep));
+  --status-warning-fg: var(--tp-soft);
+  --status-warning-bg: color-mix(in srgb, var(--tp-soft) 18%, var(--tp-deep));
+  --status-warning-border: color-mix(in srgb, var(--tp-soft) 50%, var(--tp-deep));
+  --status-danger-fg: color-mix(in srgb, var(--tp-accent) 65%, var(--tp-bg));
+  --status-danger-bg: color-mix(in srgb, var(--tp-accent) 18%, var(--tp-deep));
+  --status-danger-border: color-mix(in srgb, var(--tp-accent) 50%, var(--tp-deep));
+  --status-info-fg: color-mix(in srgb, var(--tp-line) 70%, var(--tp-muted));
+  --status-info-bg: color-mix(in srgb, var(--tp-muted) 22%, var(--tp-deep));
+  --status-info-border: var(--tp-muted);
+  --overlay: color-mix(in srgb, var(--tp-deep) 75%, transparent);
 }
 
 @layer base {
@@ -273,27 +337,27 @@
     z-index: -2;
     pointer-events: none;
     background:
-      radial-gradient(circle at 8% 10%, oklch(0.74 0.20 300 / 0.16), transparent 32rem),
-      radial-gradient(circle at 92% 2%, oklch(0.66 0.15 255 / 0.10), transparent 28rem),
-      linear-gradient(145deg, oklch(0.985 0.006 295), oklch(0.955 0.026 299));
+      radial-gradient(circle at 8% 10%, color-mix(in srgb, var(--tp-soft) 14%, transparent), transparent 32rem),
+      radial-gradient(circle at 92% 2%, color-mix(in srgb, var(--tp-line) 70%, transparent), transparent 28rem),
+      linear-gradient(145deg, var(--tp-bg), color-mix(in srgb, var(--tp-line) 45%, var(--tp-bg)));
   }
 
   .dark body::before {
     background:
-      radial-gradient(circle at 10% 0%, oklch(0.67 0.24 300 / 0.20), transparent 32rem),
-      radial-gradient(circle at 94% 12%, oklch(0.38 0.17 270 / 0.22), transparent 34rem),
-      linear-gradient(145deg, oklch(0.09 0.026 292), oklch(0.125 0.034 296));
+      radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--tp-ink) 70%, transparent), transparent 32rem),
+      radial-gradient(circle at 94% 12%, color-mix(in srgb, var(--tp-muted) 18%, transparent), transparent 34rem),
+      linear-gradient(145deg, var(--tp-deep), color-mix(in srgb, var(--tp-ink) 60%, var(--tp-deep)));
   }
 
   ::selection {
-    background: oklch(0.70 0.22 300 / 0.28);
+    background: color-mix(in srgb, var(--tp-soft) 35%, transparent);
   }
 }
 
 @layer components {
   .app-bg {
     background:
-      linear-gradient(180deg, transparent, color-mix(in oklch, var(--background) 88%, var(--primary) 12%)),
+      linear-gradient(180deg, transparent, color-mix(in srgb, var(--background) 88%, var(--primary) 12%)),
       var(--background);
   }
 
@@ -317,9 +381,9 @@
     inset: 0;
     z-index: -1;
     background:
-      radial-gradient(circle at 50% -8%, color-mix(in oklch, var(--primary) 24%, transparent), transparent 34rem),
-      radial-gradient(circle at 8% 88%, color-mix(in oklch, var(--primary) 10%, transparent), transparent 26rem),
-      radial-gradient(circle at 94% 72%, color-mix(in oklch, var(--accent) 14%, transparent), transparent 24rem);
+      radial-gradient(circle at 50% -8%, color-mix(in srgb, var(--primary) 24%, transparent), transparent 34rem),
+      radial-gradient(circle at 8% 88%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 26rem),
+      radial-gradient(circle at 94% 72%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 24rem);
   }
 
   .tp-login-card {
@@ -327,10 +391,10 @@
     width: 100%;
     max-width: 29rem;
     overflow: hidden;
-    border: 1px solid color-mix(in oklch, var(--border) 82%, var(--primary) 18%);
+    border: 1px solid color-mix(in srgb, var(--border) 82%, var(--primary) 18%);
     border-radius: 2rem;
-    background: color-mix(in oklch, var(--card) 94%, transparent);
-    box-shadow: 0 28px 80px -34px color-mix(in oklch, var(--primary) 38%, transparent), var(--shadow-card);
+    background: color-mix(in srgb, var(--card) 94%, transparent);
+    box-shadow: 0 28px 80px -34px color-mix(in srgb, var(--primary) 38%, transparent), var(--shadow-card);
     backdrop-filter: blur(20px) saturate(135%);
   }
 
@@ -339,7 +403,7 @@
     inset-inline: 0;
     top: 0;
     height: 0.25rem;
-    background: linear-gradient(90deg, var(--primary), oklch(0.70 0.20 315), oklch(0.62 0.18 270));
+    background: linear-gradient(90deg, var(--tp-deep), var(--tp-ink) 55%, var(--tp-accent));
   }
 
   .tp-login-card__content {
@@ -354,7 +418,7 @@
     justify-content: space-between;
     gap: 1rem;
     padding-bottom: 1rem;
-    border-bottom: 1px solid color-mix(in oklch, var(--border) 72%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   }
 
   .tp-login-title {
@@ -379,9 +443,9 @@
     display: grid;
     gap: 0.9rem;
     padding: 1rem;
-    border: 1px solid color-mix(in oklch, var(--border) 78%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
     border-radius: 1.5rem;
-    background: color-mix(in oklch, var(--muted) 34%, transparent);
+    background: color-mix(in srgb, var(--muted) 34%, transparent);
   }
 
   .tp-login-field {
@@ -399,18 +463,18 @@
   .tp-login-input {
     height: 3rem;
     border-radius: 1rem;
-    background: color-mix(in oklch, var(--background) 78%, transparent);
+    background: color-mix(in srgb, var(--background) 78%, transparent);
   }
 
   .tp-login-submit {
     @apply mt-0.5 h-12 w-full rounded-2xl text-base font-black;
-    box-shadow: 0 12px 30px -18px color-mix(in oklch, var(--primary) 70%, transparent);
+    box-shadow: 0 12px 30px -18px color-mix(in srgb, var(--primary) 70%, transparent);
   }
 
   .tp-login-help {
-    border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--border));
+    border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
     border-radius: 1rem;
-    background: color-mix(in oklch, var(--primary) 6%, transparent);
+    background: color-mix(in srgb, var(--primary) 6%, transparent);
     padding: 0.75rem 0.9rem;
     font-size: 0.75rem;
     line-height: 1.65rem;
@@ -455,7 +519,7 @@
     width: 70%;
     height: 140%;
     transform: rotate(18deg);
-    background: linear-gradient(90deg, transparent, oklch(0.72 0.22 300 / 0.14), transparent);
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tp-bg) 14%, transparent), transparent);
     pointer-events: none;
   }
 
@@ -511,8 +575,8 @@
   .tp-filter-grid:has(> .tp-filter-secondary):has(> :nth-child(4))::before {
     content: "الفلاتر الأساسية";
     order: -50;
-    border: 1px solid oklch(0.62 0.21 300 / 0.16);
-    background: oklch(0.62 0.21 300 / 0.07);
+    border: 1px solid color-mix(in srgb, var(--tp-ink) 16%, transparent);
+    background: color-mix(in srgb, var(--tp-ink) 6%, transparent);
     color: var(--foreground);
   }
 
@@ -521,7 +585,7 @@
     order: -25;
     margin-top: 0.125rem;
     border: 1px dashed var(--border);
-    background: oklch(0.55 0.04 296 / 0.045);
+    background: color-mix(in srgb, var(--tp-muted) 5%, transparent);
     color: var(--muted-foreground);
   }
 
@@ -640,7 +704,7 @@
   }
 
   .tp-readable-ui :is(a, button, input, textarea, select, [role="button"], [role="combobox"], [role="tab"]):focus-visible {
-    outline: 3px solid color-mix(in oklch, var(--ring) 78%, transparent);
+    outline: 3px solid color-mix(in srgb, var(--ring) 78%, transparent);
     outline-offset: 3px;
   }
 
@@ -650,8 +714,8 @@
 
   @media (prefers-contrast: more) {
     .tp-readable-ui {
-      --border: color-mix(in oklch, var(--foreground) 32%, var(--background));
-      --muted-foreground: color-mix(in oklch, var(--foreground) 76%, var(--background));
+      --border: color-mix(in srgb, var(--foreground) 32%, var(--background));
+      --muted-foreground: color-mix(in srgb, var(--foreground) 76%, var(--background));
     }
 
     .tp-readable-ui :is(a, button, input, textarea, select, [role="button"], [role="combobox"], [role="tab"]):focus-visible {
@@ -742,7 +806,7 @@
     inset-inline-start: 0;
     width: 0.2rem;
     border-radius: 999px;
-    background: linear-gradient(180deg, oklch(0.68 0.22 300 / 0.82), oklch(0.58 0.17 265 / 0.28));
+    background: linear-gradient(180deg, var(--primary), color-mix(in srgb, var(--primary) 25%, transparent));
     pointer-events: none;
   }
 
@@ -757,9 +821,9 @@
   }
 
   .tp-form-grid > *:focus-within {
-    border-color: oklch(0.62 0.21 300 / 0.42);
-    background: color-mix(in oklch, var(--background) 92%, var(--primary) 8%);
-    box-shadow: 0 0 0 3px oklch(0.62 0.21 300 / 0.08);
+    border-color: color-mix(in srgb, var(--primary) 42%, transparent);
+    background: color-mix(in srgb, var(--background) 92%, var(--primary) 8%);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
   }
 
   .tp-form-grid > * > label:first-child,
@@ -838,7 +902,7 @@
 
   .tp-loading-state__icon {
     @apply flex size-11 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10 text-primary;
-    box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 7%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 7%, transparent);
   }
 
   .tp-loading-state__title {
@@ -863,7 +927,7 @@
     inset-block: 0;
     width: 34%;
     inset-inline-start: -40%;
-    background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--primary) 18%, transparent), transparent);
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--primary) 18%, transparent), transparent);
     animation: tp-loading-sweep 1.6s ease-in-out infinite;
   }
 
@@ -882,8 +946,8 @@
   }
 
   .tp-connection-dot {
-    @apply size-2.5 shrink-0 rounded-full border border-white/20;
-    box-shadow: 0 0 0 3px color-mix(in oklch, currentColor 14%, transparent);
+    @apply size-2.5 shrink-0 rounded-full border border-tp-bg/20;
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent);
   }
 
   .tp-connection-dot--online,
@@ -934,11 +998,11 @@
   }
 
   .sidebar-aura {
-    background: radial-gradient(circle at 50% 0%, oklch(0.70 0.23 300 / 0.26), transparent 16rem);
+    background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--tp-muted) 30%, transparent), transparent 16rem);
   }
 
   .gradient-brand {
-    background: linear-gradient(135deg, oklch(0.58 0.22 300), oklch(0.70 0.20 288));
+    background: linear-gradient(135deg, var(--tp-deep), var(--tp-ink));
   }
 
   .text-gradient-brand {
@@ -961,7 +1025,7 @@
   }
 
   .table-wrap:focus-visible {
-    outline: 2px solid color-mix(in oklch, var(--ring) 70%, transparent);
+    outline: 2px solid color-mix(in srgb, var(--ring) 70%, transparent);
     outline-offset: 2px;
   }
 
@@ -984,7 +1048,7 @@
   }
 
   .table-wrap thead {
-    background: linear-gradient(oklch(0.62 0.21 300 / 0.035), oklch(0.62 0.21 300 / 0.035)), var(--muted);
+    background: var(--muted);
   }
 
   .table-wrap thead th {
@@ -1002,13 +1066,13 @@
   }
 
   .table-wrap tbody tr:nth-child(even) {
-    background: linear-gradient(oklch(0.55 0.04 296 / 0.04), oklch(0.55 0.04 296 / 0.04)), var(--card);
+    background: color-mix(in srgb, var(--tp-muted) 4%, var(--card));
   }
 
   .table-wrap tbody tr:hover,
   .table-wrap tbody tr:focus-within {
-    background: linear-gradient(oklch(0.62 0.21 300 / 0.08), oklch(0.62 0.21 300 / 0.08)), var(--card);
-    box-shadow: inset 0.2rem 0 0 oklch(0.62 0.21 300 / 0.55);
+    background: color-mix(in srgb, var(--primary) 7%, var(--card));
+    box-shadow: inset 0.2rem 0 0 var(--primary);
   }
 
   .table-wrap tbody td {
@@ -1030,14 +1094,14 @@
   }
 
   .table-wrap::-webkit-scrollbar-thumb {
-    background: oklch(0.62 0.21 300 / 0.42);
+    background: color-mix(in srgb, var(--tp-muted) 45%, transparent);
     border: 3px solid transparent;
     border-radius: 999px;
     background-clip: content-box;
   }
 
   .table-wrap::-webkit-scrollbar-thumb:hover {
-    background: oklch(0.62 0.21 300 / 0.62);
+    background: color-mix(in srgb, var(--tp-muted) 70%, transparent);
     background-clip: content-box;
   }
 
@@ -1046,8 +1110,8 @@
       position: sticky;
       inset-inline-start: 0;
       z-index: 3;
-      background: linear-gradient(oklch(0.62 0.21 300 / 0.045), oklch(0.62 0.21 300 / 0.045)), var(--muted);
-      box-shadow: -0.75rem 0 1rem -1rem oklch(0.18 0.035 292 / 0.32);
+      background: var(--muted);
+      box-shadow: -0.75rem 0 1rem -1rem color-mix(in srgb, var(--tp-deep) 32%, transparent);
     }
 
     .table-wrap tbody td:first-child:not([colspan]) {
@@ -1055,7 +1119,7 @@
       inset-inline-start: 0;
       z-index: 2;
       background: inherit;
-      box-shadow: -0.75rem 0 1rem -1rem oklch(0.18 0.035 292 / 0.32);
+      box-shadow: -0.75rem 0 1rem -1rem color-mix(in srgb, var(--tp-deep) 32%, transparent);
     }
   }
 
@@ -1063,8 +1127,8 @@
     .table-wrap {
       border-radius: 1rem;
       box-shadow:
-        0 1px 2px oklch(0.18 0.035 292 / 0.06),
-        inset -0.8rem 0 1.1rem -1.15rem oklch(0.18 0.035 292 / 0.28);
+        0 1px 2px color-mix(in srgb, var(--tp-deep) 6%, transparent),
+        inset -0.8rem 0 1.1rem -1.15rem color-mix(in srgb, var(--tp-deep) 28%, transparent);
     }
 
     .table-wrap > table,
@@ -1179,14 +1243,14 @@
   }
 
   .app-scrollbar::-webkit-scrollbar-thumb {
-    background: color-mix(in oklch, var(--primary) 48%, transparent);
+    background: color-mix(in srgb, var(--primary) 48%, transparent);
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: content-box;
   }
 
   .app-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in oklch, var(--primary) 68%, transparent);
+    background: color-mix(in srgb, var(--primary) 68%, transparent);
     background-clip: content-box;
   }
 }
@@ -1214,13 +1278,13 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in oklch, var(--primary) 42%, transparent);
+  background: color-mix(in srgb, var(--primary) 42%, transparent);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in oklch, var(--primary) 64%, transparent);
+  background: color-mix(in srgb, var(--primary) 64%, transparent);
   background-clip: content-box;
 }
 
@@ -1239,17 +1303,17 @@
 
 /* Glass morphism */
 .glass-card {
-  background: color-mix(in oklch, var(--card) 72%, transparent);
+  background: color-mix(in srgb, var(--card) 72%, transparent);
   backdrop-filter: blur(16px) saturate(130%);
-  border: 1px solid color-mix(in oklch, var(--border) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   box-shadow: var(--shadow-card);
 }
 
 /* KPI card colors, kept for compatibility with existing screens */
-.kpi-ok { --kpi-color: oklch(0.60 0.16 150); }
-.kpi-warn { --kpi-color: oklch(0.75 0.16 70); }
-.kpi-danger { --kpi-color: oklch(0.65 0.21 25); }
-.kpi-info { --kpi-color: oklch(0.62 0.16 255); }
+.kpi-ok { --kpi-color: var(--status-success-fg); }
+.kpi-warn { --kpi-color: var(--tp-soft); }
+.kpi-danger { --kpi-color: var(--tp-accent); }
+.kpi-info { --kpi-color: var(--status-info-fg); }
 
 
 /* Touch targets without forcing every text button to a fixed width. */
@@ -1398,7 +1462,7 @@
   }
 
   * {
-    -webkit-tap-highlight-color: rgba(147, 51, 234, 0.15);
+    -webkit-tap-highlight-color: color-mix(in srgb, var(--tp-ink) 12%, transparent);
   }
 
   button,
@@ -1486,9 +1550,9 @@
    feedback message with the shared feedback classes. */
 @layer components {
   .tp-validation-form {
-    --tp-validation-surface: color-mix(in oklch, var(--destructive) 7%, var(--background));
-    --tp-validation-border: color-mix(in oklch, var(--destructive) 48%, var(--border));
-    --tp-validation-ring: color-mix(in oklch, var(--destructive) 18%, transparent);
+    --tp-validation-surface: color-mix(in srgb, var(--destructive) 7%, var(--background));
+    --tp-validation-border: color-mix(in srgb, var(--destructive) 48%, var(--border));
+    --tp-validation-ring: color-mix(in srgb, var(--destructive) 18%, transparent);
   }
 
   @supports selector(input:user-invalid) {
@@ -1532,9 +1596,9 @@
       gap: 0.45rem;
       margin-top: 0.5rem;
       padding: 0.4rem 0.65rem;
-      border: 1px solid color-mix(in oklch, var(--destructive) 28%, var(--border));
+      border: 1px solid color-mix(in srgb, var(--destructive) 28%, var(--border));
       border-radius: 0.75rem;
-      background: color-mix(in oklch, var(--destructive) 7%, transparent);
+      background: color-mix(in srgb, var(--destructive) 7%, transparent);
       color: var(--destructive);
       font-size: 0.75rem;
       font-weight: 800;
@@ -1571,25 +1635,19 @@
     margin-top: 0.42rem;
     border-radius: 999px;
     background: currentColor;
-    box-shadow: 0 0 0 0.22rem color-mix(in oklch, currentColor 14%, transparent);
+    box-shadow: 0 0 0 0.22rem color-mix(in srgb, currentColor 14%, transparent);
   }
 
   .tp-field-feedback-error {
-    border-color: color-mix(in oklch, var(--destructive) 32%, var(--border));
-    background: color-mix(in oklch, var(--destructive) 8%, transparent);
+    border-color: color-mix(in srgb, var(--destructive) 32%, var(--border));
+    background: color-mix(in srgb, var(--destructive) 8%, transparent);
     color: var(--destructive);
   }
 
   .tp-field-feedback-warning {
-    border-color: oklch(0.76 0.16 72 / 0.42);
-    background: oklch(0.83 0.14 78 / 0.11);
-    color: oklch(0.53 0.15 58);
-  }
-
-  .dark .tp-field-feedback-warning {
-    border-color: oklch(0.76 0.16 72 / 0.34);
-    background: oklch(0.58 0.12 65 / 0.16);
-    color: oklch(0.83 0.14 78);
+    border-color: var(--status-warning-border);
+    background: var(--status-warning-bg);
+    color: var(--status-warning-fg);
   }
 
   @media (max-width: 639px) {
@@ -1614,7 +1672,7 @@
     border: 1px solid var(--border);
     border-radius: 9999px;
     padding: 0.25rem 0.65rem;
-    background: color-mix(in oklch, var(--muted) 45%, transparent);
+    background: color-mix(in srgb, var(--muted) 45%, transparent);
     color: var(--muted-foreground);
     font-size: 0.6875rem;
     font-weight: 850;
@@ -1631,8 +1689,8 @@
   }
 
   .tp-save-indicator--saving {
-    border-color: color-mix(in oklch, var(--primary) 28%, var(--border));
-    background: color-mix(in oklch, var(--primary) 8%, transparent);
+    border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
+    background: color-mix(in srgb, var(--primary) 8%, transparent);
     color: var(--primary);
   }
 
@@ -1641,29 +1699,21 @@
   }
 
   .tp-save-indicator--saved {
-    border-color: color-mix(in oklch, oklch(0.64 0.17 155) 34%, var(--border));
-    background: color-mix(in oklch, oklch(0.64 0.17 155) 9%, transparent);
-    color: oklch(0.48 0.15 155);
-  }
-
-  .dark .tp-save-indicator--saved {
-    color: oklch(0.79 0.14 155);
+    border-color: var(--status-success-border);
+    background: var(--status-success-bg);
+    color: var(--status-success-fg);
   }
 
   .tp-save-indicator--pending {
-    border-color: color-mix(in oklch, oklch(0.72 0.16 75) 38%, var(--border));
-    background: color-mix(in oklch, oklch(0.72 0.16 75) 10%, transparent);
-    color: oklch(0.52 0.14 65);
-  }
-
-  .dark .tp-save-indicator--pending {
-    color: oklch(0.82 0.13 80);
+    border-color: var(--status-warning-border);
+    background: var(--status-warning-bg);
+    color: var(--status-warning-fg);
   }
 
   .tp-save-indicator--local {
     border-style: dashed;
-    border-color: color-mix(in oklch, var(--primary) 24%, var(--border));
-    background: color-mix(in oklch, var(--primary) 5%, transparent);
+    border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
+    background: color-mix(in srgb, var(--primary) 5%, transparent);
     color: var(--foreground);
   }
 
@@ -1674,12 +1724,12 @@
   }
 
   .tp-save-row[data-save-state="saving"] {
-    border-color: color-mix(in oklch, var(--primary) 25%, var(--border));
-    background: color-mix(in oklch, var(--primary) 4%, var(--card));
+    border-color: color-mix(in srgb, var(--primary) 25%, var(--border));
+    background: color-mix(in srgb, var(--primary) 4%, var(--card));
   }
 
   .tp-save-row[data-save-state="saved"] {
-    border-color: color-mix(in oklch, oklch(0.64 0.17 155) 21%, var(--border));
+    border-color: var(--status-success-border);
   }
 }
 
@@ -1729,9 +1779,9 @@
     min-inline-size: 0;
     min-block-size: 4.5rem;
     padding: 0.75rem;
-    border: 1px solid color-mix(in oklch, var(--border) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
     border-radius: 0.875rem;
-    background: color-mix(in oklch, var(--card) 96%, transparent);
+    background: color-mix(in srgb, var(--card) 96%, transparent);
   }
 
   .tp-dashboard__stat-icon,
@@ -1782,7 +1832,7 @@
     min-inline-size: 0;
     min-block-size: 4rem;
     padding: 0.625rem;
-    border: 1px solid color-mix(in oklch, var(--border) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
     border-radius: 0.875rem;
     background: var(--card);
     text-align: start;
@@ -1858,7 +1908,7 @@
   }
 
   .tp-missing-notes__intro {
-    border-bottom: 1px solid color-mix(in oklch, var(--border) 78%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
     padding-bottom: 1rem;
   }
 
@@ -1867,7 +1917,7 @@
   }
 
   .tp-missing-notes__stats > :nth-child(n + 3) {
-    background: color-mix(in oklch, var(--muted) 26%, var(--card));
+    background: color-mix(in srgb, var(--muted) 26%, var(--card));
   }
 
   .tp-missing-notes__status {
@@ -1882,8 +1932,8 @@
   }
 
   .tp-missing-notes__list > [data-slot="card-header"] {
-    border-bottom: 1px solid color-mix(in oklch, var(--border) 78%, transparent);
-    background: color-mix(in oklch, var(--muted) 22%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    background: color-mix(in srgb, var(--muted) 22%, transparent);
   }
 
   .tp-missing-notes__item {
@@ -1893,8 +1943,8 @@
 
   .tp-missing-notes__item:focus-within,
   .tp-missing-notes__item:hover {
-    border-color: color-mix(in oklch, var(--primary) 24%, var(--border));
-    background: color-mix(in oklch, var(--primary) 2.5%, var(--card));
+    border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
+    background: color-mix(in srgb, var(--primary) 2.5%, var(--card));
   }
 
   .tp-missing-notes__meta > span + span::before {
@@ -1904,8 +1954,8 @@
   }
 
   .tp-missing-notes__text {
-    border-inline-start: 3px solid color-mix(in oklch, var(--primary) 38%, var(--border));
-    background: color-mix(in oklch, var(--muted) 38%, transparent);
+    border-inline-start: 3px solid color-mix(in srgb, var(--primary) 38%, var(--border));
+    background: color-mix(in srgb, var(--muted) 38%, transparent);
   }
 }
 
@@ -1942,7 +1992,7 @@
   padding-top: max(0.75rem, env(safe-area-inset-top));
   padding-inline-start: max(1rem, env(safe-area-inset-left));
   padding-inline-end: max(1rem, env(safe-area-inset-right));
-  border-color: color-mix(in oklch, var(--primary) 14%, var(--border));
+  border-color: color-mix(in srgb, var(--primary) 14%, var(--border));
   background: var(--background);
 }
 
@@ -2001,7 +2051,7 @@
 
 .tp-student-profile__content {
   min-width: 0;
-  background: color-mix(in oklch, var(--muted) 16%, var(--background));
+  background: color-mix(in srgb, var(--muted) 16%, var(--background));
 }
 
 .tp-student-profile__body {
@@ -2166,7 +2216,7 @@
 
 .tp-grade-entry-page > .grid > .card,
 .tp-grade-entry-page > [data-slot="card"] {
-  box-shadow: 0 10px 28px -24px rgb(15 23 42 / 0.45);
+  box-shadow: 0 10px 28px -24px color-mix(in srgb, var(--tp-deep) 45%, transparent);
 }
 
 .tp-grade-entry-page .teacherpro-heavy-row {

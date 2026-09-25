@@ -2137,17 +2137,17 @@ export function StudentRegistryView() {
             (otherStudentsTotal ?? 0) > 0 && (
               <Card
                 role="alert"
-                className="border-amber-500/40 bg-amber-500/10"
+                className="border-warning-line bg-warning-soft"
                 data-count-scope="system"
               >
                 <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
                   <div className="flex items-center gap-3">
                     <AlertTriangle
                       aria-hidden="true"
-                      className="size-5 shrink-0 text-amber-700 dark:text-amber-300"
+                      className="size-5 shrink-0 text-warning"
                     />
                     <div>
-                      <p className="font-bold text-amber-900 dark:text-amber-100">
+                      <p className="font-bold text-warning">
                         حالات طلاب غير معروفة: {otherStudentsTotal}
                       </p>
                       <p className="text-xs text-muted-foreground">
@@ -2278,7 +2278,7 @@ export function StudentRegistryView() {
                 <div
                   role="alert"
                   aria-live="assertive"
-                  className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-300"
+                  className="rounded-2xl border border-warning-line bg-warning-soft p-3 text-sm font-medium text-warning"
                 >
                   <strong>{serverStudentsError}</strong>
                   <span className="mt-1 block text-xs">
@@ -2432,7 +2432,7 @@ export function StudentRegistryView() {
                       setPage(1);
                     }}
                   >
-                    <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                    <span className="text-2xl font-bold text-success">
                       {registryStatsPending
                         ? "…"
                         : studentStatsError
@@ -2482,7 +2482,7 @@ export function StudentRegistryView() {
                       setPage(1);
                     }}
                   >
-                    <span className="text-2xl font-bold text-slate-600 dark:text-slate-300">
+                    <span className="text-2xl font-bold text-muted-foreground">
                       {registryStatsPending
                         ? "…"
                         : studentStatsError
@@ -2506,7 +2506,7 @@ export function StudentRegistryView() {
                       setPage(1);
                     }}
                   >
-                    <span className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                    <span className="text-2xl font-bold text-warning">
                       {registryStatsPending
                         ? "…"
                         : studentStatsError
@@ -2550,7 +2550,7 @@ export function StudentRegistryView() {
                 tabIndex={-1}
                 role="region"
                 aria-label="مراجعة أحدث بيانات الطالب"
-                className="mb-4 space-y-3 rounded-2xl border border-amber-400/50 bg-amber-500/10 p-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="mb-4 space-y-3 rounded-2xl border border-warning-line bg-warning-soft p-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <p className="font-bold">
                   {editRecoveryReason === "unknown"
@@ -2835,7 +2835,7 @@ export function StudentRegistryView() {
                     </div>
 
                     {editNeedsTransferPolicy && editOriginalStudent && (
-                      <div className="tp-registry-editor__wide rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-500/50 dark:bg-amber-950/20 dark:text-amber-100">
+                      <div className="tp-registry-editor__wide rounded-2xl border border-warning-line bg-warning-soft p-4 text-sm text-warning">
                         <div className="mb-3 flex items-start gap-2">
                           <AlertTriangle className="mt-0.5 size-5 shrink-0" />
                           <div>
@@ -2910,28 +2910,28 @@ export function StudentRegistryView() {
                         {effectiveCourseTransferPolicy === "reset" && (
                           <div className="mt-3" aria-live="polite">
                             {editTargetActiveChapterLoading ? (
-                              <p className="rounded-xl border border-sky-300 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700 dark:border-sky-500/50 dark:bg-sky-950/30 dark:text-sky-100">
+                              <p className="rounded-xl border border-info-line bg-info-soft px-3 py-2 text-xs font-bold text-info">
                                 جاري التحقق من الفصل النشط ورصيد البداية… انتظر
                                 قبل الحفظ.
                               </p>
                             ) : editTargetActiveChapterLookupFailed ? (
-                              <p className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-500/50 dark:bg-red-950/30 dark:text-red-100">
+                              <p className="rounded-xl border border-danger-line bg-danger-soft px-3 py-2 text-xs font-bold text-danger">
                                 تعذر التحقق من الفصل النشط. أعد المحاولة قبل بدء
                                 ملف جديد.
                               </p>
                             ) : editTargetActiveChapterConflict ? (
-                              <p className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-500/50 dark:bg-red-950/30 dark:text-red-100">
+                              <p className="rounded-xl border border-danger-line bg-danger-soft px-3 py-2 text-xs font-bold text-danger">
                                 يوجد أكثر من فصل نشط مرتبط بهذه الدورة. يجب حل
                                 التعارض أولاً؛ تم إيقاف بدء الملف الجديد لحماية
                                 رصيد الطالب.
                               </p>
                             ) : !editTargetActiveChapter ? (
-                              <p className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-500/50 dark:bg-red-950/30 dark:text-red-100">
+                              <p className="rounded-xl border border-danger-line bg-danger-soft px-3 py-2 text-xs font-bold text-danger">
                                 لا يوجد فصل نشط لهذه الدورة. لن يبدأ الطالب
                                 برصيد 0 ولن يُسمح بالحفظ حتى يتم تفعيل فصل واحد.
                               </p>
                             ) : (
-                              <p className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:border-emerald-500/50 dark:bg-emerald-950/30 dark:text-emerald-100">
+                              <p className="rounded-xl border border-success-line bg-success-soft px-3 py-2 text-xs font-bold text-success">
                                 تم التحقق: الفصل النشط «
                                 {editTargetActiveChapter.name}» ورصيد البداية{" "}
                                 {editTargetOpportunities} /{" "}
@@ -3197,7 +3197,7 @@ export function StudentRegistryView() {
                   )}
 
                   {editNeedsAcademicImpactPreview && (
-                    <div className="mt-4 rounded-2xl border border-orange-300 bg-orange-50 p-4 text-sm text-orange-950 dark:border-orange-500/50 dark:bg-orange-950/20 dark:text-orange-100">
+                    <div className="mt-4 rounded-2xl border border-warning-line bg-warning-soft p-4 text-sm text-warning">
                       <div className="flex items-start gap-2">
                         <AlertTriangle className="mt-0.5 size-5 shrink-0" />
                         <div className="min-w-0 flex-1">
@@ -3515,7 +3515,7 @@ export function StudentRegistryView() {
             </Button>
             <Button
               variant="destructive"
-              className="tp-student-registry__dialog-button border-red-600 bg-red-600 text-white shadow-sm shadow-red-600/20 hover:border-red-700 hover:bg-red-700 hover:text-white dark:border-red-600 dark:bg-red-600 dark:text-white dark:hover:border-red-500 dark:hover:bg-red-500"
+              className="tp-student-registry__dialog-button border-tp-accent bg-tp-accent text-tp-bg shadow-sm shadow-tp-accent/20 hover:border-tp-accent/90 hover:bg-tp-accent/90 hover:text-tp-bg"
               onClick={handleDismiss}
               disabled={isStatusActionSaving}
             >

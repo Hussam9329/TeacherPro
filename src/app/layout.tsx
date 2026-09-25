@@ -16,6 +16,11 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: "cover",
+  // Browser chrome follows the palette: Background by day, Deep Dark by night.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FBF9EB" },
+    { media: "(prefers-color-scheme: dark)", color: "#0E1F36" },
+  ],
 };
 
 export default function RootLayout({

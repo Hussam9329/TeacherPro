@@ -1332,7 +1332,7 @@ function BackupTab() {
           <CardTitle className="text-lg">استعادة نسخة احتياطية</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900 leading-relaxed">
+          <div className="rounded-md bg-warning-soft border border-warning-line p-3 text-sm text-warning leading-relaxed">
             <strong>⚠️ تحذير:</strong> الاستعادة عملية حساسة قد تستبدل أو تدمج البيانات الحالية.
             يُنصح بشدة بأخذ نسخة احتياطية جديدة قبل الاستعادة، واختبارها على بيئة Preview أولاً.
           </div>
@@ -1437,14 +1437,14 @@ function BackupTab() {
 
           {/* Restore result */}
           {restoreResult && (
-            <div className="rounded-md bg-emerald-50 border border-emerald-200 p-4 space-y-3 text-sm">
-              <div className="font-semibold text-emerald-900">
+            <div className="rounded-md bg-success-soft border border-success-line p-4 space-y-3 text-sm">
+              <div className="font-semibold text-success">
                 ✅ تمت الاستعادة بنجاح
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
                 {restoreResult.inserted && Object.entries(restoreResult.inserted).filter(([, v]) => v > 0).length > 0 && (
                   <div>
-                    <div className="font-semibold text-emerald-700">إضافات جديدة:</div>
+                    <div className="font-semibold text-success">إضافات جديدة:</div>
                     <ul className="mt-1 space-y-0.5">
                       {Object.entries(restoreResult.inserted).filter(([, v]) => v > 0).map(([k, v]) => (
                         <li key={k}>{k}: {v}</li>
@@ -1454,7 +1454,7 @@ function BackupTab() {
                 )}
                 {restoreResult.updated && Object.entries(restoreResult.updated).filter(([, v]) => v > 0).length > 0 && (
                   <div>
-                    <div className="font-semibold text-emerald-700">تحديثات:</div>
+                    <div className="font-semibold text-success">تحديثات:</div>
                     <ul className="mt-1 space-y-0.5">
                       {Object.entries(restoreResult.updated).filter(([, v]) => v > 0).map(([k, v]) => (
                         <li key={k}>{k}: {v}</li>
@@ -1474,7 +1474,7 @@ function BackupTab() {
                 )}
               </div>
               {restoreResult.errors && restoreResult.errors.length > 0 && (
-                <div className="text-xs text-amber-700">
+                <div className="text-xs text-warning">
                   <strong>أخطاء (تم تجاوزها):</strong>
                   <ul className="mt-1 space-y-0.5">
                     {restoreResult.errors.slice(0, 5).map((e, i) => (

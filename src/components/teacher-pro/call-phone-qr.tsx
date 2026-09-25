@@ -31,8 +31,10 @@ export function CallPhoneQr({
         size={128}
         level="M"
         marginSize={4}
+        fgColor="#0E1F36"
+        bgColor="#FBF9EB"
         title={accessibleTitle}
-        className="h-auto w-full max-w-32 rounded-lg bg-white"
+        className="h-auto w-full max-w-32 rounded-lg bg-tp-bg"
       />
       <span className="max-w-full break-all font-mono text-xs" dir="ltr">{phone}</span>
     </a>

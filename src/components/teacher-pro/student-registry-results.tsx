@@ -82,19 +82,19 @@ function registryHealthBadges(student: Student) {
     badges.push({
       label: `تعارض فصول نشطة: ${conflictCount}`,
       className:
-        "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+        "border-danger-line bg-danger-soft text-danger",
     });
   } else if (opportunityHealth === "missing-active-chapter") {
     badges.push({
       label: "بدون فصل نشط",
       className:
-        "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+        "border-warning-line bg-warning-soft text-warning",
     });
   } else if (opportunityHealth === "zero-limit") {
     badges.push({
       label: "سقف فرص صفر",
       className:
-        "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+        "border-warning-line bg-warning-soft text-warning",
     });
   }
 
@@ -102,13 +102,13 @@ function registryHealthBadges(student: Student) {
     badges.push({
       label: "فرص فوق السقف",
       className:
-        "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+        "border-danger-line bg-danger-soft text-danger",
     });
   } else if (opportunityHealth === "ready" && row.isOpportunityFull) {
     badges.push({
       label: "فرص كاملة",
       className:
-        "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+        "border-success-line bg-success-soft text-success",
     });
   }
 
@@ -119,7 +119,7 @@ function registryHealthBadges(student: Student) {
     badges.push({
       label: "ناقص بيانات تواصل",
       className:
-        "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+        "border-warning-line bg-warning-soft text-warning",
     });
   }
 
@@ -354,7 +354,7 @@ function StudentActions({
         <Button
           variant="outline"
           size="sm"
-          className="tp-registry-action border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
+          className="tp-registry-action border-success-line text-success"
           disabled={serverUnavailable || statusActionSaving}
           onClick={() => onRestore(student)}
         >

@@ -26,7 +26,7 @@ function HydrationGuard({ children }: { children: React.ReactNode }) {
           minHeight: '100dvh',
           fontFamily: 'system-ui, sans-serif',
           direction: 'rtl',
-          color: '#6b21a8',
+          color: '#19293A',
           gap: '12px',
         }}
       >

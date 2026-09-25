@@ -1119,9 +1119,9 @@ export function StudentProfileDialog({
                   <div className="min-w-0 rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
                     <h4 className="mb-3 text-base font-black sm:mb-4 sm:text-lg">ملخص الأداء</h4>
                     <div className="grid grid-cols-2 gap-2 text-center sm:gap-3">
-                      <div className="rounded-2xl bg-emerald-500/10 p-3"><p className="text-xl font-black text-emerald-600 sm:text-2xl">{successCount}</p><p className="text-[11px] text-muted-foreground sm:text-xs">ناجح</p></div>
-                      <div className="rounded-2xl bg-red-500/10 p-3"><p className="text-xl font-black text-red-600 sm:text-2xl">{failedCount}</p><p className="text-[11px] text-muted-foreground sm:text-xs">راسب غير مخصوم</p></div>
-                      <div className="rounded-2xl bg-amber-500/10 p-3"><p className="text-xl font-black text-amber-600 sm:text-2xl">{absentCount}</p><p className="text-[11px] text-muted-foreground sm:text-xs">غياب</p></div>
+                      <div className="rounded-2xl bg-success-soft p-3"><p className="text-xl font-black text-success sm:text-2xl">{successCount}</p><p className="text-[11px] text-muted-foreground sm:text-xs">ناجح</p></div>
+                      <div className="rounded-2xl bg-danger-soft p-3"><p className="text-xl font-black text-danger sm:text-2xl">{failedCount}</p><p className="text-[11px] text-muted-foreground sm:text-xs">راسب غير مخصوم</p></div>
+                      <div className="rounded-2xl bg-warning-soft p-3"><p className="text-xl font-black text-warning sm:text-2xl">{absentCount}</p><p className="text-[11px] text-muted-foreground sm:text-xs">غياب</p></div>
                       <div className="rounded-2xl bg-primary/10 p-3"><p className="text-xl font-black text-primary sm:text-2xl">{opportunityText}</p><p className="text-[11px] text-muted-foreground sm:text-xs">فرص</p></div>
                     </div>
                     {currentGraceText && (
@@ -1266,7 +1266,7 @@ export function StudentProfileDialog({
             {tab === "opportunities" && (
               <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
                 <h4 className="mb-4 text-base font-black sm:text-lg">سجل الفرص</h4>
-                <div className="mb-4 grid gap-2 sm:grid-cols-3 sm:gap-3"><div className="rounded-2xl bg-primary/10 p-3 text-center"><p className="text-xl font-black text-primary sm:text-2xl">{opportunityText}</p><p className="text-xs text-muted-foreground">الفرص</p></div><div className="rounded-2xl bg-red-500/10 p-3 text-center"><p className="text-xl font-black text-red-600 sm:text-2xl">{deductedCount}</p><p className="text-xs text-muted-foreground">حركات خصم</p></div><div className="rounded-2xl bg-emerald-500/10 p-3 text-center"><p className="text-xl font-black text-emerald-600 sm:text-2xl">{addedCount}</p><p className="text-xs text-muted-foreground">حركات إضافة/تعديل</p></div></div>
+                <div className="mb-4 grid gap-2 sm:grid-cols-3 sm:gap-3"><div className="rounded-2xl bg-primary/10 p-3 text-center"><p className="text-xl font-black text-primary sm:text-2xl">{opportunityText}</p><p className="text-xs text-muted-foreground">الفرص</p></div><div className="rounded-2xl bg-danger-soft p-3 text-center"><p className="text-xl font-black text-danger sm:text-2xl">{deductedCount}</p><p className="text-xs text-muted-foreground">حركات خصم</p></div><div className="rounded-2xl bg-success-soft p-3 text-center"><p className="text-xl font-black text-success sm:text-2xl">{addedCount}</p><p className="text-xs text-muted-foreground">حركات إضافة/تعديل</p></div></div>
                 <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                   {opportunityTraceRows.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="لا توجد حركات فرص" /> : [...opportunityTraceRows].reverse().map((row) => (
                     <div key={row.log.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-center"><span>{formatAppDate(row.log.date)}</span><Badge className="w-fit" variant={row.log.action === "خصم" || row.log.action === "خصم تلقائي" ? "destructive" : "default"}>{displayOpportunityAction(row.log.action)} {row.log.amount}</Badge><span className="break-words text-muted-foreground">{row.details}</span></div>
@@ -1349,8 +1349,8 @@ export function StudentProfileDialog({
 
             {tab === "archives" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-sky-300/60 bg-sky-500/10 p-4 text-sm shadow-sm sm:rounded-3xl sm:p-5">
-                  <h4 className="font-black text-sky-800 dark:text-sky-200">الملفات السابقة — للقراءة فقط</h4>
+                <div className="rounded-2xl border border-info-line bg-info-soft p-4 text-sm shadow-sm sm:rounded-3xl sm:p-5">
+                  <h4 className="font-black text-info">الملفات السابقة — للقراءة فقط</h4>
                   <p className="mt-1 leading-6 text-muted-foreground">
                     هذه الملفات جُمّدت قبل نقل الطالب إلى دورة جديدة أو قبل اختياره كطالب جديد. لا تدخل درجاتها أو فرصها أو إجراءاتها في ملفه الحالي.
                   </p>

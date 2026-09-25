@@ -40,15 +40,15 @@ type DashboardStats = {
 };
 
 const dashboardShortcuts = [
-  { section: "student-registry", title: "سجل الطلاب", icon: ClipboardList, color: "bg-violet-500/10 text-violet-700 dark:text-violet-300" },
-  { section: "student-bulk-import", title: "إضافة الطلاب الجماعية", icon: UsersRound, color: "bg-purple-500/10 text-purple-700 dark:text-purple-300" },
-  { section: "opportunities", title: "إدارة الفرص", icon: Target, color: "bg-amber-500/10 text-amber-700 dark:text-amber-300" },
-  { section: "dismissed-management", title: "إدارة المفصولين", icon: ShieldAlert, color: "bg-rose-500/10 text-rose-700 dark:text-rose-300" },
-  { section: "grade-entry", title: "تسجيل الدرجات", icon: PenLine, color: "bg-sky-500/10 text-sky-700 dark:text-sky-300" },
-  { section: "grade-records", title: "سجل الدرجات", icon: ChartColumn, color: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300" },
-  { section: "exam-new", title: "إضافة امتحان", icon: FilePlus2, color: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" },
-  { section: "follow-up-calls", title: "المكالمات", icon: PhoneCall, color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
-  { section: "follow-up-leaves", title: "الإجازات", icon: CalendarCheck, color: "bg-teal-500/10 text-teal-700 dark:text-teal-300" },
+  { section: "student-registry", title: "سجل الطلاب", icon: ClipboardList, color: "bg-primary/10 text-primary" },
+  { section: "student-bulk-import", title: "إضافة الطلاب الجماعية", icon: UsersRound, color: "bg-primary/10 text-primary" },
+  { section: "opportunities", title: "إدارة الفرص", icon: Target, color: "bg-warning-soft text-warning" },
+  { section: "dismissed-management", title: "إدارة المفصولين", icon: ShieldAlert, color: "bg-danger-soft text-danger" },
+  { section: "grade-entry", title: "تسجيل الدرجات", icon: PenLine, color: "bg-info-soft text-info" },
+  { section: "grade-records", title: "سجل الدرجات", icon: ChartColumn, color: "bg-info-soft text-info" },
+  { section: "exam-new", title: "إضافة امتحان", icon: FilePlus2, color: "bg-info-soft text-info" },
+  { section: "follow-up-calls", title: "المكالمات", icon: PhoneCall, color: "bg-success-soft text-success" },
+  { section: "follow-up-leaves", title: "الإجازات", icon: CalendarCheck, color: "bg-success-soft text-success" },
 ] as const;
 
 function formatStatsTime(value?: string) {
@@ -159,19 +159,19 @@ export function DashboardView({
       label: "طلاب نشطون",
       value: stats?.activeStudents,
       icon: Users,
-      color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+      color: "bg-success-soft text-success",
     },
     {
       label: "طلاب مفصولون",
       value: stats?.dismissedStudents,
       icon: Shield,
-      color: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      color: "bg-danger-soft text-danger",
     },
     {
       label: "إجمالي الطلاب",
       value: stats?.totalStudents,
       icon: BookOpen,
-      color: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+      color: "bg-info-soft text-info",
     },
   ];
 
@@ -222,7 +222,7 @@ export function DashboardView({
       {staleData && (
         <div
           role="alert"
-          className="flex flex-col gap-3 rounded-2xl border border-amber-300/70 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-3 rounded-2xl border border-warning-line bg-warning-soft p-4 text-sm text-warning sm:flex-row sm:items-center sm:justify-between"
         >
           <div>
             <p className="font-black">تعذر جلب التحديث الجديد</p>
@@ -284,7 +284,7 @@ export function DashboardView({
                 aria-haspopup="dialog"
                 className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
               >
-                <span className="tp-dashboard__shortcut-icon bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" aria-hidden="true">
+                <span className="tp-dashboard__shortcut-icon bg-success-soft text-success" aria-hidden="true">
                   <ListChecks />
                 </span>
                 <span className="tp-dashboard__shortcut-label">إدارة ملاحظات المكالمات</span>
@@ -297,7 +297,7 @@ export function DashboardView({
                 aria-haspopup="dialog"
                 className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
               >
-                <span className="tp-dashboard__shortcut-icon bg-rose-500/10 text-rose-700 dark:text-rose-300" aria-hidden="true">
+                <span className="tp-dashboard__shortcut-icon bg-danger-soft text-danger" aria-hidden="true">
                   <LockKeyhole />
                 </span>
                 <span className="tp-dashboard__shortcut-label">اغلاق الكودات</span>
@@ -310,7 +310,7 @@ export function DashboardView({
                 aria-haspopup="dialog"
                 className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
               >
-                <span className="tp-dashboard__shortcut-icon bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" aria-hidden="true">
+                <span className="tp-dashboard__shortcut-icon bg-success-soft text-success" aria-hidden="true">
                   <CalendarClock />
                 </span>
                 <span className="tp-dashboard__shortcut-label">إدارة فترة السماح</span>

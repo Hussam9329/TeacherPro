@@ -572,12 +572,12 @@ export function CoursesView() {
         {
           label: "نشطة للتسجيل",
           value: stats?.active,
-          color: "text-emerald-600 dark:text-emerald-400",
+          color: "text-success",
         },
         {
           label: "موقوفة عن التسجيل",
           value: stats?.inactive,
-          color: "text-amber-600 dark:text-amber-400",
+          color: "text-warning",
         },
         {
           label: "عليها طلاب",
@@ -587,7 +587,7 @@ export function CoursesView() {
         {
           label: "آمنة للحذف",
           value: stats?.deletable,
-          color: "text-sky-600 dark:text-sky-400",
+          color: "text-info",
         },
       ].map(({ label, value, color }) => (
         <Card key={label}>
@@ -645,8 +645,8 @@ export function CoursesView() {
                 variant="outline"
                 className={
                   row.course.active
-                    ? "text-emerald-700 dark:text-emerald-400"
-                    : "text-amber-700 dark:text-amber-400"
+                    ? "text-success"
+                    : "text-warning"
                 }
               >
                 {row.course.active ? "نشطة للتسجيل" : "موقوفة عن التسجيل"}
@@ -717,7 +717,7 @@ export function CoursesView() {
           <Button
             variant="outline"
             size="sm"
-            className={`text-xs ${row.course.active ? "text-amber-700 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}
+            className={`text-xs ${row.course.active ? "text-warning" : "text-success"}`}
             disabled={isTogglingCourse}
             onClick={() => void handleToggle(row)}
             aria-label={`${row.course.active ? "إيقاف التسجيل في" : "تفعيل التسجيل في"} ${row.course.name}`}
@@ -1128,7 +1128,7 @@ export function CoursesView() {
                       </div>
                     </div>
                     {courseSyncDialog.preview.studentsToUpdate === 0 ? (
-                      <p className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3 text-emerald-800 dark:text-emerald-200">
+                      <p className="rounded-xl border border-success-line bg-success-soft p-3 text-success">
                         جميع بيانات الطلاب الحالية متوافقة أصلاً؛ خيار المزامنة
                         لن يغير أي سجل.
                       </p>

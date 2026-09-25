@@ -2223,10 +2223,10 @@ export function GradeEntryView() {
             role={gradeEntryNotice.type === "error" ? "alert" : "status"}
             className={`pointer-events-auto rounded-2xl border p-3 text-sm shadow-2xl backdrop-blur-md ${
               gradeEntryNotice.type === "success"
-                ? "border-emerald-200 bg-emerald-50/95 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/90 dark:text-emerald-50"
+                ? "border-success-line bg-success-soft/95 text-success"
                 : gradeEntryNotice.type === "error"
                   ? "border-destructive/40 bg-destructive/10 text-destructive shadow-destructive/10 dark:bg-destructive/20"
-                  : "border-sky-200 bg-sky-50/95 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/90 dark:text-sky-50"
+                  : "border-info-line bg-info-soft/95 text-info"
             }`}
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -2414,7 +2414,7 @@ export function GradeEntryView() {
                 clearingAbsentGrades
               }
               title="يلغي غياب الطلاب النشطين فقط؛ تبقى سجلات المفصولين والمؤرشفين محفوظة"
-              className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/30"
+              className="border-warning-line text-warning hover:bg-warning-soft"
             >
               {clearingAbsentGrades
                 ? "جاري الإلغاء..."
@@ -2442,7 +2442,7 @@ export function GradeEntryView() {
           </div>
 
           {missingChapterCourses.length > 0 && (
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+            <div className="mt-4 rounded-2xl border border-warning-line bg-warning-soft p-3 text-sm text-warning">
               الدورات التالية غير مربوطة بفصل نشط ولن تظهر ضمن إدخال الدرجات:{" "}
               {missingChapterCourses.join("، ")}
             </div>
@@ -2492,7 +2492,7 @@ export function GradeEntryView() {
                   />
                 </div>
                 <div
-                  className="grid min-h-[5.5rem] w-full grid-cols-[minmax(0,1fr)_auto] items-stretch gap-3 rounded-xl border border-emerald-500/25 bg-gradient-to-l from-emerald-500/10 to-transparent p-3 text-right shadow-sm sm:p-4"
+                  className="grid min-h-[5.5rem] w-full grid-cols-[minmax(0,1fr)_auto] items-stretch gap-3 rounded-xl border border-success-line bg-gradient-to-l from-success-soft to-transparent p-3 text-right shadow-sm sm:p-4"
                   data-manual-grade-count="true"
                   role="status"
                   aria-live="polite"
@@ -2504,69 +2504,69 @@ export function GradeEntryView() {
                   title="يُحتسب جميع السجلات اليدوية: الرقمية + قبل التسجيل + المعلقة للمراجعة + المفصولين + المجازين + درجات السماح القديمة (أرشيف). لا تُحتسب الحالات التلقائية (غياب تلقائي فقط) ولا سجلات «درجة» بدون رقم"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="flex min-w-0 items-center gap-1.5 text-xs font-black leading-5 text-emerald-800 dark:text-emerald-200">
+                    <p className="flex min-w-0 items-center gap-1.5 text-xs font-black leading-5 text-success">
                       <span aria-hidden="true">📊</span>
                       <span>الأوراق المدخلة يدوياً</span>
                     </p>
                     <div className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-muted-foreground">
-                      <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[10px] leading-none">
-                        <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
+                      <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-success-line bg-success-soft px-2 py-1 text-[10px] leading-none">
+                        <span className="size-1.5 shrink-0 rounded-full bg-success" aria-hidden="true" />
                         <span>رقمية</span>
-                        <strong className="font-black tabular-nums text-emerald-700 dark:text-emerald-300">
+                        <strong className="font-black tabular-nums text-success">
                           {entrySheetLoading || entrySheetError ? "—" : allManualGradesCount.numeric}
                         </strong>
                       </span>
                       {allManualGradesCount.preRegistration > 0 && (
-                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-1 text-[10px] leading-none">
-                          <span className="size-1.5 shrink-0 rounded-full bg-blue-500" aria-hidden="true" />
+                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-info-line bg-info-soft px-2 py-1 text-[10px] leading-none">
+                          <span className="size-1.5 shrink-0 rounded-full bg-info" aria-hidden="true" />
                           <span>قبل التسجيل</span>
-                          <strong className="font-black tabular-nums text-blue-700 dark:text-blue-300">
+                          <strong className="font-black tabular-nums text-info">
                             {allManualGradesCount.preRegistration}
                           </strong>
                         </span>
                       )}
                       {allManualGradesCount.pending > 0 && (
-                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[10px] leading-none">
-                          <span className="size-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden="true" />
+                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-warning-line bg-warning-soft px-2 py-1 text-[10px] leading-none">
+                          <span className="size-1.5 shrink-0 rounded-full bg-warning" aria-hidden="true" />
                           <span>معلقة</span>
-                          <strong className="font-black tabular-nums text-amber-700 dark:text-amber-300">
+                          <strong className="font-black tabular-nums text-warning">
                             {allManualGradesCount.pending}
                           </strong>
                         </span>
                       )}
                       {/* Smart Notes من السجل المنظّم */}
                       {(gradeSmartNoteCategoryCounts?.DISMISSED_PENDING || 0) > 0 && (
-                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-red-500/20 bg-red-500/10 px-2 py-1 text-[10px] leading-none">
-                          <span className="size-1.5 shrink-0 rounded-full bg-red-500" aria-hidden="true" />
+                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-danger-line bg-danger-soft px-2 py-1 text-[10px] leading-none">
+                          <span className="size-1.5 shrink-0 rounded-full bg-danger" aria-hidden="true" />
                           <span>مفصولين</span>
-                          <strong className="font-black tabular-nums text-red-700 dark:text-red-300">
+                          <strong className="font-black tabular-nums text-danger">
                             {gradeSmartNoteCategoryCounts.DISMISSED_PENDING}
                           </strong>
                         </span>
                       )}
                       {(gradeSmartNoteCategoryCounts?.LEAVE_PENDING || 0) > 0 && (
-                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-[10px] leading-none">
-                          <span className="size-1.5 shrink-0 rounded-full bg-purple-500" aria-hidden="true" />
+                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] leading-none">
+                          <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
                           <span>مجازين</span>
-                          <strong className="font-black tabular-nums text-purple-700 dark:text-purple-300">
+                          <strong className="font-black tabular-nums text-primary">
                             {gradeSmartNoteCategoryCounts.LEAVE_PENDING}
                           </strong>
                         </span>
                       )}
                       {(gradeSmartNoteCategoryCounts?.GRACE_SCORED || 0) > 0 && (
-                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[10px] leading-none">
-                          <span className="size-1.5 shrink-0 rounded-full bg-cyan-500" aria-hidden="true" />
+                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-info-line bg-info-soft px-2 py-1 text-[10px] leading-none">
+                          <span className="size-1.5 shrink-0 rounded-full bg-info" aria-hidden="true" />
                           <span>سماح قديم (أرشيف)</span>
-                          <strong className="font-black tabular-nums text-cyan-700 dark:text-cyan-300">
+                          <strong className="font-black tabular-nums text-info">
                             {gradeSmartNoteCategoryCounts.GRACE_SCORED}
                           </strong>
                         </span>
                       )}
                     </div>
                   </div>
-                  <div className="grid min-h-14 min-w-16 shrink-0 place-items-center self-stretch rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2">
+                  <div className="grid min-h-14 min-w-16 shrink-0 place-items-center self-stretch rounded-lg border border-success-line bg-success-soft px-2">
                     <span
-                      className="text-3xl font-black leading-none tabular-nums text-emerald-700 dark:text-emerald-300"
+                      className="text-3xl font-black leading-none tabular-nums text-success"
                       data-manual-grade-count-value="true"
                     >
                       {entrySheetLoading || entrySheetError
@@ -2768,7 +2768,7 @@ export function GradeEntryView() {
                           {rowSmartNote?.status === "PENDING" && (
                             <Badge
                               variant="outline"
-                              className="border-amber-300 bg-amber-50 text-[10px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+                              className="border-warning-line bg-warning-soft text-[10px] text-warning"
                             >
                               درجة معلّقة: {rowSmartNote.score ?? "—"}
                             </Badge>
@@ -2803,27 +2803,27 @@ export function GradeEntryView() {
                               splitSelection(selectedExam.mainSite),
                             ) ||
                             student.status === "مؤرشف") && (
-                            <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                            <p className="mt-1 text-[11px] text-warning">
                               له درجة مسجلة على هذا الامتحان، لذا ظهر حتى لو
                               لم يعد مطابقاً للدورة أو الموقع أو الفصل الحالي.
                             </p>
                           )}
                         {examBeforeRegistration && (
-                          <p className="mt-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
+                          <p className="mt-1 rounded-lg border border-info-line bg-info-soft px-2 py-1 text-[11px] font-medium text-info">
                             هذا الامتحان يسبق تسجيل الطالب؛ عند إدخال درجة
                             تُقدَّم نهاية تسجيله إلى تاريخ الامتحان وتُحتسب
                             رسمياً في سجله. الغياب والغش غير متاحين هنا.
                           </p>
                         )}
                         {leave && (
-                          <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-300">
+                          <p className="mt-1 text-[11px] text-success">
                             الطالب مجاز لهذا الامتحان — إدخال درجة ينهي
                             الإجازة وتُحتسب الدرجة في سجله
                             {leave.reason ? `: ${leave.reason}` : ""}
                           </p>
                         )}
                         {gracePeriod && (
-                          <p className="mt-1 text-[11px] text-sky-700 dark:text-sky-300">
+                          <p className="mt-1 text-[11px] text-info">
                             {describeExamGraceExclusion(gracePeriod)}.
                           </p>
                         )}
@@ -2998,9 +2998,9 @@ export function GradeEntryView() {
                               : savePhase === "saved"
                                 ? "tp-save-indicator--saved"
                                 : savePhase === "queued"
-                                  ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
+                                  ? "border-info-line bg-info-soft text-info"
                                 : savePhase === "pending"
-                                  ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+                                  ? "border-warning-line bg-warning-soft text-warning"
                                   : ""
                           }`}
                         >

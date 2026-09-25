@@ -35,7 +35,7 @@ const CATEGORY_META: Record<
     shortTitle: "طالب مفصول",
     decision: "لم تُسجّل كدرجة ولم تؤثر أكاديمياً؛ تنتظر مراجعة حالة الفصل.",
     className:
-      "border-rose-200 bg-rose-50/80 text-rose-950 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-100",
+      "border-danger-line bg-danger-soft/80 text-danger",
     icon: UserRoundX,
   },
   // Historical only: the current grace model never creates or settles these.
@@ -44,7 +44,7 @@ const CATEGORY_META: Record<
     shortTitle: "درجة سماح قديمة (أرشيف)",
     decision: "سجل من نظام السماح السابق للعرض فقط؛ لا يغيّر المحاسبة ولا يُنشأ مثله بعد الآن.",
     className:
-      "border-sky-200 bg-sky-50/80 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/25 dark:text-sky-100",
+      "border-info-line bg-info-soft/80 text-info",
     icon: CheckCircle2,
   },
   BEFORE_REGISTRATION_PENDING: {
@@ -52,7 +52,7 @@ const CATEGORY_META: Record<
     shortTitle: "امتحان سابق للتسجيل",
     decision: "عند اعتمادها يُقدَّم تاريخ تسجيل الطالب إلى تاريخ الامتحان وتُحتسب الدرجة رسمياً.",
     className:
-      "border-amber-200 bg-amber-50/80 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100",
+      "border-warning-line bg-warning-soft/80 text-warning",
     icon: CalendarClock,
   },
   LEAVE_PENDING: {
@@ -60,7 +60,7 @@ const CATEGORY_META: Record<
     shortTitle: "سجل إجازة قديم",
     decision: "سجلات قديمة للمراجعة فقط؛ إدخال درجة اليوم ينهي الإجازة ويعتمدها محتسبة.",
     className:
-      "border-emerald-200 bg-emerald-50/80 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/25 dark:text-emerald-100",
+      "border-success-line bg-success-soft/80 text-success",
     icon: FileWarning,
   },
 };
@@ -133,7 +133,7 @@ export function GradeSmartNotesPanel({
 
   return (
     <Card
-      className="overflow-hidden border-violet-200/80 bg-gradient-to-b from-violet-50/55 to-background dark:border-violet-900/60 dark:from-violet-950/20"
+      className="overflow-hidden border-primary/30 bg-gradient-to-b from-primary/5 to-background"
       aria-labelledby="grade-smart-notes-title"
     >
       <CardHeader className="gap-3 pb-4">
@@ -184,7 +184,7 @@ export function GradeSmartNotesPanel({
                     })
                   }
                   aria-pressed={selected}
-                  className={`min-h-11 min-w-0 touch-manipulation rounded-2xl border p-4 text-start transition [overflow-wrap:anywhere] hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${meta.className} ${selected ? "ring-2 ring-violet-500 ring-offset-2 ring-offset-background" : ""}`}
+                  className={`min-h-11 min-w-0 touch-manipulation rounded-2xl border p-4 text-start transition [overflow-wrap:anywhere] hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${meta.className} ${selected ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
                 >
                   <span className="flex items-start justify-between gap-3">
                     <span>
@@ -261,7 +261,7 @@ export function GradeSmartNotesPanel({
           ) : (
             <>
               {totalCount > notes.length && !activeCategory && (
-                <p className="mb-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
+                <p className="mb-3 rounded-xl border border-info-line bg-info-soft px-3 py-2 text-xs text-info">
                   يعرض السجل أحدث {notes.length} حالة من أصل {totalCount}. استخدم
                   بطاقات الملخص لمعرفة العدد الكامل.
                 </p>

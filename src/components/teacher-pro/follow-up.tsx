@@ -314,11 +314,11 @@ function contactStatusFromSelectValue(value: string): ContactStatus {
 
 function contactStatusClasses(status: ContactStatus): string {
   if (status === "تم الاتصال")
-    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200";
+    return "border-success-line bg-success-soft text-success";
   if (status === "لم يرد")
-    return "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200";
+    return "border-danger-line bg-danger-soft text-danger";
   if (status === "الرقم خاطئ")
-    return "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200";
+    return "border-info-line bg-info-soft text-info";
   return "border-muted bg-muted/40 text-muted-foreground";
 }
 
@@ -1625,7 +1625,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         </div>
 
         {leaveDateFilter && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-info-line bg-info-soft px-4 py-3 text-sm text-info">
             <span className="font-bold">
               النتائج مفلترة على إجازات {leaveDateFilter === "today" ? "اليوم" : formatAppDate(leaveDateFilter)} بتوقيت بغداد.
             </span>
@@ -1720,7 +1720,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             return (
               <div
                 key={leave.id}
-                className={`grid min-w-0 gap-2 rounded-2xl border p-3 text-sm [overflow-wrap:anywhere] 2xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)_auto] 2xl:items-center ${editingThis ? "border-sky-300 bg-sky-50/50 dark:border-sky-900/60 dark:bg-sky-950/20" : "bg-card/80"}`}
+                className={`grid min-w-0 gap-2 rounded-2xl border p-3 text-sm [overflow-wrap:anywhere] 2xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)_auto] 2xl:items-center ${editingThis ? "border-info-line bg-info-soft" : "bg-card/80"}`}
               >
                 <b>
                   {studentDisplayName}
@@ -1786,7 +1786,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     }
     return (
       <a
-        className="rounded-xl border bg-card px-3 py-2 text-xs font-bold text-emerald-700 underline dark:text-emerald-300"
+        className="rounded-xl border bg-card px-3 py-2 text-xs font-bold text-success underline"
         href={whatsappLink(phone || "")}
         target="_blank"
         rel="noreferrer"
@@ -1798,13 +1798,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
   const callBadgeToneClass = (tone: CallBadgeTone) => {
     if (tone === "deducted")
-      return "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200";
+      return "border-danger-line bg-danger-soft text-danger";
     if (tone === "warning")
-      return "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100";
+      return "border-warning-line bg-warning-soft text-warning";
     if (tone === "safe")
-      return "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100";
+      return "border-info-line bg-info-soft text-info";
     if (tone === "success")
-      return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100";
+      return "border-success-line bg-success-soft text-success";
     return "border-border bg-muted/40 text-muted-foreground";
   };
 
@@ -1833,7 +1833,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     if (preferred) {
       return (
         <a
-          className="rounded-xl border bg-card px-3 py-2 text-xs font-bold text-sky-700 underline dark:text-sky-300"
+          className="rounded-xl border bg-card px-3 py-2 text-xs font-bold text-info underline"
           href={telegramLink(preferred)}
           target="_blank"
           rel="noreferrer"
@@ -1860,7 +1860,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     }
     return (
       <a
-        className="rounded-xl border bg-card px-3 py-2 text-xs font-bold text-sky-700 underline dark:text-sky-300"
+        className="rounded-xl border bg-card px-3 py-2 text-xs font-bold text-info underline"
         href={telegramLink(normalizedTelegram)}
         target="_blank"
         rel="noreferrer"
@@ -1918,7 +1918,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           </p>
         ) : null}
         {item.grade.notes ? (
-          <div className="mt-2 rounded-xl border border-amber-200/70 bg-amber-50/90 px-2.5 py-2 text-[11px] text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100">
+          <div className="mt-2 rounded-xl border border-warning-line bg-warning-soft px-2.5 py-2 text-[11px] text-warning">
             <span className="mb-1 block font-bold">ملاحظة الدرجة</span>
             <span className="line-clamp-4">{item.grade.notes}</span>
           </div>
@@ -2015,10 +2015,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   getOpportunityLimit(row.student) === null
                     ? "bg-muted text-muted-foreground"
                     : Number(row.student.opportunities || 0) === 0
-                      ? "bg-red-500/15 text-red-600 dark:text-red-400"
+                      ? "bg-danger-soft text-danger"
                       : Number(row.student.opportunities || 0) <= 1
-                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                        : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                        ? "bg-warning-soft text-warning"
+                        : "bg-success-soft text-success"
                 }`}
               >
                 الفرص: {studentOpportunityText(row.student)}
@@ -2081,13 +2081,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                       !item
                         ? "text-muted-foreground"
                         : item.category === "absent"
-                          ? "text-red-600 dark:text-red-400"
+                          ? "text-danger"
                           : item.category === "discounted" || item.category === "failed"
-                            ? "text-amber-600 dark:text-amber-400"
+                            ? "text-warning"
                             : item.category === "cheating"
-                              ? "text-red-600 dark:text-red-400"
+                              ? "text-danger"
                               : item.category === "passed" || item.category === "full"
-                                ? "text-emerald-600 dark:text-emerald-400"
+                                ? "text-success"
                                 : "text-primary"
                     }`}
                   >
@@ -2250,7 +2250,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 placeholder="دوّن ملاحظة مختصرة وواضحة تخص تواصل هذا الطالب أو ولي أمره"
               />
               {noteHasConflict && (
-                <div role="alert" className="mt-2 space-y-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3">
+                <div role="alert" className="mt-2 space-y-2 rounded-xl border border-warning-line bg-warning-soft p-3">
                   <p className="text-xs font-semibold">عدّل مستخدم آخر الملاحظة. تعديلك باقٍ في الحقل أعلاه.</p>
                   <p className="whitespace-pre-wrap break-words text-sm leading-6 [overflow-wrap:anywhere]">
                     المحفوظة الآن: {callNoteConflicts[noteDraftKey]?.notes || "لا توجد ملاحظة"}
@@ -2335,7 +2335,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   return (
     <div className={`space-y-5 tp-follow-up-page tp-follow-up-page--${view}`}>
       <Card className="overflow-hidden tp-follow-up-page__intro">
-        <div className="h-1 bg-gradient-to-l from-primary via-fuchsia-500 to-indigo-500" />
+        <div className="h-1 bg-gradient-to-l from-primary via-tp-accent to-tp-soft" />
         <CardHeader>
           <CardTitle>{viewTitles[view]}</CardTitle>
         </CardHeader>
@@ -2353,7 +2353,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               <CardContent className="space-y-3">
                 <fieldset disabled={leaveSaving} className="min-w-0 space-y-3">
                 {editingLeaveId && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-sky-50/70 px-3 py-2 text-xs text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-info-line bg-info-soft px-3 py-2 text-xs text-info">
                     <span>
                       أنت تعدّل إجازة قائمة. أي تغيير في النطاق يعيد ترتيب
                       الدرجات المعلّقة تلقائياً.
@@ -2379,8 +2379,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   يمكن اعتماد إجازة لامتحان سابق. يُلغى الفصل إذا زال سببه بعد احتساب الإجازة، دون منحه فرص تعهد.
                 </p>}
                 {selectedLeaveStudent && selectedStudentLeaves.length > 0 && (
-                  <div className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/25">
-                    <p className="text-xs font-bold text-amber-900 dark:text-amber-100">
+                  <div className="space-y-2 rounded-2xl border border-warning-line bg-warning-soft p-3">
+                    <p className="text-xs font-bold text-warning">
                       إجازات الطالب (
                       {selectedStudentLeaves.length}):
                     </p>
@@ -2432,7 +2432,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                         );
                       })}
                     </ul>
-                    <p className="text-[11px] text-amber-800 dark:text-amber-200">
+                    <p className="text-[11px] text-warning">
                       لا يمكن تسجيل إجازة جديدة تتقاطع مع أي إجازة أعلاه؛
                       عدّلها أو احذفها أولاً.
                     </p>
@@ -2498,7 +2498,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     </div>
                     {selectedLeaveStudent && periodPreviewExamCount !== null && (
                       <p
-                        className={`rounded-xl px-3 py-2 text-xs ${periodPreviewExamCount > 0 ? "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100" : "bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-100"}`}
+                        className={`rounded-xl px-3 py-2 text-xs ${periodPreviewExamCount > 0 ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}
                       >
                         {periodPreviewExamCount > 0
                           ? `هذه الفترة ستغطي ${periodPreviewExamCount} امتحاناً تابعاً لدورة/موقع هذا الطالب وسيُستثنى منها جميعاً من المحاسبة.`
@@ -2801,7 +2801,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 </div>
               </div>
               {callStatusFilter === "absent" ? (
-                <p className="rounded-2xl border border-amber-300/70 bg-amber-50/70 p-3 text-xs font-bold text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                <p className="rounded-2xl border border-warning-line bg-warning-soft p-3 text-xs font-bold text-warning">
                   الغائبون يشملون المسجلين بحالة «غائب» والطلاب الذين لم تُدخل
                   درجاتهم بعد انتهاء الامتحان. نطاق الدرجة معطّل لهذا الفلتر.
                 </p>
@@ -2814,7 +2814,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   درجة «من» يجب ألا تكون أكبر من درجة «إلى».
                 </p>
               ) : callStatusFilter === "dismissed" && !callGradeFrom && !callGradeTo ? (
-                <p className="rounded-2xl border border-red-300/60 bg-red-50/60 p-3 text-xs font-bold text-red-800 dark:border-red-900/60 dark:bg-red-950/25 dark:text-red-100">
+                <p className="rounded-2xl border border-danger-line bg-danger-soft p-3 text-xs font-bold text-danger">
                   يعرض هذا الفلتر الطلاب الذين حالتهم الحالية «مفصول» ضمن
                   الدورة والامتحان المحددين.
                 </p>
@@ -2848,7 +2848,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             className="md:grid-cols-2"
           />
           <div className="grid gap-3 md:grid-cols-4">
-            <Card className="border-dashed border-sky-500/35 bg-sky-500/5" data-count-scope="filtered">
+            <Card className="border-dashed border-info-line bg-info-soft" data-count-scope="filtered">
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">تم الاتصال</p>
                 <b className="text-2xl">
@@ -2856,7 +2856,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 </b>
               </CardContent>
             </Card>
-            <Card className="border-dashed border-sky-500/35 bg-sky-500/5" data-count-scope="filtered">
+            <Card className="border-dashed border-info-line bg-info-soft" data-count-scope="filtered">
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">لم يرد</p>
                 <b className="text-2xl">
@@ -2864,7 +2864,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 </b>
               </CardContent>
             </Card>
-            <Card className="border-dashed border-sky-500/35 bg-sky-500/5" data-count-scope="filtered">
+            <Card className="border-dashed border-info-line bg-info-soft" data-count-scope="filtered">
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">الرقم خاطئ</p>
                 <b className="text-2xl">
@@ -2872,7 +2872,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 </b>
               </CardContent>
             </Card>
-            <Card className="border-dashed border-sky-500/35 bg-sky-500/5" data-count-scope="filtered">
+            <Card className="border-dashed border-info-line bg-info-soft" data-count-scope="filtered">
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">بدون إجراء</p>
                 <b className="text-2xl">

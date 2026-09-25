@@ -206,10 +206,10 @@ function studentTelegramHandle(student: {
 }
 
 function toneClasses(tone: TimelineEvent["tone"]) {
-  if (tone === "danger") return "border-red-500/30 bg-red-500/5";
-  if (tone === "warning") return "border-amber-500/30 bg-amber-500/5";
-  if (tone === "success") return "border-emerald-500/30 bg-emerald-500/5";
-  if (tone === "info") return "border-blue-500/30 bg-blue-500/5";
+  if (tone === "danger") return "border-danger-line bg-danger-soft";
+  if (tone === "warning") return "border-warning-line bg-warning-soft";
+  if (tone === "success") return "border-success-line bg-success-soft";
+  if (tone === "info") return "border-info-line bg-info-soft";
   return "border-border bg-muted/20";
 }
 
@@ -309,38 +309,38 @@ function buildHtmlReport(history: StudentHistory) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>سجل الطالب - ${escapeDismissedHistoryHtml(s.name)}</title>
 <style>
-:root{font-family:Arial,Tahoma,sans-serif;color:#111827;background:#f8fafc}
+:root{font-family:Arial,Tahoma,sans-serif;color:#19293A;background:#F3F0E4}
 *{box-sizing:border-box}
 html,body{max-width:100%;overflow-x:hidden}
 body{margin:0;padding:24px}
-.page{max-width:1000px;margin:auto;background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:28px;overflow-wrap:anywhere;word-break:break-word}
-.header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;border-bottom:3px solid #111827;padding-bottom:18px;margin-bottom:20px}
-.brand h1{font-size:24px;margin:0 0 6px}.brand p{margin:0;color:#6b7280}
-.status{padding:8px 12px;border-radius:999px;background:#fee2e2;color:#991b1b;font-weight:700}
+.page{max-width:1000px;margin:auto;background:#FBF9EB;border:1px solid #E6E3D9;border-radius:18px;padding:28px;overflow-wrap:anywhere;word-break:break-word}
+.header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;border-bottom:3px solid #19293A;padding-bottom:18px;margin-bottom:20px}
+.brand h1{font-size:24px;margin:0 0 6px}.brand p{margin:0;color:#5B6674}
+.status{padding:8px 12px;border-radius:999px;background:#F7E8DB;color:#A34645;font-weight:700}
 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}
-.info-box{border:1px solid #e5e7eb;border-radius:12px;padding:10px;break-inside:avoid}
-.info-box b{display:block;font-size:11px;color:#6b7280;margin-bottom:4px}
+.info-box{border:1px solid #E6E3D9;border-radius:12px;padding:10px;break-inside:avoid}
+.info-box b{display:block;font-size:11px;color:#5B6674;margin-bottom:4px}
 .summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin:18px 0}
-.metric{border:1px solid #e5e7eb;border-radius:12px;padding:10px;text-align:center}
-.metric strong{display:block;font-size:20px}.metric span{font-size:11px;color:#6b7280}
+.metric{border:1px solid #E6E3D9;border-radius:12px;padding:10px;text-align:center}
+.metric strong{display:block;font-size:20px}.metric span{font-size:11px;color:#5B6674}
 .section-title{font-size:18px;margin:26px 0 12px}
-.event{display:flex;gap:12px;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin:0 0 10px;break-inside:avoid}
-.event-index{width:28px;height:28px;border-radius:50%;background:#111827;color:#fff;display:grid;place-items:center;flex:0 0 28px;font-weight:700}
+.event{display:flex;gap:12px;border:1px solid #E6E3D9;border-radius:12px;padding:12px;margin:0 0 10px;break-inside:avoid}
+.event-index{width:28px;height:28px;border-radius:50%;background:#19293A;color:#FBF9EB;display:grid;place-items:center;flex:0 0 28px;font-weight:700}
 .event-body{min-width:0;flex:1;overflow-wrap:anywhere;word-break:break-word}
 .event-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:6px}
-.event-head span{font-size:12px;color:#6b7280;white-space:nowrap}
+.event-head span{font-size:12px;color:#5B6674;white-space:nowrap}
 .detail{font-size:13px;line-height:1.7}
-.danger{border-color:#fecaca;background:#fff7f7}.warning{border-color:#fde68a;background:#fffdf3}
-.success{border-color:#a7f3d0;background:#f4fff9}.info{border-color:#bfdbfe;background:#f7fbff}
+.danger{border-color:#DDA198;background:#F9F1E3}.warning{border-color:#D4ABA5;background:#F7F1E4}
+.success{border-color:#A8ABA9;background:#F0EFE2}.info{border-color:#B5B7B6;background:#F3F2E5}
 @media(max-width:760px){body{padding:8px}.page{padding:14px;border-radius:10px}.header{display:block}.status{display:inline-block;margin-top:10px}.grid{grid-template-columns:1fr 1fr}.summary{grid-template-columns:repeat(2,1fr)}.event-head{display:block}.event-head span{display:block;margin-top:4px}.event{padding:10px}}
 @media(max-width:430px){.grid{grid-template-columns:1fr}.summary{grid-template-columns:1fr 1fr}}
 @page{size:A4;margin:12mm}
-@media print{html,body{overflow:visible}body{padding:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{max-width:none;border:0;border-radius:0;padding:0}.no-print{display:none!important}.event,.info-box,.metric{page-break-inside:avoid;break-inside:avoid}.header{page-break-after:avoid}.summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media print{html,body{overflow:visible}body{padding:0;background:#FBF9EB;-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{max-width:none;border:0;border-radius:0;padding:0}.no-print{display:none!important}.event,.info-box,.metric{page-break-inside:avoid;break-inside:avoid}.header{page-break-after:avoid}.summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
 </style>
 </head>
 <body>
 <main class="page">
-<div class="no-print" style="display:flex;justify-content:flex-start;margin-bottom:12px"><button onclick="window.print()" style="border:1px solid #d1d5db;background:#fff;border-radius:10px;padding:8px 14px;cursor:pointer;font-weight:700">طباعة التقرير</button></div>
+<div class="no-print" style="display:flex;justify-content:flex-start;margin-bottom:12px"><button onclick="window.print()" style="border:1px solid #D1D0CA;background:#FBF9EB;border-radius:10px;padding:8px 14px;cursor:pointer;font-weight:700">طباعة التقرير</button></div>
 <header class="header"><div class="brand"><h1>سجل الفصل للطالب</h1><p>إدارة حسن فلاح مدرس مادة الاحياء</p></div><div class="status">${escapeDismissedHistoryHtml(statusLabel)}</div></header>
 <div class="grid">${info.map(([k, v]) => `<div class="info-box"><b>${escapeDismissedHistoryHtml(k)}</b><span>${escapeDismissedHistoryHtml(v)}</span></div>`).join("")}</div>
 <div class="summary">${metrics.map((metric) => `<div class="metric"><strong>${metric.value}</strong><span>${escapeDismissedHistoryHtml(metric.label)}</span></div>`).join("")}</div>
@@ -858,7 +858,7 @@ export function DismissedManagementView() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card className="border-red-500/20">
+        <Card className="border-danger-line">
           <CardContent className="flex items-center justify-between p-4">
             <div>
               <p className="text-xs text-muted-foreground">حسب الفلترة</p>
@@ -866,7 +866,7 @@ export function DismissedManagementView() {
                 {statsLoading ? "..." : stats.total}
               </p>
             </div>
-            <Users className="size-7 text-red-500" />
+            <Users className="size-7 text-danger" />
           </CardContent>
         </Card>
         <Card>
@@ -877,7 +877,7 @@ export function DismissedManagementView() {
                 {statsLoading ? "..." : stats.current}
               </p>
             </div>
-            <ShieldAlert className="size-7 text-red-500" />
+            <ShieldAlert className="size-7 text-danger" />
           </CardContent>
         </Card>
         <Card>
@@ -905,7 +905,7 @@ export function DismissedManagementView() {
       </div>
 
       {statsError ? (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+        <div className="rounded-2xl border border-warning-line bg-warning-soft p-3 text-sm text-warning">
           {statsError}
         </div>
       ) : null}
@@ -1026,9 +1026,9 @@ export function DismissedManagementView() {
           return (
             <Card
               key={student.id}
-              className="overflow-hidden border-red-500/20 shadow-sm"
+              className="overflow-hidden border-danger-line shadow-sm"
             >
-              <div className="h-1 bg-red-500/70" />
+              <div className="h-1 bg-tp-accent/70" />
               <CardContent className="space-y-4 p-4 sm:p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
@@ -1051,15 +1051,15 @@ export function DismissedManagementView() {
                       ) : null}
                     </div>
                   </div>
-                  <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs sm:basis-64 sm:shrink-0">
-                    <b className="block text-red-700 dark:text-red-300">
+                  <div className="rounded-xl border border-danger-line bg-danger-soft px-3 py-2 text-xs sm:basis-64 sm:shrink-0">
+                    <b className="block text-danger">
                       {student.status === "مفصول" ? "سبب الفصل" : "سبب آخر فصل"}
                     </b>
                     <span>
                       {student.dismissalReason || student.lastDismissalReason || "لا يوجد سبب مسجل"}
                     </span>
                     {student.dismissalNotes ? (
-                      <span className="mt-1 block border-t border-red-500/10 pt-1 text-[11px] text-muted-foreground">
+                      <span className="mt-1 block border-t border-danger-line/50 pt-1 text-[11px] text-muted-foreground">
                         {student.dismissalNotes}
                       </span>
                     ) : null}
@@ -1262,13 +1262,13 @@ export function DismissedManagementView() {
                           key={metric.key}
                           className={`rounded-xl border p-2 text-center ${
                             metric.danger
-                              ? "border-red-500/20 bg-red-500/5"
+                              ? "border-danger-line bg-danger-soft"
                               : "bg-card"
                           }`}
                         >
                           <b
                             className={`block text-lg ${
-                              metric.danger ? "text-red-600" : ""
+                              metric.danger ? "text-danger" : ""
                             }`}
                           >
                             {metric.value}

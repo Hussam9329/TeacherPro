@@ -1017,7 +1017,7 @@ export function StudentRegisterView() {
                       selectedCourseHasChapterConflict
                         ? "border-destructive/50 bg-destructive/10 text-destructive"
                         : selectedCourseHasNoActiveChapter
-                          ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                          ? "border-warning-line bg-warning-soft text-warning"
                           : "border-primary/20 bg-primary/5 text-foreground"
                     }`}
                   >
@@ -1418,7 +1418,7 @@ export function StudentRegisterView() {
               </Card>
               <Card>
                 <CardContent className="p-4 text-center">
-                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                  <p className="text-2xl font-bold text-warning">
                     {registerContext?.stats.withoutActiveChapter ?? "—"}
                   </p>
                   <p className="text-xs text-muted-foreground">بلا فصل نشط</p>

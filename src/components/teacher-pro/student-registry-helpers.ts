@@ -186,8 +186,8 @@ export function getStudentEditForm(student: Student): StudentEditForm {
   };
 }
 
-export function whatsappLink(phone: string): string {
-  const sanitized = sanitizePhoneInput(phone);
+export function whatsappLink(phone: string | null | undefined): string {
+  const sanitized = sanitizePhoneInput(phone ?? "");
   if (!sanitized) return "";
   const appPhone =
     sanitized.startsWith("07") && sanitized.length === 11

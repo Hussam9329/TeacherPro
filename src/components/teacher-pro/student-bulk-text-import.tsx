@@ -904,7 +904,7 @@ export function StudentBulkTextImportView() {
               {row.warnings.map((warning, index) => (
                 <div
                   key={index}
-                  className="text-xs leading-5 text-amber-600 dark:text-amber-300"
+                  className="text-xs leading-5 text-warning"
                 >
                   {warning}
                 </div>
@@ -1097,7 +1097,7 @@ export function StudentBulkTextImportView() {
                     role="status"
                     className={`rounded-xl border p-3 text-sm leading-7 ${
                       importPolicy === "valid-only"
-                        ? "border-amber-300/50 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+                        ? "border-warning-line bg-warning-soft text-warning"
                         : "border-destructive/30 bg-destructive/10 text-destructive"
                     }`}
                   >
@@ -1229,12 +1229,12 @@ export function StudentBulkTextImportView() {
                   {
                     label: "جاهز للاستيراد",
                     value: summary.ready,
-                    color: "text-emerald-600 dark:text-emerald-400",
+                    color: "text-success",
                   },
                   {
                     label: "يحتاج تعديل",
                     value: summary.needsEdit,
-                    color: "text-amber-600 dark:text-amber-400",
+                    color: "text-warning",
                   },
                   {
                     label: "مكرر",
@@ -1244,12 +1244,12 @@ export function StudentBulkTextImportView() {
                   {
                     label: "دورة أو موقع غير معروف",
                     value: summary.unknownCourseOrLocation,
-                    color: "text-amber-600 dark:text-amber-400",
+                    color: "text-warning",
                   },
                   {
                     label: "أسطر مع تحذيرات",
                     value: summary.warningRows,
-                    color: "text-amber-600 dark:text-amber-400",
+                    color: "text-warning",
                   },
                 ].map((stat) => (
                   <Card key={stat.label}>

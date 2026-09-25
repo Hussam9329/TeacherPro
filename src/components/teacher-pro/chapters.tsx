@@ -195,7 +195,7 @@ function renderBlockers(blockers: string[]) {
         <Badge
           key={blocker}
           variant="outline"
-          className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200"
+          className="border-warning-line bg-warning-soft text-warning"
         >
           {blocker}
         </Badge>
@@ -806,7 +806,7 @@ export function ChaptersView() {
           {row.health.needsRepair ? (
             <Badge
               variant="outline"
-              className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200"
+              className="border-warning-line bg-warning-soft text-warning"
             >
               تحتاج مراجعة
             </Badge>
@@ -820,7 +820,7 @@ export function ChaptersView() {
         </div>
         <div>
           <dt>نشطون</dt>
-          <dd className="text-emerald-600 dark:text-emerald-400">
+          <dd className="text-success">
             {row.counts.activeStudents}
           </dd>
         </div>
@@ -830,7 +830,7 @@ export function ChaptersView() {
         </div>
       </dl>
       {row.warnings.length ? (
-        <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-xs leading-6 text-amber-900 dark:text-amber-100">
+        <div className="rounded-xl border border-warning-line bg-warning-soft p-3 text-xs leading-6 text-warning">
           {row.warnings.map((warning) => (
             <p key={warning}>{warning}</p>
           ))}
@@ -1199,13 +1199,13 @@ export function ChaptersView() {
                 "الفصول",
                 overview?.stats.chapters ?? "—",
                 undefined,
-                "text-emerald-600 dark:text-emerald-400",
+                "text-success",
               )}
               {statCard(
                 "بلا فصل نشط",
                 overview?.stats.coursesWithoutActiveChapter ?? "—",
                 undefined,
-                "text-amber-600 dark:text-amber-400",
+                "text-warning",
               )}
               {statCard(
                 "تعارض نشط",
@@ -1770,7 +1770,7 @@ export function ChaptersView() {
                     </p>
                   ) : null}
                   <p
-                    className={`rounded-xl border p-3 text-xs leading-6 ${actionDialog.action === "activate" ? "border-primary/20 bg-primary/5 text-muted-foreground" : "border-amber-500/35 bg-amber-500/10 text-amber-900 dark:text-amber-100"}`}
+                    className={`rounded-xl border p-3 text-xs leading-6 ${actionDialog.action === "activate" ? "border-primary/20 bg-primary/5 text-muted-foreground" : "border-warning-line bg-warning-soft text-warning"}`}
                   >
                     {actionPreview?.message ||
                       (actionDialog.action === "activate"

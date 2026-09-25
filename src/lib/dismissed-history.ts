@@ -776,26 +776,26 @@ export function buildOpportunityTelegramHtml(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>سجل الطالب - ${escape(cleanText(student.name))}</title>
 <style>
-:root{font-family:Arial,Tahoma,sans-serif;color:#111827;background:#f8fafc}
+:root{font-family:Arial,Tahoma,sans-serif;color:#19293A;background:#F3F0E4}
 *{box-sizing:border-box}
 body{margin:0;padding:24px}
-.page{max-width:1000px;margin:auto;background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:28px;overflow-wrap:anywhere}
-.header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;border-bottom:3px solid #111827;padding-bottom:18px;margin-bottom:20px}
-.brand h1{font-size:24px;margin:0 0 6px}.brand p{margin:0;color:#6b7280}
-.status{padding:8px 12px;border-radius:999px;background:#fee2e2;color:#991b1b;font-weight:700}
+.page{max-width:1000px;margin:auto;background:#FBF9EB;border:1px solid #E6E3D9;border-radius:18px;padding:28px;overflow-wrap:anywhere}
+.header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;border-bottom:3px solid #19293A;padding-bottom:18px;margin-bottom:20px}
+.brand h1{font-size:24px;margin:0 0 6px}.brand p{margin:0;color:#5B6674}
+.status{padding:8px 12px;border-radius:999px;background:#F7E8DB;color:#A34645;font-weight:700}
 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}
-.info-box{border:1px solid #e5e7eb;border-radius:12px;padding:10px;break-inside:avoid}
-.info-box b{display:block;font-size:11px;color:#6b7280;margin-bottom:4px}
+.info-box{border:1px solid #E6E3D9;border-radius:12px;padding:10px;break-inside:avoid}
+.info-box b{display:block;font-size:11px;color:#5B6674;margin-bottom:4px}
 .section-title{font-size:18px;margin:26px 0 12px}
 table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}
-th{background:#f3f4f6;font-weight:900}
-tbody tr:nth-child(even){background:#fafafa}
-.empty-row td{color:#64748b;padding:16px}
-.footer{margin-top:28px;border-top:1px solid #e5e7eb;padding-top:12px;font-size:12px;color:#6b7280;text-align:center}
+th,td{border:1px solid #D1D0CA;padding:8px 10px;text-align:center;vertical-align:middle}
+th{background:#F0EEE2;font-weight:900}
+tbody tr:nth-child(even){background:#F7F5E7}
+.empty-row td{color:#5B6674;padding:16px}
+.footer{margin-top:28px;border-top:1px solid #E6E3D9;padding-top:12px;font-size:12px;color:#5B6674;text-align:center}
 @media(max-width:760px){body{padding:8px}.page{padding:14px;border-radius:10px}.header{display:block}.status{display:inline-block;margin-top:10px}.grid{grid-template-columns:1fr 1fr}}
 @page{size:A4;margin:12mm}
-@media print{body{padding:0;background:#fff}.page{max-width:none;border:0;border-radius:0;padding:0}tr,.info-box{page-break-inside:avoid;break-inside:avoid}}
+@media print{body{padding:0;background:#FBF9EB}.page{max-width:none;border:0;border-radius:0;padding:0}tr,.info-box{page-break-inside:avoid;break-inside:avoid}}
 </style>
 </head>
 <body>
