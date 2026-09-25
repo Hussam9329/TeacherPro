@@ -8,6 +8,10 @@ const source = fs.readFileSync("src/app/api/students/code-closures/route.ts", "u
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText;
+const historyModule = { exports: {} };
+new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/dismissed-history.ts", "utf8"), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText)(historyModule, historyModule.exports);
 
 (async () => {
   const pg = new PGlite();
@@ -34,6 +38,27 @@ const compiled = ts.transpileModule(source, {
       INSERT INTO "Student" VALUES
         ('active','طالب نشط','ACTIVE',NULL,NULL,'نشط',true,1,'course-a',NULL,2),
         ('archived','طالب مؤرشف','ARCHIVED',NULL,NULL,'مؤرشف',true,0,'course-b',NULL,0);
+      CREATE TABLE "OpportunityLog" (
+        id text PRIMARY KEY, "studentId" text REFERENCES "Student"(id),
+        action text NOT NULL, reason text, date timestamptz NOT NULL
+      );
+      CREATE TABLE "StudentNote" (
+        id text PRIMARY KEY, "studentId" text REFERENCES "Student"(id),
+        kind text NOT NULL, text text NOT NULL, "dismissalDate" timestamptz, date timestamptz NOT NULL
+      );
+      INSERT INTO "OpportunityLog" VALUES
+        ('log-1','student-0001','فصل تلقائي','تلقائي: غياب','2026-09-20T12:00:00Z'),
+        ('log-3','student-0003','فصل تلقائي','تلقائي: غياب','2026-09-23T12:00:00Z'),
+        ('log-3-reactivation','student-0003','إعادة تفعيل','إعادة تفعيل بعد فصل الطالب','2026-09-25T12:00:00Z'),
+        ('log-5','student-0005','خصم','فصل الطالب: يدوي','2026-09-24T12:00:00Z'),
+        ('log-6','student-0006','إضافة','فصل الطالب: نص في حركة غير فصل','2026-09-25T12:00:00Z');
+      INSERT INTO "StudentNote" VALUES
+        ('note-1','student-0001','إجراء','فصل الطالب: يدوي','2026-09-21T12:00:00Z','2026-09-24T12:00:00Z'),
+        ('note-2','student-0002','إجراء','تم فصل الطالب: يدوي',NULL,'2026-09-22T12:00:00Z'),
+        ('note-3-reactivation','student-0003','إجراء','تم تعهد الطالب: إعادة تفعيله بعد فصل سابق',NULL,'2026-09-25T12:00:00Z'),
+        ('note-5','student-0005','إجراء','فصل الطالب: قديم',NULL,'2026-09-22T12:00:00Z'),
+        ('note-6-other','student-0006','إجراء','فصل الطالبات موضوع للمراجعة',NULL,'2026-09-25T12:00:00Z'),
+        ('note-6-kind','student-0006','ملاحظة','فصل الطالب: ليس إجراء فصل',NULL,'2026-09-25T12:00:00Z');
     `);
     const snapshot = () => pg.query('SELECT row_to_json(s) AS row FROM "Student" s ORDER BY id').then(({ rows }) => rows);
     const before = await snapshot();
@@ -46,11 +71,20 @@ const compiled = ts.transpileModule(source, {
       id: true, name: true, code: true, username: true, telegram: true, status: true,
       dismissedChecked: true, dismissedCheckEpoch: true,
       courseId: true, course: { select: { id: true, name: true } }, dismissalReason: true,
+      opportunityLogs: {
+        where: { OR: [{ action: "فصل تلقائي" }, { action: "خصم", reason: { startsWith: "فصل الطالب" } }] },
+        select: { action: true, reason: true, date: true },
+      },
+      studentNotes: {
+        where: { kind: "إجراء", OR: [{ text: { startsWith: "فصل الطالب" } }, { text: { startsWith: "تم فصل الطالب" } }] },
+        select: { kind: true, text: true, dismissalDate: true, date: true },
+      },
     };
     // The adapter offers only a read, so an unexpected mutation fails the test.
     // Execute it in a PostgreSQL read-only transaction as an additional guard.
     const mocks = {
       "next/server": { NextRequest, NextResponse },
+      "@/lib/dismissed-history": historyModule.exports,
       "@/lib/server-auth": {
         requirePermission: async (req, permission) => {
           authCalls.push({ req, permission });
@@ -66,11 +100,22 @@ const compiled = ts.transpileModule(source, {
         if (failRead) throw new Error("simulated database outage");
         return pg.transaction(async (sql) => {
           await sql.exec("SET TRANSACTION READ ONLY");
-          return (await sql.query(`SELECT s.id,s.name,s.code,s.username,s.telegram,s.status,
+          const rows = (await sql.query(`SELECT s.id,s.name,s.code,s.username,s.telegram,s.status,
             s."dismissedChecked",s."dismissedCheckEpoch",s."courseId",s."dismissalReason",
-            json_build_object('id',c.id,'name',c.name) AS course
+            json_build_object('id',c.id,'name',c.name) AS course,
+            COALESCE((SELECT json_agg(json_build_object('action',l.action,'reason',l.reason,'date',l.date))
+              FROM "OpportunityLog" l WHERE l."studentId"=s.id
+              AND (l.action='فصل تلقائي' OR (l.action='خصم' AND l.reason LIKE 'فصل الطالب%'))), '[]') AS "opportunityLogs",
+            COALESCE((SELECT json_agg(json_build_object('kind',n.kind,'text',n.text,'dismissalDate',n."dismissalDate",'date',n.date))
+              FROM "StudentNote" n WHERE n."studentId"=s.id AND n.kind='إجراء'
+              AND (n.text LIKE 'فصل الطالب%' OR n.text LIKE 'تم فصل الطالب%')), '[]') AS "studentNotes"
             FROM "Student" s JOIN "Course" c ON c.id=s."courseId"
             WHERE s.status=$1 ORDER BY s.name ASC,s.id ASC`, [args.where.status])).rows;
+          return rows.map((student) => ({
+            ...student,
+            opportunityLogs: student.opportunityLogs.map((log) => ({ ...log, date: new Date(log.date) })),
+            studentNotes: student.studentNotes.map((note) => ({ ...note, date: new Date(note.date), dismissalDate: note.dismissalDate ? new Date(note.dismissalDate) : null })),
+          }));
         });
       } } } },
       "@/lib/schema-readiness": { withDatabaseSchema: async (read, model) => { schemaChecks.push(model); return read(); } },
@@ -118,6 +163,13 @@ const compiled = ts.transpileModule(source, {
     const noTelegramStudent = data.students.find((student) => student.id === "student-0002");
     assert.equal(noTelegramStudent.username, null);
     assert.equal(noTelegramStudent.telegram, null, "missing Telegram details are returned honestly");
+    assert.equal(telegramOnlyStudent.lastDismissalAt, "2026-09-21T12:00:00.000Z", "the recorded dismissal date supersedes the older automatic log, not the note creation date");
+    assert.equal(noTelegramStudent.lastDismissalAt, "2026-09-22T12:00:00.000Z", "legacy action notes can supply their own date when dismissalDate is absent");
+    assert.equal(checkedStudent.lastDismissalAt, "2026-09-23T12:00:00.000Z", "reactivation movements and notes must never count as dismissal events");
+    assert.equal(data.students.find((student) => student.id === "student-0004").lastDismissalAt, null, "no date is fabricated for students without dismissal evidence");
+    assert.equal(data.students.find((student) => student.id === "student-0005").lastDismissalAt, "2026-09-24T12:00:00.000Z", "a newer manual dismissal movement supersedes an older action note");
+    assert.equal(data.students.find((student) => student.id === "student-0006").lastDismissalAt, null, "unrelated notes and movements are not dismissal evidence");
+    assert(data.students.every((student) => !("studentNotes" in student) && !("opportunityLogs" in student)), "internal dismissal history is not exposed in the response");
     const checkedIds = data.students.filter((student) => student.dismissedChecked).map((student) => student.id);
     const originalCheckedIds = before.map(({ row }) => row).filter((student) => student.status === "مفصول" && student.dismissedChecked).map((student) => student.id);
     assert.deepEqual(checkedIds.sort(), originalCheckedIds.sort(), "the read preserves every previously checked student");

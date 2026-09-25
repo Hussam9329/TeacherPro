@@ -572,9 +572,12 @@ a.tp-modal__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-foc
 .tp-closures__telegram:hover { text-decoration: underline; text-underline-offset: 0.2em; }
 .tp-closures__telegram:focus-visible { outline: 2px solid var(--tone-solid); outline-offset: 3px; }
 .tp-closures__course { grid-area: course; }
-.tp-closures__reason { grid-area: reason; display: grid; gap: 0.2rem; min-width: 0; padding: 0.55rem 0.75rem; border-radius: 0.75rem; background: var(--tp-panel); }
-.tp-closures__reason > span { color: var(--tp-text-muted); font-size: 0.68rem; font-weight: 700; }
-.tp-closures__reason p { margin: 0; color: var(--tp-text); font-size: 0.8rem; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tp-closures__dismissal { grid-area: reason; display: grid; justify-items: start; gap: 0.25rem; min-width: 0; }
+.tp-closures__date-label { color: var(--tp-text-muted); font-size: 0.68rem; font-weight: 700; }
+.tp-closures__date { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--tp-text); font-size: 0.85rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+.tp-closures__date svg { width: 1rem; height: 1rem; flex-shrink: 0; color: var(--tp-accent); }
+.tp-modal .tp-closures__reason-toggle { min-height: 2.75rem; padding-inline: 0.5rem; color: var(--tp-text-muted); font-size: 0.75rem; }
+.tp-closures__reason { margin: 0; width: 100%; min-width: 0; padding: 0.55rem 0.75rem; border-radius: 0.75rem; background: var(--tp-panel); color: var(--tp-text); font-size: 0.8rem; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tp-closures__action {
   grid-area: action;
   display: flex;
@@ -602,7 +605,7 @@ a.tp-modal__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-foc
   .tp-closures__row { grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr) minmax(0, 1.4fr) 5.5rem; grid-template-areas: "identity course reason action"; align-items: center; gap: 1rem; }
   .tp-closures__headings { position: sticky; top: 0; z-index: 1; display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr) minmax(0, 1.4fr) 5.5rem; gap: 1rem; padding: 0.55rem 1rem; border: 1px solid var(--tp-border); border-radius: 0.75rem; background: var(--tp-panel-strong); color: var(--tp-text-muted); font-size: 0.72rem; font-weight: 700; }
   .tp-closures__headings > :last-child { text-align: center; }
-  .tp-closures__reason > span { display: none; }
+  .tp-closures__date-label { display: none; }
 }
 
 @media (max-height: 540px) {

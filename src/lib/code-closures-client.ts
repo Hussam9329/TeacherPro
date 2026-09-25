@@ -13,6 +13,7 @@ export type CodeClosureStudent = {
   courseId: string | null;
   course: { id: string; name: string } | null;
   dismissalReason: string | null;
+  lastDismissalAt: string | null;
 };
 
 export type CodeClosuresResponse = {

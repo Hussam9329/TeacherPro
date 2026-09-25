@@ -138,7 +138,7 @@ function harness() {
     react,
     './code-closures-dialog.css': {},
     'react/jsx-runtime': { jsx, jsxs: jsx },
-    'lucide-react': named(['AlertCircle', 'BookOpen', 'CheckCheck', 'ChevronDown', 'LockKeyhole', 'Loader2', 'MessageCircle', 'RefreshCw', 'Search', 'UserRound', 'X']),
+    'lucide-react': named(['AlertCircle', 'BookOpen', 'CalendarDays', 'CheckCheck', 'ChevronDown', 'LockKeyhole', 'Loader2', 'MessageCircle', 'RefreshCw', 'Search', 'UserRound', 'X']),
     '@/components/ui/button': named(['Button']),
     '@/components/ui/checkbox': named(['Checkbox']),
     '@/components/ui/dialog': named(['Dialog', 'DialogContent', 'DialogHeader', 'DialogTitle']),
@@ -149,6 +149,8 @@ function harness() {
     '@/lib/user-toast': { toast: { error: (error) => errors.push(error) } },
     '@/lib/validation': validationContext.exports,
     './student-registry-helpers': registryHelpers,
+    '@/lib/baghdad-time': loadHelper('@/lib/baghdad-time'),
+    '@/lib/format': loadHelper('@/lib/format'),
   };
   const context = {
     exports: {},
@@ -260,9 +262,9 @@ function selectCourse(view, value) {
 }
 
 (async () => {
-  const first = student('first');
-  const saved = student('saved', true);
-  const second = student('second', false, 'course2');
+  const first = { ...student('first'), username: '@Student_First', telegram: '123456789', lastDismissalAt: '2026-09-25T22:30:00.000Z' };
+  const saved = { ...student('saved', true), username: null, telegram: '987654321', lastDismissalAt: null };
+  const second = { ...student('second', false, 'course2'), username: null, telegram: 'legacy_student', lastDismissalAt: null };
   let view = harness();
   view.render();
   assert.equal(view.reads.length, 1);
@@ -275,9 +277,29 @@ function selectCourse(view, value) {
   assert.deepEqual(checkedValues(view), [false, false]);
   assert(!view.text().includes('طالب saved'));
   assert(view.text().includes('المعروض 2 من 3 طالب مفصول'));
+  assert.deepEqual(view.nodes('a').map((node) => node.props.href), [
+    'tg://resolve?domain=student_first',
+    'tg://resolve?domain=legacy_student',
+  ], 'prefer the saved username over numeric Telegram ID, with a legacy username fallback');
+  assert(view.nodes('a').every((node) => !node.props.target && !node.props.onClick), 'native links do not redirect through a web page or trigger a closure action');
+  assert.equal(view.nodes('time')[0].props.children, '2026/9/26', 'dismissal dates use the Baghdad calendar day');
+  assert(view.text().includes('غير مسجل'), 'missing dates are explicit rather than invented');
+  assert(!view.text().includes(first.dismissalReason), 'dismissal reasons start hidden');
+  const reasonButton = () => view.nodes('Button').find((node) => node.props['aria-label']?.endsWith(`سبب فصل ${first.name}`));
+  reasonButton().props.onClick();
+  view.render();
+  assert.equal(reasonButton().props['aria-expanded'], true);
+  assert.equal(view.nodes('p').filter((node) => node.props.className === 'tp-closures__reason').length, 1, 'only the clicked student reveals their reason');
+  assert.equal(view.writes.length, 0, 'revealing a reason never changes the shared checked flag');
+  reasonButton().props.onClick();
+  view.render();
+  assert.equal(reasonButton().props['aria-expanded'], false);
+  assert(!view.text().includes(first.dismissalReason));
   filter(view, 'Checked');
   assert.deepEqual(checkedValues(view), [true]);
   assert(view.text().includes('طالب saved'));
+  assert.equal(view.nodes('a').length, 0, 'numeric Telegram IDs are displayed without broken chat links');
+  assert(view.text().includes('987654321'));
   filter(view, 'All');
   assert.deepEqual(checkedValues(view), [false, true, false]);
   assert.equal(view.writes.length, 0, 'Opening and filtering must never change saved flags');

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { AlertCircle, BookOpen, CheckCheck, ChevronDown, Loader2, LockKeyhole, MessageCircle, RefreshCw, Search, X } from "lucide-react";
+import { AlertCircle, BookOpen, CalendarDays, CheckCheck, ChevronDown, Loader2, LockKeyhole, MessageCircle, RefreshCw, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,6 +12,8 @@ import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
 import { normalizeForSearch } from "@/lib/validation";
 import { describeTelegramHandle } from "./student-registry-helpers";
+import { baghdadDateKey } from "@/lib/baghdad-time";
+import { formatAppDate } from "@/lib/format";
 import "./code-closures-dialog.css";
 
 type Props = {
@@ -33,6 +35,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
   const [error, setError] = useState("");
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [selectedCourseName, setSelectedCourseName] = useState("");
+  const [expandedReasonIds, setExpandedReasonIds] = useState<Set<string>>(new Set());
   const pendingRef = useRef(new Set<string>());
   const openRef = useRef(open);
   const generationRef = useRef(0);
@@ -80,6 +83,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
     setSearch("");
     setCourseId("");
     setStatusFilter("unchecked");
+    setExpandedReasonIds(new Set());
     if (!open) return;
     void refresh();
     // Global background refresh pauses while dialogs are open, so this small
@@ -274,9 +278,11 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
               </div>
             ) : (
               <div className="tp-modal__cards" data-columns="1">
-                {visibleStudents.length > 0 && <div aria-hidden="true" className="tp-closures__headings"><span>الطالب والكود</span><span>الدورة</span><span>سبب الفصل</span><span>اغلاق كود</span></div>}
+                {visibleStudents.length > 0 && <div aria-hidden="true" className="tp-closures__headings"><span>الطالب والكود</span><span>الدورة</span><span>تاريخ الفصل</span><span>اغلاق كود</span></div>}
                 {visibleStudents.map((student) => {
                   const telegram = describeTelegramHandle(student);
+                  const reasonExpanded = expandedReasonIds.has(student.id);
+                  const reasonId = `${filterId}-dismissal-reason-${student.id}`;
                   return (
                   <article key={student.id} className="tp-closures__row" data-checked={student.dismissedChecked}>
                     <div className="tp-modal__identity tp-closures__identity">
@@ -306,7 +312,38 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
                       </div>
                     </div>
                     <p className="tp-modal__meta-item tp-closures__course"><BookOpen aria-hidden="true" /><span>{student.course?.name || "—"}</span></p>
-                    <div className="tp-closures__reason"><span>سبب الفصل</span><p>{student.dismissalReason || "—"}</p></div>
+                    <div className="tp-closures__dismissal">
+                      <span className="tp-closures__date-label">تاريخ الفصل</span>
+                      <span className="tp-closures__date">
+                        <CalendarDays aria-hidden="true" />
+                        {student.lastDismissalAt ? (
+                          <time dateTime={student.lastDismissalAt} dir="ltr">
+                            {formatAppDate(baghdadDateKey(student.lastDismissalAt), "غير مسجل")}
+                          </time>
+                        ) : <span>غير مسجل</span>}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="tp-closures__reason-toggle"
+                        aria-expanded={reasonExpanded}
+                        aria-controls={reasonId}
+                        aria-label={`${reasonExpanded ? "إخفاء" : "إظهار"} سبب فصل ${student.name}`}
+                        onClick={() => setExpandedReasonIds((current) => {
+                          const next = new Set(current);
+                          if (next.has(student.id)) next.delete(student.id);
+                          else next.add(student.id);
+                          return next;
+                        })}
+                      >
+                        {reasonExpanded ? "إخفاء السبب" : "إظهار السبب"}
+                        <ChevronDown aria-hidden="true" className={`size-4 ${reasonExpanded ? "rotate-180" : ""}`} />
+                      </Button>
+                      {reasonExpanded && (
+                        <p id={reasonId} className="tp-closures__reason">{student.dismissalReason || "سبب الفصل غير مسجل"}</p>
+                      )}
+                    </div>
                     <label className="tp-closures__action" data-disabled={!canManage || pendingIds.has(student.id)}>
                       <Checkbox
                         checked={student.dismissedChecked}
