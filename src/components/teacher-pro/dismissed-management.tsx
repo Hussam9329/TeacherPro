@@ -1142,7 +1142,7 @@ export function DismissedManagementView() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="flex flex-wrap gap-2 [&>[data-slot=button]]:flex-1">
                   {student.phone ? (
                     <Button asChild variant="outline">
                       <a
@@ -1151,7 +1151,7 @@ export function DismissedManagementView() {
                         rel="noreferrer"
                       >
                         <Phone className="size-4" />
-                        {student.phone}
+                        <span dir="ltr" className="tabular-nums">{student.phone}</span>
                       </a>
                     </Button>
                   ) : (
@@ -1168,7 +1168,7 @@ export function DismissedManagementView() {
                         rel="noreferrer"
                       >
                         <MessageCircle className="size-4" />
-                        {student.parentPhone}
+                        <span dir="ltr" className="tabular-nums">{student.parentPhone}</span>
                       </a>
                     </Button>
                   ) : (
@@ -1188,9 +1188,11 @@ export function DismissedManagementView() {
                     onClick={() => void openTelegram(student)}
                   >
                     <Send className="size-4" />
-                    {telegramLoading[student.id]
-                      ? "جاري تجهيز التقرير..."
-                      : student.username || student.telegram || "تيليجرام غير متوفر"}
+                    <span className="min-w-0 [overflow-wrap:anywhere]">
+                      {telegramLoading[student.id]
+                        ? "جاري تجهيز التقرير..."
+                        : student.username || student.telegram || "تيليجرام غير متوفر"}
+                    </span>
                   </Button>
                 </div>
 
@@ -1265,7 +1267,7 @@ export function DismissedManagementView() {
 
                 {isOpen && history ? (
                   <div className="space-y-3 rounded-2xl border bg-muted/10 p-3 sm:p-4">
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-2">
                       {historyMetrics(history).map((metric) => (
                         <div
                           key={metric.key}

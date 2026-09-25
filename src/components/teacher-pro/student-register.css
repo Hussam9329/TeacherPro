@@ -109,9 +109,9 @@
 }
 
 .tp-register__fields [data-slot="select-trigger"] > [data-slot="select-value"] {
-  min-inline-size: 0;
+  min-inline-size: min-content;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   line-height: 1.5;
 }
 

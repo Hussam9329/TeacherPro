@@ -1396,7 +1396,7 @@ export function StudentProfileDialog({
                           </div>
                         </div>
 
-                        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                        <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2">
                           <InfoBox label="كود الملف السابق" value={oldStudent.code || "—"} />
                           <InfoBox label="الحالة السابقة" value={oldStudent.status || "—"} />
                           <InfoBox label="البرنامج/الدورة" value={[oldStudent.courseProgram, oldStudent.courseTerm].filter(Boolean).join(" — ") || "—"} />
@@ -1410,7 +1410,7 @@ export function StudentProfileDialog({
                           <InfoBox label="المدرسة" value={oldStudent.school || "—"} />
                         </div>
 
-                        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+                        <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2">
                           <InfoBox label="الدرجات" value={counts.grades || 0} />
                           <InfoBox label="حركات الفرص" value={counts.opportunityLogs || 0} />
                           <InfoBox label="الإجازات" value={counts.studentLeaves || 0} />

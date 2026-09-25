@@ -2250,7 +2250,7 @@ export function StudentRegistryView() {
                   >
                     <SelectTrigger
                       id="registry-pageSize"
-                      className="h-10 w-24 rounded-xl"
+                      className="h-10 w-auto min-w-24 rounded-xl tabular-nums"
                     >
                       <SelectValue />
                     </SelectTrigger>

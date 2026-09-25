@@ -2617,7 +2617,7 @@ export function GradeEntryView() {
                   >
                     <SelectTrigger
                       id="grade-entry-page-size"
-                      className="h-8 w-24"
+                      className="h-8 w-auto min-w-24 tabular-nums"
                     >
                       <SelectValue />
                     </SelectTrigger>

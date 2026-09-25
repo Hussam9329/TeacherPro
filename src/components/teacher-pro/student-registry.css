@@ -39,7 +39,8 @@
 }
 
 .tp-registry-page-size [data-slot="select-trigger"] {
-  inline-size: 5rem;
+  inline-size: auto;
+  min-inline-size: 6rem;
   min-block-size: 2.5rem;
 }
 

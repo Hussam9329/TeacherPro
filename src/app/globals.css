@@ -2744,3 +2744,11 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
 }
 .tp-tone-card[data-tone] .tp-tone-card__icon svg { inline-size: 1.4rem; block-size: 1.4rem; }
 .tp-tone-card[data-tone] .tp-tone-card__value { color: var(--tone-ink); }
+
+/* ═══ Button rows wrap instead of squeezing ═══
+   In a row of buttons, a button never shrinks below its own text (up to the
+   row's full width); the row wraps to a new line instead. Without this,
+   flex-1 buttons with min-width 0 collapse until their words overlap. */
+[data-teacherpro-active-content="true"] :where(.flex):has(> [data-slot="button"] + [data-slot="button"]) > [data-slot="button"] {
+  min-inline-size: fit-content;
+}

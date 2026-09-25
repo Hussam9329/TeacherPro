@@ -1241,7 +1241,7 @@ export function GradeRecordsView() {
               setPage(1);
             }}
           >
-            <SelectTrigger id="grade-records-pageSize" className="h-8 w-20">
+            <SelectTrigger id="grade-records-pageSize" className="h-8 w-auto min-w-24 tabular-nums">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
