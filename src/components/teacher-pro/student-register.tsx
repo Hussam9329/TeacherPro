@@ -165,7 +165,7 @@ function FieldIcon({
 }
 
 function RequiredMark() {
-  return <span className="text-destructive">*</span>;
+  return <span className="text-danger">*</span>;
 }
 
 function normalizeRegisterContextCourse(row: RegisterContextRow): Course {
@@ -1015,7 +1015,7 @@ export function StudentRegisterView() {
                   <div
                     className={`tp-register__course-status ${
                       selectedCourseHasChapterConflict
-                        ? "border-destructive/50 bg-destructive/10 text-destructive"
+                        ? "border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft text-danger"
                         : selectedCourseHasNoActiveChapter
                           ? "border-warning-line bg-warning-soft text-warning"
                           : "border-primary/20 bg-primary/5 text-foreground"
@@ -1354,9 +1354,9 @@ export function StudentRegisterView() {
                 )}
                 {(selectedCourseHasChapterConflict ||
                   selectedCourseHasNoActiveChapter) && (
-                  <div className="flex items-start gap-2 text-sm font-bold leading-6 text-destructive">
+                  <div className="flex items-start gap-2 text-sm font-bold leading-6 text-danger">
                     <AlertCircle
-                      className={`mt-0.5 h-4 w-4 shrink-0 ${selectedCourseHasChapterConflict || selectedCourseHasNoActiveChapter ? "text-destructive" : "text-primary"}`}
+                      className={`mt-0.5 h-4 w-4 shrink-0 ${selectedCourseHasChapterConflict || selectedCourseHasNoActiveChapter ? "text-danger" : "text-primary"}`}
                     />
                     <span>
                       {selectedCourseHasChapterConflict
@@ -1426,7 +1426,7 @@ export function StudentRegisterView() {
               </Card>
               <Card>
                 <CardContent className="p-4 text-center">
-                  <p className="text-2xl font-bold text-destructive">
+                  <p className="text-2xl font-bold text-danger">
                     {registerContext?.stats.withChapterConflict ?? "—"}
                   </p>
                   <p className="text-xs text-muted-foreground">تعارض فصل</p>

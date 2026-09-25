@@ -35,7 +35,7 @@ const CATEGORY_META: Record<
     shortTitle: "طالب مفصول",
     decision: "لم تُسجّل كدرجة ولم تؤثر أكاديمياً؛ تنتظر مراجعة حالة الفصل.",
     className:
-      "border-danger-line bg-danger-soft/80 text-danger",
+      "border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft/80 text-danger",
     icon: UserRoundX,
   },
   // Historical only: the current grace model never creates or settles these.
@@ -44,7 +44,7 @@ const CATEGORY_META: Record<
     shortTitle: "درجة سماح قديمة (أرشيف)",
     decision: "سجل من نظام السماح السابق للعرض فقط؛ لا يغيّر المحاسبة ولا يُنشأ مثله بعد الآن.",
     className:
-      "border-info-line bg-info-soft/80 text-info",
+      "border-info-line border-s-4 border-s-info-vivid bg-info-soft/80 text-info",
     icon: CheckCircle2,
   },
   BEFORE_REGISTRATION_PENDING: {
@@ -52,7 +52,7 @@ const CATEGORY_META: Record<
     shortTitle: "امتحان سابق للتسجيل",
     decision: "عند اعتمادها يُقدَّم تاريخ تسجيل الطالب إلى تاريخ الامتحان وتُحتسب الدرجة رسمياً.",
     className:
-      "border-warning-line bg-warning-soft/80 text-warning",
+      "border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft/80 text-warning",
     icon: CalendarClock,
   },
   LEAVE_PENDING: {
@@ -60,7 +60,7 @@ const CATEGORY_META: Record<
     shortTitle: "سجل إجازة قديم",
     decision: "سجلات قديمة للمراجعة فقط؛ إدخال درجة اليوم ينهي الإجازة ويعتمدها محتسبة.",
     className:
-      "border-success-line bg-success-soft/80 text-success",
+      "border-success-line border-s-4 border-s-success-vivid bg-success-soft/80 text-success",
     icon: FileWarning,
   },
 };
@@ -74,10 +74,10 @@ const STATUS_LABELS: Record<GradeSmartNoteStatus, string> = {
 
 const STATUS_VARIANTS: Record<
   GradeSmartNoteStatus,
-  "default" | "secondary" | "destructive" | "outline"
+  "warning" | "success" | "destructive" | "outline"
 > = {
-  PENDING: "secondary",
-  PROCESSED: "default",
+  PENDING: "warning",
+  PROCESSED: "success",
   CONFLICT: "destructive",
   REJECTED: "outline",
 };
@@ -233,7 +233,7 @@ export function GradeSmartNotesPanel({
           {error ? (
             <div
               role="alert"
-              className="rounded-2xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive"
+              className="rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-4 text-sm text-danger"
             >
               <p>{error}</p>
               <Button
@@ -261,7 +261,7 @@ export function GradeSmartNotesPanel({
           ) : (
             <>
               {totalCount > notes.length && !activeCategory && (
-                <p className="mb-3 rounded-xl border border-info-line bg-info-soft px-3 py-2 text-xs text-info">
+                <p className="mb-3 rounded-xl border border-info-line border-s-4 border-s-info-vivid bg-info-soft px-3 py-2 text-xs text-info">
                   يعرض السجل أحدث {notes.length} حالة من أصل {totalCount}. استخدم
                   بطاقات الملخص لمعرفة العدد الكامل.
                 </p>

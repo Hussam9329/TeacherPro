@@ -2225,7 +2225,7 @@ export function GradeEntryView() {
               gradeEntryNotice.type === "success"
                 ? "border-success-line bg-success-soft/95 text-success"
                 : gradeEntryNotice.type === "error"
-                  ? "border-destructive/40 bg-destructive/10 text-destructive shadow-destructive/10 dark:bg-destructive/20"
+                  ? "border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft text-danger shadow-destructive/10 dark:bg-destructive/20"
                   : "border-info-line bg-info-soft/95 text-info"
             }`}
           >
@@ -2442,7 +2442,7 @@ export function GradeEntryView() {
           </div>
 
           {missingChapterCourses.length > 0 && (
-            <div className="mt-4 rounded-2xl border border-warning-line bg-warning-soft p-3 text-sm text-warning">
+            <div className="mt-4 rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 text-sm text-warning">
               الدورات التالية غير مربوطة بفصل نشط ولن تظهر ضمن إدخال الدرجات:{" "}
               {missingChapterCourses.join("، ")}
             </div>
@@ -2510,7 +2510,7 @@ export function GradeEntryView() {
                     </p>
                     <div className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-muted-foreground">
                       <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-success-line bg-success-soft px-2 py-1 text-[10px] leading-none">
-                        <span className="size-1.5 shrink-0 rounded-full bg-success" aria-hidden="true" />
+                        <span className="size-1.5 shrink-0 rounded-full bg-success-vivid" aria-hidden="true" />
                         <span>رقمية</span>
                         <strong className="font-black tabular-nums text-success">
                           {entrySheetLoading || entrySheetError ? "—" : allManualGradesCount.numeric}
@@ -2518,7 +2518,7 @@ export function GradeEntryView() {
                       </span>
                       {allManualGradesCount.preRegistration > 0 && (
                         <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-info-line bg-info-soft px-2 py-1 text-[10px] leading-none">
-                          <span className="size-1.5 shrink-0 rounded-full bg-info" aria-hidden="true" />
+                          <span className="size-1.5 shrink-0 rounded-full bg-info-vivid" aria-hidden="true" />
                           <span>قبل التسجيل</span>
                           <strong className="font-black tabular-nums text-info">
                             {allManualGradesCount.preRegistration}
@@ -2527,7 +2527,7 @@ export function GradeEntryView() {
                       )}
                       {allManualGradesCount.pending > 0 && (
                         <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-warning-line bg-warning-soft px-2 py-1 text-[10px] leading-none">
-                          <span className="size-1.5 shrink-0 rounded-full bg-warning" aria-hidden="true" />
+                          <span className="size-1.5 shrink-0 rounded-full bg-warning-vivid" aria-hidden="true" />
                           <span>معلقة</span>
                           <strong className="font-black tabular-nums text-warning">
                             {allManualGradesCount.pending}
@@ -2537,7 +2537,7 @@ export function GradeEntryView() {
                       {/* Smart Notes من السجل المنظّم */}
                       {(gradeSmartNoteCategoryCounts?.DISMISSED_PENDING || 0) > 0 && (
                         <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-danger-line bg-danger-soft px-2 py-1 text-[10px] leading-none">
-                          <span className="size-1.5 shrink-0 rounded-full bg-danger" aria-hidden="true" />
+                          <span className="size-1.5 shrink-0 rounded-full bg-danger-vivid" aria-hidden="true" />
                           <span>مفصولين</span>
                           <strong className="font-black tabular-nums text-danger">
                             {gradeSmartNoteCategoryCounts.DISMISSED_PENDING}
@@ -2555,7 +2555,7 @@ export function GradeEntryView() {
                       )}
                       {(gradeSmartNoteCategoryCounts?.GRACE_SCORED || 0) > 0 && (
                         <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-info-line bg-info-soft px-2 py-1 text-[10px] leading-none">
-                          <span className="size-1.5 shrink-0 rounded-full bg-info" aria-hidden="true" />
+                          <span className="size-1.5 shrink-0 rounded-full bg-info-vivid" aria-hidden="true" />
                           <span>سماح قديم (أرشيف)</span>
                           <strong className="font-black tabular-nums text-info">
                             {gradeSmartNoteCategoryCounts.GRACE_SCORED}
@@ -2590,7 +2590,7 @@ export function GradeEntryView() {
               </div>
             )}
             {entrySheetError && (
-              <div className="mb-4 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
+              <div className="mb-4 rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm font-medium text-danger">
                 {entrySheetError}
               </div>
             )}
@@ -2731,6 +2731,7 @@ export function GradeEntryView() {
                       key={student.id}
                       className="teacherpro-heavy-row tp-save-row grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm xl:grid-cols-[1.5fr_130px_130px_1fr_170px]"
                       data-save-state={savePhase}
+                      data-dismissed={student.status === "مفصول" || undefined}
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -2738,12 +2739,12 @@ export function GradeEntryView() {
                             {student.name}
                           </p>
                           {leave && (
-                            <Badge variant="secondary" className="text-[10px]">
+                            <Badge variant="success" className="text-[10px]">
                               الطالب مجاز
                             </Badge>
                           )}
                           {gracePeriod && (
-                            <Badge variant="outline" className="text-[10px]">
+                            <Badge variant="warning" className="text-[10px]">
                               {GRACE_PERIOD_EXCUSE_LABEL}
                             </Badge>
                           )}
@@ -2809,7 +2810,7 @@ export function GradeEntryView() {
                             </p>
                           )}
                         {examBeforeRegistration && (
-                          <p className="mt-1 rounded-lg border border-info-line bg-info-soft px-2 py-1 text-[11px] font-medium text-info">
+                          <p className="mt-1 rounded-lg border border-info-line border-s-4 border-s-info-vivid bg-info-soft px-2 py-1 text-[11px] font-medium text-info">
                             هذا الامتحان يسبق تسجيل الطالب؛ عند إدخال درجة
                             تُقدَّم نهاية تسجيله إلى تاريخ الامتحان وتُحتسب
                             رسمياً في سجله. الغياب والغش غير متاحين هنا.

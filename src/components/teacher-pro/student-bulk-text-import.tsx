@@ -926,7 +926,7 @@ export function StudentBulkTextImportView() {
                 {row.errors.map((error, index) => (
                   <div
                     key={index}
-                    className="text-xs leading-5 text-destructive"
+                    className="text-xs leading-5 text-danger"
                   >
                     • {error}
                   </div>
@@ -1098,7 +1098,7 @@ export function StudentBulkTextImportView() {
                     className={`rounded-xl border p-3 text-sm leading-7 ${
                       importPolicy === "valid-only"
                         ? "border-warning-line bg-warning-soft text-warning"
-                        : "border-destructive/30 bg-destructive/10 text-destructive"
+                        : "border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft text-danger"
                     }`}
                   >
                     <ShieldAlert className="ml-2 inline size-4" />
@@ -1239,7 +1239,7 @@ export function StudentBulkTextImportView() {
                   {
                     label: "مكرر",
                     value: summary.duplicate,
-                    color: "text-destructive",
+                    color: "text-danger",
                   },
                   {
                     label: "دورة أو موقع غير معروف",

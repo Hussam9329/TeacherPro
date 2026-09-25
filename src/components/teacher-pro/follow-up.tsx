@@ -1487,7 +1487,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{student.name}</span>
               <span className="shrink-0 break-all text-xs opacity-80">{student.code}</span>
               {(student.status === "مؤرشف" || student.status === "مفصول") && (
-                <span className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold opacity-90">
+                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${student.status === "مفصول" ? "border-transparent bg-danger-solid text-danger-on shadow-sm" : "opacity-90"}`}>
                   {student.status}
                 </span>
               )}
@@ -1625,7 +1625,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         </div>
 
         {leaveDateFilter && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-info-line bg-info-soft px-4 py-3 text-sm text-info">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-info-line border-s-4 border-s-info-vivid bg-info-soft px-4 py-3 text-sm text-info">
             <span className="font-bold">
               النتائج مفلترة على إجازات {leaveDateFilter === "today" ? "اليوم" : formatAppDate(leaveDateFilter)} بتوقيت بغداد.
             </span>
@@ -1684,7 +1684,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             ))}
           </div>
         ) : leaveError ? (
-          <div className="flex flex-col gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm text-danger sm:flex-row sm:items-center sm:justify-between">
             <span>{leaveError}</span>
             <Button
               type="button"
@@ -1748,7 +1748,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-destructive"
+                    className="text-danger"
                     disabled={deleting || leaveSaving}
                     onClick={() => void deleteLeaveServerFirst(leave)}
                   >
@@ -1918,7 +1918,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           </p>
         ) : null}
         {item.grade.notes ? (
-          <div className="mt-2 rounded-xl border border-warning-line bg-warning-soft px-2.5 py-2 text-[11px] text-warning">
+          <div className="mt-2 rounded-xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft px-2.5 py-2 text-[11px] text-warning">
             <span className="mb-1 block font-bold">ملاحظة الدرجة</span>
             <span className="line-clamp-4">{item.grade.notes}</span>
           </div>
@@ -2003,7 +2003,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               <Badge variant="outline">{row.student.code}</Badge>
               <Badge
                 variant={
-                  row.student.status === "نشط" ? "secondary" : "destructive"
+                  row.student.status === "نشط" ? "success" : "destructive"
                 }
               >
                 {row.student.status}
@@ -2250,7 +2250,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 placeholder="دوّن ملاحظة مختصرة وواضحة تخص تواصل هذا الطالب أو ولي أمره"
               />
               {noteHasConflict && (
-                <div role="alert" className="mt-2 space-y-2 rounded-xl border border-warning-line bg-warning-soft p-3">
+                <div role="alert" className="mt-2 space-y-2 rounded-xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3">
                   <p className="text-xs font-semibold">عدّل مستخدم آخر الملاحظة. تعديلك باقٍ في الحقل أعلاه.</p>
                   <p className="whitespace-pre-wrap break-words text-sm leading-6 [overflow-wrap:anywhere]">
                     المحفوظة الآن: {callNoteConflicts[noteDraftKey]?.notes || "لا توجد ملاحظة"}
@@ -2335,7 +2335,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   return (
     <div className={`space-y-5 tp-follow-up-page tp-follow-up-page--${view}`}>
       <Card className="overflow-hidden tp-follow-up-page__intro">
-        <div className="h-1 bg-gradient-to-l from-primary via-tp-accent to-tp-soft" />
+        <div className="h-1.5 bg-gradient-to-l from-info-vivid via-success-vivid to-warning-vivid" />
         <CardHeader>
           <CardTitle>{viewTitles[view]}</CardTitle>
         </CardHeader>
@@ -2353,7 +2353,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               <CardContent className="space-y-3">
                 <fieldset disabled={leaveSaving} className="min-w-0 space-y-3">
                 {editingLeaveId && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-info-line bg-info-soft px-3 py-2 text-xs text-info">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-info-line border-s-4 border-s-info-vivid bg-info-soft px-3 py-2 text-xs text-info">
                     <span>
                       أنت تعدّل إجازة قائمة. أي تغيير في النطاق يعيد ترتيب
                       الدرجات المعلّقة تلقائياً.
@@ -2371,7 +2371,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 )}
                 {renderStudentPicker()}
                 {selectedLeavesLoading && <p className="text-xs text-muted-foreground">جاري مراجعة إجازات الطالب…</p>}
-                {selectedLeavesError && <div role="alert" className="space-y-2 text-sm text-destructive">
+                {selectedLeavesError && <div role="alert" className="space-y-2 text-sm text-danger">
                   <p>{selectedLeavesError}</p>
                   <Button variant="outline" size="sm" onClick={() => setLeaveRefreshKey(current => current + 1)}>إعادة المحاولة</Button>
                 </div>}
@@ -2379,7 +2379,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   يمكن اعتماد إجازة لامتحان سابق. يُلغى الفصل إذا زال سببه بعد احتساب الإجازة، دون منحه فرص تعهد.
                 </p>}
                 {selectedLeaveStudent && selectedStudentLeaves.length > 0 && (
-                  <div className="space-y-2 rounded-2xl border border-warning-line bg-warning-soft p-3">
+                  <div className="space-y-2 rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3">
                     <p className="text-xs font-bold text-warning">
                       إجازات الطالب (
                       {selectedStudentLeaves.length}):
@@ -2422,7 +2422,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                               type="button"
                               size="sm"
                               variant="ghost"
-                              className="h-7 px-2 text-[11px] text-destructive"
+                              className="h-7 px-2 text-[11px] text-danger"
                               disabled={Boolean(leaveDeletingIds[leave.id]) || leaveSaving}
                               onClick={() => void deleteLeaveServerFirst(leave)}
                             >
@@ -2470,7 +2470,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                         </SelectContent>
                       </Select>
                       {selectedLeaveStudent && leaveExamOptions.length === 0 && (
-                        <p className="text-xs text-destructive">
+                        <p className="text-xs text-danger">
                           لا توجد امتحانات تابعة لدورة هذا الطالب حالياً، لذلك
                           لا يمكن تسجيل إجازة امتحان له.
                         </p>
@@ -2556,7 +2556,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 )}
                 {selectedLeaveStudentBlockedReason && (
                   <p
-                    className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive"
+                    className="rounded-xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm font-medium text-danger"
                     role="alert"
                   >
                     {selectedLeaveStudentBlockedReason}
@@ -2801,7 +2801,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 </div>
               </div>
               {callStatusFilter === "absent" ? (
-                <p className="rounded-2xl border border-warning-line bg-warning-soft p-3 text-xs font-bold text-warning">
+                <p className="rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 text-xs font-bold text-warning">
                   الغائبون يشملون المسجلين بحالة «غائب» والطلاب الذين لم تُدخل
                   درجاتهم بعد انتهاء الامتحان. نطاق الدرجة معطّل لهذا الفلتر.
                 </p>
@@ -2810,7 +2810,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   حالة الغش غير رقمية، لذلك نطاق الدرجة معطّل لهذا الفلتر.
                 </p>
               ) : callGradeRangeInvalid ? (
-                <p className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm font-bold text-destructive">
+                <p className="rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm font-bold text-danger">
                   درجة «من» يجب ألا تكون أكبر من درجة «إلى».
                 </p>
               ) : callStatusFilter === "dismissed" && !callGradeFrom && !callGradeTo ? (

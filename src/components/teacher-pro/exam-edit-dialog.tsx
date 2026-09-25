@@ -110,7 +110,7 @@ function ExamEditFieldError({
 }) {
   if (!message) return null;
   return (
-    <p id={id} role="alert" className="text-xs font-medium text-destructive">
+    <p id={id} role="alert" className="text-xs font-medium text-danger">
       {message}
     </p>
   );
@@ -462,7 +462,7 @@ export function ExamEditDialog({
               />
             </div>
 
-            <div className="rounded-xl border border-info-line bg-info-soft/60 p-3 md:col-span-2">
+            <div className="rounded-xl border border-info-line border-s-4 border-s-info-vivid bg-info-soft/60 p-3 md:col-span-2">
               <label className="flex cursor-pointer items-start gap-3 text-sm">
                 <Checkbox
                   checked={noDiscount}
@@ -730,7 +730,7 @@ export function ExamEditDialog({
             id="edit-exam-validation-summary"
             role="alert"
             aria-live="polite"
-            className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm font-medium text-destructive"
+            className="rounded-xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft px-4 py-3 text-sm font-medium text-danger"
           >
             لا يمكن حفظ التعديل حالياً: {formValidation.firstError}
           </div>

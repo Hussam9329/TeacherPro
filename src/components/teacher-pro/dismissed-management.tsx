@@ -858,54 +858,62 @@ export function DismissedManagementView() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card className="border-danger-line">
-          <CardContent className="flex items-center justify-between p-4">
+        <Card className="tp-tone-card" data-tone="info">
+          <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
               <p className="text-xs text-muted-foreground">حسب الفلترة</p>
-              <p className="text-2xl font-black">
+              <p className="tp-tone-card__value text-2xl font-black">
                 {statsLoading ? "..." : stats.total}
               </p>
             </div>
-            <Users className="size-7 text-danger" />
+            <span className="tp-tone-card__icon" aria-hidden="true">
+              <Users />
+            </span>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
+        <Card className="tp-tone-card" data-tone="danger">
+          <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
               <p className="text-xs text-muted-foreground">مفصول حالياً</p>
-              <p className="text-2xl font-black">
+              <p className="tp-tone-card__value text-2xl font-black">
                 {statsLoading ? "..." : stats.current}
               </p>
             </div>
-            <ShieldAlert className="size-7 text-danger" />
+            <span className="tp-tone-card__icon" aria-hidden="true">
+              <ShieldAlert />
+            </span>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
+        <Card className="tp-tone-card" data-tone="warning">
+          <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
               <p className="text-xs text-muted-foreground">مفصول سابقاً</p>
-              <p className="text-2xl font-black">
+              <p className="tp-tone-card__value text-2xl font-black">
                 {statsLoading ? "..." : stats.former}
               </p>
             </div>
-            <RotateCcw className="size-7 text-muted-foreground" />
+            <span className="tp-tone-card__icon" aria-hidden="true">
+              <RotateCcw />
+            </span>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
+        <Card className="tp-tone-card" data-tone="info">
+          <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
               <p className="text-xs text-muted-foreground">مع ملاحظات</p>
-              <p className="text-2xl font-black">
+              <p className="tp-tone-card__value text-2xl font-black">
                 {statsLoading ? "..." : stats.withNotes}
               </p>
             </div>
-            <FileClock className="size-7 text-muted-foreground" />
+            <span className="tp-tone-card__icon" aria-hidden="true">
+              <FileClock />
+            </span>
           </CardContent>
         </Card>
       </div>
 
       {statsError ? (
-        <div className="rounded-2xl border border-warning-line bg-warning-soft p-3 text-sm text-warning">
+        <div className="rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 text-sm text-warning">
           {statsError}
         </div>
       ) : null}
@@ -999,7 +1007,7 @@ export function DismissedManagementView() {
       </Card>
 
       {error ? (
-        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+        <div className="rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-4 text-sm text-danger">
           {error}
         </div>
       ) : null}
@@ -1027,8 +1035,9 @@ export function DismissedManagementView() {
             <Card
               key={student.id}
               className="overflow-hidden border-danger-line shadow-sm"
+              data-dismissed={student.status === "مفصول" || undefined}
             >
-              <div className="h-1 bg-tp-accent/70" />
+              <div className={`h-1.5 ${student.status === "مفصول" ? "bg-gradient-to-l from-danger-vivid to-warning-vivid" : "bg-warning-vivid"}`} />
               <CardContent className="space-y-4 p-4 sm:p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
@@ -1249,7 +1258,7 @@ export function DismissedManagementView() {
                 </div>
 
                 {historyErrors[student.id] ? (
-                  <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                  <div className="rounded-xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm text-danger">
                     {historyErrors[student.id]}
                   </div>
                 ) : null}

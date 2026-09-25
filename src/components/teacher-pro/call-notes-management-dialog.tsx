@@ -45,11 +45,11 @@ function formatNoteTime(createdAt: string) {
   return Number.isFinite(date.getTime()) ? noteTimeFormatter.format(date) : "—";
 }
 
-/** Palette tone of a contact status: reached = primary, no answer = soft, wrong number = accent. */
-function actionTone(status: string): "primary" | "soft" | "accent" | "muted" {
-  if (status === "تم الاتصال") return "primary";
-  if (status === "لم يرد") return "soft";
-  if (status === "الرقم خاطئ") return "accent";
+/** Signal tone of a contact status: reached = green, no answer = amber, wrong number = red. */
+function actionTone(status: string): "success" | "warning" | "danger" | "muted" {
+  if (status === "تم الاتصال") return "success";
+  if (status === "لم يرد") return "warning";
+  if (status === "الرقم خاطئ") return "danger";
   return "muted";
 }
 

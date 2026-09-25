@@ -1041,7 +1041,7 @@ function SecurityTab() {
     return (
       <Card className="border-destructive/40">
         <CardContent className="space-y-3 p-6">
-          <p className="font-semibold text-destructive">{error}</p>
+          <p className="font-semibold text-danger">{error}</p>
           <p className="text-sm text-muted-foreground">تحتاج صلاحية إدارة الحسابات لفتح هذه اللوحة.</p>
           <Button variant="outline" onClick={() => void loadOverview()}>إعادة المحاولة</Button>
         </CardContent>
@@ -1096,7 +1096,7 @@ function SecurityTab() {
                     <p className="font-semibold">{user.name}</p>
                     <p className="text-xs text-muted-foreground">@{user.username} — {user.role}</p>
                   </div>
-                  <Badge variant={user.active ? 'default' : 'secondary'}>{user.active ? 'فعال' : 'معطل'}</Badge>
+                  <Badge variant={user.active ? 'success' : 'danger'}>{user.active ? 'فعال' : 'معطل'}</Badge>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1">
                   {user.sensitivePermissions.map((permission) => (
@@ -1400,7 +1400,7 @@ function BackupTab() {
                 </SelectContent>
               </Select>
               {restoreMode === 'replace' && (
-                <p className="text-xs text-destructive leading-relaxed">
+                <p className="text-xs text-danger leading-relaxed">
                   ⚠️ وضع الاستبدال يحذف كل البيانات غير الموجودة في النسخة. قد يكون محظوراً في بيئة الإنتاج.
                 </p>
               )}

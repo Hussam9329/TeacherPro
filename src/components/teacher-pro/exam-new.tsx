@@ -249,7 +249,7 @@ function ExamFieldError({ id, message }: { id: string; message?: string }) {
     <p
       id={id}
       role="alert"
-      className="tp-field-feedback text-xs font-medium text-destructive"
+      className="tp-field-feedback text-xs font-medium text-danger"
     >
       {message}
     </p>

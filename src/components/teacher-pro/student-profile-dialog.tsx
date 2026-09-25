@@ -145,11 +145,11 @@ function ProfileLoadNotice({
   }
   if (!error) return null;
   return (
-    <div role="alert" aria-live="assertive" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
-      <p className="min-w-0 flex-1 break-words font-bold text-destructive">
+    <div role="alert" aria-live="assertive" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft px-4 py-3 text-sm">
+      <p className="min-w-0 flex-1 break-words font-bold text-danger">
         {error}{hasFallback ? " المعروض أدناه نسخة محلية احتياطية وقد تكون غير مكتملة." : ""}
       </p>
-      <button type="button" onClick={onRetry} className="min-h-11 max-w-full touch-manipulation rounded-xl border border-destructive/30 px-3 py-2 font-black text-destructive [overflow-wrap:anywhere] focus:outline-none focus:ring-2 focus:ring-destructive/30">
+      <button type="button" onClick={onRetry} className="min-h-11 max-w-full touch-manipulation rounded-xl border border-destructive/30 px-3 py-2 font-black text-danger [overflow-wrap:anywhere] focus:outline-none focus:ring-2 focus:ring-destructive/30">
         إعادة المحاولة
       </button>
     </div>
@@ -166,7 +166,7 @@ function ProfileCollectionEmpty({
   emptyText: string;
 }) {
   if (loading) return <p role="status" aria-live="polite" className="empty-state py-8">جاري تحميل البيانات…</p>;
-  if (error) return <p role="alert" className="empty-state py-8 text-destructive">تعذر تحميل هذه البيانات.</p>;
+  if (error) return <p role="alert" className="empty-state py-8 text-danger">تعذر تحميل هذه البيانات.</p>;
   return <p className="empty-state py-8">{emptyText}</p>;
 }
 
@@ -988,7 +988,7 @@ export function StudentProfileDialog({
             <div className="min-w-0">
               <h2 id="student-profile-title" className="font-black">{profileStudent.name}</h2>
               <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
-                <Badge variant={profileStudent.status === "نشط" ? "default" : "destructive"}>{profileStudent.status}</Badge>
+                <Badge variant={profileStudent.status === "نشط" ? "success" : profileStudent.status === "مفصول" ? "destructive" : "secondary"}>{profileStudent.status}</Badge>
                 <Badge variant="outline" className="max-w-full whitespace-normal [overflow-wrap:anywhere]">{profileStudent.code}</Badge>
               </div>
               <p id="student-profile-description" className="sr-only">ملف الطالب: المعلومات والإحصائيات والمتابعة</p>
@@ -1136,8 +1136,8 @@ export function StudentProfileDialog({
                     إلا بعد تحميل ملف الطالب من بيانات النظام، حتى لا نعرض حالة فصل
                     مخفية من الكاش المحلي. */}
                 {hasAuthoritativeProfile && profileStudent.status === "مفصول" && (
-                  <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm sm:rounded-3xl">
-                    <p className="font-black text-destructive">بيانات الفصل</p>
+                  <div className="rounded-2xl p-4 text-sm sm:rounded-3xl" data-dismissed="true">
+                    <p className="font-black text-danger">بيانات الفصل</p>
                     <p className="mt-2 break-words">مفصول - {profileStudent.dismissalReason || "—"}</p>
                     {profileStudent.dismissalNotes && <p className="mt-1 break-words text-muted-foreground">{profileStudent.dismissalNotes}</p>}
                   </div>
@@ -1153,9 +1153,9 @@ export function StudentProfileDialog({
                   });
                   if (deductionLogs.length === 0) return null;
                   return (
-                    <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm sm:rounded-3xl">
+                    <div className="rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-4 text-sm sm:rounded-3xl">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="font-black text-destructive">خصومات الفصل الحالي ({deductionLogs.length})</p>
+                        <p className="font-black text-danger">خصومات الفصل الحالي ({deductionLogs.length})</p>
                       </div>
                       <Button variant="link" size="sm" className="mt-1 h-auto px-0" onClick={() => setTab("opportunities")}>
                         عرض سجل الفرص الكامل والفصول السابقة
@@ -1214,8 +1214,8 @@ export function StudentProfileDialog({
                           {grade.notes ? <div className="mt-2"><GradeNoteBanner notes={grade.notes} /></div> : null}
                         </div>
                         <div className="flex flex-wrap gap-1">
-                          {withinGrace && <Badge className="w-fit" variant="outline">{GRACE_PERIOD_EXCUSE_LABEL}</Badge>}
-                          {!withinGrace && withoutDiscount && <Badge className="w-fit" variant="secondary">بدون خصم</Badge>}
+                          {withinGrace && <Badge className="w-fit" variant="warning">{GRACE_PERIOD_EXCUSE_LABEL}</Badge>}
+                          {!withinGrace && withoutDiscount && <Badge className="w-fit" variant="info">بدون خصم</Badge>}
                           {deductionLog && (
                             <Badge className="w-fit" variant={historicalDeduction ? "outline" : "destructive"} title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>
                               {historicalDeduction ? `خصم سابق: ${deductionLog.amount} — لا يؤثر على الفصل الحالي` : `خصم ${deductionLog.amount} فرصة`}
@@ -1253,7 +1253,7 @@ export function StudentProfileDialog({
                     const deductionLog = deductionLogByExamId.get(exam.id);
                     return (
                       <div key={grade.id} className="min-w-0 rounded-2xl border bg-background/60 p-4">
-                        <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><div className="flex flex-wrap gap-1">{withinGrace && <Badge variant="outline">{GRACE_PERIOD_EXCUSE_LABEL}</Badge>}{!withinGrace && withoutDiscount && <Badge variant="secondary">بدون خصم</Badge>}{deductionLog && <Badge variant="destructive" title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>خصم {deductionLog.amount} فرصة</Badge>}<Badge>{profileGradeStatus(grade.status)}</Badge></div></div>
+                        <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><div className="flex flex-wrap gap-1">{withinGrace && <Badge variant="warning">{GRACE_PERIOD_EXCUSE_LABEL}</Badge>}{!withinGrace && withoutDiscount && <Badge variant="info">بدون خصم</Badge>}{deductionLog && <Badge variant="destructive" title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>خصم {deductionLog.amount} فرصة</Badge>}<Badge>{profileGradeStatus(grade.status)}</Badge></div></div>
                         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{formatGradeScore(grade, exam, "—")}</b><p>درجة الطالب</p></div></div>
                         {grade.notes ? <div className="mt-3"><GradeNoteBanner notes={grade.notes} /></div> : null}
                       </div>
@@ -1349,7 +1349,7 @@ export function StudentProfileDialog({
 
             {tab === "archives" && (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-info-line bg-info-soft p-4 text-sm shadow-sm sm:rounded-3xl sm:p-5">
+                <div className="rounded-2xl border border-info-line border-s-4 border-s-info-vivid bg-info-soft p-4 text-sm shadow-sm sm:rounded-3xl sm:p-5">
                   <h4 className="font-black text-info">الملفات السابقة — للقراءة فقط</h4>
                   <p className="mt-1 leading-6 text-muted-foreground">
                     هذه الملفات جُمّدت قبل نقل الطالب إلى دورة جديدة أو قبل اختياره كطالب جديد. لا تدخل درجاتها أو فرصها أو إجراءاتها في ملفه الحالي.

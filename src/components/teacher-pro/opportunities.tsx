@@ -1096,6 +1096,7 @@ export function OpportunitiesView() {
                   <div
                     key={student.id}
                     className="flex flex-col gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm transition-[border-color,box-shadow,background-color] duration-200 hover:border-primary/30 hover:shadow-lg @3xl:flex-row @3xl:items-center"
+                    data-dismissed={student.status === "مفصول" || undefined}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -1122,7 +1123,7 @@ export function OpportunitiesView() {
                           </Badge>
                         ) : null}
                         {student.isOpportunityFull ? (
-                          <Badge variant="outline" className="text-[10px]">
+                          <Badge variant="success" className="text-[10px]">
                             فرص كاملة
                           </Badge>
                         ) : null}
@@ -1139,12 +1140,12 @@ export function OpportunitiesView() {
                       </div>
                       {student.status === "مفصول" &&
                         student.dismissalReason && (
-                          <p className="mt-1 text-xs font-semibold text-destructive">
+                          <p className="mt-1 text-xs font-semibold text-danger">
                             {student.dismissalReason}
                           </p>
                         )}
                       {!hasChapter && (
-                        <p className="mt-1 text-xs font-semibold text-destructive">
+                        <p className="mt-1 text-xs font-semibold text-danger">
                           لم يتم اختيار الفصل لهم بعد؛ كل الإجراءات مقفلة.
                         </p>
                       )}
@@ -1157,10 +1158,10 @@ export function OpportunitiesView() {
                           <div
                             className={`h-full rounded-full transition-all ${
                               oppPercent > 50
-                                ? "bg-success"
+                                ? "bg-success-vivid"
                                 : oppPercent > 0
-                                  ? "bg-warning"
-                                  : "bg-danger"
+                                  ? "bg-warning-vivid"
+                                  : "bg-danger-vivid"
                             }`}
                             style={{ width: `${oppPercent}%` }}
                           />
@@ -1337,7 +1338,7 @@ export function OpportunitiesView() {
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-destructive">
+                <p className="text-2xl font-bold text-danger">
                   {statsConflicts}
                 </p>
                 <p className="text-xs text-muted-foreground">طلاب ضمن تعارض فصول</p>
@@ -1363,7 +1364,7 @@ export function OpportunitiesView() {
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-destructive">
+                <p className="text-2xl font-bold text-danger">
                   {statsOverLimit}
                 </p>
                 <p className="text-xs text-muted-foreground">فوق السقف</p>

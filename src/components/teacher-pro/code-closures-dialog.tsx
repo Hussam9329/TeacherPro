@@ -192,8 +192,8 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
             <div role="group" aria-label="حالة اغلاق الكود" className="tp-modal__filters">
               {([
                 ["all", "All", "الكل", undefined],
-                ["checked", "Checked", "مغلقة", "primary"],
-                ["unchecked", "unChecked", "بانتظار الإغلاق", "soft"],
+                ["checked", "Checked", "مغلقة", "success"],
+                ["unchecked", "unChecked", "بانتظار الإغلاق", "warning"],
               ] as const).map(([value, label, description, tone]) => (
                 <Button
                   key={value}
@@ -278,7 +278,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
                   <article key={student.id} className="tp-closures__row" data-checked={student.dismissedChecked}>
                     <div className="tp-modal__identity tp-closures__identity">
                       <p className="tp-modal__name">
-                        <span className="tp-modal__light" data-tone={student.dismissedChecked ? "primary" : "soft"} aria-hidden="true" />
+                        <span className="tp-modal__light" data-tone={student.dismissedChecked ? "success" : "warning"} aria-hidden="true" />
                         <span className="tp-modal__name-text">{student.name}</span>
                       </p>
                       <div className="tp-modal__meta">

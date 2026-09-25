@@ -40,15 +40,15 @@ type DashboardStats = {
 };
 
 const dashboardShortcuts = [
-  { section: "student-registry", title: "سجل الطلاب", icon: ClipboardList, color: "bg-primary/10 text-primary" },
-  { section: "student-bulk-import", title: "إضافة الطلاب الجماعية", icon: UsersRound, color: "bg-primary/10 text-primary" },
-  { section: "opportunities", title: "إدارة الفرص", icon: Target, color: "bg-warning-soft text-warning" },
-  { section: "dismissed-management", title: "إدارة المفصولين", icon: ShieldAlert, color: "bg-danger-soft text-danger" },
-  { section: "grade-entry", title: "تسجيل الدرجات", icon: PenLine, color: "bg-info-soft text-info" },
-  { section: "grade-records", title: "سجل الدرجات", icon: ChartColumn, color: "bg-info-soft text-info" },
-  { section: "exam-new", title: "إضافة امتحان", icon: FilePlus2, color: "bg-info-soft text-info" },
-  { section: "follow-up-calls", title: "المكالمات", icon: PhoneCall, color: "bg-success-soft text-success" },
-  { section: "follow-up-leaves", title: "الإجازات", icon: CalendarCheck, color: "bg-success-soft text-success" },
+  { section: "student-registry", title: "سجل الطلاب", icon: ClipboardList, tone: "info" },
+  { section: "student-bulk-import", title: "إضافة الطلاب الجماعية", icon: UsersRound, tone: "success" },
+  { section: "opportunities", title: "إدارة الفرص", icon: Target, tone: "warning" },
+  { section: "dismissed-management", title: "إدارة المفصولين", icon: ShieldAlert, tone: "danger" },
+  { section: "grade-entry", title: "تسجيل الدرجات", icon: PenLine, tone: "info" },
+  { section: "grade-records", title: "سجل الدرجات", icon: ChartColumn, tone: "info" },
+  { section: "exam-new", title: "إضافة امتحان", icon: FilePlus2, tone: "success" },
+  { section: "follow-up-calls", title: "المكالمات", icon: PhoneCall, tone: "success" },
+  { section: "follow-up-leaves", title: "الإجازات", icon: CalendarCheck, tone: "warning" },
 ] as const;
 
 function formatStatsTime(value?: string) {
@@ -159,19 +159,19 @@ export function DashboardView({
       label: "طلاب نشطون",
       value: stats?.activeStudents,
       icon: Users,
-      color: "bg-success-soft text-success",
+      tone: "success",
     },
     {
       label: "طلاب مفصولون",
       value: stats?.dismissedStudents,
       icon: Shield,
-      color: "bg-danger-soft text-danger",
+      tone: "danger",
     },
     {
       label: "إجمالي الطلاب",
       value: stats?.totalStudents,
       icon: BookOpen,
-      color: "bg-info-soft text-info",
+      tone: "info",
     },
   ];
 
@@ -207,7 +207,7 @@ export function DashboardView({
       {initialError && (
         <div
           role="alert"
-          className="flex flex-col gap-3 rounded-2xl border border-destructive/35 bg-destructive/10 p-4 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-3 rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-4 text-sm text-danger sm:flex-row sm:items-center sm:justify-between"
         >
           <div>
             <p className="font-black">تعذر تحميل لوحة النظام</p>
@@ -222,7 +222,7 @@ export function DashboardView({
       {staleData && (
         <div
           role="alert"
-          className="flex flex-col gap-3 rounded-2xl border border-warning-line bg-warning-soft p-4 text-sm text-warning sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-3 rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-4 text-sm text-warning sm:flex-row sm:items-center sm:justify-between"
         >
           <div>
             <p className="font-black">تعذر جلب التحديث الجديد</p>
@@ -247,9 +247,9 @@ export function DashboardView({
       )}
 
       <div className="tp-dashboard__kpis" role="group" aria-label="إحصائيات الطلاب">
-        {kpiCards.map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="tp-dashboard__stat" data-count-scope="system">
-            <span className={`tp-dashboard__stat-icon ${color}`} aria-hidden="true">
+        {kpiCards.map(({ label, value, icon: Icon, tone }) => (
+          <div key={label} className="tp-dashboard__stat" data-count-scope="system" data-tone={tone}>
+            <span className="tp-dashboard__stat-icon" aria-hidden="true">
               <Icon />
             </span>
             <div className="tp-dashboard__stat-copy">
@@ -264,14 +264,15 @@ export function DashboardView({
         <nav aria-label="اختصارات لوحة التحكم" className="tp-dashboard__navigation">
           <h3 className="text-sm font-bold">الوصول السريع</h3>
           <div className="tp-dashboard__shortcuts">
-            {visibleShortcuts.map(({ section, title, icon: Icon, color }) => (
+            {visibleShortcuts.map(({ section, title, icon: Icon, tone }) => (
               <a
                 key={section}
+                data-tone={tone}
                 href={`/?section=${section}`}
                 onClick={(event) => onSectionLinkClick?.(event, section)}
                 className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
               >
-                <span className={`tp-dashboard__shortcut-icon ${color}`} aria-hidden="true">
+                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
                   <Icon />
                 </span>
                 <span className="tp-dashboard__shortcut-label">{title}</span>
@@ -282,9 +283,10 @@ export function DashboardView({
                 type="button"
                 onClick={() => setCallNotesOpen(true)}
                 aria-haspopup="dialog"
+                data-tone="success"
                 className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
               >
-                <span className="tp-dashboard__shortcut-icon bg-success-soft text-success" aria-hidden="true">
+                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
                   <ListChecks />
                 </span>
                 <span className="tp-dashboard__shortcut-label">إدارة ملاحظات المكالمات</span>
@@ -295,9 +297,10 @@ export function DashboardView({
                 type="button"
                 onClick={() => setCodeClosuresOpen(true)}
                 aria-haspopup="dialog"
+                data-tone="danger"
                 className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
               >
-                <span className="tp-dashboard__shortcut-icon bg-danger-soft text-danger" aria-hidden="true">
+                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
                   <LockKeyhole />
                 </span>
                 <span className="tp-dashboard__shortcut-label">اغلاق الكودات</span>
@@ -308,9 +311,10 @@ export function DashboardView({
                 type="button"
                 onClick={() => setGracePeriodsOpen(true)}
                 aria-haspopup="dialog"
+                data-tone="warning"
                 className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
               >
-                <span className="tp-dashboard__shortcut-icon bg-success-soft text-success" aria-hidden="true">
+                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
                   <CalendarClock />
                 </span>
                 <span className="tp-dashboard__shortcut-label">إدارة فترة السماح</span>

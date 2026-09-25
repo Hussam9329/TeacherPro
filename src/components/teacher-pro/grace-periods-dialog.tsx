@@ -102,14 +102,14 @@ function LockTag({ lock }: { lock: StudentLock }) {
   return <span className="tp-modal__lock" data-lock={lock.kind} title={lock.hint}>{lock.tag}</span>;
 }
 
-/** Palette tone of each light: ongoing = primary, ends today = soft, ended = accent. */
-const LIGHT_TONE: Record<GraceLight, "primary" | "soft" | "accent"> = {
-  green: "primary",
-  yellow: "soft",
-  red: "accent",
+/** Signal tone of each light: ongoing = green, ends today = amber, ended = red. */
+const LIGHT_TONE: Record<GraceLight, "success" | "warning" | "danger"> = {
+  green: "success",
+  yellow: "warning",
+  red: "danger",
 };
 
-function lightTone(light: GraceLight | null): "primary" | "soft" | "accent" | "none" {
+function lightTone(light: GraceLight | null): "success" | "warning" | "danger" | "none" {
   return light ? LIGHT_TONE[light] : "none";
 }
 
@@ -121,7 +121,7 @@ function GraceLightDot({ light }: { light: GraceLight | null }) {
     <span
       className="tp-modal__light"
       data-tone={LIGHT_TONE[light]}
-      data-pulse={light === "yellow"}
+      data-pulse={light !== "red"}
       role="img"
       aria-label={label}
       title={label}
@@ -404,7 +404,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
         <Button type="button" size="sm" variant="outline" onClick={() => startUpdate(period)} disabled={locked}>
           <PencilLine className="size-4" aria-hidden="true" />تعديل
         </Button>
-        <Button type="button" size="sm" variant="ghost" data-tone="accent" onClick={() => startCancel(period)} disabled={locked}>
+        <Button type="button" size="sm" variant="ghost" data-tone="danger" onClick={() => startCancel(period)} disabled={locked}>
           <XCircle className="size-4" aria-hidden="true" />إلغاء
         </Button>
       </div>
@@ -496,7 +496,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                       className="tp-modal__filter"
                       aria-pressed={listFilter === option.value}
                       data-filter={option.value}
-                      data-tone={option.value === "current" ? "primary" : option.value === "past" ? "accent" : undefined}
+                      data-tone={option.value === "current" ? "success" : option.value === "past" ? "danger" : undefined}
                       onClick={() => setListFilter(option.value)}
                     >
                       {option.value !== "all" && <span className="tp-modal__filter-dot" aria-hidden="true" />}
@@ -586,12 +586,12 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                 </Button>
               </section>
 
-              {lock && <p role="note" className="tp-modal__note" data-tone={lock.kind === "dismissed" ? "accent" : undefined}>{lock.hint}.</p>}
+              {lock && <p role="note" className="tp-modal__note" data-tone={lock.kind === "dismissed" ? "danger" : undefined}>{lock.hint}.</p>}
 
               <section className="tp-modal__section" aria-labelledby="tp-grace-current">
                 <h3 id="tp-grace-current" className="tp-modal__title">الفترة الحالية</h3>
                 {currentPeriod ? (
-                  <div className="tp-grace__current" data-tone={currentLight === "yellow" ? "soft" : "primary"}>
+                  <div className="tp-grace__current" data-tone={currentLight === "yellow" ? "warning" : "success"}>
                     <div className="tp-grace__current-main">
                       <span className="tp-grace__badge">
                         <GraceLightDot light={currentLight} />
@@ -776,7 +776,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                         معاينة الأثر
                       </Button>
                     ) : (
-                      <Button type="button" onClick={() => void confirmSave()} disabled={busy} data-tone={editor.action === "cancel" ? "accent" : undefined}>
+                      <Button type="button" onClick={() => void confirmSave()} disabled={busy} data-tone={editor.action === "cancel" ? "danger" : undefined}>
                         {busy ? <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <CheckCircle2 className="size-4" aria-hidden="true" />}
                         {editor.action === "cancel" ? "تأكيد الإلغاء" : "تأكيد الحفظ"}
                       </Button>

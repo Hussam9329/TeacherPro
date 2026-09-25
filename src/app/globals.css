@@ -99,11 +99,28 @@
   --color-info: var(--status-info-fg);
   --color-info-soft: var(--status-info-bg);
   --color-info-line: var(--status-info-border);
+  --color-success-vivid: var(--status-success-vivid);
+  --color-success-solid: var(--status-success-solid);
+  --color-success-on: var(--status-success-on);
+  --color-warning-vivid: var(--status-warning-vivid);
+  --color-warning-solid: var(--status-warning-solid);
+  --color-warning-on: var(--status-warning-on);
+  --color-danger-vivid: var(--status-danger-vivid);
+  --color-danger-solid: var(--status-danger-solid);
+  --color-danger-on: var(--status-danger-on);
+  --color-info-vivid: var(--status-info-vivid);
+  --color-info-solid: var(--status-info-solid);
+  --color-info-on: var(--status-info-on);
   --color-overlay: var(--overlay);
 }
 
 /* Tailwind's shadow scale, cast in Deep Dark (#0E1F36) instead of black. */
 @theme {
+  /* Night signal colours for surfaces that stay dark in both themes (sidebar). */
+  --color-night-success: #3dd28f;
+  --color-night-warning: #f7be55;
+  --color-night-danger: #f2675e;
+  --color-night-info: #5fa8f0;
   --shadow-2xs: 0 1px rgb(14 31 54 / 0.05);
   --shadow-xs: 0 1px 2px 0 rgb(14 31 54 / 0.06);
   --shadow-sm: 0 1px 3px 0 rgb(14 31 54 / 0.1), 0 1px 2px -1px rgb(14 31 54 / 0.1);
@@ -126,8 +143,8 @@
 }
 
 /* ═══════════════════════════════════════════════════════
-   TeacherPro palette — the only colours in the system.
-   Every token below is one of these seven values or a blend of them.
+   TeacherPro palette: seven base colours for surfaces, text and brand,
+   plus four signal colours (green, amber, red, blue) for statuses.
    ═══════════════════════════════════════════════════════ */
 :root {
   --tp-bg: #fbf9eb;      /* Background   */
@@ -137,6 +154,20 @@
   --tp-soft: #cd938f;    /* Soft Accent  */
   --tp-line: #e6e3d9;    /* Border       */
   --tp-deep: #0e1f36;    /* Deep Dark    */
+
+  /* Signal colours: statuses only (lights, badges, banners, progress).
+     Surfaces, text and brand stay on the seven palette colours above.
+     vivid = dots, bars, strips · ink = readable text · fill = solid chip with text */
+  --sig-success: #1fa971;      --sig-success-ink: #136b47;  --sig-success-fill: #157a51;
+  --sig-warning: #f2a93b;      --sig-warning-ink: #8f570c;  --sig-warning-fill: #f2a93b;
+  --sig-danger: #d15049;       --sig-danger-ink: #b3362f;   --sig-danger-fill: #c23b34;
+  --sig-info: #2e86de;         --sig-info-ink: #1f66ad;     --sig-info-fill: #1f6fbf;
+}
+.dark {
+  --sig-success: #3dd28f;      --sig-success-ink: #3dd28f;  --sig-success-fill: #3dd28f;
+  --sig-warning: #f7be55;      --sig-warning-ink: #f7be55;  --sig-warning-fill: #f7be55;
+  --sig-danger: #f2675e;       --sig-danger-ink: #f2675e;   --sig-danger-fill: #f2675e;
+  --sig-info: #5fa8f0;         --sig-info-ink: #5fa8f0;     --sig-info-fill: #5fa8f0;
 }
 
 :root {
@@ -158,16 +189,16 @@
   --muted-foreground: var(--tp-muted);
   --accent: color-mix(in srgb, var(--tp-line) 75%, var(--tp-bg));
   --accent-foreground: var(--tp-ink);
-  --destructive: var(--tp-accent);
+  --destructive: var(--sig-danger-fill);
   --destructive-foreground: var(--tp-bg);
   --border: var(--tp-line);
   --input: color-mix(in srgb, var(--tp-muted) 30%, var(--tp-line));
   --ring: var(--tp-ink);
-  --chart-1: var(--tp-ink);
-  --chart-2: var(--tp-accent);
-  --chart-3: var(--tp-soft);
-  --chart-4: var(--tp-muted);
-  --chart-5: var(--tp-deep);
+  --chart-1: var(--sig-info);
+  --chart-2: var(--sig-success);
+  --chart-3: var(--sig-warning);
+  --chart-4: var(--sig-danger);
+  --chart-5: var(--tp-soft);
   --sidebar: var(--tp-deep);
   --sidebar-foreground: var(--tp-bg);
   --sidebar-primary: var(--tp-bg);
@@ -183,20 +214,32 @@
   --shadow-soft: 0 18px 50px color-mix(in srgb, var(--tp-deep) 10%, transparent);
   --shadow-card: 0 12px 36px color-mix(in srgb, var(--tp-deep) 8%, transparent);
   --shadow-ring: 0 0 0 4px color-mix(in srgb, var(--tp-ink) 16%, transparent);
-  /* Meaning, the same on every page:
-     success = Primary Dark, warning = Soft Accent, danger = Accent, info = Secondary */
-  --status-success-fg: var(--tp-ink);
-  --status-success-bg: color-mix(in srgb, var(--tp-ink) 8%, var(--tp-bg));
-  --status-success-border: color-mix(in srgb, var(--tp-ink) 30%, var(--tp-line));
-  --status-warning-fg: color-mix(in srgb, var(--tp-accent) 55%, var(--tp-ink));
-  --status-warning-bg: color-mix(in srgb, var(--tp-soft) 20%, var(--tp-bg));
-  --status-warning-border: color-mix(in srgb, var(--tp-soft) 70%, var(--tp-line));
-  --status-danger-fg: color-mix(in srgb, var(--tp-accent) 88%, var(--tp-ink));
-  --status-danger-bg: color-mix(in srgb, var(--tp-accent) 10%, var(--tp-bg));
-  --status-danger-border: color-mix(in srgb, var(--tp-accent) 45%, var(--tp-line));
-  --status-info-fg: var(--tp-muted);
-  --status-info-bg: color-mix(in srgb, var(--tp-muted) 10%, var(--tp-bg));
-  --status-info-border: color-mix(in srgb, var(--tp-muted) 35%, var(--tp-line));
+  /* Meaning, the same on every page: success green, warning amber,
+     danger red (the palette accent), info blue. */
+  --status-success-fg: var(--sig-success-ink);
+  --status-success-bg: color-mix(in srgb, var(--sig-success) 15%, var(--tp-bg));
+  --status-success-border: color-mix(in srgb, var(--sig-success) 50%, var(--tp-bg));
+  --status-success-vivid: var(--sig-success);
+  --status-success-solid: var(--sig-success-fill);
+  --status-success-on: var(--tp-bg);
+  --status-warning-fg: var(--sig-warning-ink);
+  --status-warning-bg: color-mix(in srgb, var(--sig-warning) 20%, var(--tp-bg));
+  --status-warning-border: color-mix(in srgb, var(--sig-warning) 60%, var(--tp-bg));
+  --status-warning-vivid: var(--sig-warning);
+  --status-warning-solid: var(--sig-warning-fill);
+  --status-warning-on: var(--tp-deep);
+  --status-danger-fg: var(--sig-danger-ink);
+  --status-danger-bg: color-mix(in srgb, var(--sig-danger) 15%, var(--tp-bg));
+  --status-danger-border: color-mix(in srgb, var(--sig-danger) 55%, var(--tp-bg));
+  --status-danger-vivid: var(--sig-danger);
+  --status-danger-solid: var(--sig-danger-fill);
+  --status-danger-on: var(--tp-bg);
+  --status-info-fg: var(--sig-info-ink);
+  --status-info-bg: color-mix(in srgb, var(--sig-info) 13%, var(--tp-bg));
+  --status-info-border: color-mix(in srgb, var(--sig-info) 50%, var(--tp-bg));
+  --status-info-vivid: var(--sig-info);
+  --status-info-solid: var(--sig-info-fill);
+  --status-info-on: var(--tp-bg);
   --overlay: color-mix(in srgb, var(--tp-deep) 60%, transparent);
 }
 
@@ -217,16 +260,16 @@
   --muted-foreground: color-mix(in srgb, var(--tp-line) 70%, var(--tp-muted));
   --accent: color-mix(in srgb, var(--tp-muted) 32%, var(--tp-ink));
   --accent-foreground: var(--tp-bg);
-  --destructive: var(--tp-accent);
-  --destructive-foreground: var(--tp-bg);
+  --destructive: var(--sig-danger-fill);
+  --destructive-foreground: var(--tp-deep);
   --border: color-mix(in srgb, var(--tp-muted) 42%, var(--tp-ink));
   --input: color-mix(in srgb, var(--tp-muted) 55%, var(--tp-ink));
   --ring: color-mix(in srgb, var(--tp-bg) 70%, var(--tp-deep));
-  --chart-1: var(--tp-bg);
-  --chart-2: var(--tp-accent);
-  --chart-3: var(--tp-soft);
-  --chart-4: color-mix(in srgb, var(--tp-line) 70%, var(--tp-muted));
-  --chart-5: var(--tp-line);
+  --chart-1: var(--sig-info);
+  --chart-2: var(--sig-success);
+  --chart-3: var(--sig-warning);
+  --chart-4: var(--sig-danger);
+  --chart-5: var(--tp-soft);
   --sidebar: var(--tp-deep);
   --sidebar-foreground: var(--tp-bg);
   --sidebar-primary: var(--tp-bg);
@@ -241,18 +284,30 @@
   --shadow-soft: 0 22px 70px color-mix(in srgb, var(--tp-deep) 70%, transparent);
   --shadow-card: 0 16px 44px color-mix(in srgb, var(--tp-deep) 55%, transparent);
   --shadow-ring: 0 0 0 4px color-mix(in srgb, var(--tp-bg) 22%, transparent);
-  --status-success-fg: var(--tp-bg);
-  --status-success-bg: color-mix(in srgb, var(--tp-bg) 10%, var(--tp-deep));
-  --status-success-border: color-mix(in srgb, var(--tp-bg) 30%, var(--tp-deep));
-  --status-warning-fg: var(--tp-soft);
-  --status-warning-bg: color-mix(in srgb, var(--tp-soft) 18%, var(--tp-deep));
-  --status-warning-border: color-mix(in srgb, var(--tp-soft) 50%, var(--tp-deep));
-  --status-danger-fg: color-mix(in srgb, var(--tp-accent) 65%, var(--tp-bg));
-  --status-danger-bg: color-mix(in srgb, var(--tp-accent) 18%, var(--tp-deep));
-  --status-danger-border: color-mix(in srgb, var(--tp-accent) 50%, var(--tp-deep));
-  --status-info-fg: color-mix(in srgb, var(--tp-line) 70%, var(--tp-muted));
-  --status-info-bg: color-mix(in srgb, var(--tp-muted) 22%, var(--tp-deep));
-  --status-info-border: var(--tp-muted);
+  --status-success-fg: var(--sig-success-ink);
+  --status-success-bg: color-mix(in srgb, var(--sig-success) 16%, var(--tp-ink));
+  --status-success-border: color-mix(in srgb, var(--sig-success) 50%, var(--tp-ink));
+  --status-success-vivid: var(--sig-success);
+  --status-success-solid: var(--sig-success-fill);
+  --status-success-on: var(--tp-deep);
+  --status-warning-fg: var(--sig-warning-ink);
+  --status-warning-bg: color-mix(in srgb, var(--sig-warning) 16%, var(--tp-ink));
+  --status-warning-border: color-mix(in srgb, var(--sig-warning) 50%, var(--tp-ink));
+  --status-warning-vivid: var(--sig-warning);
+  --status-warning-solid: var(--sig-warning-fill);
+  --status-warning-on: var(--tp-deep);
+  --status-danger-fg: var(--sig-danger-ink);
+  --status-danger-bg: color-mix(in srgb, var(--sig-danger) 18%, var(--tp-ink));
+  --status-danger-border: color-mix(in srgb, var(--sig-danger) 55%, var(--tp-ink));
+  --status-danger-vivid: var(--sig-danger);
+  --status-danger-solid: var(--sig-danger-fill);
+  --status-danger-on: var(--tp-deep);
+  --status-info-fg: var(--sig-info-ink);
+  --status-info-bg: color-mix(in srgb, var(--sig-info) 16%, var(--tp-ink));
+  --status-info-border: color-mix(in srgb, var(--sig-info) 50%, var(--tp-ink));
+  --status-info-vivid: var(--sig-info);
+  --status-info-solid: var(--sig-info-fill);
+  --status-info-on: var(--tp-deep);
   --overlay: color-mix(in srgb, var(--tp-deep) 75%, transparent);
 }
 
@@ -971,14 +1026,15 @@
 
   .tp-connection-dot--online,
   .tp-connection-badge--online .tp-connection-badge__dot {
-    background: var(--status-success-fg);
+    background: var(--status-success-vivid);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-success-vivid) 25%, transparent), 0 0 10px color-mix(in srgb, var(--status-success-vivid) 70%, transparent);
   }
 
   .tp-connection-dot--syncing,
   .tp-connection-dot--loading,
   .tp-connection-badge--syncing .tp-connection-badge__dot,
   .tp-connection-badge--loading .tp-connection-badge__dot {
-    background: var(--status-warning-fg);
+    background: var(--status-warning-vivid);
     animation: pulse 1.5s ease-in-out infinite;
   }
 
@@ -986,7 +1042,8 @@
   .tp-connection-dot--error,
   .tp-connection-badge--offline .tp-connection-badge__dot,
   .tp-connection-badge--error .tp-connection-badge__dot {
-    background: var(--status-danger-fg);
+    background: var(--status-danger-vivid);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-danger-vivid) 25%, transparent);
   }
 
   .tp-connection-badge {
@@ -1311,8 +1368,8 @@
 
 /* KPI card colors, kept for compatibility with existing screens */
 .kpi-ok { --kpi-color: var(--status-success-fg); }
-.kpi-warn { --kpi-color: var(--tp-soft); }
-.kpi-danger { --kpi-color: var(--tp-accent); }
+.kpi-warn { --kpi-color: var(--status-warning-fg); }
+.kpi-danger { --kpi-color: var(--status-danger-fg); }
 .kpi-info { --kpi-color: var(--status-info-fg); }
 
 
@@ -2599,3 +2656,91 @@
     padding-inline: 0.25rem;
   }
 }
+
+/* ═══ A dismissed student stands out on every screen ═══
+   Cards and rows carrying data-dismissed="true" get a red strip on the
+   reading side, a warm red wash and a faint red glow. */
+[data-dismissed="true"][data-dismissed] {
+  border-color: var(--status-danger-border);
+  border-inline-start: 4px solid var(--status-danger-vivid);
+  background-image: linear-gradient(to left, var(--status-danger-bg), transparent 75%);
+  box-shadow: 0 14px 30px -24px var(--status-danger-vivid);
+}
+tr[data-dismissed="true"][data-dismissed] {
+  border-inline-start: 0;
+  background-image: none;
+  box-shadow: none;
+}
+tr[data-dismissed="true"] > td { background-color: var(--status-danger-bg); }
+tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--status-danger-vivid); }
+[dir="ltr"] tr[data-dismissed="true"] > td:first-child { box-shadow: inset 4px 0 0 var(--status-danger-vivid); }
+
+/* Status pill with a glowing dot: <span class="tp-status-dot" data-tone="success"> */
+.tp-status-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 22%, transparent), 0 0 8px color-mix(in srgb, currentColor 65%, transparent);
+}
+
+/* ═══ Signal tones anywhere: data-tone="success|warning|danger|info" ═══ */
+[data-tone="success"] { --tone: var(--status-success-vivid); --tone-ink: var(--status-success-fg); --tone-tint: var(--status-success-bg); --tone-line: var(--status-success-border); --tone-solid: var(--status-success-solid); --tone-on: var(--status-success-on); }
+[data-tone="warning"] { --tone: var(--status-warning-vivid); --tone-ink: var(--status-warning-fg); --tone-tint: var(--status-warning-bg); --tone-line: var(--status-warning-border); --tone-solid: var(--status-warning-solid); --tone-on: var(--status-warning-on); }
+[data-tone="danger"] { --tone: var(--status-danger-vivid); --tone-ink: var(--status-danger-fg); --tone-tint: var(--status-danger-bg); --tone-line: var(--status-danger-border); --tone-solid: var(--status-danger-solid); --tone-on: var(--status-danger-on); }
+[data-tone="info"] { --tone: var(--status-info-vivid); --tone-ink: var(--status-info-fg); --tone-tint: var(--status-info-bg); --tone-line: var(--status-info-border); --tone-solid: var(--status-info-solid); --tone-on: var(--status-info-on); }
+
+/* Dashboard statistics: solid glowing icon, coloured number, a wash of colour. */
+.tp-dashboard__stat[data-tone] {
+  border-color: var(--tone-line);
+  background: linear-gradient(to left, color-mix(in srgb, var(--tone) 12%, var(--card)), var(--card) 70%);
+  box-shadow: inset 0 3px 0 var(--tone), 0 16px 32px -26px var(--tone);
+}
+.tp-dashboard__stat[data-tone] .tp-dashboard__stat-icon {
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  border-radius: 0.8rem;
+  background: var(--tone-solid);
+  color: var(--tone-on);
+  box-shadow: 0 10px 20px -10px var(--tone);
+}
+.tp-dashboard__stat[data-tone] .tp-dashboard__stat-value { color: var(--tone-ink); }
+
+/* Dashboard shortcuts: tinted icon that fills with colour on hover. */
+.tp-dashboard__shortcut[data-tone] .tp-dashboard__shortcut-icon {
+  background: var(--tone-tint);
+  color: var(--tone-ink);
+  box-shadow: inset 0 0 0 1px var(--tone-line);
+  transition: background-color 150ms, color 150ms, box-shadow 150ms;
+}
+.tp-dashboard__shortcut[data-tone]:hover,
+.tp-dashboard__shortcut[data-tone]:focus-visible { border-color: var(--tone-line); }
+.tp-dashboard__shortcut[data-tone]:hover .tp-dashboard__shortcut-icon,
+.tp-dashboard__shortcut[data-tone]:focus-visible .tp-dashboard__shortcut-icon {
+  background: var(--tone-solid);
+  color: var(--tone-on);
+  box-shadow: 0 8px 18px -10px var(--tone);
+}
+
+/* Coloured statistic card: <Card class="tp-tone-card" data-tone="danger"> with
+   .tp-tone-card__icon and .tp-tone-card__value inside. */
+.tp-tone-card[data-tone] {
+  border-color: var(--tone-line);
+  background: linear-gradient(to left, color-mix(in srgb, var(--tone) 12%, var(--card)), var(--card) 70%);
+  box-shadow: inset 0 3px 0 var(--tone), 0 16px 32px -26px var(--tone);
+}
+.tp-tone-card[data-tone] .tp-tone-card__icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border-radius: 0.9rem;
+  background: var(--tone-solid);
+  color: var(--tone-on);
+  box-shadow: 0 10px 20px -10px var(--tone);
+}
+.tp-tone-card[data-tone] .tp-tone-card__icon svg { inline-size: 1.4rem; block-size: 1.4rem; }
+.tp-tone-card[data-tone] .tp-tone-card__value { color: var(--tone-ink); }

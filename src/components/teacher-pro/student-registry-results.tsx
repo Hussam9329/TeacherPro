@@ -17,6 +17,7 @@ import { formatAppDate, sanitizePhoneInput } from "@/lib/format";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { formatGraceDate } from "@/lib/grace-periods";
+import { baghdadTodayKey } from "@/lib/baghdad-time";
 import {
   currentStudentGracePeriod,
   formatStudentCurrentGrace,
@@ -223,16 +224,25 @@ function ContactLink({
 }
 
 function StudentStatusBadge({ status }: { status: Student["status"] }) {
+  if (status === "نشط") {
+    return (
+      <Badge variant="success">
+        <span className="tp-status-dot text-success-vivid" aria-hidden="true" />
+        {status}
+      </Badge>
+    );
+  }
+  if (status === ARCHIVED_STUDENT_STATUS) {
+    return (
+      <Badge variant="secondary">
+        <Archive aria-hidden="true" />
+        {status}
+      </Badge>
+    );
+  }
   return (
-    <Badge
-      variant={
-        status === "نشط"
-          ? "default"
-          : status === ARCHIVED_STUDENT_STATUS
-            ? "secondary"
-            : "destructive"
-      }
-    >
+    <Badge variant="destructive">
+      <UserX aria-hidden="true" />
       {status}
     </Badge>
   );
@@ -269,18 +279,44 @@ function StudentHealthIndicators({
   );
 }
 
+/** Glowing grace light: green while the period runs, amber on its last day. */
+function GraceLightPill({ endDate, children }: { endDate: string; children: React.ReactNode }) {
+  const endsToday = endDate === baghdadTodayKey();
+  return (
+    <span
+      className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 font-semibold ${
+        endsToday
+          ? "border-warning-line bg-warning-soft text-warning"
+          : "border-success-line bg-success-soft text-success"
+      }`}
+    >
+      <span
+        className={`tp-status-dot ${endsToday ? "text-warning-vivid" : "text-success-vivid"}`}
+        aria-hidden="true"
+      />
+      <span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
+    </span>
+  );
+}
+
 function StudentCurrentGraceNote({ student }: { student: Student }) {
   const text = formatStudentCurrentGrace(student);
-  return text ? <p>{text}</p> : null;
+  const period = currentStudentGracePeriod(student);
+  if (!text || !period) return null;
+  return (
+    <p>
+      <GraceLightPill endDate={period.endDate}>{text}</GraceLightPill>
+    </p>
+  );
 }
 
 function StudentDismissalDetails({ student }: { student: Student }) {
   if (student.status !== "مفصول") return null;
   return (
-    <div className="rounded-lg bg-destructive/10 p-2 text-xs text-destructive">
+    <div className="rounded-lg border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-2 text-xs font-medium text-danger">
       <div>{student.dismissalReason || "سبب الفصل غير مدخل"}</div>
       {student.dismissalNotes && (
-        <div className="mt-1 text-destructive/80">
+        <div className="mt-1 text-danger/85">
           ملاحظات: {student.dismissalNotes}
         </div>
       )}
@@ -366,7 +402,7 @@ function StudentActions({
         <Button
           variant="outline"
           size="sm"
-          className="tp-registry-action border-destructive/40 text-destructive hover:bg-destructive/10"
+          className="tp-registry-action border-destructive/40 text-danger hover:bg-destructive/10"
           disabled={serverUnavailable || deleting}
           onClick={() => onArchive(student)}
         >
@@ -453,7 +489,11 @@ export function StudentRegistryResults({
         </thead>
         <tbody>
           {students.map((student) => (
-            <tr key={student.id} className="border-t align-top">
+            <tr
+              key={student.id}
+              className="border-t align-top"
+              data-dismissed={student.status === "مفصول" || undefined}
+            >
               <td className="min-w-52 p-3 font-medium">
                 <p>{student.name}</p>
                 <p className="text-xs text-muted-foreground">{student.code}</p>
@@ -571,6 +611,7 @@ function StudentRegistryRow({
       className="tp-registry-row"
       role="article"
       aria-labelledby={`registry-student-${student.id}`}
+      data-dismissed={student.status === "مفصول" || undefined}
     >
       <CardContent className="tp-registry-row__body">
         <div className="tp-registry-row__header">
@@ -608,7 +649,11 @@ function StudentRegistryRow({
           {currentGrace && (
             <RegistryField
               label="فترة السماح"
-              value={`حتى ${formatGraceDate(currentGrace.endDate)}`}
+              value={
+                <GraceLightPill endDate={currentGrace.endDate}>
+                  {`حتى ${formatGraceDate(currentGrace.endDate)}`}
+                </GraceLightPill>
+              }
             />
           )}
         </dl>

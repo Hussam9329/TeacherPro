@@ -1220,7 +1220,7 @@ export function TeacherProLayout() {
             </Button>
           </div>
           {!dbLoading && !dbConnected && (
-            <div className="mt-2 rounded-xl border border-tp-soft/30 bg-tp-soft/10 px-2.5 py-1.5 text-[11px] leading-5 text-tp-soft">
+            <div className="mt-2 rounded-xl border border-night-warning/40 bg-night-warning/10 px-2.5 py-1.5 text-[11px] leading-5 text-night-warning">
               غير متصل بالنظام؛ قد تبقى التغييرات محليًا حتى عودة الاتصال.
             </div>
           )}

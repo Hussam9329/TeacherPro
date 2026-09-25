@@ -794,7 +794,7 @@ export function ChaptersView() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={row.course.active ? "secondary" : "outline"}>
+          <Badge variant={row.course.active ? "success" : "outline"}>
             {row.course.active ? "نشطة للتسجيل" : "موقوفة عن التسجيل"}
           </Badge>
           {row.counts.activeLinks === 0 ? (
@@ -826,11 +826,11 @@ export function ChaptersView() {
         </div>
         <div>
           <dt>مفصولون</dt>
-          <dd className="text-destructive">{row.counts.dismissedStudents}</dd>
+          <dd className="text-danger">{row.counts.dismissedStudents}</dd>
         </div>
       </dl>
       {row.warnings.length ? (
-        <div className="rounded-xl border border-warning-line bg-warning-soft p-3 text-xs leading-6 text-warning">
+        <div className="rounded-xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 text-xs leading-6 text-warning">
           {row.warnings.map((warning) => (
             <p key={warning}>{warning}</p>
           ))}
@@ -878,7 +878,7 @@ export function ChaptersView() {
                         <h4 className="text-sm font-bold">
                           {link.chapter.name}
                         </h4>
-                        <Badge variant={link.active ? "default" : "outline"}>
+                        <Badge variant={link.active ? "success" : "outline"}>
                           {link.active ? "مفعل" : "غير مفعل"}
                         </Badge>
                       </div>
@@ -901,7 +901,7 @@ export function ChaptersView() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-destructive"
+                        className="text-danger"
                         aria-label={`حذف ربط ${link.chapter.name} — ${row.course.name}`}
                         onClick={() =>
                           setDeleteLinkDialog({ open: true, link, course: row })
@@ -958,7 +958,7 @@ export function ChaptersView() {
           <Button
             size="sm"
             variant="ghost"
-            className="text-destructive"
+            className="text-danger"
             aria-label={`حذف ${row.chapter.name}`}
             onClick={() => setDeleteChapterDialog({ open: true, row })}
             disabled={!row.deleteSafety.canDelete}
@@ -1211,7 +1211,7 @@ export function ChaptersView() {
                 "تعارض نشط",
                 overview?.stats.coursesWithMultipleActiveChapters ?? "—",
                 undefined,
-                "text-destructive",
+                "text-danger",
               )}
               {statCard("طلاب 0/0", zeroZeroReviewCount)}
             </div>
@@ -1545,7 +1545,7 @@ export function ChaptersView() {
               جاري تحميل المعاينة...
             </p>
           ) : transitionPreviewError ? (
-            <div className="space-y-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+            <div className="space-y-3 rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-4 text-sm text-danger">
               <p>{transitionPreviewError}</p>
               <Button
                 type="button"
@@ -1594,7 +1594,7 @@ export function ChaptersView() {
                 {transitionPreview.message}
               </p>
               {transitionPreview.blockers.length > 0 ? (
-                <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs leading-6 text-destructive">
+                <div className="rounded-xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-xs leading-6 text-danger">
                   {transitionPreview.blockers.map((blocker) => (
                     <p key={blocker}>{blocker}</p>
                   ))}
@@ -1730,7 +1730,7 @@ export function ChaptersView() {
                   جاري تحميل معاينة الأثر...
                 </p>
               ) : actionPreviewError ? (
-                <p className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                <p className="rounded-xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-xs text-danger">
                   {actionPreviewError}
                 </p>
               ) : (
@@ -1765,12 +1765,12 @@ export function ChaptersView() {
                     )}
                   </div>
                   {actionPreview?.blockingMessage ? (
-                    <p className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs leading-6 text-destructive">
+                    <p className="rounded-xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-xs leading-6 text-danger">
                       {actionPreview.blockingMessage}
                     </p>
                   ) : null}
                   <p
-                    className={`rounded-xl border p-3 text-xs leading-6 ${actionDialog.action === "activate" ? "border-primary/20 bg-primary/5 text-muted-foreground" : "border-warning-line bg-warning-soft text-warning"}`}
+                    className={`rounded-xl border p-3 text-xs leading-6 ${actionDialog.action === "activate" ? "border-primary/20 bg-primary/5 text-muted-foreground" : "border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft text-warning"}`}
                   >
                     {actionPreview?.message ||
                       (actionDialog.action === "activate"

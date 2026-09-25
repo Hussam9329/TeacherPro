@@ -2172,7 +2172,7 @@ export function StudentRegistryView() {
             <div
               role="alert"
               aria-live="assertive"
-              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm font-medium text-destructive"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm font-medium text-danger"
             >
               <span>{studentStatsError}</span>
               <Button
@@ -2278,7 +2278,7 @@ export function StudentRegistryView() {
                 <div
                   role="alert"
                   aria-live="assertive"
-                  className="rounded-2xl border border-warning-line bg-warning-soft p-3 text-sm font-medium text-warning"
+                  className="rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 text-sm font-medium text-warning"
                 >
                   <strong>{serverStudentsError}</strong>
                   <span className="mt-1 block text-xs">
@@ -2457,7 +2457,7 @@ export function StudentRegistryView() {
                       setPage(1);
                     }}
                   >
-                    <span className="text-2xl font-bold text-destructive">
+                    <span className="text-2xl font-bold text-danger">
                       {registryStatsPending
                         ? "…"
                         : studentStatsError
@@ -2550,7 +2550,7 @@ export function StudentRegistryView() {
                 tabIndex={-1}
                 role="region"
                 aria-label="مراجعة أحدث بيانات الطالب"
-                className="mb-4 space-y-3 rounded-2xl border border-warning-line bg-warning-soft p-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="mb-4 space-y-3 rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <p className="font-bold">
                   {editRecoveryReason === "unknown"
@@ -2835,7 +2835,7 @@ export function StudentRegistryView() {
                     </div>
 
                     {editNeedsTransferPolicy && editOriginalStudent && (
-                      <div className="tp-registry-editor__wide rounded-2xl border border-warning-line bg-warning-soft p-4 text-sm text-warning">
+                      <div className="tp-registry-editor__wide rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-4 text-sm text-warning">
                         <div className="mb-3 flex items-start gap-2">
                           <AlertTriangle className="mt-0.5 size-5 shrink-0" />
                           <div>
@@ -2910,7 +2910,7 @@ export function StudentRegistryView() {
                         {effectiveCourseTransferPolicy === "reset" && (
                           <div className="mt-3" aria-live="polite">
                             {editTargetActiveChapterLoading ? (
-                              <p className="rounded-xl border border-info-line bg-info-soft px-3 py-2 text-xs font-bold text-info">
+                              <p className="rounded-xl border border-info-line border-s-4 border-s-info-vivid bg-info-soft px-3 py-2 text-xs font-bold text-info">
                                 جاري التحقق من الفصل النشط ورصيد البداية… انتظر
                                 قبل الحفظ.
                               </p>
@@ -2931,7 +2931,7 @@ export function StudentRegistryView() {
                                 برصيد 0 ولن يُسمح بالحفظ حتى يتم تفعيل فصل واحد.
                               </p>
                             ) : (
-                              <p className="rounded-xl border border-success-line bg-success-soft px-3 py-2 text-xs font-bold text-success">
+                              <p className="rounded-xl border border-success-line border-s-4 border-s-success-vivid bg-success-soft px-3 py-2 text-xs font-bold text-success">
                                 تم التحقق: الفصل النشط «
                                 {editTargetActiveChapter.name}» ورصيد البداية{" "}
                                 {editTargetOpportunities} /{" "}
@@ -3197,7 +3197,7 @@ export function StudentRegistryView() {
                   )}
 
                   {editNeedsAcademicImpactPreview && (
-                    <div className="mt-4 rounded-2xl border border-warning-line bg-warning-soft p-4 text-sm text-warning">
+                    <div className="mt-4 rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-4 text-sm text-warning">
                       <div className="flex items-start gap-2">
                         <AlertTriangle className="mt-0.5 size-5 shrink-0" />
                         <div className="min-w-0 flex-1">
@@ -3377,7 +3377,7 @@ export function StudentRegistryView() {
                   نهائياً. سيتم أرشفته وإخفاؤه من القوائم اليومية فقط، مع إبقاء
                   سجلاته وتقاريره محفوظة ويمكن استعادته لاحقاً.
                 </p>
-                <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-destructive">
+                <div className="rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-danger">
                   الحذف النهائي معطّل لحماية الدرجات والإجازات والمكالمات
                   والملاحظات وسجلات الفرص من الضياع أو ظهور حالات “طالب محذوف”.
                 </div>
@@ -3476,7 +3476,7 @@ export function StudentRegistryView() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm leading-6 text-destructive">
+            <div className="rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm leading-6 text-danger">
               عند تأكيد الفصل سيصبح الطالب <strong>مفصولاً</strong> ورصيد فرصه{" "}
               <strong>0</strong>. لا توجد أنواع أو درجات للفصل، وسجل الفصل
               السابق لا يغيّر هذا القرار.
@@ -3515,7 +3515,7 @@ export function StudentRegistryView() {
             </Button>
             <Button
               variant="destructive"
-              className="tp-student-registry__dialog-button border-tp-accent bg-tp-accent text-tp-bg shadow-sm shadow-tp-accent/20 hover:border-tp-accent/90 hover:bg-tp-accent/90 hover:text-tp-bg"
+              className="tp-student-registry__dialog-button border-danger-solid bg-danger-solid text-danger-on shadow-md shadow-danger-vivid/30 hover:border-danger-solid/90 hover:bg-danger-solid/90 hover:text-danger-on"
               onClick={handleDismiss}
               disabled={isStatusActionSaving}
             >

@@ -340,8 +340,8 @@ const ExamRecordCard = React.memo(function ExamRecordCard(props: ExamRecordVisua
             </p>
             <div className="mt-2 flex flex-wrap gap-1">
               <Badge>{exam.type}</Badge>
-              <Badge variant="outline">{status}</Badge>
-              <Badge variant={entryAvailable ? "secondary" : "destructive"}>
+              <Badge variant={status === "نشط" ? "success" : status === "تفعيل مجدول" ? "warning" : "danger"}>{status}</Badge>
+              <Badge variant={entryAvailable ? "success" : "destructive"}>
                 متاح للإدخال: {entryAnswer}
               </Badge>
               <Badge variant="outline">سجلات: {totalStat}</Badge>
@@ -413,15 +413,15 @@ const ExamRecordTableRow = React.memo(function ExamRecordTableRow(props: ExamRec
         <td className="p-3">
           <div className="flex flex-wrap gap-1">
             <Badge>{exam.type}</Badge>
-            {exam.noDiscount && <Badge variant="secondary">بدون خصم</Badge>}
+            {exam.noDiscount && <Badge variant="info">بدون خصم</Badge>}
           </div>
         </td>
         <td className="p-3">
-          <Badge variant="outline">{status}</Badge>
+          <Badge variant={status === "نشط" ? "success" : status === "تفعيل مجدول" ? "warning" : "danger"}>{status}</Badge>
         </td>
         <td className="p-3 min-w-48">
           <div className="space-y-1">
-            <Badge variant={entryAvailable ? "secondary" : "destructive"}>
+            <Badge variant={entryAvailable ? "success" : "destructive"}>
               {entryAnswer}
             </Badge>
             {detailsOpen && (
@@ -1143,17 +1143,17 @@ export function ExamRecordsView() {
               <div className="space-y-2 text-sm text-muted-foreground">
                 <p>الامتحان: &quot;{deleteDialog.name}&quot;</p>
                 {deleteDialog.gradeCount === null ? (
-                  <p className="rounded-lg border border-warning-line bg-warning-soft p-3 font-semibold text-warning">
+                  <p className="rounded-lg border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 font-semibold text-warning">
                     جاري التحقق من السجلات المرتبطة بالامتحان...
                   </p>
                 ) : deleteDialog.gradeCount > 0 ? (
-                  <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 font-semibold text-destructive">
+                  <p className="rounded-lg border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 font-semibold text-danger">
                     لا يمكن حذف امتحان عليه درجات. يوجد{" "}
                     {deleteDialog.gradeCount} سجل درجات مرتبط بهذا الامتحان.
                     استخدم التعطيل إذا كان الهدف إيقاف ظهوره في إدخال الدرجات.
                   </p>
                 ) : deleteDialog.dependentCount > 0 ? (
-                  <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 font-semibold text-destructive">
+                  <p className="rounded-lg border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 font-semibold text-danger">
                     لا يمكن حذف هذا الامتحان لأنه مرتبط بـ{" "}
                     {deleteDialog.dependentCount} سجل تابع مثل إجازات أو مكالمات
                     أو مكالمات أو سجلات فرص. عطّل الامتحان بدل حذفه حتى لا يضيع

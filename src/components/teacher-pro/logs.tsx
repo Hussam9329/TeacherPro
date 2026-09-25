@@ -279,7 +279,7 @@ export function LogsView() {
           </div>
 
           {error ? (
-            <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm text-danger">
               {error}
             </div>
           ) : null}

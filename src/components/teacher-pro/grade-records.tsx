@@ -1260,7 +1260,7 @@ export function GradeRecordsView() {
       )}
 
       {serverGradesError && (
-        <div className="rounded-2xl border border-warning-line bg-warning-soft p-3 text-sm font-medium text-warning">
+        <div className="rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 text-sm font-medium text-warning">
           {serverGradesError}
         </div>
       )}
@@ -1301,7 +1301,7 @@ export function GradeRecordsView() {
                     <GradeNoteBanner notes={grade.notes} className="mt-2" />
                   ) : null}
                   {!isExamOnOrAfterStudentRegistration(student, exam) && (
-                    <div className="mt-2 rounded-xl border border-info-line bg-info-soft px-3 py-2 text-xs font-medium leading-5 text-info">
+                    <div className="mt-2 rounded-xl border border-info-line border-s-4 border-s-info-vivid bg-info-soft px-3 py-2 text-xs font-medium leading-5 text-info">
                       محفوظة للمتابعة فقط ولا تخصم؛ تاريخ الامتحان يسبق تاريخ
                       تسجيل الطالب في الدورة.
                     </div>

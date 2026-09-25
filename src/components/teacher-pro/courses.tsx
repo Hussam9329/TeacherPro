@@ -641,14 +641,7 @@ export function CoursesView() {
           <div className="tp-course-card__identity">
             <header className="tp-course-card__header">
               <h3 id={`course-title-${row.id}`}>{row.course.name}</h3>
-              <Badge
-                variant="outline"
-                className={
-                  row.course.active
-                    ? "text-success"
-                    : "text-warning"
-                }
-              >
+              <Badge variant={row.course.active ? "success" : "warning"}>
                 {row.course.active ? "نشطة للتسجيل" : "موقوفة عن التسجيل"}
               </Badge>
             </header>
@@ -832,7 +825,7 @@ export function CoursesView() {
               <Button
                 variant="ghost"
                 onClick={() => openDeleteDialog(row)}
-                className="text-destructive hover:text-destructive"
+                className="text-danger hover:text-destructive"
                 aria-label={`حذف نهائي للدورة ${row.course.name}`}
               >
                 حذف نهائي
@@ -1128,7 +1121,7 @@ export function CoursesView() {
                       </div>
                     </div>
                     {courseSyncDialog.preview.studentsToUpdate === 0 ? (
-                      <p className="rounded-xl border border-success-line bg-success-soft p-3 text-success">
+                      <p className="rounded-xl border border-success-line border-s-4 border-s-success-vivid bg-success-soft p-3 text-success">
                         جميع بيانات الطلاب الحالية متوافقة أصلاً؛ خيار المزامنة
                         لن يغير أي سجل.
                       </p>
@@ -1181,7 +1174,7 @@ export function CoursesView() {
                 <p>يمكن حذف الدورة إذا لم تكن مرتبطة بطلاب أو امتحانات.</p>
                 {deleteDialog.row ? (
                   <div
-                    className={`rounded-xl border p-3 ${deleteDialog.row.deleteSafety.canDelete ? "bg-muted/40" : "border-destructive/25 bg-destructive/10 text-destructive"}`}
+                    className={`rounded-xl border p-3 ${deleteDialog.row.deleteSafety.canDelete ? "bg-muted/40" : "border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft text-danger"}`}
                   >
                     <p className="font-bold">
                       {deleteDialog.row.deleteSafety.canDelete

@@ -51,10 +51,14 @@ export function StatCard({
   const visibleScopeLabel = scopeLabel ?? TEACHERPRO_COUNT_SCOPE_COPY[scope];
 
   return (
-    <Card className={cn('metric-card py-0', countScopeStyles[scope])} data-count-scope={scope}>
+    <Card
+      className={cn('metric-card py-0', countScopeStyles[scope], tone !== 'primary' && 'tp-tone-card')}
+      data-count-scope={scope}
+      data-tone={tone !== 'primary' ? tone : undefined}
+    >
       <CardContent className="relative p-4">
         <div className="flex items-center gap-4">
-          <div className={cn('flex size-12 items-center justify-center rounded-2xl border', toneClass)}>
+          <div className={cn('tp-tone-card__icon flex size-12 items-center justify-center rounded-2xl border', toneClass)}>
             <Icon className="size-6" />
           </div>
           <div className="min-w-0">
@@ -66,7 +70,7 @@ export function StatCard({
                 </span>
               )}
             </div>
-            <p className="text-2xl font-black tracking-tight">{value}</p>
+            <p className="tp-tone-card__value text-2xl font-black tracking-tight">{value}</p>
             {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
           </div>
         </div>

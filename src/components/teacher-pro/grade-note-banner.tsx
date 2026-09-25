@@ -13,59 +13,49 @@ import {
 
 import { resolveGradeNoteBanner } from "@/lib/grade-note-banners";
 
+// Full class strings (Tailwind only sees literal class names).
+const SIGNAL = {
+  info: {
+    wrapper: "border border-info-line border-s-4 border-s-info-vivid bg-gradient-to-l from-info-soft to-info-soft/40 text-info",
+    icon: "bg-info-solid text-info-on shadow-sm",
+  },
+  danger: {
+    wrapper: "border border-danger-line border-s-4 border-s-danger-vivid bg-gradient-to-l from-danger-soft to-danger-soft/40 text-danger",
+    icon: "bg-danger-solid text-danger-on shadow-sm",
+  },
+  warning: {
+    wrapper: "border border-warning-line border-s-4 border-s-warning-vivid bg-gradient-to-l from-warning-soft to-warning-soft/40 text-warning",
+    icon: "bg-warning-solid text-warning-on shadow-sm",
+  },
+  success: {
+    wrapper: "border border-success-line border-s-4 border-s-success-vivid bg-gradient-to-l from-success-soft to-success-soft/40 text-success",
+    icon: "bg-success-solid text-success-on shadow-sm",
+  },
+} as const;
+
 const TONES: Record<
   string,
   { Icon: LucideIcon; wrapper: string; icon: string }
 > = {
-  corrected: {
-    Icon: PenLine,
-    wrapper:
-      "border border-info-line/80 bg-gradient-to-l from-info-soft to-info-soft/40 text-info",
-    icon: "bg-info-soft text-info",
-  },
-  "batch-absent": {
-    Icon: UserX,
-    wrapper:
-      "border border-danger-line/80 bg-gradient-to-l from-danger-soft to-danger-soft/40 text-danger",
-    icon: "bg-danger-soft text-danger",
-  },
-  "auto-absent": {
-    Icon: UserX,
-    wrapper:
-      "border border-danger-line/80 bg-gradient-to-l from-danger-soft to-danger-soft/40 text-danger",
-    icon: "bg-danger-soft text-danger",
-  },
+  corrected: { Icon: PenLine, ...SIGNAL.info },
+  "batch-absent": { Icon: UserX, ...SIGNAL.danger },
+  "auto-absent": { Icon: UserX, ...SIGNAL.danger },
   "before-registration": {
     Icon: CalendarClock,
     wrapper:
-      "border border-border/80 bg-gradient-to-l from-muted to-muted/40 text-foreground",
-    icon: "bg-muted text-muted-foreground",
+      "border border-border/80 border-s-4 border-s-muted-foreground/60 bg-gradient-to-l from-muted to-muted/40 text-foreground",
+    icon: "bg-muted-foreground text-background",
   },
-  grace: {
-    Icon: Hourglass,
-    wrapper:
-      "border border-primary/30 bg-gradient-to-l from-primary/10 to-primary/5 text-primary",
-    icon: "bg-primary/10 text-primary",
-  },
-  excused: {
-    Icon: Leaf,
-    wrapper:
-      "border border-success-line/80 bg-gradient-to-l from-success-soft to-success-soft/40 text-success",
-    icon: "bg-success-soft text-success",
-  },
-  deferred: {
-    Icon: FileClock,
-    wrapper:
-      "border border-success-line/80 bg-gradient-to-l from-success-soft to-success-soft/40 text-success",
-    icon: "bg-success-soft text-success",
-  },
+  grace: { Icon: Hourglass, ...SIGNAL.warning },
+  excused: { Icon: Leaf, ...SIGNAL.success },
+  deferred: { Icon: FileClock, ...SIGNAL.info },
 };
 
 const CUSTOM = {
   Icon: StickyNote,
   wrapper:
-    "border border-warning-line/70 bg-warning-soft/80 text-warning",
-  icon: "bg-warning-soft text-warning",
+    "border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft/80 text-warning",
+  icon: "bg-warning-solid text-warning-on shadow-sm",
 };
 
 /**
