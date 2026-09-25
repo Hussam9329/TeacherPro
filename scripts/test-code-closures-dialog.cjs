@@ -22,6 +22,25 @@ vm.runInNewContext(ts.transpileModule(
   { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } },
 ).outputText, validationContext);
 
+// Use the real presentation helper, including its native Telegram link policy.
+const helperModules = new Map();
+function loadHelper(specifier, parentFile = path.join(root, 'src/index.ts')) {
+  const file = `${specifier.startsWith('@/')
+    ? path.join(root, 'src', specifier.slice(2))
+    : path.resolve(path.dirname(parentFile), specifier)}.ts`;
+  if (helperModules.has(file)) return helperModules.get(file).exports;
+  const module = { exports: {} };
+  helperModules.set(file, module);
+  const output = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  new Function('module', 'exports', 'require', output)(
+    module, module.exports, (name) => loadHelper(name, file),
+  );
+  return module.exports;
+}
+const registryHelpers = loadHelper('@/components/teacher-pro/student-registry-helpers');
+
 function deferred() {
   let resolve;
   let reject;
@@ -119,7 +138,7 @@ function harness() {
     react,
     './code-closures-dialog.css': {},
     'react/jsx-runtime': { jsx, jsxs: jsx },
-    'lucide-react': named(['AlertCircle', 'BookOpen', 'CheckCheck', 'ChevronDown', 'LockKeyhole', 'Loader2', 'RefreshCw', 'Search', 'UserRound', 'X']),
+    'lucide-react': named(['AlertCircle', 'BookOpen', 'CheckCheck', 'ChevronDown', 'LockKeyhole', 'Loader2', 'MessageCircle', 'RefreshCw', 'Search', 'UserRound', 'X']),
     '@/components/ui/button': named(['Button']),
     '@/components/ui/checkbox': named(['Checkbox']),
     '@/components/ui/dialog': named(['Dialog', 'DialogContent', 'DialogHeader', 'DialogTitle']),
@@ -129,6 +148,7 @@ function harness() {
     '@/lib/teacherpro-sync': { emitTeacherProDataChanged() {} },
     '@/lib/user-toast': { toast: { error: (error) => errors.push(error) } },
     '@/lib/validation': validationContext.exports,
+    './student-registry-helpers': registryHelpers,
   };
   const context = {
     exports: {},

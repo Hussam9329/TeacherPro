@@ -16,6 +16,7 @@ const compiled = ts.transpileModule(source, {
       CREATE TABLE "Course" (id text PRIMARY KEY, name text NOT NULL);
       CREATE TABLE "Student" (
         id text PRIMARY KEY, name text NOT NULL, code text NOT NULL,
+        username text, telegram text,
         status text NOT NULL, "dismissedChecked" boolean NOT NULL,
         "dismissedCheckEpoch" integer NOT NULL, "courseId" text REFERENCES "Course"(id),
         "dismissalReason" text, opportunities integer NOT NULL
@@ -23,13 +24,16 @@ const compiled = ts.transpileModule(source, {
       INSERT INTO "Course" VALUES ('course-a','الدورة الأولى'),('course-b','الدورة الثانية');
       INSERT INTO "Student"
       SELECT 'student-' || lpad(i::text, 4, '0'), 'طالب ' || lpad((i / 2)::text, 4, '0'),
-        'BIO-' || i, 'مفصول', i % 3 = 0, i % 4,
+        'BIO-' || i,
+        CASE WHEN i % 3 = 0 THEN 'student_user_' || i ELSE NULL END,
+        CASE WHEN i % 3 = 0 THEN (1000000000 + i)::text WHEN i % 3 = 1 THEN '@telegram_' || i ELSE NULL END,
+        'مفصول', i % 3 = 0, i % 4,
         CASE WHEN i % 2 = 0 THEN 'course-a' ELSE 'course-b' END,
         CASE WHEN i % 2 = 0 THEN 'غياب' ELSE NULL END, 0
       FROM generate_series(1, 601) i;
       INSERT INTO "Student" VALUES
-        ('active','طالب نشط','ACTIVE','نشط',true,1,'course-a',NULL,2),
-        ('archived','طالب مؤرشف','ARCHIVED','مؤرشف',true,0,'course-b',NULL,0);
+        ('active','طالب نشط','ACTIVE',NULL,NULL,'نشط',true,1,'course-a',NULL,2),
+        ('archived','طالب مؤرشف','ARCHIVED',NULL,NULL,'مؤرشف',true,0,'course-b',NULL,0);
     `);
     const snapshot = () => pg.query('SELECT row_to_json(s) AS row FROM "Student" s ORDER BY id').then(({ rows }) => rows);
     const before = await snapshot();
@@ -39,7 +43,7 @@ const compiled = ts.transpileModule(source, {
     const authCalls = [];
     const schemaChecks = [];
     const expectedSelect = {
-      id: true, name: true, code: true, status: true,
+      id: true, name: true, code: true, username: true, telegram: true, status: true,
       dismissedChecked: true, dismissedCheckEpoch: true,
       courseId: true, course: { select: { id: true, name: true } }, dismissalReason: true,
     };
@@ -62,7 +66,7 @@ const compiled = ts.transpileModule(source, {
         if (failRead) throw new Error("simulated database outage");
         return pg.transaction(async (sql) => {
           await sql.exec("SET TRANSACTION READ ONLY");
-          return (await sql.query(`SELECT s.id,s.name,s.code,s.status,
+          return (await sql.query(`SELECT s.id,s.name,s.code,s.username,s.telegram,s.status,
             s."dismissedChecked",s."dismissedCheckEpoch",s."courseId",s."dismissalReason",
             json_build_object('id',c.id,'name',c.name) AS course
             FROM "Student" s JOIN "Course" c ON c.id=s."courseId"
@@ -106,6 +110,14 @@ const compiled = ts.transpileModule(source, {
     assert.equal(checkedStudent.dismissedCheckEpoch, 3, "the existing lifecycle epoch is preserved for CAS writes");
     assert.deepEqual(checkedStudent.course, { id: "course-b", name: "الدورة الثانية" });
     assert.equal(checkedStudent.dismissalReason, null);
+    assert.equal(checkedStudent.username, 'student_user_3', "the stored username remains available beside a numeric Telegram ID");
+    assert.equal(checkedStudent.telegram, '1000000003', "reading does not rewrite Telegram IDs or handles");
+    const telegramOnlyStudent = data.students.find((student) => student.id === "student-0001");
+    assert.equal(telegramOnlyStudent.username, null);
+    assert.equal(telegramOnlyStudent.telegram, '@telegram_1', "legacy Telegram handles remain available without a username");
+    const noTelegramStudent = data.students.find((student) => student.id === "student-0002");
+    assert.equal(noTelegramStudent.username, null);
+    assert.equal(noTelegramStudent.telegram, null, "missing Telegram details are returned honestly");
     const checkedIds = data.students.filter((student) => student.dismissedChecked).map((student) => student.id);
     const originalCheckedIds = before.map(({ row }) => row).filter((student) => student.status === "مفصول" && student.dismissedChecked).map((student) => student.id);
     assert.deepEqual(checkedIds.sort(), originalCheckedIds.sort(), "the read preserves every previously checked student");
@@ -131,7 +143,7 @@ const compiled = ts.transpileModule(source, {
     assert.equal(empty.totalCount, 0);
     assert.equal(empty.checkedCount, 0);
     assert.equal(empty.uncheckedCount, 0);
-    console.log("PASS: code-closure query permissions, complete current dismissed snapshot, preserved checked flags/epochs, consistent counts, fresh status reads, no-store and read-only behavior");
+    console.log("PASS: code-closure query permissions, complete current dismissed snapshot, Telegram handles and IDs, preserved checked flags/epochs, consistent counts, fresh status reads, no-store and read-only behavior");
   } finally {
     await pg.close();
   }

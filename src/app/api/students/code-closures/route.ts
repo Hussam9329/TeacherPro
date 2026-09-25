@@ -21,6 +21,8 @@ export async function GET(req: NextRequest) {
         id: true,
         name: true,
         code: true,
+        username: true,
+        telegram: true,
         status: true,
         dismissedChecked: true,
         dismissedCheckEpoch: true,

@@ -561,6 +561,16 @@ a.tp-modal__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-foc
 }
 .tp-closures__row[data-checked="true"] { border-inline-start-color: var(--status-success-vivid); background: linear-gradient(to left, color-mix(in srgb, var(--status-success-vivid) 8%, var(--tp-surface)), var(--tp-surface) 50%); }
 .tp-closures__identity { grid-area: identity; }
+.tp-closures__telegram {
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.65rem;
+  white-space: normal;
+  text-decoration: none;
+}
+.tp-closures__telegram > span { min-width: 0; overflow-wrap: anywhere; }
+.tp-closures__telegram:hover { text-decoration: underline; text-underline-offset: 0.2em; }
+.tp-closures__telegram:focus-visible { outline: 2px solid var(--tone-solid); outline-offset: 3px; }
 .tp-closures__course { grid-area: course; }
 .tp-closures__reason { grid-area: reason; display: grid; gap: 0.2rem; min-width: 0; padding: 0.55rem 0.75rem; border-radius: 0.75rem; background: var(--tp-panel); }
 .tp-closures__reason > span { color: var(--tp-text-muted); font-size: 0.68rem; font-weight: 700; }

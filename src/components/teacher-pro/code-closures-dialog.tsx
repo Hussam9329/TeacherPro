@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { AlertCircle, BookOpen, CheckCheck, ChevronDown, Loader2, LockKeyhole, RefreshCw, Search, X } from "lucide-react";
+import { AlertCircle, BookOpen, CheckCheck, ChevronDown, Loader2, LockKeyhole, MessageCircle, RefreshCw, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,6 +11,7 @@ import { saveDismissedCheck } from "@/lib/dismissed-check-api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
 import { normalizeForSearch } from "@/lib/validation";
+import { describeTelegramHandle } from "./student-registry-helpers";
 import "./code-closures-dialog.css";
 
 type Props = {
@@ -274,7 +275,9 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
             ) : (
               <div className="tp-modal__cards" data-columns="1">
                 {visibleStudents.length > 0 && <div aria-hidden="true" className="tp-closures__headings"><span>الطالب والكود</span><span>الدورة</span><span>سبب الفصل</span><span>اغلاق كود</span></div>}
-                {visibleStudents.map((student) => (
+                {visibleStudents.map((student) => {
+                  const telegram = describeTelegramHandle(student);
+                  return (
                   <article key={student.id} className="tp-closures__row" data-checked={student.dismissedChecked}>
                     <div className="tp-modal__identity tp-closures__identity">
                       <p className="tp-modal__name">
@@ -283,6 +286,23 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
                       </p>
                       <div className="tp-modal__meta">
                         <span className="tp-modal__chip" data-tone="outline"><span dir="ltr" className="tp-modal__code">{student.code}</span></span>
+                        {telegram.href ? (
+                          <a
+                            href={telegram.href}
+                            className="tp-modal__chip tp-closures__telegram"
+                            data-tone="info"
+                            aria-label={`فتح محادثة ${student.name} في تطبيق تليگرام`}
+                            title="فتح المحادثة في تطبيق تليگرام"
+                          >
+                            <MessageCircle aria-hidden="true" />
+                            <span dir="ltr">@{telegram.value}</span>
+                          </a>
+                        ) : (
+                          <span className="tp-modal__meta-item" title={telegram.value ? "معرّف رقمي — لا يوجد يوزر تليگرام لفتح المحادثة" : undefined}>
+                            <MessageCircle aria-hidden="true" />
+                            <span dir={telegram.value ? "ltr" : undefined}>{telegram.value || "لا يوجد معرّف"}</span>
+                          </span>
+                        )}
                       </div>
                     </div>
                     <p className="tp-modal__meta-item tp-closures__course"><BookOpen aria-hidden="true" /><span>{student.course?.name || "—"}</span></p>
@@ -298,7 +318,8 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
                       <span>{student.dismissedChecked ? "الكود مغلق" : "اغلاق كود"}</span>
                     </label>
                   </article>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>

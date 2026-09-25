@@ -5,6 +5,8 @@ export type CodeClosureStudent = {
   id: string;
   name: string;
   code: string;
+  username: string | null;
+  telegram: string | null;
   status: string;
   dismissedChecked: boolean;
   dismissedCheckEpoch: number;
