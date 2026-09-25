@@ -15,7 +15,8 @@ import {
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
-import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
+import { isStudentInGracePeriod } from "@/lib/grace-periods";
+import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
 import { assertGradeStatusScoreConsistency } from "@/lib/grade-status-score-validation";
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
     if (!examExists) return validationError("الامتحان غير موجود", 404);
 
     // ROOT-CAUSE FIX: This batch endpoint always sends status != "درجة"
-    // (it only ever writes "غائب", "ضمن فترة السماح", or "قبل تسجيل الطالب")
+    // (it only ever writes "غائب" or "قبل تسجيل الطالب")
     // and always sends score = null. We assert this invariant here so that
     // any future refactor that accidentally passes a score will fail loudly
     // with a clear Arabic message instead of silently persisting a
@@ -83,13 +84,7 @@ export async function POST(req: NextRequest) {
           const [student, exam] = await Promise.all([
             tx.student.findUnique({
               where: { id: studentId },
-              select: {
-                createdAt: true,
-                accountingGraceDays: true,
-                gracePeriodStartDate: true,
-                gracePeriodEndedAt: true,
-                gracePeriodHistory: true,
-              },
+              select: { createdAt: true },
             }),
             tx.exam.findUnique({
               where: { id: examId },
@@ -135,14 +130,10 @@ export async function POST(req: NextRequest) {
             }
           }
 
+          // A missing student inside a grace period is still recorded as the
+          // fact "غائب"; the accounting engine excuses it by the exam date.
           const registeredForExam = isExamOnOrAfterStudentRegistration(student, exam);
-          const withinGrace =
-            registeredForExam && isExamWithinStudentGraceWindow(student, exam);
-          const automaticStatus = !registeredForExam
-            ? "قبل تسجيل الطالب"
-            : withinGrace
-              ? "ضمن فترة السماح"
-              : "غائب";
+          const automaticStatus = registeredForExam ? "غائب" : "قبل تسجيل الطالب";
 
           const writeback = await syncAcademicGradeWriteback({
             tx,
@@ -152,9 +143,7 @@ export async function POST(req: NextRequest) {
             score: null,
             notes: !registeredForExam
               ? "تسجيل تلقائي: الامتحان يسبق تاريخ تسجيل الطالب"
-              : withinGrace
-                ? "تسجيل تلقائي: الطالب ضمن فترة السماح لهذا الامتحان"
-                : "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم",
+              : "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم",
             sourceLabel: "تسجيل الحالات الجماعي",
             allowBlankGrade: false,
             blockOnLeave: true,
@@ -178,9 +167,22 @@ export async function POST(req: NextRequest) {
       const academicRecalculation = createdStudentIds.length
         ? await recalculateStudentsAcademicState(createdStudentIds, { tx })
         : null;
+      const examDate = grades.length
+        ? (await tx.exam.findUnique({ where: { id: examId }, select: { date: true } }))?.date
+        : null;
+      const gracePeriods = await loadActiveGracePeriodsByStudent(
+        tx,
+        grades.filter((grade) => grade.status === "غائب").map((grade) => grade.studentId),
+      );
+      const absentInGrace = examDate
+        ? grades.filter((grade) =>
+            grade.status === "غائب" &&
+            isStudentInGracePeriod(gracePeriods.get(grade.studentId), examDate)).length
+        : 0;
 
       return {
         grades,
+        absentInGrace,
         skippedStudentIds,
         failures,
         academicRecalculation,
@@ -211,7 +213,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       created: grades.length,
       createdAbsent: grades.filter((grade) => grade.status === "غائب").length,
-      createdGrace: grades.filter((grade) => grade.status === "ضمن فترة السماح").length,
+      createdAbsentInGrace: result.absentInGrace,
       createdBeforeRegistration: grades.filter(
         (grade) => grade.status === "قبل تسجيل الطالب",
       ).length,

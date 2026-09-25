@@ -1,12 +1,5 @@
 import { baghdadDateKey, baghdadTodayKey, parseBaghdadDateTime } from './baghdad-time';
 import { MAIN_SITE_OPTIONS, normalizeIraqiProvinceName } from './iraq';
-import {
-  getStudentGraceWindow,
-  isExamWithinStudentGraceWindow,
-  normalizeGraceDays,
-  type ExamDateLike as UnifiedExamDateLike,
-  type StudentGraceLike as UnifiedStudentGraceLike,
-} from './student-grace';
 
 export type ExamLike = {
   active: boolean;
@@ -48,15 +41,11 @@ export type ExamEntryAvailability = {
 };
 
 
-export type { ExamDateLike, StudentGraceLike } from './student-grace';
-export { getStudentGraceWindow, normalizeGraceDays };
-
-export function isExamWithinStudentGracePeriod(
-  student: UnifiedStudentGraceLike,
-  exam: UnifiedExamDateLike,
-): boolean {
-  return isExamWithinStudentGraceWindow(student, exam);
-}
+export {
+  findExamGracePeriod,
+  isExamInStudentGracePeriod,
+  type StudentGracePeriodsLike,
+} from './grace-periods';
 
 export function splitSelection(value?: string | null): string[] {
   return String(value || '')
@@ -75,7 +64,7 @@ function parseDateOnly(value?: string | Date | null): Date | null {
   return Number.isFinite(date.getTime()) ? date : null;
 }
 
-export function isExamOnOrAfterStudentRegistration(student: StudentRegistrationLike, exam: UnifiedExamDateLike): boolean {
+export function isExamOnOrAfterStudentRegistration(student: StudentRegistrationLike, exam: { date?: string | Date | null }): boolean {
   const registeredAt = parseDateOnly(student.createdAt);
   const examDate = parseDateOnly(exam.date);
   if (!registeredAt || !examDate) return true;
@@ -220,13 +209,16 @@ export function formatGradeScore(grade: GradeLike, exam?: ExamForGradeRange | nu
     return exam ? `${score}/${Number(exam.fullMark || 0)}` : String(score);
   }
   if (status === 'غائب' || status === 'غش') return status;
+  // The retired grace placeholder is not a result.
+  if (status === 'ضمن فترة السماح') return emptyLabel;
   return status || emptyLabel;
 }
 
 export function isGradeEntered(grade: GradeLike, exam?: ExamForGradeRange | null): boolean {
   if (!grade || !exam) return false;
   if (grade.status === 'درجة') return isScoreInsideExamRange(grade.score, exam.fullMark);
-  return ['غائب', 'غش', 'مجاز', 'ضمن فترة السماح', 'قبل تسجيل الطالب'].includes(String(grade.status || ''));
+  // The retired grace placeholder is not a result; grace comes only from GracePeriod.
+  return ['غائب', 'غش', 'مجاز', 'قبل تسجيل الطالب'].includes(String(grade.status || ''));
 }
 
 export function escapeHtml(value: unknown): string {

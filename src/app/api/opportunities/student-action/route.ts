@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+import { studentsWithGracePeriodsForResponse } from "@/lib/grace-periods-server";
 import type { Prisma } from "@prisma/client";
 import { hasPermission, requirePermissionPrincipal } from "@/lib/server-auth";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
@@ -103,10 +104,6 @@ function selectStudentForResponse() {
     createdAt: true,
     opportunities: true,
     baseOpportunities: true,
-    accountingGraceDays: true,
-    gracePeriodStartDate: true,
-    gracePeriodEndedAt: true,
-    gracePeriodHistory: true,
   } as const;
 }
 
@@ -370,7 +367,9 @@ export async function POST(req: NextRequest) {
     );
 
     const [studentWithOpportunity] = result.student
-      ? await attachStudentOpportunitySnapshots([result.student])
+      ? await studentsWithGracePeriodsForResponse(
+          await attachStudentOpportunitySnapshots([result.student]),
+        )
       : [null];
     const responseResult = {
       ...result,

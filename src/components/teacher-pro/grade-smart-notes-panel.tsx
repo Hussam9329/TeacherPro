@@ -37,10 +37,11 @@ const CATEGORY_META: Record<
       "border-rose-200 bg-rose-50/80 text-rose-950 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-100",
     icon: UserRoundX,
   },
+  // Historical only: the current grace model never creates or settles these.
   GRACE_SCORED: {
-    title: "تعارضات درجات السماح القديمة",
-    shortTitle: "ضمن فترة السماح",
-    decision: "سجلات قديمة للمراجعة فقط؛ النظام لا ينشئ حالات سماح معلّقة جديدة.",
+    title: "درجات سماح قديمة (أرشيف)",
+    shortTitle: "درجة سماح قديمة (أرشيف)",
+    decision: "سجل من نظام السماح السابق للعرض فقط؛ لا يغيّر المحاسبة ولا يُنشأ مثله بعد الآن.",
     className:
       "border-sky-200 bg-sky-50/80 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/25 dark:text-sky-100",
     icon: CheckCircle2,

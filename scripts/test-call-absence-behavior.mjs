@@ -83,8 +83,7 @@ const student = {
   id: "student-1",
   status: "نشط",
   createdAt: "2026-07-01",
-  accountingGraceDays: 0,
-  gracePeriodStartDate: null,
+  gracePeriods: [],
   mainSite: "بغداد",
   subSite: "المنصور",
   locationScope: "بغداد",
@@ -303,10 +302,23 @@ test("future exams, leave, pre-registration, grace, archive and exclusion are pr
   assert.equal(
     absence.resolveCallAbsenceSource({
       exam,
-      student: { ...student, createdAt: "2026-08-09" },
+      student: {
+        ...student,
+        createdAt: "2026-08-09",
+        gracePeriods: [{ startDate: "2026-08-09", endDate: "2026-08-11" }],
+      },
       today,
     }),
     null,
+  );
+  // No hidden days: a new student without a grace period is accounted normally.
+  assert.equal(
+    absence.resolveCallAbsenceSource({
+      exam,
+      student: { ...student, createdAt: "2026-08-09" },
+      today,
+    }),
+    "missing",
   );
   assert.equal(
     absence.resolveCallAbsenceSource({

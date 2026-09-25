@@ -12,7 +12,7 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  assert.equal(classify.classifyGradeAcademicImpact({id:'g',studentId:'s',status:'درجة',score:0},{id:'e',type:'فاينل',date:'2026-08-01',fullMark:100},{opportunityLogs:[{studentId:'s',action:'إعادة تعيين',ledgerVersion:2,settledGradeIds:'["g"]'}]}),'academic-effect-excluded');
  console.log('PASS: null/blank are missing, true zero remains valid, settled grades have no current effect');
  const engine=require('../src/lib/academic-engine.ts');
- const state={students:[{id:'s',courseId:'c',status:'نشط',dismissalReason:'',opportunities:1,baseOpportunities:3,createdAt:'2026-01-01',accountingGraceDays:0}],exams:[{id:'e',name:'e',courseIds:['c'],type:'يومي',date:'2026-02-01',active:true,fullMark:100,passMark:50,discountMark:20,opportunitiesPenalty:1}],grades:[],opportunityLogs:[],studentLeaves:[],studentNotes:[],chapters:[{id:'a',name:'a',opportunities:3},{id:'b',name:'b',opportunities:3}],courseChapters:[{id:'ca',courseId:'c',chapterId:'a',active:true,archived:false}]};
+ const state={students:[{id:'s',courseId:'c',status:'نشط',dismissalReason:'',opportunities:1,baseOpportunities:3,createdAt:'2026-01-01',gracePeriods:[]}],exams:[{id:'e',name:'e',courseIds:['c'],type:'يومي',date:'2026-02-01',active:true,fullMark:100,passMark:50,discountMark:20,opportunitiesPenalty:1}],grades:[],opportunityLogs:[],studentLeaves:[],studentNotes:[],chapters:[{id:'a',name:'a',opportunities:3},{id:'b',name:'b',opportunities:3}],courseChapters:[{id:'ca',courseId:'c',chapterId:'a',active:true,archived:false}]};
  const balance=()=>engine.recalculateAcademicState(state,new Set(['s'])).students[0].opportunities;
  state.opportunityLogs=[{id:'reset',studentId:'s',action:'إعادة تعيين',amount:1,balanceAfter:1,date:'2026-02-02',chapterId:'a',ledgerVersion:2,settledGradeIds:'[]'}];
  assert.equal(balance(),1);state.courseChapters[0].chapterId='b';assert.equal(balance(),3);state.courseChapters[0].chapterId='a';assert.equal(balance(),1);
@@ -28,9 +28,11 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  console.log('PASS: session revocation rejects copied signed tokens; viewers cannot run worker');
  const fingerprint=require('../src/lib/student-academic-impact-token.ts');
  const tx={student:{findUnique:async()=>({id:'s',mainSite:site})}};let site='A',examSite='A';
- for(const model of ['grade','studentLeave','opportunityLog','studentNote','courseChapter','chapter'])tx[model]={findMany:async()=>[]};tx.exam={findMany:async()=>[{id:'e',mainSite:examSite}]};
- const input={studentId:'s',proposedCreatedAt:'2026-01-01',proposedGraceDays:0};const first=await fingerprint.buildStudentAcademicImpactToken(tx,input);site='B';const second=await fingerprint.buildStudentAcademicImpactToken(tx,input);assert.notEqual(first,second);examSite='B';assert.notEqual(second,await fingerprint.buildStudentAcademicImpactToken(tx,input));
- console.log('PASS: student and exam site changes invalidate preview fingerprints');
+ let periods=[];for(const model of ['grade','studentLeave','opportunityLog','studentNote','courseChapter','chapter'])tx[model]={findMany:async()=>[]};tx.gracePeriod={findMany:async()=>periods};tx.exam={findMany:async()=>[{id:'e',mainSite:examSite}]};
+ const input={studentId:'s',proposedCreatedAt:'2026-01-01'};const first=await fingerprint.buildStudentAcademicImpactToken(tx,input);site='B';const second=await fingerprint.buildStudentAcademicImpactToken(tx,input);assert.notEqual(first,second);examSite='B';const third=await fingerprint.buildStudentAcademicImpactToken(tx,input);assert.notEqual(second,third);
+ periods=[{id:'p',studentId:'s',startDate:new Date('2026-01-02T00:00:00Z'),endDate:new Date('2026-01-04T00:00:00Z')}];const fourth=await fingerprint.buildStudentAcademicImpactToken(tx,input);assert.notEqual(third,fourth,'a saved grace period invalidates the preview');
+ assert.notEqual(fourth,await fingerprint.buildStudentAcademicImpactToken(tx,{...input,proposedGracePeriods:[{startDate:'2026-01-02',endDate:'2026-01-05'}]}),'a different proposed grace period changes the fingerprint');
+ console.log('PASS: student, exam site and grace period changes invalidate preview fingerprints');
  mocks.set('@/lib/db',{db:{opportunityLog:{findMany:async()=>[{id:'l',studentId:'s',action:'إعادة تعيين',date:'2026-03-01',chapterId:'a',ledgerVersion:2,settledGradeIds:'["g"]'}]},student:{findMany:async()=>[{id:'s',courseId:'c'}]},exam:{findMany:async()=>[{id:'e',date:'2026-02-01'}]},courseChapter:{findMany:async()=>[{courseId:'c',chapterId:'a'}]}}});
  const rows=[{id:'g',studentId:'s',examId:'e',status:'درجة',score:0}];
  await require('../src/lib/grade-settlement-server.ts').annotateGradeSettlementEffects(rows);

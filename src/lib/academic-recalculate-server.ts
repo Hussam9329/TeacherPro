@@ -1,11 +1,13 @@
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { reconcileExpiredGracePendingGrades } from "@/lib/grade-smart-note-grace-expiry-server";
+import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
+import type { GracePeriodRange } from "@/lib/grace-periods";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { persistAcademicStudentResults } from "@/lib/academic-student-writeback-server";
 import { historicalLeaveLogIds, recalculateWithLeaveReview, type LeaveDismissalReview } from "@/lib/leave-dismissal-review";
 import { recalculateWithExamEditReview } from "@/lib/exam-dismissal-review";
+import { recalculateWithGraceReview, type GraceDismissalReview } from "@/lib/grace-dismissal-review";
 import {
   isAutomaticOpportunityLog,
   recalculateAcademicState,
@@ -66,11 +68,7 @@ function mapStudent(student: {
   opportunities: number;
   baseOpportunities: number;
   createdAt: Date;
-  accountingGraceDays: number;
-  gracePeriodStartDate?: Date | null;
-  gracePeriodEndedAt?: Date | null;
-  gracePeriodHistory?: unknown;
-}): AcademicStudent {
+}, gracePeriods: GracePeriodRange[] = []): AcademicStudent {
   return {
     id: student.id,
     courseId: student.courseId,
@@ -83,10 +81,7 @@ function mapStudent(student: {
     opportunities: Number(student.opportunities || 0),
     baseOpportunities: Number(student.baseOpportunities || 0),
     createdAt: dateString(student.createdAt),
-    accountingGraceDays: Number(student.accountingGraceDays || 0),
-    gracePeriodStartDate: student.gracePeriodStartDate ? dateString(student.gracePeriodStartDate) : null,
-    gracePeriodEndedAt: student.gracePeriodEndedAt ? dateString(student.gracePeriodEndedAt) : null,
-    gracePeriodHistory: student.gracePeriodHistory ?? [],
+    gracePeriods,
   };
 }
 
@@ -363,7 +358,7 @@ async function repairAcademicBaselinesForStudents(
   return fixed;
 }
 
-async function loadAcademicStateForStudents(
+export async function loadAcademicStateForStudents(
   client: PrismaClientLike,
   studentIds: string[],
 ): Promise<AcademicStateInput> {
@@ -376,6 +371,7 @@ async function loadAcademicStateForStudents(
     opportunityLogs,
     studentLeaves,
     studentNotes,
+    gracePeriodsByStudent,
   ] = await Promise.all([
     client.student.findMany({
       where: { id: { in: studentIds } },
@@ -391,10 +387,6 @@ async function loadAcademicStateForStudents(
         opportunities: true,
         baseOpportunities: true,
         createdAt: true,
-        accountingGraceDays: true,
-        gracePeriodStartDate: true,
-        gracePeriodEndedAt: true,
-        gracePeriodHistory: true,
       },
     }),
     client.grade.findMany({
@@ -495,10 +487,13 @@ async function loadAcademicStateForStudents(
       },
       orderBy: { date: "asc" },
     }),
+    loadActiveGracePeriodsByStudent(client, studentIds),
   ]);
 
   return {
-    students: students.map(mapStudent),
+    students: students.map((student) =>
+      mapStudent(student, gracePeriodsByStudent.get(student.id) || []),
+    ),
     grades: grades.map(mapGrade),
     exams: exams.map(toAcademicExam),
     courseChapters: courseChapters.map(mapCourseChapter),
@@ -684,8 +679,6 @@ export interface StudentAcademicUpdatePreview {
   studentId: string;
   current: {
     createdAt: string;
-    accountingGraceDays: number;
-    gracePeriodStartDate: string | null;
     opportunities: number;
     status: string;
     dismissalReason: string;
@@ -693,8 +686,6 @@ export interface StudentAcademicUpdatePreview {
   };
   projected: {
     createdAt: string;
-    accountingGraceDays: number;
-    gracePeriodStartDate: string | null;
     opportunities: number;
     status: string;
     dismissalReason: string;
@@ -703,17 +694,15 @@ export interface StudentAcademicUpdatePreview {
 }
 
 /** Pure database-backed preview. It runs the same academic engine used by save,
- * but never persists students or logs. */
+ * but never persists students or logs. A grace change is previewed with the
+ * same explicit dismissal review that its save applies. */
 export async function previewStudentAcademicUpdate(
   studentId: string,
   changes: {
     createdAt?: Date;
-    accountingGraceDays?: number;
-    gracePeriodStartDate?: Date | null;
-    gracePeriodEndedAt?: Date | null;
-    gracePeriodHistory?: unknown;
+    gracePeriods?: GracePeriodRange[];
   },
-  options: { tx?: Prisma.TransactionClient } = {},
+  options: { tx?: Prisma.TransactionClient; graceReview?: boolean } = {},
 ): Promise<StudentAcademicUpdatePreview | null> {
   const trimmedId = String(studentId || "").trim();
   if (!trimmedId) return null;
@@ -728,42 +717,24 @@ export async function previewStudentAcademicUpdate(
     currentResult.students.find((student) => student.id === trimmedId) ||
     storedStudent;
 
-  const projectedStudent = {
+  const projectedStudent: AcademicStudent = {
     ...storedStudent,
     ...(changes.createdAt
       ? { createdAt: dateString(changes.createdAt) }
       : {}),
-    ...(changes.accountingGraceDays !== undefined
-      ? { accountingGraceDays: Math.min(30, Math.max(0, Math.trunc(Number(changes.accountingGraceDays || 0)))) }
-      : {}),
-    ...(changes.gracePeriodStartDate !== undefined
-      ? {
-          gracePeriodStartDate: changes.gracePeriodStartDate
-            ? dateString(changes.gracePeriodStartDate)
-            : null,
-        }
-      : {}),
-    ...(changes.gracePeriodEndedAt !== undefined
-      ? {
-          gracePeriodEndedAt: changes.gracePeriodEndedAt
-            ? dateString(changes.gracePeriodEndedAt)
-            : null,
-        }
+    ...(changes.gracePeriods !== undefined
+      ? { gracePeriods: changes.gracePeriods }
       : {}),
   };
-  if (changes.gracePeriodHistory !== undefined) {
-    projectedStudent.gracePeriodHistory = changes.gracePeriodHistory;
-  }
   const projectedState: AcademicStateInput = {
     ...state,
     students: state.students.map((student) =>
       student.id === trimmedId ? projectedStudent : student,
     ),
   };
-  const projectedResult = recalculateAcademicState(
-    projectedState,
-    new Set([trimmedId]),
-  );
+  const projectedResult = options.graceReview
+    ? recalculateWithGraceReview(projectedState, new Set([trimmedId]), { studentId: trimmedId })
+    : recalculateAcademicState(projectedState, new Set([trimmedId]));
   const calculatedProjected =
     projectedResult.students.find((student) => student.id === trimmedId) ||
     projectedStudent;
@@ -772,8 +743,6 @@ export async function previewStudentAcademicUpdate(
     studentId: trimmedId,
     current: {
       createdAt: storedStudent.createdAt,
-      accountingGraceDays: storedStudent.accountingGraceDays,
-      gracePeriodStartDate: storedStudent.gracePeriodStartDate || null,
       opportunities: calculatedCurrent.opportunities,
       status: calculatedCurrent.status,
       dismissalReason: calculatedCurrent.dismissalReason || "",
@@ -783,8 +752,6 @@ export async function previewStudentAcademicUpdate(
     },
     projected: {
       createdAt: projectedStudent.createdAt,
-      accountingGraceDays: projectedStudent.accountingGraceDays,
-      gracePeriodStartDate: projectedStudent.gracePeriodStartDate || null,
       opportunities: calculatedProjected.opportunities,
       status: calculatedProjected.status,
       dismissalReason: calculatedProjected.dismissalReason || "",
@@ -800,6 +767,7 @@ export async function recalculateStudentsAcademicState(
   options: {
     tx?: Prisma.TransactionClient;
     leaveReview?: LeaveDismissalReview;
+    graceReview?: GraceDismissalReview;
     preserveHistoricalLogs?: boolean;
     previousPolicyExam?: AcademicExam;
     previousExamState?: AcademicStateInput;
@@ -824,14 +792,6 @@ export async function recalculateStudentsAcademicState(
 
   const client = transaction;
   await repairAcademicBaselinesForStudents(client, studentIds);
-  // Finalize expired grace attempts before loading the academic snapshot.
-  // The resulting Grades are permanently excluded, so recalculation observes
-  // them for history but never derives opportunities or dismissal from them.
-  await reconcileExpiredGracePendingGrades({
-    tx: transaction,
-    studentIds,
-    actor: { name: "TeacherPro - إعادة الاحتساب الأكاديمي" },
-  });
   const state = await loadAcademicStateForStudents(client, studentIds);
   const recalculableStudentIds = state.students
     .filter((student) => student.status !== "مؤرشف")
@@ -844,11 +804,13 @@ export async function recalculateStudentsAcademicState(
       automaticOpportunityLogs: [],
     };
   }
-  let result = recalculateWithLeaveReview(
-    state,
-    new Set(recalculableStudentIds),
-    options.leaveReview,
-  );
+  let result = options.graceReview
+    ? recalculateWithGraceReview(state, new Set(recalculableStudentIds), options.graceReview)
+    : recalculateWithLeaveReview(
+        state,
+        new Set(recalculableStudentIds),
+        options.leaveReview,
+      );
   if (options.examEditReview) {
     result = recalculateWithExamEditReview(
       state, new Set(recalculableStudentIds), result,
@@ -866,7 +828,7 @@ export async function recalculateStudentsAcademicState(
       })) });
     }
   }
-  const preservedHistory = options.leaveReview || options.preserveHistoricalLogs
+  const preservedHistory = options.leaveReview || options.graceReview || options.preserveHistoricalLogs
     ? historicalLeaveLogIds(state, new Set(recalculableStudentIds))
     : new Set<string>();
   if (options.preserveHistoricalLogs && (options.previousPolicyExam || options.previousExamState)) {

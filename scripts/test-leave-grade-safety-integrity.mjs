@@ -81,15 +81,15 @@ must(
 
 must(
   leaveRoute.includes("absentBeforeRegistration") &&
-    leaveRoute.includes("absentWithinGrace") &&
-    leaveRoute.includes("skippedGradeRestores: result.skippedGradeRestores"),
-  "حذف الإجازة يرجع أعداد الغياب الذي لم يُسترجع وأسبابه",
-  "يجب أن يرجع API حذف الإجازة ملخص الغياب المتجاهل قبل التسجيل وضمن السماح.",
+    !leaveRoute.includes("absentWithinGrace") &&
+    leaveRoute.includes("skippedGradeRestores"),
+  "حذف الإجازة يرجع أعداد الغياب الذي لم يُسترجع لأنه قبل التسجيل؛ الغياب ضمن فترة السماح يُسترجع ويبقى مجازاً",
+  "يجب أن يرجع API حذف الإجازة ملخص الغياب المتجاهل قبل التسجيل فقط، ولا يتجاهل الغياب ضمن فترة السماح.",
 );
 
 must(
   followUp.includes("skippedGradeRestores?.absentBeforeRegistration") &&
-    followUp.includes("skippedGradeRestores?.absentWithinGrace") &&
+    !followUp.includes("absentWithinGrace") &&
     followUp.includes("تم تجاهل") &&
     followUp.includes("تم حذف الإجازة وإعادة احتساب الطالب."),
   "واجهة الإجازات تعرض نتيجة الحذف والاسترجاع والتجاهل بوضوح",

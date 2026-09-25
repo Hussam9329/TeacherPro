@@ -99,13 +99,14 @@ check(
     !studentsRoute.includes("console.error(\"Failed to recalculate student"),
 );
 check(
-  "تغيير تاريخ التسجيل أو السماح يملك معاينة من نفس محرك الاحتساب",
+  "تغيير تاريخ التسجيل يملك معاينة من نفس محرك الاحتساب ولا يغيّر فترة السماح",
   impactRoute.includes("withSerializableTransaction(async (tx)") &&
     impactRoute.includes("previewStudentAcademicUpdate") &&
     impactRoute.includes("{ tx }") &&
     impactRoute.includes("classifyGradeAcademicImpact") &&
     impactRoute.includes("movedBeforeRegistration") &&
-    impactRoute.includes("movedIntoGrace") &&
+    !impactRoute.includes("movedIntoGrace") &&
+    !impactRoute.includes("accountingGraceDays") &&
     registry.includes("studentApi.updateImpact"),
 );
 check(
@@ -123,9 +124,10 @@ check(
     registry.includes("academicImpactPreview?.previewToken"),
 );
 check(
-  "تأكيد المعاينة لا يبقى صالحاً بعد تغيير التاريخ أو السماح في الواجهة",
+  "تأكيد المعاينة لا يبقى صالحاً بعد تغيير تاريخ التسجيل في الواجهة",
   registry.includes("resolvedAcademicImpactConfirmed") &&
-    registry.includes("hasResolvedAcademicImpactPreview && academicImpactConfirmed"),
+    registry.includes("hasCurrentAcademicImpactPreview && academicImpactConfirmed") &&
+    registry.includes("const editAcademicImpactSignature = `${editDialog.id}|${editDialog.form.createdAt}`;"),
 );
 check(
   "استعادة المؤرشف إجراء مستقل ولا تمر عبر إعادة تفعيل أو تعديل عام",

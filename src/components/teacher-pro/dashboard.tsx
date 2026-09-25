@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   BookOpen,
   CalendarCheck,
+  CalendarClock,
   ChartColumn,
   ClipboardList,
   FilePlus2,
@@ -26,6 +27,7 @@ import {
 import { useLatestRequest } from "@/hooks/use-latest-request";
 import { CallNotesManagementDialog } from "./call-notes-management-dialog";
 import { CodeClosuresDialog } from "./code-closures-dialog";
+import { GracePeriodsDialog } from "./grace-periods-dialog";
 
 type DashboardStats = {
   activeStudents: number;
@@ -86,6 +88,19 @@ export function DashboardView({
     actor.permissions?.includes("students.reactivate")
   ));
   const [codeClosuresOpen, setCodeClosuresOpen] = useState(false);
+  // «إدارة فترة السماح» is the only place that creates, edits or cancels grace.
+  const canViewGracePeriods = canAccess("student-registry");
+  const canManageGracePeriods = Boolean(actor && (
+    actor.username?.trim().toLowerCase() === "admin" ||
+    actor.roleId === "role_admin" ||
+    actor.permissions?.includes("students.edit")
+  ));
+  const canConvertLegacyGrace = Boolean(actor && (
+    actor.username?.trim().toLowerCase() === "admin" ||
+    actor.roleId === "role_admin" ||
+    actor.permissions?.includes("system.maintenance")
+  ));
+  const [gracePeriodsOpen, setGracePeriodsOpen] = useState(false);
   const syncKey = useTeacherProSyncKey(["dashboard", "students", "grades", "opportunities", "exams"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const beginStatsRequest = useLatestRequest();
@@ -248,7 +263,7 @@ export function DashboardView({
         ))}
       </div>
 
-      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures) && (
+      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canViewGracePeriods) && (
         <nav aria-label="اختصارات لوحة التحكم" className="tp-dashboard__navigation">
           <h3 className="text-sm font-bold">الوصول السريع</h3>
           <div className="tp-dashboard__shortcuts">
@@ -291,6 +306,19 @@ export function DashboardView({
                 <span className="tp-dashboard__shortcut-label">اغلاق الكودات</span>
               </button>
             )}
+            {canViewGracePeriods && (
+              <button
+                type="button"
+                onClick={() => setGracePeriodsOpen(true)}
+                aria-haspopup="dialog"
+                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
+              >
+                <span className="tp-dashboard__shortcut-icon bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" aria-hidden="true">
+                  <CalendarClock />
+                </span>
+                <span className="tp-dashboard__shortcut-label">إدارة فترة السماح</span>
+              </button>
+            )}
           </div>
         </nav>
       )}
@@ -299,6 +327,15 @@ export function DashboardView({
           open={callNotesOpen}
           onOpenChange={setCallNotesOpen}
           canManage={canManageCallNotes}
+        />
+      )}
+      {canViewGracePeriods && (
+        <GracePeriodsDialog
+          key={`grace-${actor?.id || ""}`}
+          open={gracePeriodsOpen}
+          onOpenChange={setGracePeriodsOpen}
+          canManage={canManageGracePeriods}
+          canConvertLegacy={canConvertLegacyGrace}
         />
       )}
       {canViewCodeClosures && (

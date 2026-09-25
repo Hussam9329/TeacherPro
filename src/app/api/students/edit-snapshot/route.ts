@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+import { studentsWithGracePeriodsForResponse } from "@/lib/grace-periods-server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
@@ -21,7 +22,9 @@ export async function GET(req: NextRequest) {
     if (!sourceStudent) {
       return validationError("تعذر العثور على الطالب المطلوب.", 404);
     }
-    const [student] = await attachStudentOpportunitySnapshots([sourceStudent]);
+    const [student] = await studentsWithGracePeriodsForResponse(
+      await attachStudentOpportunitySnapshots([sourceStudent]),
+    );
     return NextResponse.json(
       {
         student: withStudentMutationToken(

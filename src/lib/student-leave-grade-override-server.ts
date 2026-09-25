@@ -5,7 +5,6 @@ import {
   splitSelection,
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
-import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 
 /**
  * Grade-override leave termination.
@@ -156,14 +155,7 @@ async function restoreLeaveBackups(
   const [students, exams] = await Promise.all([
     client.student.findMany({
       where: { id: { in: backups.map((backup) => backup.studentId) } },
-      select: {
-        id: true,
-        createdAt: true,
-        accountingGraceDays: true,
-        gracePeriodStartDate: true,
-        gracePeriodEndedAt: true,
-        gracePeriodHistory: true,
-      },
+      select: { id: true, createdAt: true },
     }),
     client.exam.findMany({
       where: { id: { in: backups.map((backup) => backup.examId) } },
@@ -178,13 +170,13 @@ async function restoreLeaveBackups(
     const student = studentById.get(backup.studentId);
     const exam = examById.get(backup.examId);
     // Same guard as the official deletion path: never restore an absence that
-    // was invalid in the first place (before registration or inside grace).
+    // was invalid in the first place (before registration). Grace periods do
+    // not change restores; they only remove the accounting effect by date.
     if (
       backup.status === "غائب" &&
       student &&
       exam &&
-      (!isExamOnOrAfterStudentRegistration(student, exam) ||
-        isExamWithinStudentGraceWindow(student, exam))
+      !isExamOnOrAfterStudentRegistration(student, exam)
     ) {
       continue;
     }

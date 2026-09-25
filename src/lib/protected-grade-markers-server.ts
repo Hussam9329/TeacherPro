@@ -1,22 +1,17 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
-  getExamEntryAvailability,
   isExamOnOrAfterStudentRegistration,
   splitSelection,
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
 import { parseCourseIds } from "@/lib/exam-course-links";
-import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
-import { baghdadDateKey, baghdadTodayKey } from "@/lib/baghdad-time";
 import { studentLeaveAppliesToExam } from "@/lib/grade-classification";
 
 type PrismaClientLike = typeof db | Prisma.TransactionClient;
 
 export type ProtectedGradeMarkerSyncResult = {
   createdBeforeRegistration: number;
-  createdGrace: number;
-  createdAbsent: number;
   createdExcused: number;
 };
 
@@ -30,7 +25,8 @@ export type ExamEditProtectedGradeReconciliationResult = {
 /**
  * Reconciles only system-owned protected Grade rows after an exam definition
  * changes. Exam date/course/site edits can move an already stored exam into or
- * out of leave/grace/registration scope. Leaving the old placeholder behind
+ * out of leave/registration scope. Grace periods need no reconciliation: they
+ * are evaluated from the exam date at read time and never write rows. Leaving the old placeholder behind
  * makes the database disagree with the current exam definition.
  *
  * Numeric/manual grades are never deleted here. If a changed exam now falls
@@ -84,10 +80,6 @@ export async function reconcileProtectedGradeMarkersForExamEdit(
           subSite: true,
           locationScope: true,
           createdAt: true,
-          accountingGraceDays: true,
-          gracePeriodStartDate: true,
-          gracePeriodEndedAt: true,
-          gracePeriodHistory: true,
         },
       },
     },
@@ -273,8 +265,7 @@ export async function reconcileProtectedGradeMarkersForExamEdit(
         backup?.status === "قبل تسجيل الطالب" || backup?.status === "ضمن فترة السماح";
       const canRestoreAbsence =
         backup?.status !== "غائب" ||
-        (isExamOnOrAfterStudentRegistration(grade.student, exam) &&
-          !isExamWithinStudentGraceWindow(grade.student, exam));
+        isExamOnOrAfterStudentRegistration(grade.student, exam);
       if (backup && !backupIsProtectedPlaceholder && canRestoreAbsence) {
         await client.grade.update({
           where: { id: grade.id },
@@ -293,7 +284,7 @@ export async function reconcileProtectedGradeMarkersForExamEdit(
       } else {
         // Protected placeholders are derived state. Recreate the correct one
         // below via ensureProtectedGradeMarkers instead of reviving a stale
-        // pre-registration/grace snapshot from before the exam date changed.
+        // pre-registration (or retired grace) snapshot from before the edit.
         await client.grade.delete({ where: { id: grade.id } });
         result.removedStaleMarkers += 1;
       }
@@ -303,14 +294,6 @@ export async function reconcileProtectedGradeMarkersForExamEdit(
       continue;
     }
 
-    if (
-      grade.status === "ضمن فترة السماح" &&
-      !isExamWithinStudentGraceWindow(grade.student, exam)
-    ) {
-      await client.grade.delete({ where: { id: grade.id } });
-      result.removedStaleMarkers += 1;
-      continue;
-    }
     if (
       grade.status === "قبل تسجيل الطالب" &&
       isExamOnOrAfterStudentRegistration(grade.student, exam)
@@ -371,9 +354,7 @@ export async function ensureProtectedGradeMarkers(
   options: {
     studentIds?: string[];
     examIds?: string[];
-    includeAbsent?: boolean;
     excludeExamIds?: string[];
-    historicalNoEffect?: boolean;
   } = {},
 ): Promise<ProtectedGradeMarkerSyncResult> {
   const requestedStudentIds = Array.from(
@@ -386,10 +367,10 @@ export async function ensureProtectedGradeMarkers(
     (options.excludeExamIds || []).map(String).filter(Boolean),
   );
   if (options.studentIds && requestedStudentIds.length === 0) {
-    return { createdBeforeRegistration: 0, createdGrace: 0, createdAbsent: 0, createdExcused: 0 };
+    return { createdBeforeRegistration: 0, createdExcused: 0 };
   }
   if (options.examIds && requestedExamIds.length === 0) {
-    return { createdBeforeRegistration: 0, createdGrace: 0, createdAbsent: 0, createdExcused: 0 };
+    return { createdBeforeRegistration: 0, createdExcused: 0 };
   }
 
   const [students, exams] = await Promise.all([
@@ -402,10 +383,6 @@ export async function ensureProtectedGradeMarkers(
         id: true,
         courseId: true,
         createdAt: true,
-        accountingGraceDays: true,
-        gracePeriodStartDate: true,
-        gracePeriodEndedAt: true,
-        gracePeriodHistory: true,
         mainSite: true,
         subSite: true,
         locationScope: true,
@@ -413,11 +390,11 @@ export async function ensureProtectedGradeMarkers(
     }),
     client.exam.findMany({
       where: options.examIds ? { id: { in: requestedExamIds } } : undefined,
-      select: { id: true, courseIds: true, mainSite: true, date: true, active: true, scheduledActivateAt: true },
+      select: { id: true, courseIds: true, mainSite: true, date: true },
     }),
   ]);
   if (students.length === 0 || exams.length === 0) {
-    return { createdBeforeRegistration: 0, createdGrace: 0, createdAbsent: 0, createdExcused: 0 };
+    return { createdBeforeRegistration: 0, createdExcused: 0 };
   }
 
   const [existingGrades, studentLeaves] = await Promise.all([
@@ -450,10 +427,7 @@ export async function ensureProtectedGradeMarkers(
     leavesByStudent.set(leave.studentId, rows);
   }
   const beforeRegistrationRows: Prisma.GradeCreateManyInput[] = [];
-  const graceRows: Prisma.GradeCreateManyInput[] = [];
-  const absentRows: Prisma.GradeCreateManyInput[] = [];
   const excusedRows: Prisma.GradeCreateManyInput[] = [];
-  const todayKey = baghdadTodayKey();
 
   for (const student of students) {
     for (const exam of exams) {
@@ -489,28 +463,6 @@ export async function ensureProtectedGradeMarkers(
           score: null,
           notes: "تسجيل تلقائي: الامتحان يسبق تاريخ تسجيل الطالب",
         });
-      } else if (isExamWithinStudentGraceWindow(student, exam)) {
-        graceRows.push({
-          studentId: student.id,
-          examId: exam.id,
-          status: "ضمن فترة السماح",
-          score: null,
-          notes: "تسجيل تلقائي: الطالب ضمن فترة السماح لهذا الامتحان",
-        });
-      } else if (
-        options.includeAbsent &&
-        getExamEntryAvailability(exam).available &&
-        baghdadDateKey(exam.date) < todayKey
-      ) {
-        absentRows.push({
-          studentId: student.id,
-          examId: exam.id,
-          status: "غائب",
-          score: null,
-          notes: options.historicalNoEffect
-            ? "تسوية تاريخية بلا أثر: إكمال حالة امتحان سابق"
-            : "تسجيل تلقائي: لم تُدخل درجة الطالب في امتحان سابق",
-        });
       }
     }
   }
@@ -521,20 +473,12 @@ export async function ensureProtectedGradeMarkers(
         skipDuplicates: true,
       })
     : { count: 0 };
-  const grace = graceRows.length
-    ? await client.grade.createMany({ data: graceRows, skipDuplicates: true })
-    : { count: 0 };
-  const absent = absentRows.length
-    ? await client.grade.createMany({ data: absentRows, skipDuplicates: true })
-    : { count: 0 };
   const excused = excusedRows.length
     ? await client.grade.createMany({ data: excusedRows, skipDuplicates: true })
     : { count: 0 };
 
   return {
     createdBeforeRegistration: beforeRegistration.count,
-    createdGrace: grace.count,
-    createdAbsent: absent.count,
     createdExcused: excused.count,
   };
 }

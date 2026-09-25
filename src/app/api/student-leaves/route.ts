@@ -23,7 +23,6 @@ import {
   splitSelection,
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
-import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { rejectPendingLeaveNotesForExams } from "@/lib/student-leave-grade-override-server";
@@ -254,11 +253,10 @@ type RestoredGrade = {
 
 type SkippedGradeRestoreSummary = {
   absentBeforeRegistration: number;
-  absentWithinGrace: number;
 };
 
 function emptySkippedGradeRestoreSummary(): SkippedGradeRestoreSummary {
-  return { absentBeforeRegistration: 0, absentWithinGrace: 0 };
+  return { absentBeforeRegistration: 0 };
 }
 
 async function backupGradesForLeave(
@@ -379,14 +377,7 @@ async function restoreGradesForLeave(
     studentIds.length
       ? tx.student.findMany({
           where: { id: { in: studentIds } },
-          select: {
-            id: true,
-            createdAt: true,
-            accountingGraceDays: true,
-            gracePeriodStartDate: true,
-            gracePeriodEndedAt: true,
-            gracePeriodHistory: true,
-          },
+          select: { id: true, createdAt: true },
         })
       : [],
     examIds.length
@@ -415,18 +406,12 @@ async function restoreGradesForLeave(
       continue;
     }
     // حذف الإجازة لا يجوز أن يعيد غياباً كان غير صالح أصلاً: قبل تسجيل
-    // الطالب أو ضمن السماح التلقائي/اليدوي. بقية الحالات (درجة/غش) تبقى
-    // قابلة للاستعادة لأن السماح يمنع العقوبة لا إدخال النتيجة.
-    if (backup.status === "غائب" && student && exam) {
-      const beforeRegistration = !isExamOnOrAfterStudentRegistration(student, exam);
-      const withinGrace = isExamWithinStudentGraceWindow(student, exam);
-      if (beforeRegistration || withinGrace) {
-        if (skippedSummary) {
-          if (beforeRegistration) skippedSummary.absentBeforeRegistration += 1;
-          else if (withinGrace) skippedSummary.absentWithinGrace += 1;
-        }
-        continue;
-      }
+    // الطالب. أما داخل فترة السماح فيُستعاد السجل كما هو؛ فترة السماح تُلغي
+    // أثره المحاسبي من تاريخ الامتحان ولا تتغير بسبب الإجازة.
+    if (backup.status === "غائب" && student && exam &&
+        !isExamOnOrAfterStudentRegistration(student, exam)) {
+      if (skippedSummary) skippedSummary.absentBeforeRegistration += 1;
+      continue;
     }
     validBackups.push(backup);
   }
@@ -1012,7 +997,6 @@ export async function DELETE(req: NextRequest) {
       restoredGradeCount: result.restoredGrades.length,
       skippedAbsentBeforeRegistration:
         result.skippedGradeRestores.absentBeforeRegistration,
-      skippedAbsentWithinGrace: result.skippedGradeRestores.absentWithinGrace,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
       studentResults: result.academicRecalculation?.students.map(s => ({ studentId: s.id, status: s.status, opportunities: s.opportunities })),
       studentIds: result.academicRecalculation?.studentIds || [],

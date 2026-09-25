@@ -2,6 +2,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
+import type { GracePeriodRange } from "@/lib/grace-periods";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { routeErrorResponse } from "@/lib/route-helpers";
@@ -84,10 +86,8 @@ type DbStudentLite = {
   dismissalNotes: string | null;
   opportunities: number;
   baseOpportunities: number;
-  accountingGraceDays: number;
-  gracePeriodStartDate: Date | null;
-  gracePeriodEndedAt: Date | null;
-  gracePeriodHistory?: unknown;
+  /** Active grace periods, attached after loading. */
+  gracePeriods?: GracePeriodRange[];
   createdAt: Date;
   courseId: string;
 };
@@ -566,10 +566,6 @@ export async function GET(req: NextRequest) {
         dismissalNotes: true,
         opportunities: true,
         baseOpportunities: true,
-        accountingGraceDays: true,
-        gracePeriodStartDate: true,
-        gracePeriodEndedAt: true,
-        gracePeriodHistory: true,
         createdAt: true,
         courseId: true,
       },
@@ -617,16 +613,19 @@ export async function GET(req: NextRequest) {
             dismissalNotes: true,
             opportunities: true,
             baseOpportunities: true,
-            accountingGraceDays: true,
-            gracePeriodStartDate: true,
-            gracePeriodEndedAt: true,
-            gracePeriodHistory: true,
             createdAt: true,
             courseId: true,
           },
         },
       },
     })) as Array<DbGradeLite & { student: DbStudentLite }>;
+    const gracePeriodsByStudent = await loadActiveGracePeriodsByStudent(db, [
+      ...selectedStudents.map((student) => student.id),
+      ...selectedGrades.map((grade) => grade.student.id),
+    ]);
+    for (const student of [...selectedStudents, ...selectedGrades.map((grade) => grade.student)]) {
+      student.gracePeriods = gracePeriodsByStudent.get(student.id) || [];
+    }
 
     const scoredAttempts = await db.gradeSmartNote.findMany({
       where: {

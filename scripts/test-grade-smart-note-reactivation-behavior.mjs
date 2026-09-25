@@ -90,8 +90,7 @@ test("a GRACE_SCORED grade stays excluded after the grace window changes", () =>
     opportunities: 3,
     baseOpportunities: 3,
     createdAt: "2026-01-01T00:00:00.000Z",
-    accountingGraceDays: 0,
-    gracePeriodStartDate: null,
+    gracePeriods: [],
   };
   const exam = {
     id: "exam-grace",
@@ -239,8 +238,7 @@ test("a migrated dismissed score is permanently excluded from academic effects",
     opportunities: 3,
     baseOpportunities: 3,
     createdAt: "2026-01-01T00:00:00.000Z",
-    accountingGraceDays: 0,
-    gracePeriodStartDate: null,
+    gracePeriods: [],
   };
   const exam = {
     id: "exam-1",

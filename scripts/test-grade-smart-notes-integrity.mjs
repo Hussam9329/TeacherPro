@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -14,8 +15,6 @@ const [
   notesRoute,
   entrySheet,
   helper,
-  graceExpiryHelper,
-  graceCronRoute,
   academicRecalculation,
   vercelConfig,
   gradeWriteback,
@@ -32,15 +31,13 @@ const [
     read("src/app/api/grade-smart-notes/route.ts"),
     read("src/app/api/grades/entry-sheet/route.ts"),
     read("src/lib/grade-smart-notes-server.ts"),
-    read("src/lib/grade-smart-note-grace-expiry-server.ts"),
-    read("src/app/api/internal/grace-smart-notes/settle/route.ts"),
     read("src/lib/academic-recalculate-server.ts"),
     read("vercel.json"),
     read("src/lib/academic-grade-writeback-server.ts"),
     read("src/lib/pre-registration-grade.ts"),
     read("src/lib/pre-registration-grade-promotion-server.ts"),
     read("src/app/api/grades/promote-pre-registration/route.ts"),
-    read("src/lib/grace-period-repair-server.ts"),
+    read("src/lib/pre-registration-absence-repair-server.ts"),
     read("src/components/teacher-pro/grade-smart-notes-panel.tsx"),
   ]);
 
@@ -95,14 +92,10 @@ assert.match(
   /if \(!beforeRegistration && student\.status/,
 );
 assert.doesNotMatch(numericAttemptInspection, /LEAVE_PENDING/);
-assert.match(
-  gradeWriteback,
-  /const shouldEndGrace\s*=\s*shouldEndGraceForNumericGrade\([\s\S]*accountingGraceDays:\s*0[\s\S]*gracePeriodEndedAt:\s*endedAt/,
-);
-assert.match(
-  gradeWriteback,
-  /category:\s*"GRACE_SCORED"[\s\S]*status:\s*"PENDING"[\s\S]*status:\s*"REJECTED"/,
-);
+// Grades never end, start or move grace: GracePeriod rows are managed only
+// from «إدارة فترة السماح».
+assert.doesNotMatch(gradeWriteback, /shouldEndGrace|gracePeriodEndedAt|accountingGraceDays|gracePeriodStartDate/);
+assert.doesNotMatch(gradeWriteback, /category:\s*"GRACE_SCORED"/);
 assert.match(
   gradeWriteback,
   /isPreRegistrationNumericGrade\([\s\S]*preRegistrationNumericGrade/,
@@ -111,12 +104,9 @@ assert.match(
   gradeWriteback,
   /status !== "قبل تسجيل الطالب" &&[\s\S]*!preRegistrationNumericGrade/,
 );
-// Pre-registration numeric grades backdate the student's registration to the
-// exam date and are stored counted; permanent exclusion is forbidden.
-assert.match(
-  gradeWriteback,
-  /preRegistrationNumericGrade[\s\S]*createdAt:\s*exam\.date[\s\S]*accountingGraceDays:\s*0[\s\S]*gracePeriodStartDate:\s*null[\s\S]*gracePeriodEndedAt:\s*endedAt/,
-);
+// A grade never changes the registration date automatically; only the
+// explicit, permission-gated promotion below may do that.
+assert.doesNotMatch(gradeWriteback, /student\.updateMany\([\s\S]{0,200}createdAt:\s*exam\.date/);
 assert.doesNotMatch(
   gradeWriteback,
   /PRE_REGISTRATION_GRADE_EXCLUSION_REASON/,
@@ -127,8 +117,10 @@ assert.match(
 );
 assert.match(
   protectedAbsenceRepair,
-  /grade\.status === "غائب" &&[\s\S]*!isExamOnOrAfterStudentRegistration/,
+  /status:\s*"غائب"[\s\S]*!isExamOnOrAfterStudentRegistration/,
 );
+// Absences inside a grace period stay "غائب"; the engine excuses them by date.
+assert.doesNotMatch(protectedAbsenceRepair, /ضمن فترة السماح|accountingGraceDays/);
 assert.doesNotMatch(
   protectedAbsenceRepair,
   /\(!options\.onlyAbsences \|\| grade\.status === "غائب"\)/,
@@ -154,31 +146,15 @@ assert.match(
   /عند اعتمادها يُقدَّم تاريخ تسجيل الطالب إلى تاريخ الامتحان وتُحتسب الدرجة رسمياً/,
 );
 
-assert.match(graceExpiryHelper, /category:\s*"GRACE_SCORED"/);
-assert.match(graceExpiryHelper, /status:\s*"PENDING"/);
-assert.match(graceExpiryHelper, /today\s*>=\s*graceWindow\.endExclusive/);
-assert.match(graceExpiryHelper, /examSnapshotDate\s*&&\s*!examStillInsideCurrentWindow/);
-assert.match(graceExpiryHelper, /eligibleRemaining/);
-assert.match(graceExpiryHelper, /status:\s*GRACE_PLACEHOLDER_STATUS/);
-// GRACE_SCORED settlement is historical-only: implicitly disabled everywhere
-// and, when explicitly enabled, converted grades are counted (never excluded).
-assert.match(graceExpiryHelper, /ALLOW_LEGACY_GRACE_SCORED_MIGRATION/);
-assert.match(graceExpiryHelper, /legacyMigrationDisabled/);
-assert.match(graceExpiryHelper, /academicEffectExcluded:\s*false/);
-assert.doesNotMatch(graceExpiryHelper, /gradeSmartNoteExclusionSource/);
-assert.match(graceExpiryHelper, /status:\s*"CONFLICT"/);
-assert.match(graceExpiryHelper, /note\.score\s*>\s*fullMark/);
-
-assert.match(academicRecalculation, /reconcileExpiredGracePendingGrades\([\s\S]*studentIds/);
-assert.match(graceCronRoute, /process\.env\.CRON_SECRET/);
-assert.match(graceCronRoute, /timingSafeEqual/);
-assert.match(graceCronRoute, /reconcileExpiredGracePendingGrades\(/);
-// The legacy daily cron must stay retired; settlement is explicit-only.
+// GRACE_SCORED notes are archive-only: the settlement helper and its cron
+// route are retired and nothing reconciles them any more.
+assert.ok(!existsSync(path.join(root, "src/lib/grade-smart-note-grace-expiry-server.ts")));
+assert.ok(!existsSync(path.join(root, "src/app/api/internal/grace-smart-notes/settle/route.ts")));
+assert.doesNotMatch(academicRecalculation, /reconcileExpiredGracePendingGrades/);
 assert.doesNotMatch(vercelConfig, /grace-smart-notes/);
 assert.doesNotMatch(vercelConfig, /5 21 \* \* \*/);
 
-// Ordinary user-facing GET endpoints must remain read-only. Grace settlement
-// is write-triggered or performed by the authenticated internal cron only.
+// Ordinary user-facing GET endpoints must remain read-only.
 assert.doesNotMatch(notesRoute, /reconcileExpiredGracePendingGrades/);
 assert.doesNotMatch(entrySheet, /reconcileExpiredGracePendingGrades/);
 

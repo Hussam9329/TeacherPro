@@ -4,7 +4,7 @@ const { buildPlan, classifyStudent } = require('./plan-retained-dismissals-repai
 function fixture() {
   const dismissalReason = 'مخالفة بعد انتهاء الفرص - غياب في امتحان يومي: امتحان قديم';
   const student = { id: 's', code: 'TEST', courseId: 'course', status: 'مفصول', opportunities: 0,
-    dismissalReason, baseOpportunities: 3, accountingGraceDays: 0, createdAt: '2026-06-01',
+    dismissalReason, baseOpportunities: 3, gracePeriods: [], createdAt: '2026-06-01',
     _rowHash: 'student-hash', _sourceHashes: { Grade: 'g', OpportunityLog: 'l', StudentLeave: 'v', StudentNote: 'n', GradeSmartNote: 's' } };
   const oldExam = { id: 'old-exam', name: 'امتحان قديم', courseIds: '["course"]', type: 'يومي', date: '2026-09-05',
     fullMark: 20, passMark: 10, discountMark: 7, opportunitiesPenalty: '1', active: true, noDiscount: false,

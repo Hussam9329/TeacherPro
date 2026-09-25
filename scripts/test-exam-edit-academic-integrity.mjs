@@ -31,7 +31,9 @@ assert.match(examRecords, /\}, editDialog\.mutationToken\)/);
 
 assert.match(examsRoute, /mainSite:\s*String\(exam\.mainSite/);
 assert.match(examsRoute, /reconcileProtectedGradeMarkersForExamEdit\(tx, exam\.id\)/);
-assert.match(examsRoute, /includeAbsent:\s*protectedScopeChanged/);
+assert.match(examsRoute, /repairPreRegistrationAbsencesForStudents\([\s\S]*?\{ examIds: \[exam\.id\] \}/);
+// Editing an exam never records absences or changes grace; the engine re-reads the new date.
+assert.doesNotMatch(examsRoute, /ضمن فترة السماح|accountingGraceDays|gracePeriodEndedAt/);
 assert.match(examsRoute, /studentLeave\.findMany[\s\S]*leaveType:\s*'exam'/);
 assert.match(examsRoute, /baghdadDateKey\(leave\.date\) === oldExamDay/);
 assert.match(examsRoute, /StudentLeaveUpdateInput/);
@@ -42,8 +44,8 @@ assert.match(examsRoute, /studentLeaveGradeBackup\.aggregate/);
 console.log('✅ الاسم يزامن النصوص دون إعادة احتساب، وباقي التعديلات الأكاديمية تعيد المزامنة وتحمي fullMark');
 
 assert.match(studentsRoute, /reconcileProtectedGradeMarkersForStudentAcademicEdit/);
-assert.match(studentsRoute, /includeAbsent:\s*true/);
-console.log('✅ تعديل تاريخ تسجيل الطالب/السماح يعالج العلامات القديمة بالاتجاهين');
+assert.match(studentsRoute, /repairPreRegistrationAbsencesForStudents\(tx, \[String\(id\)\]\)/);
+console.log('✅ تعديل تاريخ تسجيل الطالب يعالج علامات ما قبل التسجيل بالاتجاهين');
 
 assert.match(engine, /studentMatchesExamMainSites/);
 assert.match(engine, /examA\?\.date/);
@@ -56,11 +58,12 @@ assert.match(protectedMarkers, /convertedToExcused/);
 assert.match(protectedMarkers, /restoredFromLeaveBackup/);
 assert.match(protectedMarkers, /removedStaleMarkers/);
 assert.match(protectedMarkers, /reconcileProtectedGradeMarkersForStudentAcademicEdit/);
-assert.match(protectedMarkers, /getExamEntryAvailability\(exam\)\.available/);
+// No automatic absences: missing results are never turned into «غائب» by an exam or student edit.
+assert.doesNotMatch(protectedMarkers, /includeAbsent|تسجيل تلقائي: لم تُدخل درجة الطالب/);
 assert.match(protectedMarkers, /status: "مجاز"/);
-assert.match(protectedMarkers, /isExamWithinStudentGraceWindow/);
+assert.doesNotMatch(protectedMarkers, /isExamWithinStudentGraceWindow|accountingGraceDays/);
 assert.match(protectedMarkers, /isExamOnOrAfterStudentRegistration/);
-console.log('✅ تاريخ الامتحان يصلح الإجازة/السماح/قبل التسجيل ويحوّل الحالة القديمة إلى غياب فقط إذا صار الامتحان مستحقاً');
+console.log('✅ تاريخ الامتحان يصلح علامات الإجازة وقبل التسجيل فقط؛ السماح يُحسب من تاريخ الامتحان الجديد');
 
 assert.match(gradesRoute, /examSiteDatabaseValues/);
 assert.match(gradesRoute, /startsWith: "خارج القطر"/);
@@ -80,7 +83,7 @@ console.log('✅ العرض التاريخي يفضل اسم الامتحان ا
 
 assert.match(cronRoute, /process\.env\.CRON_SECRET/);
 assert.match(cronRoute, /settleDueScheduledExamActivations/);
-assert.match(cronRoute, /reconcileExpiredGracePendingGrades/);
+assert.doesNotMatch(cronRoute, /reconcileExpiredGracePendingGrades/);
 assert.match(cronHelper, /scheduledActivateAt:\s*\{ not: null, lte: now \}/);
 assert.match(cronHelper, /data:\s*\{ active: true \}/);
 assert.match(cronHelper, /recalculateStudentsForExam/);
@@ -89,7 +92,7 @@ assert.doesNotMatch(examsRoute, /settleDueScheduledExamActivations/);
 assert.match(read("src/app/api/exams/settle-scheduled/route.ts"), /requirePermission\(req, 'exams.edit'\)/);
 assert.doesNotMatch(dashboardStats, /settleDueScheduledExamActivations/);
 assert.match(vercelConfig, /0 0 \* \* \*/);
-console.log('✅ التفعيل المجدول وانتهاء فترة السماح لهما صيانة يومية، مع تسوية كسولة للتفعيل عند استخدام النظام');
+console.log('✅ التفعيل المجدول له صيانة يومية مع تسوية كسولة؛ فترة السماح لا تحتاج أي تسوية لأنها تُحسب من التاريخ');
 
 assert.match(repairRoute, /dryRun:\s*true/);
 assert.match(repairRoute, /previewToken/);
@@ -97,7 +100,7 @@ assert.match(repairRoute, /requiresFreshPreview/);
 assert.match(repairRoute, /reconcileProtectedGradeMarkersForExamEdit/);
 assert.match(repairRoute, /filter\(\(candidate\) => candidate\.examId === examId\)/);
 assert.match(repairRoute, /studentIds:\s*examStudentIds/);
-assert.match(repairRoute, /repairProtectedAbsencesForStudents/);
+assert.match(repairRoute, /repairPreRegistrationAbsencesForStudents/);
 assert.match(repairRoute, /recalculateStudentsAcademicState/);
 console.log('✅ إصلاح البيانات القديمة Preview-first ولا يطبق على معاينة قديمة');
 

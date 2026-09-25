@@ -102,9 +102,6 @@ function grade(overrides = {}) {
       subSite: null,
       locationScope: null,
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
-      accountingGraceDays: 3,
-      gracePeriodStartDate: null,
-      gracePeriodEndedAt: null,
     },
     ...overrides,
   };
@@ -132,13 +129,14 @@ test("exam date entering a leave backs up the real grade before converting it", 
   assert.ok(fixture.events.some((event) => event.type === "backup.upsert"));
 });
 
-test("an expired grace placeholder is removed so the current marker can be rebuilt", async () => {
-  const staleGrade = grade({ status: "ضمن فترة السماح", score: null });
-  const fixture = protectedClient({ exam: exam(), grade: staleGrade });
+test("an exam edit never rebuilds grace markers; a legacy placeholder waits for the one-time conversion", async () => {
+  const legacyGrade = grade({ status: "ضمن فترة السماح", score: null });
+  const fixture = protectedClient({ exam: exam(), grade: legacyGrade });
   const result = await reconcileProtectedGradeMarkersForExamEdit(fixture.client, "exam-1");
 
-  assert.equal(result.removedStaleMarkers, 1);
-  assert.ok(fixture.events.some((event) => event.type === "grade.delete"));
+  assert.equal(result.removedStaleMarkers, 0);
+  assert.equal(fixture.events.some((event) => event.type === "grade.create" || event.type === "grade.createMany"), false);
+  assert.equal(fixture.events.some((event) => event.type === "grade.delete"), false);
 });
 
 test("a real grade outside the edited exam site remains stored", async () => {

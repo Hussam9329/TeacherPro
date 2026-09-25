@@ -27,9 +27,10 @@ type AnyDelegate = { upsert: (args: any) => Promise<any>; createMany: (args: any
 //    Safe to restore on v4+ databases (restore skips unknown tables).
 //  - v7: operational tables only; restore skips unknown tables.
 //  - v8: prior complete operational backup contract.
-//  - v9 (current): Exam Telegram submission-window timestamps round-trip.
+//  - v9: Exam Telegram submission-window timestamps round-trip.
+//  - v10 (current): GracePeriod rows (the only source of grace periods).
 // ============================================================================
-const BACKUP_VERSION = 9;
+const BACKUP_VERSION = 10;
 
 const RESTORE_CONFIRMATION_TOKEN = 'RESTORE';
 
@@ -45,6 +46,7 @@ const RESTORE_ORDER = [
   'exams',
   'examCourses',
   'students',
+  'gracePeriods',
   'gradeSmartNotes',
   'grades',
   'opportunityLogs',
@@ -604,6 +606,7 @@ async function restoreTable(
           ),
         );
         break;
+      case 'gracePeriods':
       case 'logClearBackups':
       case 'studentCallHistoryMigrationRuns':
       case 'studentCallHistoryBackups':
@@ -643,6 +646,7 @@ const PRISMA_TABLE_NAMES: Record<string, string> = {
   exams: 'Exam',
   examCourses: 'ExamCourse',
   students: 'Student',
+  gracePeriods: 'GracePeriod',
   gradeSmartNotes: 'GradeSmartNote',
   grades: 'Grade',
   opportunityLogs: 'OpportunityLog',
@@ -661,7 +665,7 @@ const PRISMA_TABLE_NAMES: Record<string, string> = {
 const MODEL_NAMES = {
   roles: 'role', users: 'appUser', permissionCatalog: 'permissionCatalog',
   courses: 'course', chapters: 'chapter', courseChapters: 'courseChapter',
-  exams: 'exam', examCourses: 'examCourse', students: 'student',
+  exams: 'exam', examCourses: 'examCourse', students: 'student', gracePeriods: 'gracePeriod',
   gradeSmartNotes: 'gradeSmartNote', grades: 'grade', opportunityLogs: 'opportunityLog',
   studentLeaves: 'studentLeave', studentLeaveGradeBackups: 'studentLeaveGradeBackup',
   studentCalls: 'studentCall', studentNotes: 'studentNote', studentEnrollmentArchives: 'studentEnrollmentArchive',

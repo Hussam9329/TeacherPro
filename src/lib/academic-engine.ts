@@ -7,8 +7,8 @@ import {
   splitSelection,
   studentMatchesExamMainSites,
 } from "./exam-utils";
-export { isExamWithinStudentGraceWindow } from "./student-grace";
-import { isExamWithinStudentGraceWindow } from "./student-grace";
+export { isExamInStudentGracePeriod } from "./grace-periods";
+import { isExamInStudentGracePeriod } from "./grace-periods";
 import { baghdadDateKey, baghdadTodayKey } from "./baghdad-time";
 import {
   applyOpportunityPenalty,
@@ -519,7 +519,7 @@ function findLatestAcademicReactivationSourceForStudent(
         )
       )
         return false;
-      if (isExamWithinStudentGraceWindow(student, exam)) return false;
+      if (isExamInStudentGracePeriod(student, exam)) return false;
       return gradeCausesDismissalGradeEffect(grade, exam);
     });
 
@@ -744,7 +744,7 @@ export function recalculateAcademicState(
             )
           )
             return false;
-          if (isExamWithinStudentGraceWindow(student, exam)) return false;
+          if (isExamInStudentGracePeriod(student, exam)) return false;
           return gradeHasAcademicEffect(grade, exam);
         });
       },
@@ -988,7 +988,7 @@ export function recalculateAcademicState(
         )
       )
         continue;
-      if (isExamWithinStudentGraceWindow(student, exam)) continue;
+      if (isExamInStudentGracePeriod(student, exam)) continue;
       const gradeHasEffect = gradeHasAcademicEffect(grade, exam);
       if (isProtectedLinkedSourceGrade(grade) && gradeHasEffect) continue;
       if (grade.status === "غش") {

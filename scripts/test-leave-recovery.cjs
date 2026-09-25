@@ -96,8 +96,8 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  await pg.exec(`INSERT INTO "Course"(id,name) VALUES('c','الصيفية'),('other','أخرى');
  INSERT INTO "Chapter"(id,name,opportunities) VALUES('ch','الحالي',3),('old-ch','السابق',3);
  INSERT INTO "CourseChapter"(id,"courseId","chapterId",active) VALUES('cc','c','ch',true),('oc','other','ch',true);
- INSERT INTO "Student"(id,name,"nameKey",gender,code,"courseId","createdAt","baseOpportunities",opportunities,"accountingGraceDays")
- SELECT s,s,s,'ذكر',s,'c','2026-01-01',3,3,0 FROM unnest(ARRAY['rescue','manual','final','period','zero','rollback','archive','untouched']) s;
+ INSERT INTO "Student"(id,name,"nameKey",gender,code,"courseId","createdAt","baseOpportunities",opportunities)
+ SELECT s,s,s,'ذكر',s,'c','2026-01-01',3,3 FROM unnest(ARRAY['rescue','manual','final','period','zero','rollback','archive','untouched']) s;
  INSERT INTO "Exam"(id,name,type,date,"courseIds","fullMark","passMark","discountMark","opportunitiesPenalty")
  SELECT 'e'||i,'امتحان '||i,'يومي','2026-02-01'::timestamp+i*INTERVAL '1 day','["c"]',20,10,7,'1' FROM generate_series(1,4)i;
  INSERT INTO "Exam"(id,name,type,date,"courseIds","fullMark","passMark","discountMark","opportunitiesPenalty")

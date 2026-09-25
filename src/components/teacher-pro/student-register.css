@@ -119,7 +119,7 @@
   flex-shrink: 0;
 }
 
-.tp-register__fields :is(#reg-outOfCountrySite, #reg-accountingGraceDays) {
+.tp-register__fields #reg-outOfCountrySite {
   padding-inline: 0.75rem;
 }
 

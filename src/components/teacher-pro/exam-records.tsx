@@ -43,6 +43,7 @@ import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { examApi, examStatsApi, type ApiResult, type ExamRecordStat } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
+import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import {
   ExamEditDialog,
@@ -55,11 +56,16 @@ const examGradeExportColumns: ExportColumn<any>[] = [
   { key: "code", label: "الكود", value: (row) => row.student?.code || "" },
   { key: "student", label: "الطالب", value: (row) => row.student?.name || "" },
   { key: "course", label: "الدورة", value: (row) => row.courseName || "" },
-  { key: "status", label: "الحالة", value: (row) => row.grade.status || "" },
+  // The retired grace placeholder is not a result: export it as empty.
+  {
+    key: "status",
+    label: "الحالة",
+    value: (row) => row.grade.status === LEGACY_GRACE_PLACEHOLDER_STATUS ? "" : row.grade.status || "",
+  },
   {
     key: "score",
     label: "الدرجة",
-    value: (row) => formatGradeScore(row.grade, row.exam, ""),
+    value: (row) => row.grade.status === LEGACY_GRACE_PLACEHOLDER_STATUS ? "" : formatGradeScore(row.grade, row.exam, ""),
   },
   {
     key: "classification",

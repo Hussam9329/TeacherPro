@@ -48,10 +48,6 @@ import {
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { formatOpportunityBalance, getOpportunityLimit } from "@/lib/opportunity-balance";
-import {
-  getStudentGraceWindow,
-  isStudentCurrentlyInGrace as isStudentCurrentlyInGraceUnified,
-} from "@/lib/student-grace";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
 import { CALL_STUDENT_NOTE_CATEGORY } from "@/lib/call-notes-filter";
 import {
@@ -324,22 +320,6 @@ function contactStatusClasses(status: ContactStatus): string {
   if (status === "الرقم خاطئ")
     return "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200";
   return "border-muted bg-muted/40 text-muted-foreground";
-}
-
-function graceEndDate(student: Student): string {
-  const graceWindow = getStudentGraceWindow(student);
-  if (!graceWindow)
-    return formatAppDate(
-      student.createdAt,
-      String(student.createdAt || "").slice(0, 10) || "-",
-    );
-  const end = new Date(graceWindow.endExclusive);
-  end.setUTCDate(end.getUTCDate() - 1);
-  return formatAppDate(end);
-}
-
-function isStudentCurrentlyInGrace(student: Student): boolean {
-  return isStudentCurrentlyInGraceUnified(student);
 }
 
 function dayKey(value: string | null | undefined): string {
@@ -1549,7 +1529,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       ? `فترة من ${formatAppDate(leave.dateFrom || leave.date)} إلى ${formatAppDate(leave.dateTo || leave.dateFrom || leave.date)}`
       : "امتحان واحد";
     const ok = window.confirm(
-      `سيتم حذف إجازة (${scopeText}) نهائياً، واسترجاع أي درجات عُلّقت بسببها (يُستثنى الغياب غير الصالح قبل التسجيل أو ضمن السماح)، ثم إعادة احتساب الطالب. هل تريد المتابعة؟`,
+      `سيتم حذف إجازة (${scopeText}) نهائياً، واسترجاع أي درجات عُلّقت بسببها (يُستثنى الغياب غير الصالح قبل التسجيل)، ثم إعادة احتساب الطالب. هل تريد المتابعة؟`,
     );
     if (!ok) return;
 
@@ -1589,15 +1569,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       restoredGradeCount?: number;
       skippedGradeRestores?: {
         absentBeforeRegistration?: number;
-        absentWithinGrace?: number;
       };
     };
     const restored = Number(response.restoredGradeCount || 0);
     const skippedBeforeRegistration = Number(
       response.skippedGradeRestores?.absentBeforeRegistration || 0,
-    );
-    const skippedWithinGrace = Number(
-      response.skippedGradeRestores?.absentWithinGrace || 0,
     );
     const resultDetails = [
       restored > 0
@@ -1605,9 +1581,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         : "لم تكن هناك درجات صالحة للاسترجاع.",
       skippedBeforeRegistration > 0
         ? `تم تجاهل ${skippedBeforeRegistration} غياب/غيابات لأنها تقع قبل تسجيل الطالب.`
-        : "",
-      skippedWithinGrace > 0
-        ? `تم تجاهل ${skippedWithinGrace} غياب/غيابات لأنها تقع ضمن فترة السماح.`
         : "",
     ]
       .filter(Boolean)
@@ -2355,8 +2328,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         activeChapterForCourse={activeChapterForCourse}
         whatsappLink={whatsappLink}
         telegramLink={telegramLink}
-        isStudentCurrentlyInGrace={isStudentCurrentlyInGrace}
-        graceEndDate={graceEndDate}
       />
     );
   }

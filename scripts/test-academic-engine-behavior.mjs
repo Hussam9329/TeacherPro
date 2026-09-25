@@ -69,8 +69,7 @@ const student = (overrides = {}) => ({
   opportunities: 3,
   baseOpportunities: 3,
   createdAt: "2026-01-01T00:00:00.000Z",
-  accountingGraceDays: 0,
-  gracePeriodStartDate: null,
+  gracePeriods: [],
   ...overrides,
 });
 
@@ -670,7 +669,7 @@ function recalculatedStudent(input) {
   );
   assert.equal(result.status, "نشط");
   assert.equal(result.opportunities, 3);
-  console.log("✅ حالة ضمن فترة السماح لا تخصم ولا تفصل");
+  console.log("✅ الوسم القديم «ضمن فترة السماح» ليس نتيجة ولا يخصم ولا يفصل");
 }
 
 {
@@ -679,7 +678,6 @@ function recalculatedStudent(input) {
       students: [
         student({
           createdAt: "2026-02-01T00:00:00.000Z",
-          gracePeriodEndedAt: "2026-02-02T09:00:00.000Z",
         }),
       ],
       exams: [
@@ -694,7 +692,31 @@ function recalculatedStudent(input) {
   );
   assert.equal(result.status, "نشط");
   assert.equal(result.opportunities, 2);
-  console.log("✅ إنهاء السماح يجعل نفس الدرجة الرقمية مؤثرة أكاديمياً");
+  console.log("✅ لا أيام سماح مخفية: طالب جديد بلا فترة سماح يُحاسب من أول امتحان");
+}
+
+{
+  const result = recalculatedStudent(
+    state({
+      students: [
+        student({
+          createdAt: "2026-02-01T00:00:00.000Z",
+          gracePeriods: [{ id: "g1", startDate: "2026-02-01", endDate: "2026-02-03" }],
+        }),
+      ],
+      exams: [
+        exam({
+          type: "يومي",
+          date: "2026-02-02T00:00:00.000Z",
+          opportunitiesPenalty: 1,
+        }),
+      ],
+      grades: [grade({ score: 10 })],
+    }),
+  );
+  assert.equal(result.status, "نشط");
+  assert.equal(result.opportunities, 3);
+  console.log("✅ الدرجة الرقمية داخل فترة السماح تبقى محفوظة ولا تُحتسب ولا تنهي الفترة");
 }
 
 {

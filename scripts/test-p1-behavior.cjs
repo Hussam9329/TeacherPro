@@ -9,7 +9,7 @@ const load = Module._load;
 Module._load = function(r,p,...args) { return mocks.has(r) ? mocks.get(r) : load.call(this,r,p,...args); };
 const source = p => require(path.join(root,'src',p));
 const pass = label => console.log('PASS:',label);
-function state() {return {students:[{id:'s',courseId:'c',status:'نشط',dismissalReason:'',opportunities:3,baseOpportunities:3,createdAt:'2026-01-01',accountingGraceDays:0}],exams:[],grades:[],courseChapters:[{id:'cc',courseId:'c',chapterId:'ch',active:true,archived:false}],chapters:[{id:'ch',name:'فصل',opportunities:3}],opportunityLogs:[],studentLeaves:[],studentNotes:[]};}
+function state() {return {students:[{id:'s',courseId:'c',status:'نشط',dismissalReason:'',opportunities:3,baseOpportunities:3,createdAt:'2026-01-01'}],exams:[],grades:[],courseChapters:[{id:'cc',courseId:'c',chapterId:'ch',active:true,archived:false}],chapters:[{id:'ch',name:'فصل',opportunities:3}],opportunityLogs:[],studentLeaves:[],studentNotes:[]};}
 function exam(id,date) {return {id,name:id,type:'يومي',date,fullMark:100,passMark:50,discountMark:20,opportunitiesPenalty:1,dismissalGrade:10,noDiscount:false,active:true,courseIds:['c']};}
 function grade(id,date) {return {id:'g'+id,studentId:'s',examId:id,status:'درجة',score:10,createdAt:date,updatedAt:date};}
 function command(action,amount,date,extra={}) {return {id:'l'+date,studentId:'s',examId:'',action,amount,appliedAmount:amount,date,reason:'manual',chapterId:'ch',ledgerVersion:2,...extra};}
@@ -38,6 +38,7 @@ function command(action,amount,date,extra={}) {return {id:'l'+date,studentId:'s'
  for(const [model,key] of Object.entries({student:'students',grade:'grades',exam:'exams',chapter:'chapters',courseChapter:'courseChapters',opportunityLog:'opportunityLogs',studentLeave:'studentLeaves',studentNote:'studentNotes'})) {
    fakeTx[model]={findMany:async({select})=>fixture[key].map(row=>Object.fromEntries(Object.keys(select).map(k=>[k,k==='courseIds'?JSON.stringify(row[k]):row[k]])))};
  }
+ fakeTx.gracePeriod={findMany:async()=>[]};
  assert.equal((await serverEngine.previewStudentsAcademicState(['s'],{tx:fakeTx})).students[0].opportunities,3);
  pass('server loader preserves the structured ledger and settlement fields');
  const auth=source('lib/server-auth.ts');
@@ -76,10 +77,10 @@ function command(action,amount,date,extra={}) {return {id:'l'+date,studentId:'s'
  delete global.window;delete global.document;
 
  mocks.set('@/lib/scheduled-exam-activation-server',{settleDueScheduledExamActivations:async()=>({scanned:0,activated:0,recalculatedStudents:0,examIds:[]})});
- process.env.CRON_SECRET='p1-local-test';delete process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+ process.env.CRON_SECRET='p1-local-test';
  const cron=source('app/api/internal/academic-maintenance/route.ts');
- const cronResult=await cron.GET({headers:new Headers({authorization:'Bearer p1-local-test'})});assert.equal(cronResult.status,200);assert.deepEqual((await cronResult.json()).graceSettlement.processedNoteIds,[]);
- pass('real maintenance route with legacy converter disabled');
+ const cronResult=await cron.GET({headers:new Headers({authorization:'Bearer p1-local-test'})});assert.equal(cronResult.status,200);assert.equal((await cronResult.json()).graceSettlement,undefined);
+ pass('real maintenance route no longer settles grace');
 
  mocks.set('@/lib/server-auth',{requirePermission:async()=>null,getAuthPrincipal:async()=>({id:'admin',username:'admin'})});
  for(const route of ['logs/clear','logs/restore','opportunity-logs']) {
@@ -91,7 +92,7 @@ function command(action,amount,date,extra={}) {return {id:'l'+date,studentId:'s'
  let studentWrites=0,recalculations=0;
  mocks.set('@/lib/academic-recalculate-server',{recalculateStudentsAcademicState:async()=>{recalculations++}});
  const promotion=source('lib/pre-registration-grade-promotion-server.ts');
- const student={id:'s',courseId:'c',status:'نشط',createdAt:new Date('2026-03-10'),gracePeriodEndedAt:null};
+ const student={id:'s',courseId:'c',status:'نشط',createdAt:new Date('2026-03-10')};
  let notes=[{id:'n',studentId:'s',examId:'e',score:10,exam:{fullMark:100,date:new Date('2026-03-02'),courseIds:'["c"]'}}];let existing={id:'g',status:'غائب',score:null};
  const tx={gradeSmartNote:{findMany:async()=>notes,update:async()=>{},count:async()=>0},grade:{findUnique:async()=>existing,create:async()=>{},update:async()=>{}},studentLeave:{findMany:async()=>[]},student:{findUnique:async()=>({...student}),updateMany:async({where,data})=>{studentWrites++;if(student.createdAt>where.createdAt.gt)student.createdAt=data.createdAt;return{count:1}},update:async()=>{studentWrites++}}};
  assert.equal((await promotion.promotePendingPreRegistrationGrades(tx)).conflicts,1);assert.equal(studentWrites,0);assert.equal(recalculations,0);

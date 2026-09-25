@@ -224,10 +224,12 @@ assert(
   'فلتر الغائبين يوحّد الغياب المسجل والمشتق ويستبعد الحالات المحمية',
 );
 assert(
-  candidates.includes('gracePeriodStartDate: true') &&
-    stats.includes('gracePeriodStartDate: true') &&
+  candidates.includes('loadActiveGracePeriodsByStudent') &&
+    stats.includes('loadActiveGracePeriodsByStudent') &&
+    !candidates.includes('gracePeriodStartDate') &&
+    !stats.includes('gracePeriodStartDate') &&
     candidates.includes('NON_DISPLAY_CALL_KINDS.has(kind)'),
-  'المكالمات تجلب تاريخ بدء السماح اليدوي وتستبعد التصنيفات المحمية من العرض',
+  'المكالمات تقرأ فترات السماح من إدارة فترة السماح وتستبعد التصنيفات المحمية من العرض',
 );
 assert(
   followUp.includes('renderCallImpactBadges') &&

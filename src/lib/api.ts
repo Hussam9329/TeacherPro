@@ -802,21 +802,9 @@ export interface StudentAcademicUpdateImpactResponse {
   studentId: string;
   studentName: string;
   requiresConfirmation: boolean;
-  changes: { dateChanged: boolean; graceChanged: boolean };
-  current: {
-    createdAt: string;
-    accountingGraceDays: number;
-    gracePeriodStartDate?: string | null;
-    gracePeriodEndedAt?: string | null;
-    gracePeriodHistory?: unknown;
-  };
-  proposed: {
-    createdAt: string;
-    accountingGraceDays: number;
-    gracePeriodStartDate?: string | null;
-    gracePeriodEndedAt?: string | null;
-    gracePeriodHistory?: unknown;
-  };
+  changes: { dateChanged: boolean };
+  current: { createdAt: string };
+  proposed: { createdAt: string };
   impact: {
     totalGrades: number;
     changedGrades: number;
@@ -824,8 +812,6 @@ export interface StudentAcademicUpdateImpactResponse {
     becameChargeable: number;
     movedBeforeRegistration: number;
     returnedAfterRegistration: number;
-    movedIntoGrace: number;
-    leftGrace: number;
     sample: Array<{
       examId: string;
       examName: string;

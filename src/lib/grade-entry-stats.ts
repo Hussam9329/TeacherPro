@@ -25,7 +25,7 @@ type GradeCountRow = Pick<
  * - "غائب" (absent - system generated)
  * - "غش" (cheating - system generated)
  * - "مجاز" (on leave - system generated)
- * - "ضمن فترة السماح" (grace period - system generated)
+ * - "ضمن فترة السماح" (retired grace placeholder - not a result)
  * - "درجة" بدون رقم (legacy placeholder - system generated)
  * 
  * IMPORTANT: 

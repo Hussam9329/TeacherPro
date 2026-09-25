@@ -6,6 +6,7 @@ export const maxDuration = 60;
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthPrincipal, requirePermission } from "@/lib/server-auth";
+import { loadActiveGracePeriodsByStudent, withoutLegacyGraceFields } from "@/lib/grace-periods-server";
 import { db } from "@/lib/db";
 import {
   normalizeArabicText,
@@ -15,7 +16,7 @@ import {
 import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
-import { gradeMatchesStatusFilterUnified, isExamBeforeStudentRegistration } from "@/lib/grade-classification";
+import { gradeMatchesStatusFilterUnified, isExamBeforeStudentRegistration, type StudentGraceLike } from "@/lib/grade-classification";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import {
@@ -268,10 +269,6 @@ type NumericGradeAttemptContext = {
     courseId: string;
     status: string;
     createdAt: Date;
-    accountingGraceDays: number;
-    gracePeriodStartDate: Date | null;
-    gracePeriodEndedAt: Date | null;
-    gracePeriodHistory?: unknown;
   };
   exam: {
     id: string;
@@ -334,10 +331,6 @@ async function inspectNumericGradeAttempt(
         locationScope: true,
         status: true,
         createdAt: true,
-        accountingGraceDays: true,
-        gracePeriodStartDate: true,
-        gracePeriodEndedAt: true,
-        gracePeriodHistory: true,
       },
     }),
     tx.exam.findUnique({
@@ -394,13 +387,13 @@ async function inspectNumericGradeAttempt(
   // عندما يكون الامتحان قبل تاريخ تسجيل الطالب:
   // - category يبقى null (لا Smart Note!)
   // - الدرجة تمر مباشرة لـ syncAcademicGradeWriteback
-  // - هناك يُقدَّم تاريخ تسجيل الطالب إلى تاريخ الامتحان وتُصفّر فترة السماح
-  //   وتُحفظ الدرجة محتسبة رسمياً في سجله
+  // - هناك تُحفظ الدرجة كما أُدخلت دون احتساب (الامتحان قبل التسجيل)، ولا
+  //   يتغير تاريخ التسجيل تلقائياً ولا فترة السماح
   // - هذا يضمن عدم ظهورها كـ "درجة معلّقة" في لوحة الدرجات الذكية
   //
   // لا تضف مساراً يحوّل حالة ما قبل التسجيل إلى ملاحظة معلقة؛ هذا سيعيد
   // المشكلة التي أصلحناها. الإجازة كذلك: الدرجة الرقمية تمر مباشرة إلى
-  // syncAcademicGradeWriteback الذي ينهي الإجازة ويحفظ الدرجة محتسبة.
+  // syncAcademicGradeWriteback الذي ينهي الإجازة ويحفظ الدرجة.
   if (!beforeRegistration && student.status === "مفصول") {
     category = "DISMISSED_PENDING";
     reason = "محاولة إدخال درجة رقمية لطالب مفصول؛ حُفظت للمراجعة دون أثر أكاديمي.";
@@ -409,12 +402,30 @@ async function inspectNumericGradeAttempt(
   return { student, exam, category, reason, score };
 }
 
+/** Grade rows carry their student's active grace periods (read-only result). */
+async function withStudentGracePeriods<T extends { student: { id: string } }>(
+  grades: T[],
+): Promise<T[]> {
+  const periods = await loadActiveGracePeriodsByStudent(
+    db,
+    grades.map((grade) => grade.student.id),
+  );
+  return grades.map((grade) => ({
+    ...grade,
+    student: {
+      ...withoutLegacyGraceFields(grade.student),
+      gracePeriods: periods.get(grade.student.id) || [],
+    },
+  }));
+}
+
 function gradeMatchesServerStatusFilter(
   filter: GradeStatusFilter,
   grade: GradeWithRelations,
 ): boolean {
   return gradeMatchesStatusFilterUnified(filter, grade, grade.exam, {
-    student: grade.student,
+    // withStudentGracePeriods attached the student's active grace periods.
+    student: grade.student as unknown as StudentGraceLike,
     leaves: grade.student.studentLeaves,
   });
 }
@@ -459,11 +470,11 @@ export async function GET(req: NextRequest) {
       databaseComputedGradeFilters.has(statusFilter);
 
     if (needsDatabaseComputedFilter) {
-      const allGrades = await db.grade.findMany({
+      const allGrades = await withStudentGracePeriods(await db.grade.findMany({
         where,
         orderBy: { updatedAt: "desc" },
         include: { student: { include: { studentLeaves: true } }, exam: true },
-      });
+      }));
       await annotateGradeSettlementEffects(allGrades);
       const matchingGrades = allGrades.filter((grade) =>
         gradeMatchesServerStatusFilter(statusFilter, grade),
@@ -493,7 +504,7 @@ export async function GET(req: NextRequest) {
           : where;
     const skip = (page - 1) * pageSize;
 
-    const [totalCount, grades] = await Promise.all([
+    const [totalCount, rawGrades] = await Promise.all([
       db.grade.count({ where: finalWhere }),
       db.grade.findMany({
         where: finalWhere,
@@ -503,6 +514,7 @@ export async function GET(req: NextRequest) {
         include: { student: true, exam: true },
       }),
     ]);
+    const grades = await withStudentGracePeriods(rawGrades);
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
     await annotateGradeSettlementEffects(grades);
 
@@ -570,9 +582,9 @@ export async function POST(req: NextRequest) {
         });
 
         // Leave and dismissal attempts remain structured smart notes. Grace
-        // is intentionally not intercepted here: every real numeric grade now
-        // reaches the shared writeback, which atomically ends grace and counts
-        // that same grade.
+        // is never intercepted here: the grade is stored as entered and the
+        // accounting engine excuses it by the exam date when it falls inside
+        // one of the student's grace periods.
         const numericAttempt =
           String(body.status || "") === "درجة"
             ? await inspectNumericGradeAttempt(
@@ -709,9 +721,6 @@ export async function POST(req: NextRequest) {
       examId: result.grade.examId,
       status: result.grade.status,
       score: result.grade.score,
-      graceEnded: "graceEnded" in result ? result.graceEnded : false,
-      registrationBackdated:
-        "registrationBackdated" in result ? result.registrationBackdated : false,
       leaveEndedByGrade:
         "leaveEndedByGrade" in result ? result.leaveEndedByGrade : false,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,

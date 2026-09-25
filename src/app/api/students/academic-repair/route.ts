@@ -11,7 +11,7 @@ import {
   recalculateStudentsAcademicState,
 } from "@/lib/academic-recalculate-server";
 import { db } from "@/lib/db";
-import { repairProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
+import { repairPreRegistrationAbsencesForStudents } from "@/lib/pre-registration-absence-repair-server";
 import { ensureProtectedGradeMarkers } from "@/lib/protected-grade-markers-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 
@@ -140,18 +140,13 @@ export async function PATCH(req: NextRequest) {
         select: { id: true },
         orderBy: { createdAt: "asc" },
       });
-      let convertedGrades = 0;
       let convertedBeforeRegistration = 0;
 
       for (let index = 0; index < rows.length; index += batchSize) {
         const studentIds = rows.slice(index, index + batchSize).map((row) => row.id);
         const repair = await withSerializableTransaction((tx) =>
-          repairProtectedAbsencesForStudents(tx, studentIds, {
-            deleteCalls: false,
-            onlyAbsences: true,
-          }),
+          repairPreRegistrationAbsencesForStudents(tx, studentIds),
         );
-        convertedGrades += repair.convertedGrades;
         convertedBeforeRegistration += repair.convertedBeforeRegistration;
       }
 
@@ -176,7 +171,6 @@ export async function PATCH(req: NextRequest) {
 
       const result = {
         ok: true,
-        convertedGrades,
         convertedBeforeRegistration,
         enabledEffectGrades,
         recalculatedStudents: 0,
@@ -186,12 +180,12 @@ export async function PATCH(req: NextRequest) {
       await writeRequestAuditLog(
         req,
         "الدرجات",
-        "تصحيح حالات السماح وقبل التسجيل دون إعادة احتساب",
+        "تصحيح حالات قبل التسجيل دون إعادة احتساب",
         result,
       );
       return NextResponse.json({
         ...result,
-        message: `تم تحويل ${convertedGrades} غياباً إلى ضمن فترة السماح و${convertedBeforeRegistration} إلى قبل تسجيل الطالب دون إعادة احتساب.`,
+        message: `تم تحويل ${convertedBeforeRegistration} غياباً إلى قبل تسجيل الطالب دون إعادة احتساب.`,
         source: "database" as const,
         generatedAt: new Date().toISOString(),
       });
@@ -227,9 +221,7 @@ export async function PATCH(req: NextRequest) {
       const hasMore = fetchedRows.length > limit;
       const rows = fetchedRows.slice(0, limit);
       let preservedDismissedStudents = 0;
-      let convertedGrades = 0;
       let convertedBeforeRegistration = 0;
-      let deletedCalls = 0;
 
       for (let index = 0; index < rows.length; index += batchSize) {
         const studentIds = rows
@@ -237,7 +229,7 @@ export async function PATCH(req: NextRequest) {
           .map((row) => row.id);
         const batch = await withSerializableTransaction(async (tx) => {
           await ensureProtectedGradeMarkers(tx, { studentIds });
-          const repair = await repairProtectedAbsencesForStudents(
+          const repair = await repairPreRegistrationAbsencesForStudents(
             tx,
             studentIds,
           );
@@ -256,10 +248,8 @@ export async function PATCH(req: NextRequest) {
           return { repair, recalculation };
         });
         preservedDismissedStudents += batch.recalculation.students.length;
-        convertedGrades += batch.repair.convertedGrades;
         convertedBeforeRegistration +=
           batch.repair.convertedBeforeRegistration;
-        deletedCalls += batch.repair.deletedCalls;
       }
 
       const result = {
@@ -268,9 +258,7 @@ export async function PATCH(req: NextRequest) {
         nextCursor: rows.at(-1)?.id || afterId || null,
         hasMore,
         preservedDismissedStudents,
-        convertedGrades,
         convertedBeforeRegistration,
-        deletedCalls,
         reactivatedStudents: 0,
       };
       await writeRequestAuditLog(
@@ -288,76 +276,14 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (scope === "grace") {
-      const batchSize = readBatchSize(req);
-      const excludeExamIds = String(searchParams.get("excludeExamIds") || "")
-        .split(",")
-        .map((value) => value.trim())
-        .filter(Boolean);
-      const rows = await db.student.findMany({
-        where: { status: { not: "مؤرشف" } },
-        select: { id: true },
-        orderBy: { createdAt: "asc" },
-      });
-      let createdBeforeRegistration = 0;
-      let createdGrace = 0;
-      let createdAbsent = 0;
-      let createdExcused = 0;
-      let convertedGrades = 0;
-      let convertedBeforeRegistration = 0;
-      let deletedGrades = 0;
-      let deletedCalls = 0;
-      const affectedStudentIds = new Set<string>();
-
-      for (let index = 0; index < rows.length; index += batchSize) {
-        const studentIds = rows.slice(index, index + batchSize).map((row) => row.id);
-        const batch = await withSerializableTransaction(async (tx) => {
-          const markers = await ensureProtectedGradeMarkers(tx, {
-            studentIds,
-            includeAbsent: false,
-            excludeExamIds,
-            historicalNoEffect: true,
-          });
-          const repair = await repairProtectedAbsencesForStudents(tx, studentIds);
-          const recalculation = await recalculateStudentsAcademicState(studentIds, { tx });
-          return { markers, repair, recalculation };
-        });
-        createdBeforeRegistration += batch.markers.createdBeforeRegistration;
-        createdGrace += batch.markers.createdGrace;
-        createdAbsent += batch.markers.createdAbsent;
-        createdExcused += batch.markers.createdExcused;
-        convertedGrades += batch.repair.convertedGrades;
-        convertedBeforeRegistration += batch.repair.convertedBeforeRegistration;
-        deletedGrades += batch.repair.deletedGrades;
-        deletedCalls += batch.repair.deletedCalls;
-        for (const studentId of batch.recalculation?.studentIds || []) {
-          affectedStudentIds.add(studentId);
-        }
-      }
-
-      const result = {
-        ok: true,
-        createdBeforeRegistration,
-        createdGrace,
-        createdAbsent,
-        createdExcused,
-        convertedGrades,
-        convertedBeforeRegistration,
-        deletedGrades,
-        deletedCalls,
-        recalculatedStudents: affectedStudentIds.size,
-      };
-      await writeRequestAuditLog(
-        req,
-        "الدرجات",
-        "تنظيف جماعي للحالات المحمية وإعادة الأثر الأكاديمي",
-        result,
+      return NextResponse.json(
+        {
+          error:
+            "أُلغي إصلاح السماح القديم. فترات السماح تُدار من «إدارة فترة السماح» في لوحة التحكم وتُحسب من تاريخ الامتحان مباشرة.",
+          retiredMaintenanceEndpoint: true,
+        },
+        { status: 410 },
       );
-      return NextResponse.json({
-        ...result,
-        message: `تم إنشاء ${createdAbsent} غياباً تاريخياً بلا أثر، و${createdExcused} حالة مجاز، و${createdGrace} حالة ضمن فترة السماح، و${createdBeforeRegistration} حالة قبل التسجيل، ثم تصحيح السجلات الأكاديمية.`,
-        source: "database" as const,
-        generatedAt: new Date().toISOString(),
-      });
     }
 
     return NextResponse.json(

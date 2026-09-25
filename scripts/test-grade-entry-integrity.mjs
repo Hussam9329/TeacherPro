@@ -208,14 +208,15 @@ must(
     gradeEntry.includes("markingAllMissingAbsent") &&
     gradeEntry.includes("جارٍ تسجيل الحالات") &&
     gradeEntry.includes("missingExamStudentsBeforeProtection") &&
-    gradeEntry.includes("graceProtectedMissingStudents") &&
+    gradeEntry.includes("graceAbsentMissingStudents") &&
     gradeEntry.includes("preRegistrationMissingStudents") &&
-    markMissingAbsentRoute.includes('? "قبل تسجيل الطالب"') &&
+    markMissingAbsentRoute.includes('? "غائب" : "قبل تسجيل الطالب"') &&
     markMissingAbsentRoute.includes('createdBeforeRegistration') &&
-    markMissingAbsentRoute.includes("createdGrace") &&
+    markMissingAbsentRoute.includes("createdAbsentInGrace") &&
+    !markMissingAbsentRoute.includes('"ضمن فترة السماح"') &&
     gradeEntry.includes("firstFailureReason"),
-  "التسجيل الجماعي يسجل الغياب أو السماح من حالة قاعدة البيانات الحالية ويتجاوز الموجود",
-  "يجب أن يسجل الخادم الغائب والسماح وما قبل التسجيل حسب تاريخ الامتحان دون تعارض 409.",
+  "التسجيل الجماعي يسجل الغائب (حتى ضمن فترة السماح) وما قبل التسجيل ويتجاوز الموجود",
+  "يجب أن يسجل الخادم الغائب وما قبل التسجيل حسب تاريخ الامتحان، ويبقى الغائب ضمن السماح «غائب» مجازاً.",
 );
 
 must(
@@ -228,26 +229,22 @@ must(
 );
 
 must(
-  gradeEntry.includes('import { getGradeEntryGraceState } from "@/lib/grade-entry-grace"') &&
-    gradeEntry.includes("getGradeEntryGraceState({") &&
-    gradeEntry.includes('data-grace-direct-entry=') &&
-    gradeEntry.includes("protectedForExam: studentInGrace, numericGradeEndsGrace") &&
-    gradeEntry.includes("وتبدأ المحاسبة من نفس") &&
-    gradeEntry.includes("تم حفظ الدرجة وإنهاء فترة السماح") &&
-    gradeEntry.includes("payload.graceEnded") &&
-    !gradeEntry.includes("const canCaptureGraceScoreDirectly") &&
-    !gradeEntry.includes("graceNumericCapture"),
-  "طالب السماح يدخل درجة رسمية تنهي السماح وتبدأ المحاسبة فوراً",
-  "يجب أن يبقى الحقل مفتوحاً وأن يوضح أن الدرجة نفسها ستُنهي السماح وتُحتسب.",
+  !gradeEntry.includes("grade-entry-grace") &&
+    gradeEntry.includes("findExamGracePeriod(student, selectedExam)") &&
+    gradeEntry.includes("describeExamGraceExclusion(gracePeriod)") &&
+    !gradeEntry.includes("إنهاء فترة السماح") &&
+    !gradeEntry.includes("graceEnded") &&
+    !gradeEntry.includes("numericGradeEndsGrace"),
+  "طالب السماح يدخل نتيجته الحقيقية؛ تُحفظ كما هي وتُستبعد من المحاسبة دون إنهاء الفترة",
+  "يجب أن يبقى الحقل مفتوحاً وأن يوضح أن النتيجة لا تُحتسب ولا تنهي فترة السماح.",
 );
 
 must(
-  gradeEntry.includes('["مجاز", "ضمن فترة السماح", "قبل تسجيل الطالب"]') &&
-    gradeEntry.includes('graceSmartNote?.category === "GRACE_SCORED"') &&
-    gradeEntry.includes('graceSmartNote.status === "PENDING"') &&
-    gradeEntry.includes("String(pendingGraceScore)"),
-  "واجهة السماح تستعيد الدرجة المعلّقة في الحقل الرقمي بعد إعادة التحميل",
-  "يجب ألا يعود حقل درجة السماح فارغاً أو إلى حالة نصية بعد حفظ الدرجة المعلّقة.",
+  gradeEntry.includes('["مجاز", LEGACY_GRACE_PLACEHOLDER_STATUS, "قبل تسجيل الطالب"]') &&
+    !gradeEntry.includes('"GRACE_SCORED"') &&
+    !gradeEntry.includes("pendingGraceScore"),
+  "لا توجد درجات سماح معلّقة: الوسم القديم يظهر فارغاً ولا يعيد ملء الحقل من ملاحظات قديمة",
+  "يجب ألا تعتمد ورقة الإدخال على درجات السماح المعلّقة القديمة.",
 );
 
 must(

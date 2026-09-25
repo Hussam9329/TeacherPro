@@ -19,7 +19,6 @@ export const studentEditFieldLabels: Record<StudentEditField, string> = {
   courseId: "الدورة",
   subSite: "الموقع",
   createdAt: "تاريخ التسجيل",
-  accountingGraceDays: "مدة السماح",
 };
 
 // A course/site change can invalidate other enrollment fields even if two
@@ -29,10 +28,8 @@ const enrollmentFields: StudentEditField[] = [
   "locationScope", "baghdadMode", "subSite",
 ];
 
-function comparable(field: StudentEditField, value: unknown): string {
-  return field === "accountingGraceDays"
-    ? String(Number(value || 0))
-    : String(value ?? "").trim();
+function comparable(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
 export function prepareStudentEditRecovery(
@@ -41,7 +38,7 @@ export function prepareStudentEditRecovery(
   latest: StudentEditForm,
 ) {
   const changed = (a: StudentEditForm, b: StudentEditForm, field: StudentEditField) =>
-    comparable(field, a[field]) !== comparable(field, b[field]);
+    comparable(a[field]) !== comparable(b[field]);
   const enrollmentConflict =
     enrollmentFields.some((field) => changed(original, draft, field)) &&
     enrollmentFields.some((field) => changed(original, latest, field));

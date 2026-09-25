@@ -2,7 +2,7 @@ import { gradeSettlementExclusion } from "./grade-settlement";
 import { numericGradeScore } from "@/lib/grade-score";
 import { getExamEntryAvailability } from "@/lib/exam-utils";
 import { baghdadDateKey } from "@/lib/baghdad-time";
-import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
+import { isExamInStudentGracePeriod, type GracePeriodRange } from "@/lib/grace-periods";
 
 export type GradeStatusFilter =
   | "all"
@@ -65,10 +65,8 @@ export type ExamLike = {
 export type StudentGraceLike = {
   courseId?: string | null;
   createdAt?: Date | string | null;
-  accountingGraceDays?: number | null;
-  gracePeriodStartDate?: Date | string | null;
-  gracePeriodEndedAt?: Date | string | null;
-  gracePeriodHistory?: unknown;
+  /** Active grace periods; the only source of grace protection. */
+  gracePeriods?: readonly GracePeriodRange[] | null;
 };
 
 export type StudentLeaveLike = {
@@ -118,7 +116,7 @@ export function isGradeEnteredUnified(
     const score = numericGradeScore(grade.score);
     return score !== null && score >= 0 && score <= Number(exam.fullMark || 0);
   }
-  return grade.status === "غائب" || grade.status === "غش" || grade.status === "مجاز" || grade.status === "ضمن فترة السماح" || grade.status === "قبل تسجيل الطالب";
+  return grade.status === "غائب" || grade.status === "غش" || grade.status === "مجاز" || grade.status === "قبل تسجيل الطالب";
 }
 
 export function isExamBeforeStudentRegistration(
@@ -135,7 +133,7 @@ export function isExamWithinStudentGracePeriodUnified(
   student: StudentGraceLike,
   exam: Pick<ExamLike, "date"> & Partial<Pick<ExamLike, "id">>,
 ): boolean {
-  return isExamWithinStudentGraceWindow(student, exam);
+  return isExamInStudentGracePeriod(student, exam);
 }
 
 export function studentLeaveAppliesToExam(
@@ -168,16 +166,17 @@ export function classifyGradeAcademicImpact(
   if (grade?.academicEffectExcluded || grade?.effectiveImpactExcluded) return "academic-effect-excluded";
   if (hasStudentLeaveForExam(leaves, exam)) return "excused";
   if (grade?.status === "مجاز") return "excused";
+  // Grace depends only on the student's periods and the exam date: whatever
+  // was recorded (a score, absence, cheating or nothing yet) has no effect.
+  if (student && isExamWithinStudentGracePeriodUnified(student, exam)) return "grace-period";
   if (!isGradeEnteredUnified(grade, exam)) return "missing";
   if (grade?.status === "قبل تسجيل الطالب") return "before-registration";
-  if (grade?.status === "ضمن فترة السماح") return "grace-period";
   if (student && isExamBeforeStudentRegistration(student, exam)) return "before-registration";
   if (exam.active !== undefined && !getExamEntryAvailability({
     active: Boolean(exam.active),
     date: exam.date,
     scheduledActivateAt: exam.scheduledActivateAt,
   }).available) return "unavailable-exam";
-  if (student && isExamWithinStudentGracePeriodUnified(student, exam)) return "grace-period";
   if (grade?.status === "غش") return "cheating";
   if (exam.noDiscount) {
     if (grade?.status === "درجة" && Number(grade.score || 0) >= Number(exam.passMark || 0)) {
@@ -237,7 +236,7 @@ export function gradeMatchesStatusFilterUnified(
     case "full-mark":
       return kind === "full-mark";
     case "has-grade":
-      return score !== null || grade?.status === "غائب" || grade?.status === "غش" || grade?.status === "مجاز" || grade?.status === "ضمن فترة السماح" || grade?.status === "قبل تسجيل الطالب";
+      return score !== null || grade?.status === "غائب" || grade?.status === "غش" || grade?.status === "مجاز" || grade?.status === "قبل تسجيل الطالب";
     default:
       return true;
   }

@@ -46,10 +46,6 @@ import {
   getOpportunityProgressPercent,
 } from "@/lib/opportunity-balance";
 import {
-  getStudentGraceWindow,
-  isStudentCurrentlyInGrace as isStudentCurrentlyInGraceUnified,
-} from "@/lib/student-grace";
-import {
   displayOpportunityAction,
   displayOpportunityReason,
 } from "@/lib/retired-followup-compat";
@@ -514,22 +510,6 @@ export function OpportunitiesView() {
       return Boolean(opportunityStudent.hasActiveChapter);
     }
     return Boolean(getStudentActiveChapter(student));
-  };
-
-  const graceEndDate = (student: Student): string => {
-    const graceWindow = getStudentGraceWindow(student);
-    if (!graceWindow)
-      return formatAppDate(
-        student.createdAt,
-        String(student.createdAt || "").slice(0, 10) || "-",
-      );
-    const end = new Date(graceWindow.endExclusive);
-    end.setUTCDate(end.getUTCDate() - 1);
-    return formatAppDate(end);
-  };
-
-  const isStudentCurrentlyInGrace = (student: Student): boolean => {
-    return isStudentCurrentlyInGraceUnified(student);
   };
 
   const cleanOpportunityReason = (reason: string | null | undefined) => {
@@ -1587,8 +1567,6 @@ export function OpportunitiesView() {
         activeChapterForCourse={activeChapterForCourse}
         whatsappLink={whatsappLink}
         telegramLink={telegramLink}
-        isStudentCurrentlyInGrace={isStudentCurrentlyInGrace}
-        graceEndDate={graceEndDate}
       />
 
       <Dialog

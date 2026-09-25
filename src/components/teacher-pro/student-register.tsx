@@ -26,7 +26,6 @@ import {
 
 import { toast } from "@/lib/user-toast";
 import {
-  formatAppDate,
   getPhoneValidationError,
   sanitizePhoneInput,
   toLatinDigits,
@@ -97,7 +96,6 @@ type StudentRegisterForm = {
   courseId: string;
   subSite: string;
   createdAt: string;
-  accountingGraceDays: string;
 };
 
 type RegisterContextRow = StudentRegisterContextResponse["courses"][number];
@@ -112,36 +110,21 @@ function todayISO(): string {
   return baghdadTodayKey();
 }
 
-function calculateGracePeriodEnd(dateISO: string, days: number): string {
-  if (!dateISO || days <= 0) return "";
-  const date = new Date(`${dateISO}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) return "";
-  date.setUTCDate(date.getUTCDate() + days - 1);
-  return date.toISOString().slice(0, 10);
-}
-
-function formatGraceDate(dateISO: string): string {
-  return formatAppDate(dateISO);
-}
-
-function normalizeGraceDays(value: string): string {
-  const digits = toLatinDigits(value).replace(/\D/g, "");
-  if (!digits) return "";
-  return String(Math.min(Number(digits), 30));
-}
-
-function isValidGraceDays(value: string): boolean {
-  if (!/^\d+$/.test(value)) return false;
-  const days = Number(value);
-  return Number.isInteger(days) && days >= 0 && days <= 30;
-}
-
 function readStudentDraft(): StudentRegisterForm {
   if (typeof window === "undefined") return emptyForm();
   try {
     const saved = window.localStorage.getItem(STUDENT_DRAFT_KEY);
     if (!saved) return emptyForm();
-    return { ...emptyForm(), ...JSON.parse(saved) } as StudentRegisterForm;
+    const draft = JSON.parse(saved) as Record<string, unknown>;
+    const form = emptyForm();
+    // Keep only current fields so fields retired from the form (such as the
+    // old grace days) never come back from an older saved draft.
+    for (const key of Object.keys(form) as Array<keyof StudentRegisterForm>) {
+      if (typeof draft?.[key] === "string") {
+        Object.assign(form, { [key]: draft[key] });
+      }
+    }
+    return form;
   } catch {
     return emptyForm();
   }
@@ -164,7 +147,6 @@ function emptyForm(): StudentRegisterForm {
     courseId: "",
     subSite: "",
     createdAt: todayISO(),
-    accountingGraceDays: "0",
   };
 }
 
@@ -404,33 +386,6 @@ export function StudentRegisterView() {
     [form.locationScope, courseBaghdadMode, form.subSite],
   );
 
-  const accountingGraceDays = useMemo(
-    () => Number(form.accountingGraceDays || 0),
-    [form.accountingGraceDays],
-  );
-
-  const gracePeriodEnd = useMemo(
-    () => calculateGracePeriodEnd(form.createdAt, accountingGraceDays),
-    [form.createdAt, accountingGraceDays],
-  );
-
-  const formattedGraceStart = useMemo(
-    () => formatGraceDate(form.createdAt),
-    [form.createdAt],
-  );
-
-  const formattedGraceEnd = useMemo(
-    () => formatGraceDate(gracePeriodEnd),
-    [gracePeriodEnd],
-  );
-
-  const gracePeriodDescription = useMemo(() => {
-    if (accountingGraceDays <= 0) {
-      return `هذا الطالب سيحاسب من تاريخ ${formattedGraceStart} وتُطبّق فترة السماح التلقائية (3 أيام)`;
-    }
-    return `هذا الطالب لن يحاسب من تاريخ ${formattedGraceStart} إلى تاريخ ${formattedGraceEnd}`;
-  }, [formattedGraceStart, formattedGraceEnd, accountingGraceDays]);
-
   const duplicatePhoneStudent = useMemo(() => {
     const phoneKey = normalizePhoneForDuplicate(form.phone);
     if (!phoneKey) return null;
@@ -495,9 +450,7 @@ export function StudentRegisterView() {
       },
       {
         label: "إعدادات التسجيل",
-        complete: Boolean(
-          form.createdAt && isValidGraceDays(form.accountingGraceDays),
-        ),
+        complete: Boolean(form.createdAt),
       },
     ],
     [
@@ -515,7 +468,6 @@ export function StudentRegisterView() {
     () =>
       hasMeaningfulDraftValue(form, [
         "createdAt",
-        "accountingGraceDays",
         "gender",
         "courseProgram",
         "courseTerm",
@@ -636,9 +588,6 @@ export function StudentRegisterView() {
     if (parentPhoneError) return parentPhoneError;
 
     if (!form.createdAt) return "تاريخ تسجيل الطالب مطلوب";
-    if (!isValidGraceDays(form.accountingGraceDays)) {
-      return "فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم";
-    }
 
     // فحص التكرار النهائي يتم في النظام باستعلام مباشر على المفاتيح الفريدة.
     // الفحص المحلي أدناه للعرض فقط لأن بيانات الطلاب المؤقتة قد يكون جزئياً أو غير محمّل بالكامل.
@@ -654,15 +603,6 @@ export function StudentRegisterView() {
         toast.error(requiredError);
         return;
       }
-
-      const gracePeriodStartMode =
-        accountingGraceDays > 0
-          ? window.confirm(
-              "هل تريد بدء فترة السماح من تاريخ تسجيل الطالب؟\n\nموافق: من تاريخ التسجيل.\nإلغاء: من اليوم الذي وضعت فيه فترة السماح.",
-            )
-            ? "registration"
-            : "now"
-          : undefined;
 
       const result = await studentApi.add({
         name: form.name.trim(),
@@ -681,8 +621,6 @@ export function StudentRegisterView() {
         mainSite: form.locationScope,
         subSite: effectiveSubSite,
         createdAt: form.createdAt,
-        accountingGraceDays,
-        gracePeriodStartMode,
       });
 
       if (!result.ok) {
@@ -703,10 +641,12 @@ export function StudentRegisterView() {
       window.localStorage.removeItem(STUDENT_DRAFT_KEY);
       setForm(emptyForm());
       void loadRegisterContext();
+      const successDetails = [
+        response.student?.code ? `الكود: ${response.student.code}` : "",
+        response.opportunitiesWarning || "",
+      ].filter(Boolean);
       toast.success("تم حفظ بيانات الطالب", {
-        description: `${response.student?.code ? `الكود: ${response.student.code} — ` : ""}${
-          response.opportunitiesWarning || gracePeriodDescription
-        }`,
+        description: successDetails.length ? successDetails.join(" — ") : undefined,
       });
     },
   );
@@ -1398,55 +1338,7 @@ export function StudentRegisterView() {
                       className={fieldBaseClass}
                     />
                     <p className="text-xs leading-5 text-muted-foreground">
-                      بداية السماح:{" "}
-                      <span className="font-semibold text-foreground">
-                        {formattedGraceStart}
-                      </span>
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-accountingGraceDays"
-                      className="text-xs font-bold text-foreground"
-                    >
-                      فترة السماح بالأيام <RequiredMark />
-                    </Label>
-                    <Input
-                      id="reg-accountingGraceDays"
-                      name="accountingGraceDays"
-                      value={form.accountingGraceDays}
-                      onChange={(e) =>
-                        updateForm(
-                          "accountingGraceDays",
-                          normalizeGraceDays(e.target.value),
-                        )
-                      }
-                      required
-                      inputMode="numeric"
-                      min={0}
-                      max={30}
-                      pattern="(?:[0-9]|[12][0-9]|30)"
-                      placeholder="مثلاً 7"
-                      dir="ltr"
-                      className={`${fieldBaseClass} text-left font-tabular`}
-                    />
-                    <p className="text-xs leading-5 text-muted-foreground">
-                      {accountingGraceDays > 0 ? (
-                        <>
-                          تبدأ فترة السماح تلقائياً من{" "}
-                          <span className="font-semibold text-foreground">
-                            {formattedGraceStart}
-                          </span>{" "}
-                          وتنتهي في{" "}
-                          <span className="font-semibold text-foreground">
-                            {formattedGraceEnd}
-                          </span>{" "}
-                          حسب عدد الأيام المدخل.
-                        </>
-                      ) : (
-                        "لا يوجد سماح يدوي؛ تُطبّق 3 أيام تلقائيًا عند اختيار 0."
-                      )}
+                      فترة السماح تُضاف من شاشة «إدارة فترة السماح».
                     </p>
                   </div>
                 </div>

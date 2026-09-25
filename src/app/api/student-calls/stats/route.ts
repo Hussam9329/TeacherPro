@@ -4,6 +4,8 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
+import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
+import type { GracePeriodRange } from "@/lib/grace-periods";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
@@ -64,10 +66,8 @@ type DbStudentLite = {
   subSite: string | null;
   locationScope: string | null;
   createdAt: Date;
-  accountingGraceDays: number;
-  gracePeriodStartDate: Date | null;
-  gracePeriodEndedAt: Date | null;
-  gracePeriodHistory?: unknown;
+  /** Active grace periods, attached after loading. */
+  gracePeriods?: GracePeriodRange[];
 };
 
 type DbGradeLite = {
@@ -316,7 +316,7 @@ export async function GET(req: NextRequest) {
     const examDayEnd = dayAfter(exam.date);
 
     const [
-      students,
+      loadedStudents,
       grades,
       leaves,
       calls,
@@ -340,10 +340,6 @@ export async function GET(req: NextRequest) {
               subSite: true,
               locationScope: true,
               createdAt: true,
-              accountingGraceDays: true,
-              gracePeriodStartDate: true,
-              gracePeriodEndedAt: true,
-              gracePeriodHistory: true,
             },
           }),
           db.grade.findMany({
@@ -408,6 +404,14 @@ export async function GET(req: NextRequest) {
       "StudentCallStats",
     );
 
+    const gracePeriodsByStudent = await loadActiveGracePeriodsByStudent(
+      db,
+      loadedStudents.map((student) => student.id),
+    );
+    const students: DbStudentLite[] = loadedStudents.map((student) => ({
+      ...student,
+      gracePeriods: gracePeriodsByStudent.get(student.id) || [],
+    }));
     const gradeByStudentId = new Map<string, DbGradeLite>();
     grades.forEach((grade) => gradeByStudentId.set(grade.studentId, grade));
     const studentIdsWithNotes = new Set<string>();

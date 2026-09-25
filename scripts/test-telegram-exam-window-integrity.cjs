@@ -53,7 +53,7 @@ assert.doesNotMatch(academicSnapshot, /telegram(?:Open|Close)At/);
 
 assert.match(mutationToken, /"telegramOpenAt"/);
 assert.match(mutationToken, /"telegramCloseAt"/);
-assert.match(backup, /const BACKUP_VERSION = 9/);
+assert.match(backup, /const BACKUP_VERSION = 10/);
 assert.match(backup, /upsertRecord\(tx\.exam/);
 
 for (const form of [newForm, editForm]) {

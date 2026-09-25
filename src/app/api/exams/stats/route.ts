@@ -5,6 +5,8 @@ export const maxDuration = 60;
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
+import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
+import type { GracePeriodRange } from "@/lib/grace-periods";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import {
   classifyGradeAcademicImpact,
@@ -40,10 +42,8 @@ type StudentRow = {
   locationScope: string | null;
   status: string;
   createdAt: Date;
-  accountingGraceDays: number;
-  gracePeriodStartDate: Date | null;
-  gracePeriodEndedAt: Date | null;
-  gracePeriodHistory?: unknown;
+  /** Active grace periods, attached after loading. */
+  gracePeriods?: GracePeriodRange[];
 };
 
 type GradeRow = {
@@ -181,10 +181,6 @@ export async function GET(req: NextRequest) {
               locationScope: true,
               status: true,
               createdAt: true,
-              accountingGraceDays: true,
-              gracePeriodStartDate: true,
-              gracePeriodEndedAt: true,
-              gracePeriodHistory: true,
             },
           },
         },
@@ -205,6 +201,13 @@ export async function GET(req: NextRequest) {
       }) as Promise<LeaveRow[]>,
     ]);
 
+    const gracePeriodsByStudent = await loadActiveGracePeriodsByStudent(
+      db,
+      grades.map((grade) => grade.studentId),
+    );
+    for (const grade of grades) {
+      grade.student.gracePeriods = gracePeriodsByStudent.get(grade.studentId) || [];
+    }
     const examById = new Map(exams.map((exam) => [exam.id, exam]));
     const leavesByStudent = new Map<string, LeaveRow[]>();
     leaves.forEach((leave) => {

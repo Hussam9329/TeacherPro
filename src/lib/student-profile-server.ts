@@ -69,6 +69,8 @@ export function studentProfileStudentForAccess<T extends Record<string, unknown>
     "isOpportunityFull",
     "isOpportunityOverLimit",
     "hasActiveChapter",
+    // Read-only grace result: grade rows inside a period show «مجاز — فترة سماح».
+    "gracePeriods",
   ]);
   return Object.fromEntries(
     Object.entries(student).filter(([key]) => allowed.has(key)),
@@ -96,10 +98,6 @@ export const STUDENT_PROFILE_STUDENT_SELECT = {
   dismissalNotes: true,
   opportunities: true,
   baseOpportunities: true,
-  accountingGraceDays: true,
-  gracePeriodStartDate: true,
-  gracePeriodEndedAt: true,
-  gracePeriodHistory: true,
   createdAt: true,
   courseId: true,
 } satisfies Prisma.StudentSelect;
@@ -217,7 +215,7 @@ export function buildStudentProfileDataVersion(input: {
     "telegram", "courseProgram", "courseTerm", "studyType", "locationScope",
     "baghdadMode", "mainSite", "subSite", "code", "status",
     "dismissalReason", "dismissalNotes", "opportunities", "baseOpportunities",
-    "accountingGraceDays", "gracePeriodStartDate", "gracePeriodEndedAt", "gracePeriodHistory", "createdAt",
+    "gracePeriods", "createdAt",
   ];
   const student = Object.fromEntries(
     studentKeys.map((key) => [key, input.student[key] ?? null]),

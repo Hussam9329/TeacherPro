@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+import { studentsWithGracePeriodsForResponse } from "@/lib/grace-periods-server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { routeErrorResponse } from "@/lib/route-helpers";
@@ -42,8 +43,10 @@ export async function GET(req: NextRequest) {
       }),
     ]);
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-    const studentsWithOpportunity = await attachStudentOpportunitySnapshots(
+    const studentsWithOpportunity = await studentsWithGracePeriodsForResponse(
+      await attachStudentOpportunitySnapshots(
       students,
+    ),
     );
     const studentIds = students.map((student) => student.id);
     const [dismissalNotes, dismissalLogs] = studentIds.length

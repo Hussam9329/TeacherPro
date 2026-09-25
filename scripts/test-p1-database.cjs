@@ -33,11 +33,12 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
    await tx.query(`INSERT INTO "Grade" (id,"studentId","examId",status,score,"academicEffectExcluded","academicEffectExclusionSource","updatedAt") VALUES ($1,$1,$2,'درجة',0,$3,CASE WHEN $3 THEN 'P1_TEST' ELSE NULL END,CURRENT_TIMESTAMP)`,[id,id==='before'?'old':'e',excluded]);
   });
   const student=(await pg.query('SELECT "gracePeriodEndedAt" FROM "Student" WHERE id=$1',[id])).rows[0];
-  assert.equal(Boolean(student.gracePeriodEndedAt),id==='inside',id);
+  // Retired: a numeric grade never ends or changes grace (GracePeriod rows only).
+  assert.equal(student.gracePeriodEndedAt,null,id);
  }
- assert.equal((await pg.query(`SELECT status FROM "GradeSmartNote" WHERE id='n'`)).rows[0].status,'REJECTED');
+ assert.notEqual((await pg.query(`SELECT status FROM "GradeSmartNote" WHERE id='n'`)).rows[0].status,'REJECTED');
  assert.equal((await pg.query(`SELECT "academicEffectExcluded" FROM "Grade" WHERE id='excluded'`)).rows[0].academicEffectExcluded,true);
- console.log('PASS: Baghdad grace exclusive end, zero, pre-registration, category matching and snapshot restore');
+ console.log('PASS: numeric grades never end grace, exclusions and snapshot restore keep their flags');
 
  // A SQL-backed Prisma-shaped adapter exercises the actual backup HTTP handlers
  // against PostgreSQL constraints and triggers; it is not a Prisma engine test.
@@ -94,7 +95,7 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  await pg.exec(`UPDATE "Student" SET code='BIO-90000' WHERE id='inside'; SELECT setval('"Student_code_seq"',1,true);`);
  await pg.exec(`UPDATE "ExamCourse" SET id='legacy-link-id' WHERE "examId"='e' AND "courseId"='c'`);
   const exported=await backup.GET({});assert.equal(exported.status,200);const snapshot=await exported.json();
-  assert.equal(isolation.at(-1),'RepeatableRead');assert.equal(snapshot.version,9);assert.equal(snapshot.tableCount,22);assert.equal(snapshot.gradeEntryMissingNotes.length,1);
+  assert.equal(isolation.at(-1),'RepeatableRead');assert.equal(snapshot.version,10);assert.equal(snapshot.tableCount,23);assert.ok(Array.isArray(snapshot.gracePeriods));assert.equal(snapshot.gradeEntryMissingNotes.length,1);
   const backedUpExam=snapshot.exams.find(exam=>exam.id==='e');const backedUpTelegramOpenAt=new Date(backedUpExam.telegramOpenAt).toISOString();const backedUpTelegramCloseAt=new Date(backedUpExam.telegramCloseAt).toISOString();assert.notEqual(backedUpTelegramOpenAt,backedUpTelegramCloseAt);
  assert.equal(snapshot.opportunityLogs[0].requestedAmount,1);assert.equal(snapshot.users[0].passwordHash,undefined);
  let res=await backup.POST({json:async()=>({version:8,confirm:'RESTORE',mode:'replace',backup:{version:8,courses:snapshot.courses}})});assert.equal(res.status,400);

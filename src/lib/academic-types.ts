@@ -1,3 +1,5 @@
+import type { GracePeriodRange } from "./grace-periods";
+
 export type StudentStatus = "نشط" | "مفصول" | "مؤرشف";
 
 export const GRADE_STATUSES = [
@@ -11,6 +13,13 @@ export const GRADE_STATUSES = [
 ] as const;
 
 export type GradeStatus = (typeof GRADE_STATUSES)[number];
+
+/**
+ * Legacy placeholder written by the retired grace system. New code never
+ * writes it and it never protects an exam: grace protection comes only from
+ * GracePeriod rows (see src/lib/grace-periods.ts).
+ */
+export const LEGACY_GRACE_PLACEHOLDER_STATUS = "ضمن فترة السماح";
 export type ExamType = "يومي" | "تراكمي" | "فاينل";
 export type StudentLeaveType = "exam" | "period";
 
@@ -40,10 +49,8 @@ export interface AcademicStudent {
   opportunities: number;
   baseOpportunities: number;
   createdAt: string;
-  accountingGraceDays: number;
-  gracePeriodStartDate?: string | null;
-  gracePeriodEndedAt?: string | null;
-  gracePeriodHistory?: unknown;
+  /** Active (non-cancelled) grace periods; the only grace input of the engine. */
+  gracePeriods?: GracePeriodRange[];
 }
 
 export interface AcademicExam {

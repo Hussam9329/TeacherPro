@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
+import { studentsWithGracePeriodsForResponse } from "@/lib/grace-periods-server";
 import { buildStudentRegistryWhere } from "@/lib/student-registry-filters-server";
 
 const DEFAULT_EXPORT_PAGE_SIZE = 500;
@@ -32,10 +33,6 @@ const studentExportSelect = {
   dismissalNotes: true,
   opportunities: true,
   baseOpportunities: true,
-  accountingGraceDays: true,
-  gracePeriodStartDate: true,
-  gracePeriodEndedAt: true,
-  gracePeriodHistory: true,
   createdAt: true,
   courseId: true,
   course: { select: { name: true } },
@@ -98,10 +95,12 @@ export async function GET(req: NextRequest) {
 
     const hasMore = pageRows.length > pageSize;
     const rows = hasMore ? pageRows.slice(0, pageSize) : pageRows;
-    const students = rows.map(({ course, ...student }) => ({
-      ...student,
-      courseName: course?.name || "",
-    }));
+    const students = await studentsWithGracePeriodsForResponse(
+      rows.map(({ course, ...student }) => ({
+        ...student,
+        courseName: course?.name || "",
+      })),
+    );
 
     return NextResponse.json(
       {

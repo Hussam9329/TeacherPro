@@ -31,7 +31,6 @@ import {
   isMissingDatabaseObjectError,
   routeErrorResponse,
 } from "@/lib/route-helpers";
-import { resolveManualGraceStartDate } from "@/lib/student-grace";
 import { ensureProtectedGradeMarkers } from "@/lib/protected-grade-markers-server";
 
 type BulkStudentPayload = {
@@ -53,7 +52,6 @@ type BulkStudentPayload = {
   createdAt?: unknown;
   opportunities?: unknown;
   baseOpportunities?: unknown;
-  accountingGraceDays?: unknown;
   previewRowNumber?: unknown;
 };
 
@@ -72,21 +70,6 @@ type BulkActiveCourseChapter = {
   courseId: string;
   chapter: { id: string; name: string | null; opportunities: number | null };
 };
-
-function normalizeGraceDays(value: unknown): number {
-  const numeric = Number(value ?? 0);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.min(30, Math.max(0, Math.trunc(numeric)));
-}
-
-function validateGraceDays(value: unknown): string | null {
-  if (value === undefined || value === null || value === "") return null;
-  const numeric = Number(value);
-  if (!Number.isInteger(numeric) || numeric < 0 || numeric > 30) {
-    return "فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم";
-  }
-  return null;
-}
 
 function normalizeBulkPhone(value: unknown): string {
   const digits = toLatinDigits(String(value ?? "")).replace(/\D/g, "");
@@ -238,7 +221,6 @@ export async function POST(req: NextRequest) {
     parentPhone: string;
     telegram: string;
     opportunities: number;
-    graceDays: number;
     resolvedSubSite: string;
     rowNo: number;
     uniqueKeys: ReturnType<typeof getStudentUniqueKeys>;
@@ -267,7 +249,6 @@ export async function POST(req: NextRequest) {
     const baghdadMode = asText(row.baghdadMode);
     const subSite = asText(row.subSite);
     const status = asText(row.status) || "نشط";
-    const graceDays = normalizeGraceDays(row.accountingGraceDays);
     const activeLinks = activeCourseChaptersByCourseId.get(courseId) || [];
     const activeChapter =
       activeLinks.length === 1 ? activeLinks[0].chapter : null;
@@ -343,12 +324,6 @@ export async function POST(req: NextRequest) {
     if (parentPhoneError)
       return NextResponse.json({ error: parentPhoneError }, { status: 400 });
 
-    const graceDaysError = validateGraceDays(graceDays);
-    if (graceDaysError)
-      return NextResponse.json(
-        { error: `السطر ${rowNo}: ${graceDaysError}` },
-        { status: 400 },
-      );
 
     if (course) {
       const choiceValidation = validateStudentCourseChoices(course, {
@@ -412,7 +387,6 @@ export async function POST(req: NextRequest) {
       parentPhone,
       telegram,
       opportunities,
-      graceDays,
       resolvedSubSite,
       rowNo,
       uniqueKeys,
@@ -541,7 +515,6 @@ export async function POST(req: NextRequest) {
             phone,
             parentPhone,
             telegram,
-            graceDays,
             rowNo,
             uniqueKeys,
           },
@@ -637,14 +610,6 @@ export async function POST(req: NextRequest) {
               createdAt: registrationDate,
               opportunities,
               baseOpportunities: opportunities,
-              accountingGraceDays: graceDays,
-              gracePeriodStartDate:
-                graceDays > 0
-                  ? resolveManualGraceStartDate({
-                      mode: "registration",
-                      createdAt: registrationDate,
-                    })
-                  : null,
               courseId,
               ...uniqueKeys,
             },

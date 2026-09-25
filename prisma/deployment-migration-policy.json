@@ -254,5 +254,9 @@
   "20260924150000_student_grace_history": {
     "kind": "expand",
     "checksum": "c20060080d3bd76ef83a59a68a66960a6ea72fe1c3174677516e5b2aa254ea03"
+  },
+  "20260925120000_grace_period_table": {
+    "kind": "expand",
+    "checksum": "ba7244f36417222150767269e370643122b40b506b03a4e4f13ca5072c281c8b"
   }
 }

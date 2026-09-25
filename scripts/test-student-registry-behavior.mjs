@@ -98,7 +98,6 @@ const opportunitySnapshots = loadTypeScriptModule(
 const registryViewHelpers = loadTypeScriptModule(
   "src/components/teacher-pro/student-registry-helpers.ts",
 );
-const studentGrace = loadTypeScriptModule("src/lib/student-grace.ts");
 const studentExportPagination = loadTypeScriptModule(
   "src/lib/student-export-pagination.ts",
 );
@@ -687,46 +686,25 @@ test("only the real admin receives full student identity management", () => {
   assert.equal(editor.canEditStudents, true);
 });
 
-test("grace remaining days decrease by Baghdad calendar day and stop at zero", () => {
+test("registry shows grace only while today is inside a managed period", () => {
   const student = {
     createdAt: "2026-08-01",
-    accountingGraceDays: 12,
-    gracePeriodStartDate: "2026-08-01",
+    gracePeriods: [{ id: "g1", startDate: "2026-08-01", endDate: "2026-08-12" }],
   };
 
   assert.equal(
-    studentGrace.getStudentGraceDaysRemaining(
-      student,
-      new Date("2026-08-01T12:00:00.000Z"),
-    ),
-    12,
+    registryViewHelpers.formatStudentCurrentGrace(student, "2026-08-01"),
+    "ضمن فترة السماح حتى 12/08/2026",
   );
   assert.equal(
-    studentGrace.getStudentGraceDaysRemaining(
-      student,
-      new Date("2026-08-07T12:00:00.000Z"),
-    ),
-    6,
+    registryViewHelpers.formatStudentCurrentGrace(student, "2026-08-12"),
+    "ضمن فترة السماح حتى 12/08/2026",
   );
+  assert.equal(registryViewHelpers.formatStudentCurrentGrace(student, "2026-08-13"), "");
+  assert.equal(registryViewHelpers.currentStudentGracePeriod(student, "2026-08-13"), null);
+  // Registration alone never grants hidden grace days.
   assert.equal(
-    studentGrace.getStudentGraceDaysRemaining(
-      student,
-      new Date("2026-08-12T12:00:00.000Z"),
-    ),
-    1,
-  );
-  assert.equal(
-    studentGrace.getStudentGraceDaysRemaining(
-      student,
-      new Date("2026-08-13T12:00:00.000Z"),
-    ),
-    0,
-  );
-  assert.equal(
-    studentGrace.isStudentCurrentlyInGrace(
-      student,
-      new Date("2026-08-13T12:00:00.000Z"),
-    ),
-    false,
+    registryViewHelpers.formatStudentCurrentGrace({ createdAt: "2026-08-01", gracePeriods: [] }, "2026-08-01"),
+    "",
   );
 });

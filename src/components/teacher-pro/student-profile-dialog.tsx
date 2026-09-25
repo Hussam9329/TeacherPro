@@ -29,7 +29,13 @@ import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hoo
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { formatAuditLogDisplay } from "@/lib/audit-log-display";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
-import { getStudentGraceDaysRemaining } from "@/lib/student-grace";
+import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
+import {
+  GRACE_PERIOD_EXCUSE_LABEL,
+  describeExamGraceExclusion,
+  findExamGracePeriod,
+} from "@/lib/grace-periods";
+import { formatStudentCurrentGrace } from "./student-registry-helpers";
 import {
   filterStudentProfileGrades,
   getStudentProfileCardTarget,
@@ -61,8 +67,6 @@ type StudentProfileDialogProps = {
   activeChapterForCourse: (courseId: string) => { name: string } | null | undefined;
   whatsappLink: (phone: string) => string;
   telegramLink: (telegram: string) => string;
-  isStudentCurrentlyInGrace: (student: Student) => boolean;
-  graceEndDate: (student: Student) => string;
 };
 
 
@@ -172,7 +176,13 @@ function InfoBox({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+// The retired grace placeholder is not a result: show it as nothing recorded.
+function profileGradeStatus(status: string | null | undefined): string {
+  return status === LEGACY_GRACE_PLACEHOLDER_STATUS ? "لا توجد نتيجة" : String(status || "");
+}
+
 function formatScore(grade: Grade, exam?: Exam) {
+  if (grade.status === LEGACY_GRACE_PLACEHOLDER_STATUS) return "—";
   return formatGradeScore(grade, exam, "—");
 }
 
@@ -213,7 +223,7 @@ function logToneVariant(tone: StudentLogRow["tone"]): "default" | "destructive" 
 function gradeLogDetails(grade: Grade, exam?: Exam) {
   const examName = exam?.name || "امتحان محذوف";
   const examDate = exam?.date ? ` - ${formatAppDate(exam.date)}` : "";
-  return `${examName}${examDate} - النتيجة: ${formatScore(grade, exam)} - الحالة: ${grade.status}${grade.notes ? ` - ملاحظة: ${grade.notes}` : ""}`;
+  return `${examName}${examDate} - النتيجة: ${formatScore(grade, exam)} - الحالة: ${profileGradeStatus(grade.status)}${grade.notes ? ` - ملاحظة: ${grade.notes}` : ""}`;
 }
 
 function leaveLogDetails(leave: StudentLeave, exam?: Exam) {
@@ -244,7 +254,7 @@ function examPenaltyText(exam?: Exam): string {
   return Number.isFinite(penalty) && penalty > 0 ? String(Math.trunc(penalty)) : "1";
 }
 
-function gradeImpactLabel(kind: GradeClassificationKind, grade: Grade, exam?: Exam): string {
+function gradeImpactLabel(kind: GradeClassificationKind, grade: Grade, student: Student, exam?: Exam): string {
   if (!exam) return "تعذر تحديد قاعدة الامتحان لأن الامتحان محذوف.";
   if (kind === "academic-effect-excluded")
     return grade.academicEffectExclusionReason
@@ -253,7 +263,10 @@ function gradeImpactLabel(kind: GradeClassificationKind, grade: Grade, exam?: Ex
   if (kind === "excused") return "لم يتم الخصم: الطالب لديه إجازة تغطي هذا الامتحان.";
   if (kind === "before-registration") return "لم يتم الخصم: الامتحان قبل تاريخ تسجيل الطالب.";
   if (kind === "unavailable-exam") return "لم يتم الاحتساب: الامتحان غير متاح حالياً بحسب التفعيل أو الموعد.";
-  if (kind === "grace-period") return "لم يتم الخصم: الامتحان ضمن فترة السماح المحاسبية للطالب.";
+  if (kind === "grace-period") {
+    const period = findExamGracePeriod(student, exam);
+    return period ? `${describeExamGraceExclusion(period)}.` : `لم يتم الخصم: ${GRACE_PERIOD_EXCUSE_LABEL}.`;
+  }
   if (kind === "no-discount-protected") return "لم يتم الخصم: هذا الامتحان مضبوط كـ بدون خصم.";
   if (kind === "missing") return "لا توجد محاسبة لأن الدرجة غير مكتملة.";
   if (kind === "cheating") return "غش: يؤدي إلى فصل الطالب وتصفير رصيد الفرص.";
@@ -300,7 +313,7 @@ function gradeLogDetailsWithAccounting(
         .map((log) => `${displayOpportunityAction(log.action)}${log.amount ? ` ${log.amount}` : ""}`)
         .join("، ")}`
     : " | لا يوجد سجل خصم مرتبط بهذا الامتحان";
-  return `${base} | تصنيف الدرجة وفق التسويات: ${gradeImpactLabel(kind, grade, exam)}${logSummary}`;
+  return `${base} | تصنيف الدرجة وفق التسويات: ${gradeImpactLabel(kind, grade, student, exam)}${logSummary}`;
 }
 
 type OpportunityTraceRow = {
@@ -369,8 +382,6 @@ export function StudentProfileDialog({
   activeChapterForCourse,
   whatsappLink,
   telegramLink,
-  isStudentCurrentlyInGrace,
-  graceEndDate,
 }: StudentProfileDialogProps) {
   const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "opportunity-logs", "follow-up", "logs"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
@@ -563,7 +574,7 @@ export function StudentProfileDialog({
         id: `grade-${grade.id}`,
         date: grade.updatedAt || grade.createdAt,
         source: "الدرجات",
-        title: grade.status === "درجة" ? "درجة مسجلة" : grade.status,
+        title: grade.status === "درجة" ? "درجة مسجلة" : profileGradeStatus(grade.status),
         details: gradeLogDetailsWithAccounting(grade, effectiveStudent, profileExamById.get(grade.examId), studentLeavesForProfile, studentOpportunities),
         tone: grade.status === "درجة" ? "default" as const : grade.status === "غائب" ? "danger" as const : "secondary" as const,
       })),
@@ -817,6 +828,7 @@ export function StudentProfileDialog({
   if (!open || !student || !isMounted) return null;
 
   const profileStudent = effectiveStudent || student;
+  const currentGraceText = formatStudentCurrentGrace(profileStudent);
   const statsForStudent = databaseStats?.studentId === profileStudent.id ? databaseStats : null;
   const statsPending = databaseStatsLoading || (!statsForStudent && !databaseStatsError);
   const profileLogPending = databaseGradesLoading || (!hasAuthoritativeProfile && !databaseGradesError);
@@ -919,7 +931,7 @@ export function StudentProfileDialog({
     { key: "grades", label: "الدرجات", value: profileStatValue(statsForStudent?.grades) },
     { key: "exams", label: "الامتحانات", value: examCount },
     { key: "absences", label: "الغيابات", value: absentCount },
-    { key: "grace-grades", label: "ضمن السماح", value: graceGradeCount },
+    { key: "grace-grades", label: "فترة السماح", value: graceGradeCount },
     { key: "no-discount-grades", label: "بدون خصم", value: noDiscountGradeCount },
     { key: "opportunities", label: "الخصومات/الفرص", value: opportunityText },
     { key: "status-actions", label: "فصل/إعادة تفعيل", value: `${dismissalsCount}/${reactivationsCount}` },
@@ -1111,11 +1123,11 @@ export function StudentProfileDialog({
                       <div className="rounded-2xl bg-amber-500/10 p-3"><p className="text-xl font-black text-amber-600 sm:text-2xl">{absentCount}</p><p className="text-[11px] text-muted-foreground sm:text-xs">غياب</p></div>
                       <div className="rounded-2xl bg-primary/10 p-3"><p className="text-xl font-black text-primary sm:text-2xl">{opportunityText}</p><p className="text-[11px] text-muted-foreground sm:text-xs">فرص</p></div>
                     </div>
-                    <div className="mt-4 rounded-2xl border p-3 text-xs leading-6 text-muted-foreground">
-                      {isStudentCurrentlyInGrace(profileStudent)
-                        ? `الطالب ضمن فترة السماح. المتبقي ${getStudentGraceDaysRemaining(profileStudent)} يوم، وتنتهي في ${graceEndDate(profileStudent)}.`
-                        : "المحاسبة فعالة. السماح المتبقي: 0 يوم."}
-                    </div>
+                    {currentGraceText && (
+                      <div className="mt-4 rounded-2xl border p-3 text-xs leading-6 text-muted-foreground">
+                        {currentGraceText}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1189,7 +1201,7 @@ export function StudentProfileDialog({
 
             {tab === "grades" && (
               <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                <h4 className="mb-4 text-base font-black sm:text-lg">{gradeViewFilter === "absent" ? "غيابات الطالب المؤثرة" : gradeViewFilter === "grace" ? "درجات ضمن السماح" : gradeViewFilter === "no-discount" ? "درجات بدون خصم" : "درجات الطالب"}</h4>
+                <h4 className="mb-4 text-base font-black sm:text-lg">{gradeViewFilter === "absent" ? "غيابات الطالب المؤثرة" : gradeViewFilter === "grace" ? "درجات ضمن فترة السماح" : gradeViewFilter === "no-discount" ? "درجات بدون خصم" : "درجات الطالب"}</h4>
                 <div className="space-y-2">
                   {filteredGradeRows.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText={gradeViewFilter === "all" ? gradesEmptyMessage : "لا توجد درجات مطابقة لهذا التصنيف"} /> : filteredGradeRows.map(({ grade, withinGrace, withoutDiscount, deductionLog, historicalDeduction }) => {
                     const exam = profileExamById.get(grade.examId);
@@ -1202,14 +1214,14 @@ export function StudentProfileDialog({
                         </div>
                         <div className="flex flex-wrap gap-1">
                           {grade.academicEffectExcluded && <Badge className="w-fit" variant="outline">توثيق فقط - بلا أثر أكاديمي</Badge>}
-                          {withinGrace && <Badge className="w-fit" variant="outline">ضمن السماح</Badge>}
+                          {withinGrace && <Badge className="w-fit" variant="outline">{GRACE_PERIOD_EXCUSE_LABEL}</Badge>}
                           {!withinGrace && withoutDiscount && <Badge className="w-fit" variant="secondary">بدون خصم</Badge>}
                           {deductionLog && (
                             <Badge className="w-fit" variant={historicalDeduction ? "outline" : "destructive"} title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>
                               {historicalDeduction ? `خصم سابق: ${deductionLog.amount} — لا يؤثر على الفصل الحالي` : `خصم ${deductionLog.amount} فرصة`}
                             </Badge>
                           )}
-                          <Badge className="w-fit" variant={withinGrace || withoutDiscount ? "outline" : grade.status === "درجة" ? "default" : grade.status === "غائب" ? "destructive" : "secondary"}>{grade.status}</Badge>
+                          <Badge className="w-fit" variant={withinGrace || withoutDiscount ? "outline" : grade.status === "درجة" ? "default" : grade.status === "غائب" ? "destructive" : "secondary"}>{profileGradeStatus(grade.status)}</Badge>
                           {opportunityText !== "0/0" && <Badge variant="outline" className="text-[10px]">فرص: {opportunityText}</Badge>}
                         </div>
                         <span className="font-black">{formatScore(grade, exam)}</span>
@@ -1241,7 +1253,7 @@ export function StudentProfileDialog({
                     const deductionLog = deductionLogByExamId.get(exam.id);
                     return (
                       <div key={grade.id} className="min-w-0 rounded-2xl border bg-background/60 p-4">
-                        <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><div className="flex flex-wrap gap-1">{grade.academicEffectExcluded && <Badge variant="outline">توثيق فقط - بلا أثر أكاديمي</Badge>}{withinGrace && <Badge variant="outline">ضمن السماح</Badge>}{!withinGrace && withoutDiscount && <Badge variant="secondary">بدون خصم</Badge>}{deductionLog && <Badge variant="destructive" title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>خصم {deductionLog.amount} فرصة</Badge>}<Badge>{grade.status}</Badge></div></div>
+                        <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><div className="flex flex-wrap gap-1">{grade.academicEffectExcluded && <Badge variant="outline">توثيق فقط - بلا أثر أكاديمي</Badge>}{withinGrace && <Badge variant="outline">{GRACE_PERIOD_EXCUSE_LABEL}</Badge>}{!withinGrace && withoutDiscount && <Badge variant="secondary">بدون خصم</Badge>}{deductionLog && <Badge variant="destructive" title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>خصم {deductionLog.amount} فرصة</Badge>}<Badge>{profileGradeStatus(grade.status)}</Badge></div></div>
                         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{formatGradeScore(grade, exam, "—")}</b><p>درجة الطالب</p></div></div>
                         {grade.notes ? <p className="mt-3 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{grade.notes}</p> : null}
                         {grade.academicEffectExcluded && grade.academicEffectExclusionReason ? <p className="mt-2 text-xs font-medium text-sky-700 dark:text-sky-300">سبب عدم الاحتساب: {grade.academicEffectExclusionReason}</p> : null}
@@ -1393,7 +1405,6 @@ export function StudentProfileDialog({
                           <InfoBox label="الموقع السابق" value={[oldStudent.locationScope || oldStudent.mainSite, oldStudent.subSite].filter(Boolean).join(" — ") || "—"} />
                           <InfoBox label="الرصيد السابق" value={`${Number(oldStudent.opportunities || 0)}/${Number(oldStudent.baseOpportunities || 0)}`} />
                           <InfoBox label="تاريخ بداية الملف" value={formatAppDate(oldStudent.createdAt)} />
-                          <InfoBox label="السماح السابق" value={`${Number(oldStudent.accountingGraceDays || 0)} يوم`} />
                           <InfoBox label="هاتف الطالب" value={oldStudent.phone || "—"} />
                           <InfoBox label="هاتف ولي الأمر" value={oldStudent.parentPhone || "—"} />
                           <InfoBox label="معرف تيليجرام" value={oldStudent.telegram || "—"} />
@@ -1416,7 +1427,7 @@ export function StudentProfileDialog({
                             <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
                               {oldGrades.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد درجات</p> : oldGrades.map((grade) => (
                                 <div key={String(grade.id)} className="rounded-xl bg-background p-3 text-xs">
-                                  <p className="font-bold">{grade.exam?.name || "امتحان"} — {grade.status || "—"} {grade.score !== null && grade.score !== undefined ? `(${grade.score})` : ""}</p>
+                                  <p className="font-bold">{grade.exam?.name || "امتحان"} — {profileGradeStatus(grade.status) || "—"} {grade.score !== null && grade.score !== undefined ? `(${grade.score})` : ""}</p>
                                   <p className="mt-1 text-muted-foreground">{formatAppDate(grade.exam?.date || grade.updatedAt || grade.createdAt)}</p>
                                 </div>
                               ))}

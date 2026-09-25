@@ -10,6 +10,10 @@ import {
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
+import {
+  studentsWithGracePeriodsForResponse,
+  withoutLegacyGraceFields,
+} from "@/lib/grace-periods-server";
 
 function parseCourseIds(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
@@ -166,9 +170,13 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       exam,
-      students,
+      // Grace is a read-only result here: active periods decide the badge.
+      students: await studentsWithGracePeriodsForResponse(students),
       grades,
-      studentLeaves,
+      studentLeaves: studentLeaves.map((leave) => ({
+        ...leave,
+        student: leave.student ? withoutLegacyGraceFields(leave.student) : leave.student,
+      })),
       opportunityLogs,
       courseChapters,
       source: "database",

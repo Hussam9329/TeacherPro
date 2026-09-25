@@ -28,7 +28,7 @@ function exam(id, day, extra = {}) {
 function fixture(exams, { id = 's', cap = 3, gradeOverrides = {}, studentOverrides = {} } = {}) {
   return {
     students: [{ id, courseId: 'c', mainSite: 'بغداد', status: 'نشط', dismissalReason: '',
-      opportunities: cap, baseOpportunities: cap, createdAt: '2026-06-01', accountingGraceDays: 0,
+      opportunities: cap, baseOpportunities: cap, createdAt: '2026-06-01', gracePeriods: [],
       ...studentOverrides }],
     exams,
     grades: exams.map(e => ({ id: `${id}-${e.id}`, studentId: id, examId: e.id, status: 'غائب',

@@ -52,6 +52,7 @@ import {
   normalizeScore,
 } from "@/lib/exam-utils";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
+import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { applyOpportunityPenalty } from "@/lib/opportunity-balance";
 import { CheckCircle2, UserX } from "lucide-react";
@@ -96,6 +97,15 @@ const englishNumberFormatter = new Intl.NumberFormat("en-US");
 const formatEnglishNumber = (value: number) =>
   englishNumberFormatter.format(value);
 
+// The retired grace placeholder is not a result: show it as nothing recorded.
+function gradeRecordStatusText(status: string | null | undefined): string {
+  return status === LEGACY_GRACE_PLACEHOLDER_STATUS ? "" : String(status || "");
+}
+
+function gradeRecordScoreText(grade: Grade, exam: Parameters<typeof formatGradeScore>[1]): string {
+  return grade.status === LEGACY_GRACE_PLACEHOLDER_STATUS ? "—" : formatGradeScore(grade, exam, "—");
+}
+
 function serverStatusForGradeFilter(
   filter: GradeStatusFilter,
 ): GradeStatus | undefined {
@@ -125,7 +135,7 @@ const gradeExportColumns: ExportColumn<GradeExportRow>[] = [
   {
     key: "status",
     label: "الحالة",
-    value: ({ grade, statusText }) => statusText || grade?.status || "",
+    value: ({ grade, statusText }) => gradeRecordStatusText(statusText || grade?.status),
   },
   {
     key: "score",
@@ -731,7 +741,7 @@ export function GradeRecordsView() {
       status:
         (grade.status as string) === "مجاز"
           ? "غائب"
-          : (grade.status as string) === "ضمن فترة السماح"
+          : (grade.status as string) === LEGACY_GRACE_PLACEHOLDER_STATUS
             ? "درجة"
           : (grade.status as string) === "قبل تسجيل الطالب"
             ? "درجة"
@@ -933,7 +943,7 @@ export function GradeRecordsView() {
       student,
       exam,
       classificationText: cls.text,
-      statusText: grade.status || "",
+      statusText: gradeRecordStatusText(grade.status),
     };
   });
 
@@ -1362,7 +1372,7 @@ export function GradeRecordsView() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-bold">
-                    {formatGradeScore(grade, exam, "—")}
+                    {gradeRecordScoreText(grade, exam)}
                   </span>
                   {grade.academicEffectExcluded && (
                     <Badge variant="outline">توثيق فقط - بلا أثر أكاديمي</Badge>
@@ -1455,9 +1465,9 @@ export function GradeRecordsView() {
                         "—"}
                     </td>
                     <td className="p-3">{exam.name}</td>
-                    <td className="p-3">{grade.status}</td>
+                    <td className="p-3">{gradeRecordStatusText(grade.status) || "—"}</td>
                     <td className="p-3">
-                      {formatGradeScore(grade, exam, "—")}
+                      {gradeRecordScoreText(grade, exam)}
                     </td>
                     <td className="p-3">
                       <Badge

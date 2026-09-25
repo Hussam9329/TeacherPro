@@ -11,20 +11,8 @@ import { previewStudentAcademicUpdate } from "@/lib/academic-recalculate-server"
 import { buildStudentAcademicImpactToken } from "@/lib/student-academic-impact-token";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
-import {
-  normalizeGracePeriodStartMode,
-  parseGraceStartDateInput,
-  resolveManualGraceStartDate,
-  validateManualGraceStartDate,
-} from "@/lib/student-grace";
-import { captureStudentGraceHistory } from "@/lib/student-grace-history-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
-
-function normalizeGraceDays(value: unknown): number {
-  const numeric = Number(value ?? 0);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.min(30, Math.max(0, Math.trunc(numeric)));
-}
+import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
 
 function validDate(value: unknown): Date | null {
   const date = new Date(String(value || ""));
@@ -44,6 +32,11 @@ const protectedKinds = new Set<GradeClassificationKind>([
   "no-discount-protected",
 ]);
 
+/**
+ * Preview of a registration-date change. Grace periods are not part of the
+ * student edit anymore; they are read (unchanged) so the projection matches
+ * what the save will compute.
+ */
 export async function POST(req: NextRequest) {
   const authError = await requirePermission(req, "students.edit");
   if (authError) return authError;
@@ -52,19 +45,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const studentId = String(body.studentId || body.id || "").trim();
     if (!studentId) return validationError("تعذر تحديد الطالب المطلوب");
-    const gracePeriodStartMode = normalizeGracePeriodStartMode(
-      body.gracePeriodStartMode,
-    );
-    if (
-      body.gracePeriodStartMode !== undefined &&
-      body.gracePeriodStartMode !== null &&
-      body.gracePeriodStartMode !== "" &&
-      !gracePeriodStartMode
-    ) {
-      return validationError(
-        "مصدر بدء فترة السماح غير واضح. اختر تاريخ التسجيل أو اليوم.",
-      );
-    }
 
     // Build the human-readable impact, engine projection, and confirmation
     // token from one SERIALIZABLE snapshot. A preview can therefore never mix
@@ -72,15 +52,7 @@ export async function POST(req: NextRequest) {
     const response = await withSerializableTransaction(async (tx) => {
       const student = await tx.student.findUnique({
         where: { id: studentId },
-        select: {
-          id: true,
-          name: true,
-          createdAt: true,
-          accountingGraceDays: true,
-          gracePeriodStartDate: true,
-          gracePeriodEndedAt: true,
-          gracePeriodHistory: true,
-        },
+        select: { id: true, name: true, courseId: true, createdAt: true },
       });
       if (!student) {
         throw Object.assign(new Error("student not found"), {
@@ -97,101 +69,30 @@ export async function POST(req: NextRequest) {
           statusCode: 400,
         });
       }
-      const proposedGraceDays =
-        body.accountingGraceDays === undefined
-          ? student.accountingGraceDays
-          : normalizeGraceDays(body.accountingGraceDays);
-
-      const customGraceStart =
-        gracePeriodStartMode === "custom"
-          ? parseGraceStartDateInput(body.gracePeriodStartDate)
-          : null;
-      if (gracePeriodStartMode === "custom" && !customGraceStart) {
-        throw Object.assign(
-          new Error("تاريخ بداية فترة السماح المحدد غير صالح"),
-          { statusCode: 400 },
-        );
-      }
-      if (customGraceStart) {
-        const startError = validateManualGraceStartDate({
-          start: customGraceStart,
-          createdAt: proposedCreatedAt,
-        });
-        if (startError) {
-          throw Object.assign(new Error(startError), { statusCode: 400 });
-        }
-      }
-
       const dateChanged = dayKey(proposedCreatedAt) !== dayKey(student.createdAt);
-      const graceDaysChanged =
-        proposedGraceDays !== Number(student.accountingGraceDays || 0);
-      const proposedGraceStartDate =
-        proposedGraceDays <= 0
-          ? null
-          : customGraceStart
-            ? customGraceStart
-            : graceDaysChanged || gracePeriodStartMode
-              ? resolveManualGraceStartDate({
-                  mode: gracePeriodStartMode || "now",
-                  createdAt: proposedCreatedAt,
-                })
-              : student.gracePeriodStartDate;
-      const proposedGraceEndedAt =
-        proposedGraceDays > 0 && (graceDaysChanged || gracePeriodStartMode)
-          ? null
-          : student.gracePeriodEndedAt;
-      const graceStartChanged =
-        dayKey(proposedGraceStartDate) !== dayKey(student.gracePeriodStartDate);
-      const graceEndChanged =
-        dayKey(proposedGraceEndedAt) !== dayKey(student.gracePeriodEndedAt);
-      const graceChanged =
-        graceDaysChanged || graceStartChanged || graceEndChanged;
-      const proposedGraceHistory = dateChanged || graceChanged
-        ? await captureStudentGraceHistory(tx, student)
-        : student.gracePeriodHistory;
 
-      const [grades, leaves, projection, previewToken] = await Promise.all([
+      const [grades, leaves, gracePeriodsByStudent, projection, previewToken] = await Promise.all([
         tx.grade.findMany({
           where: { studentId },
           include: { exam: true },
           orderBy: { updatedAt: "desc" },
         }),
         tx.studentLeave.findMany({ where: { studentId } }),
+        loadActiveGracePeriodsByStudent(tx, [studentId]),
         previewStudentAcademicUpdate(
           studentId,
-          {
-            createdAt: proposedCreatedAt,
-            accountingGraceDays: proposedGraceDays,
-            gracePeriodStartDate: proposedGraceStartDate,
-            gracePeriodEndedAt: proposedGraceEndedAt,
-            gracePeriodHistory: proposedGraceHistory,
-          },
+          { createdAt: proposedCreatedAt },
           { tx },
         ),
         buildStudentAcademicImpactToken(tx, {
           studentId,
           proposedCreatedAt,
-          proposedGraceDays,
-          proposedGraceStartDate,
-          proposedGraceEndedAt,
-          proposedGraceHistory,
         }),
       ]);
+      const gracePeriods = gracePeriodsByStudent.get(studentId) || [];
 
-      const currentStudent = {
-        createdAt: student.createdAt,
-        accountingGraceDays: student.accountingGraceDays,
-        gracePeriodStartDate: student.gracePeriodStartDate,
-        gracePeriodEndedAt: student.gracePeriodEndedAt,
-        gracePeriodHistory: student.gracePeriodHistory,
-      };
-      const projectedStudent = {
-        createdAt: proposedCreatedAt,
-        accountingGraceDays: proposedGraceDays,
-        gracePeriodStartDate: proposedGraceStartDate,
-        gracePeriodEndedAt: proposedGraceEndedAt,
-        gracePeriodHistory: proposedGraceHistory,
-      };
+      const currentStudent = { courseId: student.courseId, createdAt: student.createdAt, gracePeriods };
+      const projectedStudent = { courseId: student.courseId, createdAt: proposedCreatedAt, gracePeriods };
 
       const changes = grades
         .map((grade) => {
@@ -230,30 +131,14 @@ export async function POST(req: NextRequest) {
         (item) =>
           item.before === "before-registration" && item.after !== item.before,
       ).length;
-      const movedIntoGrace = changes.filter(
-        (item) => item.after === "grace-period" && item.before !== item.after,
-      ).length;
-      const leftGrace = changes.filter(
-        (item) => item.before === "grace-period" && item.after !== item.before,
-      ).length;
 
       return {
         studentId,
         studentName: student.name,
-        requiresConfirmation: dateChanged || graceChanged,
-        changes: { dateChanged, graceChanged },
-        current: {
-          createdAt: dayKey(student.createdAt),
-          accountingGraceDays: Number(student.accountingGraceDays || 0),
-          gracePeriodStartDate: dayKey(student.gracePeriodStartDate),
-          gracePeriodEndedAt: student.gracePeriodEndedAt?.toISOString() || null,
-        },
-        proposed: {
-          createdAt: dayKey(proposedCreatedAt),
-          accountingGraceDays: proposedGraceDays,
-          gracePeriodStartDate: dayKey(proposedGraceStartDate),
-          gracePeriodEndedAt: proposedGraceEndedAt?.toISOString() || null,
-        },
+        requiresConfirmation: dateChanged,
+        changes: { dateChanged },
+        current: { createdAt: dayKey(student.createdAt) },
+        proposed: { createdAt: dayKey(proposedCreatedAt) },
         impact: {
           totalGrades: grades.length,
           changedGrades: changes.length,
@@ -261,8 +146,6 @@ export async function POST(req: NextRequest) {
           becameChargeable,
           movedBeforeRegistration,
           returnedAfterRegistration,
-          movedIntoGrace,
-          leftGrace,
           sample: changes.slice(0, 12),
         },
         projection,
@@ -279,12 +162,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "الطالب غير موجود" }, { status: 404 });
     }
     if (candidate.statusCode === 400) {
-      return validationError(
-        candidate.message && candidate.message !== "invalid registration date"
-          ? candidate.message
-          : "تاريخ التسجيل الجديد غير صالح",
-      );
+      return validationError("تاريخ التسجيل الجديد غير صالح");
     }
-    return routeErrorResponse(error, "تعذر معاينة أثر تاريخ التسجيل وفترة السماح.");
+    return routeErrorResponse(error, "تعذر معاينة أثر تاريخ التسجيل.");
   }
 }

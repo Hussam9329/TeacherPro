@@ -21,6 +21,8 @@ import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 import { buildProfessionalXlsx } from "@/lib/xlsx-export";
 import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
 import { buildReportOpportunityContext, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradeEffect, reportGradeOutcome, reportNumber, type ReportBalanceNote, type ReportMovementKind } from "@/lib/student-report-presentation";
+import { GRACE_PERIOD_EXCUSE_LABEL, isStudentInGracePeriod, normalizeGracePeriodRanges } from "@/lib/grace-periods";
+import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
 
 export type ExportColumn<T = Record<string, unknown>> = {
   key: string;
@@ -137,14 +139,6 @@ export type StudentDetailsFetcher = (
   context: ExportFetchContext,
 ) => Promise<StudentDetailsMap>;
 
-const GRACE_DEFERRED_REPORT_STATUS = "لا يحاسب الطالب ( ضمن فترة السماح )";
-// تُهمل أنواع الملاحظات الأخرى عمداً لأن عمود الملاحظات أزيل من التقرير،
-// وتلك الحالات لا تؤثر على عرض الحالة في التقرير.
-const GRACE_DEFERRED_GRADE_NOTE_PREFIXES = [
-  "درجة مؤجلة خلال فترة السماح",
-  "درجة مؤجلة خلال فترة سماح الطالب",
-  "درجة حقيقية داخل فترة السماح؛ محفوظة للمتابعة دون أثر أكاديمي",
-] as const;
 function normalizeArabicComparisonText(value: unknown): string {
   return String(value ?? "")
     .toLocaleLowerCase("ar-IQ")
@@ -158,18 +152,6 @@ function normalizeArabicComparisonText(value: unknown): string {
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
     .replace(/[\s\-_]+/g, " ")
     .trim();
-}
-
-function isGraceDeferredGradeForHtml(grade: StudentGradeDetail): boolean {
-  // لا نحول أي حالة أخرى (مثل «غائب») حتى لو احتوت ملاحظة مشابهة.
-  if (String(grade.status || "").trim() !== "درجة") return false;
-
-  const normalizedNotes = normalizeArabicComparisonText(grade.notes);
-  if (!normalizedNotes) return false;
-
-  return GRACE_DEFERRED_GRADE_NOTE_PREFIXES.some((phrase) =>
-    normalizedNotes.includes(normalizeArabicComparisonText(phrase)),
-  );
 }
 
 export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): StudentDetailsMap {
@@ -186,12 +168,7 @@ export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): Stude
         grades: (studentDetails.grades || [])
           .map((grade) => {
             const { notes: _notes, ...reportGrade } = grade;
-            return {
-              ...reportGrade,
-              status: isGraceDeferredGradeForHtml(grade)
-                ? GRACE_DEFERRED_REPORT_STATUS
-                : grade.status,
-            };
+            return reportGrade;
           })
           .sort((a, b) => {
             const da = new Date(a.examDate).getTime() || 0;
@@ -310,7 +287,17 @@ export function buildStudentDetailsFromProfileLog(
   const rawLogs = Array.isArray(profile.opportunityLogs) ? profile.opportunityLogs : [];
   const logScope = resolveActiveChapterLogScope(profile);
   const scopedLogs = rawLogs.filter(log => opportunityLogWithinActiveChapter(log, logScope));
-  const opportunityContext = buildReportOpportunityContext(rawLogs, String(profile.currentChapter?.id || ""));
+  const gracePeriods = normalizeGracePeriodRanges(profile.student?.gracePeriods);
+  const opportunityContext = {
+    ...buildReportOpportunityContext(rawLogs, String(profile.currentChapter?.id || "")),
+    gracePeriods,
+  };
+  // Grace comes only from the student's periods and the exam date. The retired
+  // grace placeholder is not a result, so it reports as nothing recorded.
+  const reportStatus = (status: unknown, examDate: unknown): string =>
+    isStudentInGracePeriod(gracePeriods, examDate as string | null | undefined)
+      ? GRACE_PERIOD_EXCUSE_LABEL
+      : status === LEGACY_GRACE_PLACEHOLDER_STATUS ? "" : String(status || "");
   const gradeExamIds = new Set<string>();
   const grades: StudentGradeDetail[] = rawGrades
     // درجات امتحانات الفصل النشط الحالي فقط: عند توفر سياق الفصل النشط
@@ -336,7 +323,7 @@ export function buildStudentDetailsFromProfileLog(
         score: score === null || score === undefined ? null : Number(score),
         fullMark:
           fullMark === null || fullMark === undefined ? null : Number(fullMark),
-        status: String(grade.status || ""),
+        status: reportStatus(grade.status, exam?.date),
         notes: grade.notes ? String(grade.notes) : null,
         outcome: reportGradeOutcome(grade, exam),
         opportunityEffect: reportGradeEffect(grade, exam, scopedLogs.filter(log => log.examId === examId), opportunityContext),
@@ -368,7 +355,7 @@ export function buildStudentDetailsFromProfileLog(
           examRecord.fullMark === null || examRecord.fullMark === undefined
             ? null
             : Number(examRecord.fullMark),
-        status: "غائب",
+        status: reportStatus("غائب", examRecord.date),
         notes: null,
         outcome: "غياب",
         opportunityEffect: reportGradeEffect({ status: "غائب" }, examRecord, scopedLogs.filter(log => log.examId === examId), opportunityContext),

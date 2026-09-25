@@ -9,7 +9,12 @@ import { type CourseLocationConfig, type StudyTypesByProgram, getAvailableProgra
 import { getExamEntryAvailability, isExamOnOrAfterStudentRegistration, isGradeEntered } from "./exam-utils";
 import { baghdadDateKey, baghdadTodayKey, toBaghdadDateTimeLocal } from "./baghdad-time";
 import { formatAppDate } from "./format";
-import { isExamWithinStudentGraceWindow } from "./student-grace";
+import {
+  GRACE_PERIOD_EXCUSE_LABEL,
+  isExamInStudentGracePeriod,
+  normalizeGracePeriodRanges,
+  type GracePeriodRange,
+} from "./grace-periods";
 import {
   announceTeacherProSyncError,
   announceTeacherProSyncRefreshing,
@@ -79,10 +84,8 @@ export interface Student {
   createdAt: string;
   opportunities: number;
   baseOpportunities: number;
-  accountingGraceDays: number;
-  gracePeriodStartDate?: string | null;
-  gracePeriodEndedAt?: string | null;
-  gracePeriodHistory?: unknown;
+  /** Active grace periods (read-only result; managed only from the dashboard). */
+  gracePeriods?: GracePeriodRange[];
   /** Server-side snapshot used by إدارة الفرص so actions never depend on stale course-chapter cache. */
   hasActiveChapter?: boolean;
   activeChapterConflictCount?: number;
@@ -109,10 +112,9 @@ export type CourseTransferPolicy = "reset" | "keep";
 export type StudentUpdatePayload = Partial<
   Omit<
     Student,
-    "id" | "code" | "gracePeriodStartDate" | "gracePeriodEndedAt" | "gracePeriodHistory"
+    "id" | "code" | "gracePeriods"
   >
 > & {
-  gracePeriodStartMode?: "registration" | "now";
   /**
    * Required only when courseId changes from one course to another.
    * - reset: treat the student as new in the target course and grant the
@@ -1042,14 +1044,7 @@ function normalizeStudentRecord(st: Record<string, unknown>): Student {
       st.isOpportunityOverLimit === undefined
         ? undefined
         : Boolean(st.isOpportunityOverLimit),
-    accountingGraceDays: normalizeGraceDaysValue(st.accountingGraceDays),
-    gracePeriodStartDate: st.gracePeriodStartDate
-      ? baghdadDateKey(st.gracePeriodStartDate as string | Date)
-      : null,
-    gracePeriodEndedAt: st.gracePeriodEndedAt
-      ? String(st.gracePeriodEndedAt)
-      : null,
-    gracePeriodHistory: st.gracePeriodHistory ?? [],
+    gracePeriods: normalizeGracePeriodRanges(st.gracePeriods),
     dismissalNotes: String(st.dismissalNotes || ""),
     dismissedChecked: st.status === "مفصول" && st.dismissedChecked === true,
     dismissedCheckEpoch: Number(st.dismissedCheckEpoch || 0),
@@ -1195,32 +1190,12 @@ function mergeDefaultRoles(roles: Role[]): Role[] {
   ];
 }
 
-function normalizeGraceDaysValue(value: unknown): number {
-  const numeric = Number(value ?? 0);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.min(30, Math.max(0, Math.trunc(numeric)));
-}
-
 function sanitizeGradeStatus(value: unknown): Grade["status"] {
   if (value === "غش") return "غش";
   if (value === "غائب" || value === "مجاز") return value;
   if (value === "ضمن فترة السماح") return "ضمن فترة السماح";
   if (value === "قبل تسجيل الطالب") return "قبل تسجيل الطالب";
   return "درجة";
-}
-
-function isExamWithinStudentGracePeriod(
-  student: Pick<
-    Student,
-    | "createdAt"
-    | "accountingGraceDays"
-    | "gracePeriodStartDate"
-    | "gracePeriodEndedAt"
-    | "gracePeriodHistory"
-  >,
-  exam: Pick<Exam, "id" | "date">,
-): boolean {
-  return isExamWithinStudentGraceWindow(student, exam);
 }
 
 function dayKey(value: string | Date | null | undefined): string {
@@ -2415,19 +2390,17 @@ export const useTeacherStore = create<TeacherState>()(
         // the corresponding StudentLeave rows).
         if (grade?.status === "مجاز")
           return { text: "مجاز", type: "info", kind: "excused" };
+        // Grace depends only on the student's periods and the exam date.
+        if (student && isExamInStudentGracePeriod(student, exam))
+          return { text: GRACE_PERIOD_EXCUSE_LABEL, type: "info", kind: "grace" };
         if (!grade || !isGradeEntered(grade, exam))
           return { text: "غير مسجل", type: "neutral", kind: "missing" };
         if (student && !isExamOnOrAfterStudentRegistration(student, exam))
           return { text: "قبل التسجيل", type: "info", kind: "before-registration" };
         if (!getExamEntryAvailability(exam).available)
           return { text: "غير محتسب", type: "info", kind: "unavailable-exam" };
-        if (student && isExamWithinStudentGracePeriod(student, exam))
-          return { text: "ضمن السماح", type: "info", kind: "grace" };
-        // Same defensive guard for "ضمن فترة السماح" and "قبل تسجيل الطالب"
-        // — these are server-set marker statuses and should never fall
-        // through to the score-based checks.
-        if (grade.status === "ضمن فترة السماح")
-          return { text: "ضمن السماح", type: "info", kind: "grace" };
+        // "قبل تسجيل الطالب" is a server-set marker status and should never
+        // fall through to the score-based checks.
         if (grade.status === "قبل تسجيل الطالب")
           return { text: "قبل التسجيل", type: "info", kind: "before-registration" };
         if (grade.status === "غش")
@@ -2744,15 +2717,8 @@ export const useTeacherStore = create<TeacherState>()(
           }
         }
 
-        // Migration v8 → v9: preserve student grace days as an academic-protection field.
-        if (version < 9 && Array.isArray(nextState.students)) {
-          nextState.students = nextState.students.map((student) => ({
-            ...(student as Record<string, unknown>),
-            accountingGraceDays: normalizeGraceDaysValue(
-              (student as Record<string, unknown>).accountingGraceDays,
-            ),
-          }));
-        }
+        // Migration v8 → v9 used to copy legacy grace days. Grace periods now
+        // come only from the server (GracePeriod table), so nothing is copied.
 
         // Migration v9 → v10: add per-student dismissal notes.
         if (version < 10 && Array.isArray(nextState.students)) {

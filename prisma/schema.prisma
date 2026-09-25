@@ -94,6 +94,7 @@ model Student {
   studentLeaveGradeBackups StudentLeaveGradeBackup[]
   enrollmentArchives StudentEnrollmentArchive[]
   gradeSmartNotes GradeSmartNote[]
+  gracePeriods    GracePeriod[]
 
   @@index([courseId])
   @@index([status])
@@ -363,6 +364,35 @@ model StudentLeaveGradeBackup {
   @@index([studentId, examId])
 }
 
+
+/// The only source of grace-period protection. A student is excused by grace
+/// for any exam whose Baghdad calendar date is within [startDate, endDate]
+/// (both inclusive) of a non-cancelled period. Periods are created, edited and
+/// cancelled only from the dashboard grace-management screen; cancelled rows
+/// stay as history. Legacy Student grace columns are read only by the one-time
+/// conversion and are never used for accounting.
+model GracePeriod {
+  id              String    @id @default(cuid())
+  studentId       String
+  startDate       DateTime  @db.Date
+  endDate         DateTime  @db.Date
+  source          String    @default("manual")
+  note            String    @default("")
+  createdById     String?
+  createdByName   String    @default("")
+  createdAt       DateTime  @default(now())
+  updatedById     String?
+  updatedByName   String    @default("")
+  updatedAt       DateTime  @updatedAt
+  cancelledAt     DateTime?
+  cancelledById   String?
+  cancelledByName String    @default("")
+  cancelReason    String    @default("")
+  student         Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, startDate])
+  @@index([cancelledAt])
+}
 
 model StudentEnrollmentArchive {
   id              String   @id @default(cuid())

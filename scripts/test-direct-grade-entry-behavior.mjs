@@ -19,7 +19,7 @@ function must(condition, okMessage, failMessage = okMessage) {
 }
 
 const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
-const studentGrace = read("src/lib/student-grace.ts");
+const gradeWriteback = read("src/lib/academic-grade-writeback-server.ts");
 const gradesRoute = read("src/app/api/grades/route.ts");
 
 // 1) لا يوجد أي قفل صفوف يتطلب الضغط على «تعديل» قبل إدخال الدرجة.
@@ -51,14 +51,14 @@ must(
   "يجب أن تعتمد تعطيلات الحقول على canEditPersistedGrade/protectedNumericCapture فقط.",
 );
 
-// 4) حماية وسم السماح: الخروج من خلية سماح دون كتابة رقم (Tab/blur)
-//    يجب ألا يحذف السجل تلقائياً.
+// 4) حماية وسوم النظام: الخروج من الخلية دون كتابة رقم (Tab/blur)
+//    يجب ألا يحذف «قبل تسجيل الطالب» أو الوسم القديم قبل نقله.
 must(
-  gradeEntry.includes("existingIsGraceMarker") &&
-    gradeEntry.includes('existing?.status === "ضمن فترة السماح"') &&
+  gradeEntry.includes("existingIsSystemMarker") &&
+    gradeEntry.includes("existing?.status === LEGACY_GRACE_PLACEHOLDER_STATUS") &&
     gradeEntry.includes('existing?.status === "قبل تسجيل الطالب"'),
-  "المرور بخلية سماح دون إدخال رقم لا يحذف وسم «ضمن فترة السماح»",
-  "يجب حماية أوسام السماح من الحذف العرضي عند blur فارغ.",
+  "المرور بخلية دون إدخال رقم لا يحذف وسوم النظام",
+  "يجب حماية وسوم النظام من الحذف العرضي عند blur فارغ.",
 );
 
 // 5) سلسلة التنقل Tab تشمل جميع الصفوف القابلة للإدخال مباشرة
@@ -70,13 +70,14 @@ must(
   "يجب أن تدخل صفوف السماح في سلسلة التنقل السريع بـ Tab.",
 );
 
-// 6) عقد الخادم لم يتغير: الدرجة الرقمية تنهي السماح ذرياً في مسار الكتابة.
+// 6) عقد الخادم: الدرجة تُحفظ كما هي ولا تنهي فترة السماح أو تغيّرها.
 must(
-  gradesRoute.includes("graceEnded") &&
-    studentGrace.includes("gracePeriodEndedAt") &&
-    studentGrace.includes("AUTOMATIC_NEW_STUDENT_GRACE_DAYS"),
-  "عقد الخادم ثابت: الدرجة الرقمية تنهي السماح ذرياً وتُحتسب من نفس العملية",
-  "يجب ألا يتغير عقد إنهاء السماح على الخادم.",
+  !gradesRoute.includes("graceEnded") &&
+    !gradeWriteback.includes("gracePeriodEndedAt") &&
+    !gradeEntry.includes("graceEnded") &&
+    !fs.existsSync(path.join(root, "src/lib/student-grace.ts")),
+  "الدرجة الرقمية لا تنهي فترة السماح؛ الفترات تُدار من «إدارة فترة السماح» فقط",
+  "يجب ألا يغيّر حفظ الدرجة فترة السماح.",
 );
 
 if (failed) process.exit(1);

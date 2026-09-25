@@ -1,188 +1,155 @@
+#!/usr/bin/env node
+// Static guard for the rebuilt grace system: one GracePeriod table, one engine,
+// one management screen. Fails if any retired grace behavior comes back.
 import fs from "node:fs";
+import path from "node:path";
 
-const read = (file) => fs.readFileSync(file, "utf8");
-const checks = [];
-const check = (label, condition) => checks.push({ label, ok: Boolean(condition) });
+const root = process.cwd();
+const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+const exists = (file) => fs.existsSync(path.join(root, file));
 
-const grace = read("src/lib/student-grace.ts");
-const engine = read("src/lib/academic-engine.ts");
-const classification = read("src/lib/grade-classification.ts");
-const writeback = read("src/lib/academic-grade-writeback-server.ts");
-const students = read("src/app/api/students/route.ts");
-const updateImpact = read("src/app/api/students/update-impact/route.ts");
-const register = read("src/components/teacher-pro/student-register.tsx");
-const registry = read("src/components/teacher-pro/student-registry.tsx");
-const registryHelpers = read("src/components/teacher-pro/student-registry-helpers.ts");
-const registryResults = read("src/components/teacher-pro/student-registry-results.tsx");
-const studentProfile = read("src/components/teacher-pro/student-profile-dialog.tsx");
-const candidates = read("src/app/api/student-calls/candidates/route.ts");
-const stats = read("src/app/api/student-calls/stats/route.ts");
-const leaves = read("src/app/api/student-leaves/route.ts");
-const repair = read("scripts/repair-grace-period-data.ts");
-const repairHelper = read("src/lib/grace-period-repair-server.ts");
-const academicRepair = read("src/app/api/students/academic-repair/route.ts");
-const schemaReadiness = read("src/lib/schema-readiness.ts");
-const schema = read("prisma/schema.prisma");
-const gradesRoute = read("src/app/api/grades/route.ts");
-const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
-const graceActivation = read("src/lib/grace-grade-activation.ts");
+function walk(dir) {
+  const out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...walk(full));
+    else if (/\.(?:ts|tsx)$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
 
-check(
-  "المصدر الموحد يطبق 3 أيام تلقائية ويجعل السماح اليدوي بديلاً عنها",
-  grace.includes("AUTOMATIC_NEW_STUDENT_GRACE_DAYS = 3") &&
-    grace.includes('source: "manual"') &&
-    grace.includes('source: "automatic"'),
-);
-check(
-  "المصدر الموحد يحسب الأيام المتبقية من تاريخ بغداد ويصفرها عند الانتهاء",
-  grace.includes("getStudentGraceStatus") &&
-    grace.includes("getStudentGraceDaysRemaining") &&
-    grace.includes('state: "active"') &&
-    grace.includes('state: "expired"') &&
-    grace.includes("window.endExclusive.getTime() - today.getTime()"),
-);
-check(
-  "المحرك والتصنيف يعتمدان المصدر الموحد للسماح",
-  engine.includes('from "./student-grace"') &&
-    classification.includes('from "@/lib/student-grace"'),
-);
-check(
-  "حفظ الغياب محمي بالسماح اليدوي/التلقائي",
-  writeback.includes("isExamWithinStudentGraceWindow") &&
-    writeback.includes('status === "غائب"'),
-);
-check(
-  "الدرجة الرقمية تنهي السماح ذرياً وتُحتسب من نفس العملية",
-  schema.includes("gracePeriodEndedAt DateTime?") &&
-    grace.includes("if (student.gracePeriodEndedAt) return null") &&
-    writeback.includes("const shouldEndGrace") &&
-    writeback.includes('status === "درجة"') &&
-    writeback.includes("score !== null") &&
-    writeback.includes("shouldEndGraceForNumericGrade") &&
-    graceActivation.includes("isStudentCurrentlyInGrace(input.student, input.now)") &&
-    writeback.includes("accountingGraceDays: 0") &&
-    writeback.includes("gracePeriodEndedAt: endedAt") &&
-    writeback.includes("recalculateStudentsAcademicState") &&
-    gradesRoute.includes("reaches the shared writeback") &&
-    !gradesRoute.slice(
-      gradesRoute.indexOf("async function inspectNumericGradeAttempt"),
-      gradesRoute.indexOf("function dateKey"),
-    ).includes('category = "GRACE_SCORED"'),
-);
-check(
-  "واجهة الدرجات تشرح إنهاء السماح ولا تعرض الدرجة الجديدة كمعلقة",
-  gradeEntry.includes("وتبدأ المحاسبة من نفس") &&
-    gradeEntry.includes("تم حفظ الدرجة وإنهاء فترة السماح") &&
-    !gradeEntry.includes("const canCaptureGraceScoreDirectly"),
-);
-check(
-  "التسجيل والتعديل يدعمان اختيار تاريخ التسجيل أو اليوم",
-  students.includes("normalizeGracePeriodStartMode") &&
-    students.includes("resolveManualGraceStartDate") &&
-    register.includes("gracePeriodStartMode") &&
-    registry.includes("gracePeriodStartMode"),
-);
-check(
-  "التعديل العادي لا يعيد بدء السماح دون تغيير الأيام أو اختيار صريح",
-  students.includes("graceDaysChanged || gracePeriodStartMode") &&
-    updateImpact.includes("graceDaysChanged || gracePeriodStartMode") &&
-    !students.includes("data.gracePeriodStartDate = new Date()"),
-);
-check(
-  "سجل الطالب يعرض السماح المتبقي لا مدة المنح الأصلية الثابتة",
-  registryHelpers.includes('label: "السماح المتبقي"') &&
-    registryHelpers.includes("formatStudentGraceRemaining(student)") &&
-    registryResults.includes('label="السماح المتبقي"') &&
-    !registryResults.includes("student.accountingGraceDays ?? 0") &&
-    studentProfile.includes("getStudentGraceDaysRemaining(profileStudent)") &&
-    studentProfile.includes("السماح المتبقي: 0 يوم"),
-);
-check(
-  "تجديد السماح بنفس عدد الأيام يبدأ نافذة جديدة ويخضع لمعاينة الأثر",
-  registry.includes("editGraceInputTouched") &&
-    registry.includes("editGraceRenewalRequested") &&
-    registry.includes("editGraceSettingsChanged") &&
-    registry.includes("editRegistrationDateChanged || editGraceSettingsChanged") &&
-    registry.includes('setGracePeriodStartMode("now")') &&
-    registry.includes("تجديد المدة المكتوبة من اليوم") &&
-    students.includes("graceDaysChanged || gracePeriodStartMode") &&
-    updateImpact.includes("graceDaysChanged || gracePeriodStartMode"),
-);
-check(
-  "قوائم المكالمات تجلب تاريخ بدء السماح وتستبعد المحمي",
-  candidates.includes("gracePeriodStartDate: true") &&
-    stats.includes("gracePeriodStartDate: true") &&
-    candidates.includes("NON_DISPLAY_CALL_KINDS.has(kind)") &&
-    !candidates.includes("غائب بدون خصم: فترة سماح"),
-);
-check(
-  "حذف الإجازة لا يعيد غياباً محمياً أو سابقاً للتسجيل",
-  leaves.includes("isExamWithinStudentGraceWindow") &&
-    leaves.includes("isExamOnOrAfterStudentRegistration") &&
-    leaves.includes('backup.status === "غائب"'),
-);
-check(
-  "إصلاح الإنتاج يحول الغيابات المحمية ويحافظ على الدرجات الرقمية السابقة للتسجيل",
-  repairHelper.includes('grade.status === "غائب"') &&
-    repairHelper.includes('grade.status === "غائب" &&') &&
-    !repairHelper.includes('(!options.onlyAbsences || grade.status === "غائب")') &&
-    !repairHelper.includes("studentCall.deleteMany") &&
-    repairHelper.includes('status: "ضمن فترة السماح"') &&
-    repairHelper.includes('status: "قبل تسجيل الطالب"') &&
-    repairHelper.includes("grade.updateMany") &&
-    repair.includes('throw new Error("Retired historical repair'),
-);
-check(
-  "الإصلاح الإداري يبقي إصلاح الحماية والسماح ويغلق أي مسار صيانة قد يسترجع المفصول تلقائياً",
-  academicRepair.includes("repairProtectedAbsencesForStudents") &&
-  academicRepair.includes("ensureProtectedGradeMarkers") &&
-    academicRepair.includes('scope === "dismissed"') &&
-    academicRepair.includes('scope === "restore-excess-dismissed"') &&
-    academicRepair.match(/retiredDismissedReactivationPath:\s*true/g)?.length === 1 &&
-    academicRepair.includes("preservedDismissedStudents") &&
-    academicRepair.includes("حارس مركزية الاسترجاع") &&
-    !academicRepair.includes("restoredStudents") &&
-    !academicRepair.includes('status: "نشط"') &&
-    academicRepair.includes('scope === "protected"') &&
-    academicRepair.includes('where: { status: { not: "مؤرشف" } }') &&
-    academicRepair.includes("deletedGrades") &&
-    academicRepair.includes("convertedGrades") &&
-    academicRepair.includes("convertedBeforeRegistration") &&
-    academicRepair.includes('scope === "grace"') &&
-    academicRepair.includes("deletedCalls"),
-);
-check(
-  "حارس قاعدة البيانات لا يغير المخطط ويتطلب أحدث migration مطلوبة",
-  schemaReadiness.includes("20260924150000_student_grace_history") &&
-    schemaReadiness.includes('FROM "_prisma_migrations"') &&
-    !schemaReadiness.includes("$executeRaw"),
-);
-check(
-  "بداية السماح بتاريخ محدد: مسار الحفظ والمعاينة يطبقان نفس قواعد التحقق والواجهة تعرضها",
-  grace.includes('value === "custom"') &&
-    grace.includes("parseGraceStartDateInput") &&
-    grace.includes("validateManualGraceStartDate") &&
-    grace.includes("لا يمكن أن يسبق تاريخ تسجيل الطالب") &&
-    grace.includes("لا يمكن أن يكون في المستقبل") &&
-    students.includes("parseGraceStartDateInput") &&
-    students.includes("validateManualGraceStartDate") &&
-    students.includes("gracePeriodStartDate: rawGracePeriodStartDate") &&
-    updateImpact.includes("parseGraceStartDateInput") &&
-    updateImpact.includes("validateManualGraceStartDate") &&
-    registry.includes("edit-grace-start-mode") &&
-    registry.includes("edit-grace-start-date") &&
-    registry.includes('"custom"') &&
-    registry.includes("gracePeriodStartDate: resolvedGraceStartDate") &&
-    registry.includes("normalizeGracePeriodStartMode"),
-);
-
-let failed = 0;
-for (const item of checks) {
-  if (item.ok) console.log(`✅ ${item.label}`);
+let failed = false;
+function check(condition, message) {
+  if (condition) console.log(`✅ ${message}`);
   else {
-    failed += 1;
-    console.error(`❌ ${item.label}`);
+    failed = true;
+    console.error(`❌ ${message}`);
   }
 }
+
+const rel = (file) => path.relative(root, file).split(path.sep).join("/");
+const sources = walk(path.join(root, "src")).map((file) => ({ file: rel(file), text: fs.readFileSync(file, "utf8") }));
+const filesMatching = (pattern) => sources.filter(({ text }) => pattern.test(text)).map(({ file }) => file).sort();
+
+// 1. Retired modules and routes are gone.
+const retired = [
+  "src/lib/student-grace.ts",
+  "src/lib/grade-entry-grace.ts",
+  "src/lib/grace-grade-activation.ts",
+  "src/lib/grace-period-repair-server.ts",
+  "src/lib/grade-smart-note-grace-expiry-server.ts",
+  "src/lib/student-grace-history-server.ts",
+  "src/app/api/internal/grace-smart-notes/settle/route.ts",
+];
+for (const file of retired) check(!exists(file), `الملف القديم محذوف: ${file}`);
+const retiredImports = filesMatching(
+  /from\s+["'][^"']*(?:student-grace|grade-entry-grace|grace-grade-activation|grace-period-repair-server|grade-smart-note-grace-expiry-server|student-grace-history-server)["']/,
+);
+check(retiredImports.length === 0, `لا يوجد استيراد لوحدات السماح القديمة ${retiredImports.join(", ")}`);
+const retiredNames = filesMatching(
+  /\b(?:getStudentGraceWindow|isExamInsideGracePeriod|isGradeInsideGracePeriod|endStudentGracePeriod|settleGraceSmartNotes|GRACE_DEFERRED_[A-Z_]+|DEFAULT_GRACE_DAYS)\b/,
+).filter((file) => file !== "src/lib/legacy-grace-conversion.ts");
+check(retiredNames.length === 0, `لا توجد دوال أو ثوابت السماح القديمة ${retiredNames.join(", ")}`);
+
+// 2. Old Student grace columns are read only by the one-time conversion.
+const legacyColumnReaders = filesMatching(/\b(?:accountingGraceDays|gracePeriodStartDate|gracePeriodEndedAt|gracePeriodHistory)\b/);
+const allowedLegacyReaders = new Set([
+  "src/lib/legacy-grace-conversion.ts",
+  "src/lib/legacy-grace-conversion-server.ts",
+  "src/lib/grace-periods-server.ts",
+  "src/app/api/students/route.ts",
+]);
+check(
+  legacyColumnReaders.every((file) => allowedLegacyReaders.has(file)),
+  `حقول السماح القديمة لا تُقرأ إلا في أداة النقل ${legacyColumnReaders.filter((file) => !allowedLegacyReaders.has(file)).join(", ")}`,
+);
+const studentsRoute = read("src/app/api/students/route.ts");
+check(
+  /LEGACY_STUDENT_GRACE_FIELDS|accountingGraceDays",\s*\n\s*"gracePeriodStartDate/.test(studentsRoute) &&
+    !/data:\s*{[^}]*accountingGraceDays/.test(studentsRoute),
+  "مسار الطلاب يرفض حقول السماح القديمة ولا يكتبها",
+);
+
+// 3. GracePeriod rows are written only by the management screen and the conversion.
+const graceWriters = filesMatching(/\bgracePeriod\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\b/);
+check(
+  graceWriters.join(",") === "src/lib/grace-period-plan-server.ts,src/lib/legacy-grace-conversion-server.ts",
+  `كتابة فترات السماح محصورة بإدارة فترة السماح وأداة النقل (${graceWriters.join(", ")})`,
+);
+
+// 4. Nothing writes the retired «ضمن فترة السماح» placeholder any more.
+const placeholderWriters = sources
+  .filter(({ text }) => /status:\s*["']ضمن فترة السماح["']/.test(text))
+  .map(({ file }) => file);
+check(placeholderWriters.length === 0, `لا يوجد كود يكتب «ضمن فترة السماح» في خلية الدرجة ${placeholderWriters.join(", ")}`);
+const writeback = read("src/lib/academic-grade-writeback-server.ts");
+check(
+  /=== "ضمن فترة السماح"\) \{[\s\S]{0,300}?409/.test(writeback),
+  "حفظ الدرجات يرفض كتابة الحالة القديمة",
+);
+
+// 5. One engine: the rule depends only on the student periods and the exam date.
+const engineSource = read("src/lib/grace-periods.ts");
+check(/export function isStudentInGracePeriod\(/.test(engineSource), "الدالة المركزية isStudentInGracePeriod موجودة");
+check(engineSource.includes('GRACE_PERIOD_EXCUSE_LABEL = "مجاز — فترة سماح"'), "التسمية الموحدة «مجاز — فترة سماح»");
+check(
+  engineSource.includes("يوجد للطالب فترة سماح تتداخل مع الفترة المحددة. يرجى تعديل الفترة الموجودة بدلاً من إنشاء فترة جديدة."),
+  "رسالة التداخل مطابقة للنص المطلوب",
+);
+check(!/createdAt|registration|grade|leave/i.test(engineSource.match(/export function isDateInGracePeriod[\s\S]*?\n}\n/)?.[0] || "x"), "قاعدة السماح لا تعتمد على التسجيل أو الدرجات أو الإجازات");
+for (const file of ["src/lib/academic-engine.ts", "src/lib/grade-classification.ts", "src/lib/exam-utils.ts"]) {
+  check(/isExamInStudentGracePeriod|findExamGracePeriod/.test(read(file)), `${file} يستخدم محرك السماح الجديد`);
+}
+
+// 6. Single management entry point, next to «اغلاق الكودات».
+const dashboard = read("src/components/teacher-pro/dashboard.tsx");
+const closeCodes = dashboard.indexOf("اغلاق الكودات");
+const manageGrace = dashboard.indexOf("إدارة فترة السماح</span>");
+check(closeCodes > 0 && manageGrace > closeCodes, "زر «إدارة فترة السماح» بجانب «اغلاق الكودات» في لوحة التحكم");
+check(exists("src/components/teacher-pro/grace-periods-dialog.tsx"), "نافذة إدارة فترة السماح موجودة");
+const dialogImporters = filesMatching(/grace-periods-dialog["']/);
+check(
+  dialogImporters.join(",") === "src/components/teacher-pro/dashboard.tsx",
+  `نافذة الإدارة تُفتح من لوحة التحكم فقط (${dialogImporters.join(", ")})`,
+);
+const graceApiCallers = filesMatching(/["'`]\/api\/grace-periods/).filter((file) => !file.startsWith("src/app/api/"));
+check(
+  graceApiCallers.every((file) =>
+    ["src/lib/grace-periods-client.ts", "src/components/teacher-pro/legacy-grace-conversion-panel.tsx", "src/lib/mutation-replay-policy.ts"].includes(file),
+  ),
+  `واجهة فترات السماح تُستدعى من شاشة الإدارة فقط (${graceApiCallers.join(", ")})`,
+);
+
+// 7. Database: new table with overlap guard; old trigger neutralized, old columns kept.
+const migrationDir = "prisma/migrations/20260925120000_grace_period_table";
+const migration = read(`${migrationDir}/migration.sql`);
+check(/CREATE TABLE "GracePeriod"/.test(migration), "جدول GracePeriod منشأ");
+check(/"endDate" >= "startDate"/.test(migration), "قيد: النهاية لا تسبق البداية");
+check(/GRACE_PERIOD_OVERLAP/.test(migration), "قاعدة البيانات تمنع تداخل الفترات");
+check(
+  /CREATE OR REPLACE FUNCTION "tp_end_active_grace_on_numeric_grade"\(\)[\s\S]*?BEGIN\s*RETURN NEW;\s*END/.test(migration),
+  "المشغّل القديم الذي ينهي السماح عند إدخال درجة أصبح بلا أثر",
+);
+check(!/\bDROP\b/i.test(migration), "لا حذف لحقول النظام القديم قبل التحقق من النقل");
+const schema = read("prisma/schema.prisma");
+check(/model GracePeriod \{/.test(schema) && /cancelledAt\s+DateTime\?/.test(schema), "نموذج GracePeriod يحفظ الإلغاء بدل الحذف");
+check(!/model GracePeriod \{[\s\S]*?\bstatus\b[\s\S]*?\n\}/.test(schema), "حالة الفترة تُحسب ولا تُخزَّن");
+check(read("src/lib/schema-readiness.ts").includes("20260925120000_grace_period_table"), "التطبيق ينتظر ترحيل جدول السماح");
+const policy = JSON.parse(read("prisma/deployment-migration-policy.json"));
+check(
+  JSON.stringify(policy).includes("20260925120000_grace_period_table"),
+  "سياسة الترحيل تتضمن ترحيل جدول السماح",
+);
+
+// 8. Legacy conversion: dry run before apply, never replayed offline.
+const legacyRoute = read("src/app/api/grace-periods/legacy/route.ts");
+check(/dry-run/.test(legacyRoute) && /apply/.test(legacyRoute), "النقل من النظام القديم فيه تشغيل تجريبي ثم تطبيق");
+check(/system\.maintenance/.test(legacyRoute), "النقل مقصور على صلاحية الصيانة");
+check(read("src/lib/mutation-replay-policy.ts").includes("/api/grace-periods/legacy"), "النقل لا يعاد تشغيله من طابور عدم الاتصال");
+
+// 9. Tests are wired.
+const pkg = JSON.parse(read("package.json"));
+check(pkg.scripts["test:grace-period-integrity"]?.includes("test-grace-periods-behavior.mjs"), "اختبارات سلوك السماح الجديدة ضمن الحزمة");
+
 if (failed) process.exit(1);
-console.log("\nكل اختبارات سلامة فترة السماح نجحت.");
+console.log("\nنظام فترة السماح الجديد سليم.");

@@ -64,7 +64,11 @@ import {
 import { baghdadTodayKey } from "@/lib/baghdad-time";
 import "./student-bulk-text-import.css";
 
-const EXPECTED_COLUMNS = 15;
+const EXPECTED_COLUMNS = 14;
+// Older sheets had a «فترة السماح» column after «الفرص». It is ignored now:
+// grace is managed only from «إدارة فترة السماح».
+const LEGACY_GRACE_COLUMN_INDEX = 11;
+const LEGACY_GRACE_CELL_PATTERN = /^[0-9٠-٩]{1,2}(?:\s*(?:يوم|يوماً|يوما|أيام|ايام))?$/;
 const COLUMN_NAMES = [
   "اسم الطالب",
   "المدرسة",
@@ -77,16 +81,15 @@ const COLUMN_NAMES = [
   "الموقع الفرعي",
   "الحالة",
   "الفرص",
-  "فترة السماح",
   "رقم هاتف الطالب",
   "رقم ولي الأمر",
   "معرف التيليجرام",
 ];
 
-const SAMPLE_TEXT = `مراد سلمان سرحان سلمان\tالياسمين للبنين\tذكر\tالدورة الصيفية\tمنهج كامل\t\tإلكتروني\tبغداد\tبغداد - عموم بغداد\tنشط\t0\t0 يوم\t7505687475\t7505374138\tMorad_SS2
-نور العباس فوزي عبد الحسين منصور\tثانوية الشهيد ابو مهدي المهندس للمتفوقين\tذكر\tالدورة الصيفية\tكورسات\tالكورس الأول\tمدمج\tبغداد\tبغداد - عموم بغداد\tنشط\t0\t0 يوم\t7724959157\t7717701265\tABAAS_554
-رانيا فراس خليل ابراهيم\tصفية بنت عبد المطلب\tأنثى\tالدورة الصيفية\tكورسات\tالكورس الأول\tمدمج\tبغداد\tبغداد - عموم بغداد\tنشط\t0\t0 يوم\t7516470445\t7500948615\tra_9rr9
-هبه الله سلمان لفته\tثانويه النضال\tأنثى\tالدورة الصيفية\tكورسات\tالكورس الأول\tمدمج\tبغداد\tبغداد - عموم بغداد\tنشط\t0\t0 يوم\t7747247967\t7704768926\tHibaallha`;
+const SAMPLE_TEXT = `مراد سلمان سرحان سلمان\tالياسمين للبنين\tذكر\tالدورة الصيفية\tمنهج كامل\t\tإلكتروني\tبغداد\tبغداد - عموم بغداد\tنشط\t0\t7505687475\t7505374138\tMorad_SS2
+نور العباس فوزي عبد الحسين منصور\tثانوية الشهيد ابو مهدي المهندس للمتفوقين\tذكر\tالدورة الصيفية\tكورسات\tالكورس الأول\tمدمج\tبغداد\tبغداد - عموم بغداد\tنشط\t0\t7724959157\t7717701265\tABAAS_554
+رانيا فراس خليل ابراهيم\tصفية بنت عبد المطلب\tأنثى\tالدورة الصيفية\tكورسات\tالكورس الأول\tمدمج\tبغداد\tبغداد - عموم بغداد\tنشط\t0\t7516470445\t7500948615\tra_9rr9
+هبه الله سلمان لفته\tثانويه النضال\tأنثى\tالدورة الصيفية\tكورسات\tالكورس الأول\tمدمج\tبغداد\tبغداد - عموم بغداد\tنشط\t0\t7747247967\t7704768926\tHibaallha`;
 
 type BulkStudentDraft = Omit<
   Student,
@@ -244,6 +247,14 @@ function parseInteger(value: string, fallback = 0): number {
   if (!digits) return fallback;
   const numeric = Number(digits);
   return Number.isFinite(numeric) ? Math.max(0, Math.trunc(numeric)) : fallback;
+}
+
+function hasLegacyGraceColumn(cells: string[]): boolean {
+  return (
+    cells.length === EXPECTED_COLUMNS + 1 ||
+    (cells.length === EXPECTED_COLUMNS &&
+      LEGACY_GRACE_CELL_PATTERN.test(cells[LEGACY_GRACE_COLUMN_INDEX] || ""))
+  );
 }
 
 function splitRows(rawText: string): string[][] {
@@ -461,10 +472,19 @@ export function StudentBulkTextImportView() {
     setPreviewRows([]);
     setPreviewDone(false);
 
-    const result: PreviewRow[] = parsedRows.map((cells, index) => {
+    const result: PreviewRow[] = parsedRows.map((pastedCells, index) => {
       const errors: string[] = [];
       const warnings: string[] = [];
       const rowNumber = index + 1;
+      const legacyGraceColumn = hasLegacyGraceColumn(pastedCells);
+      const cells = legacyGraceColumn
+        ? pastedCells.filter((_, cellIndex) => cellIndex !== LEGACY_GRACE_COLUMN_INDEX)
+        : pastedCells;
+      if (legacyGraceColumn) {
+        warnings.push(
+          "تم تجاهل عمود «فترة السماح»؛ فترة السماح تُضاف من «إدارة فترة السماح».",
+        );
+      }
 
       if (cells.length !== EXPECTED_COLUMNS) {
         errors.push(`عدد الأعمدة ${cells.length}، المطلوب ${EXPECTED_COLUMNS}`);
@@ -483,7 +503,6 @@ export function StudentBulkTextImportView() {
         subSiteRaw,
         statusRaw,
         opportunitiesRaw,
-        graceRaw,
         phoneRaw,
         parentPhoneRaw,
         telegramRaw,
@@ -522,7 +541,6 @@ export function StudentBulkTextImportView() {
         courseRow?.activeChapter &&
           Number(courseRow.activeChapterCount || 0) === 1,
       );
-      const accountingGraceDays = Math.min(30, parseInteger(graceRaw, 0));
 
       if (!nameRaw.trim()) errors.push("اسم الطالب مطلوب");
       if (!schoolRaw.trim()) errors.push("المدرسة مطلوبة");
@@ -652,7 +670,6 @@ export function StudentBulkTextImportView() {
               activeChapter: null,
               isOpportunityFull: hasActiveChapter && opportunities > 0,
               isOpportunityOverLimit: false,
-              accountingGraceDays,
             }
           : null;
 
@@ -874,7 +891,7 @@ export function StudentBulkTextImportView() {
           )}
         </td>
         <td className="p-3 dir-ltr text-left">
-          {row.student?.phone || normalizePhone(row.rawCells[12] || "") || "—"}
+          {row.student?.phone || normalizePhone(row.rawCells[11] || "") || "—"}
         </td>
         <td className="p-3">{row.student?.status || row.rawCells[9] || "—"}</td>
         <td className="p-3">

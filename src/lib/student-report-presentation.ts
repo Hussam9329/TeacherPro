@@ -1,3 +1,4 @@
+import { findStudentGracePeriod, formatGracePeriod, type GracePeriodRange } from "./grace-periods";
 /** Read-only wording for the published student report. Never replay the ledger. */
 export function reportNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
@@ -47,6 +48,8 @@ export type ReportOpportunityContext = {
     settledGradeIds: ReadonlySet<string>;
   } | null;
   balanceNotes: ReportBalanceNote[];
+  /** The student's active grace periods: the only source of grace in reports. */
+  gracePeriods?: readonly GracePeriodRange[];
 };
 
 function reportLogDate(log: Record<string, unknown>): string | null {
@@ -195,7 +198,8 @@ export function reportGradeOutcome(grade: Record<string, unknown>, exam?: Record
     const pass = reportNumber(exam?.passMark);
     return full !== null && score === full ? "الدرجة كاملة" : pass === null ? "درجة مسجّلة" : score >= pass ? "ناجح" : "أقل من درجة النجاح";
   }
-  return ({ "غائب": "غياب", "غش": "حالة غش", "مجاز": "إجازة", "ضمن فترة السماح": "ضمن فترة السماح", "قبل تسجيل الطالب": "قبل تسجيلك" } as Record<string, string>)[status] || "غياب";
+  // The retired grace placeholder is not a result: it records nothing.
+  return ({ "غائب": "غياب", "غش": "حالة غش", "مجاز": "إجازة", "ضمن فترة السماح": "لا توجد نتيجة مسجلة", "قبل تسجيل الطالب": "قبل تسجيلك" } as Record<string, string>)[status] || "غياب";
 }
 
 export function reportGradeEffect(grade: Record<string, unknown>, exam: Record<string, unknown> | undefined, logs: Record<string, unknown>[], context?: ReportOpportunityContext): string {
@@ -224,7 +228,8 @@ export function reportGradeEffect(grade: Record<string, unknown>, exam: Record<s
   if (grade.academicEffectExcluded) return "لا خصم: هذه الدرجة مستثناة من حساب الفرص.";
   if (grade.status === "مجاز") return "لا خصم: لديك إجازة لهذا الامتحان.";
   if (grade.status === "قبل تسجيل الطالب") return "لا خصم: الامتحان قبل تسجيلك.";
-  if (grade.status === "ضمن فترة السماح" || /درجة (?:مؤجلة خلال فترة سماح الطالب|مؤجلة خلال فترة السماح|حقيقية داخل فترة السماح)/.test(String(grade.notes || ""))) return "لا خصم: الامتحان ضمن فترة السماح.";
+  const gracePeriod = findStudentGracePeriod(context?.gracePeriods, exam?.date as string | Date | null | undefined);
+  if (gracePeriod) return `لا خصم: الامتحان ضمن فترة السماح ${formatGracePeriod(gracePeriod)}.`;
   if (exam?.noDiscount) return "هذا الامتحان لا يخصم فرصاً.";
   return "لا يوجد خصم لهذا الامتحان";
 }

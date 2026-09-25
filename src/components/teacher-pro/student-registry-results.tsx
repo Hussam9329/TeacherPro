@@ -16,7 +16,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatAppDate, sanitizePhoneInput } from "@/lib/format";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
-import { formatStudentGraceRemaining } from "./student-registry-helpers";
+import { formatGraceDate } from "@/lib/grace-periods";
+import {
+  currentStudentGracePeriod,
+  formatStudentCurrentGrace,
+} from "./student-registry-helpers";
 import "./student-registry-results.css";
 
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
@@ -263,6 +267,11 @@ function StudentHealthIndicators({
       ))}
     </div>
   );
+}
+
+function StudentCurrentGraceNote({ student }: { student: Student }) {
+  const text = formatStudentCurrentGrace(student);
+  return text ? <p>{text}</p> : null;
 }
 
 function StudentDismissalDetails({ student }: { student: Student }) {
@@ -514,7 +523,7 @@ export function StudentRegistryResults({
                     {formatOpportunityBalance(student, { separator: " / " })}
                   </strong>
                 </p>
-                <p>السماح المتبقي: {formatStudentGraceRemaining(student)}</p>
+                <StudentCurrentGraceNote student={student} />
                 <p>
                   التسجيل:{" "}
                   {formatAppDate(student.createdAt, student.createdAt || "—")}
@@ -556,6 +565,7 @@ function StudentRegistryRow({
   whatsappLink: (phone: string) => string;
   telegramLink: (telegram: string) => string;
 }) {
+  const currentGrace = currentStudentGracePeriod(student);
   return (
     <Card
       className="tp-registry-row"
@@ -595,10 +605,12 @@ function StudentRegistryRow({
             label="الفرص"
             value={formatOpportunityBalance(student, { separator: " / " })}
           />
-          <RegistryField
-            label="السماح المتبقي"
-            value={formatStudentGraceRemaining(student)}
-          />
+          {currentGrace && (
+            <RegistryField
+              label="فترة السماح"
+              value={`حتى ${formatGraceDate(currentGrace.endDate)}`}
+            />
+          )}
         </dl>
         <StudentHealthIndicators student={student} activeIssue={activeIssue} />
         <StudentDismissalDetails student={student} />

@@ -7,6 +7,7 @@ const checks = [];
 const check = (label, condition) => checks.push({ label, ok: Boolean(condition) });
 
 const studentsRoute = read("src/app/api/students/route.ts");
+const gracePlan = read("src/lib/grace-period-plan-server.ts");
 const studentImpactRoute = read("src/app/api/students/update-impact/route.ts");
 const studentRegistry = read("src/components/teacher-pro/student-registry.tsx");
 const coursesRoute = read("src/app/api/courses/route.ts");
@@ -65,10 +66,11 @@ const maintenanceRepairEndpoints = [
 ];
 
 check(
-  "معاينة الطالب والحفظ يستخدمان تاريخ بدء السماح نفسه ولا يعيدان توليد اليوم عند التنفيذ",
-  studentRegistry.includes("academicImpactPreviewGraceStartDate") &&
-    studentsRoute.includes("academicImpactPreviewGraceStartDate") &&
-    studentsRoute.includes("? academicImpactPreviewGraceStartDate"),
+  "معاينة فترة السماح والحفظ مربوطان ببصمة واحدة؛ تعديل الطالب لم يعد يحمل أي حقل سماح",
+  gracePlan.includes("plan.previewToken !== request.previewToken") &&
+    gracePlan.includes("buildStudentAcademicImpactToken(") &&
+    !studentRegistry.includes("academicImpactPreviewGraceStartDate") &&
+    !studentsRoute.includes("academicImpactPreviewGraceStartDate"),
 );
 check(
   "Token أثر الطالب يُبنى ويُراجع داخل SERIALIZABLE transaction",

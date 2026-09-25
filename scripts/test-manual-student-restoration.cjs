@@ -57,7 +57,8 @@ require.extensions['.ts'] = (m,f) => m._compile(ts.transpileModule(fs.readFileSy
   let failAudit = false, recalculations = 0;
   tx.auditLog.create = async ({data}) => { if (failAudit) throw new Error('injected audit failure');return insert('AuditLog',data); };
   const principal={id:'admin',name:'test administrator',isAdmin:true,permissions:[]};
-  mocks.set('@/lib/db',{db:{}});
+  // No grace periods in this fixture; the response still carries the read-only list.
+  mocks.set('@/lib/db',{db:{gracePeriod:{findMany:async()=>[]}}});
   const {NextResponse} = require('next/server');
   mocks.set('@/lib/server-auth',{
     requirePermissionPrincipal:async (_req,permission)=>principal.isAdmin || principal.permissions.includes(permission) ? principal : NextResponse.json({error:'forbidden'},{status:403}),

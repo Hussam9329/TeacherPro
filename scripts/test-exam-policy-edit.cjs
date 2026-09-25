@@ -108,16 +108,16 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  mocks.set('@/lib/serializable-transaction',{withSerializableTransaction:async fn=>{await pg.exec('BEGIN');try{const result=await fn(client);await pg.exec('COMMIT');return result;}catch(e){await pg.exec('ROLLBACK');throw e;}}});
  const markerCalls=[];
  const markers=require('../src/lib/protected-grade-markers-server.ts');
- const repairs=require('../src/lib/grace-period-repair-server.ts');
+ const repairs=require('../src/lib/pre-registration-absence-repair-server.ts');
  mocks.set('@/lib/protected-grade-markers-server',Object.fromEntries(Object.entries(markers).map(([key,fn])=>[key,async(...args)=>{markerCalls.push(key);return fn(...args);}])));
- mocks.set('@/lib/grace-period-repair-server',{...repairs,repairProtectedAbsencesForStudents:async(...args)=>{markerCalls.push('repairProtectedAbsencesForStudents');return repairs.repairProtectedAbsencesForStudents(...args);}});
+ mocks.set('@/lib/pre-registration-absence-repair-server',{...repairs,repairPreRegistrationAbsencesForStudents:async(...args)=>{markerCalls.push('repairPreRegistrationAbsencesForStudents');return repairs.repairPreRegistrationAbsencesForStudents(...args);}});
  const route=require('../src/app/api/exams/route.ts');
  const {previewStudentsAcademicState}=require('../src/lib/academic-recalculate-server.ts');
  await pg.exec(`INSERT INTO "Course"(id,name) VALUES('c','الصيفية الأولى'),('isolated','دورة أخرى');
  INSERT INTO "Chapter"(id,name,opportunities) VALUES('ch','الفصل الثاني',3),('old-ch','الفصل الأول',3);
  INSERT INTO "CourseChapter"(id,"courseId","chapterId",active) VALUES('cc','c','ch',true),('ic','isolated','ch',true);
- INSERT INTO "Student"(id,name,"nameKey",gender,code,"courseId","mainSite","createdAt","baseOpportunities",opportunities,"accountingGraceDays",school)
- SELECT 's'||i,'طالب اختبار '||i,'test-'||i,'ذكر','T-'||i,'c','بغداد','2026-06-01',3,1,0,'يبقى محفوظاً' FROM generate_series(1,1000)i;
+ INSERT INTO "Student"(id,name,"nameKey",gender,code,"courseId","mainSite","createdAt","baseOpportunities",opportunities,school)
+ SELECT 's'||i,'طالب اختبار '||i,'test-'||i,'ذكر','T-'||i,'c','بغداد','2026-06-01',3,1,'يبقى محفوظاً' FROM generate_series(1,1000)i;
  INSERT INTO "Student"(id,name,"nameKey",gender,code,"courseId","mainSite","createdAt","baseOpportunities",opportunities)
  VALUES('untouched','آخر','other','ذكر','OTHER','isolated','بغداد','2026-06-01',3,2),('scope','تغيير تاريخ','scope','ذكر','SCOPE','isolated','بغداد','2026-09-07',3,3),('archive','أرشيف','archive','ذكر','ARCHIVE','c','بغداد','2026-06-01',3,3);
  UPDATE "Student" SET status='مفصول',opportunities=0,"dismissalReason"='قرار إداري',"dismissalNotes"='لا تستعده من تعديل امتحان' WHERE id='s2';
@@ -265,8 +265,9 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  const moved=await put({id:'scope-exam',date:'2026-09-08'});assert.equal(moved.status,200,JSON.stringify(moved.data));
  assert.ok(markerCalls.includes('reconcileProtectedGradeMarkersForExamEdit'));
  assert.ok(markerCalls.includes('ensureProtectedGradeMarkers'));
- const scopeGrade=await client.grade.findFirst({where:{studentId:'scope',examId:'scope-exam'}});assert.equal(scopeGrade.status,'ضمن فترة السماح','moving exam after registration replaces old marker with the correct grace marker');
- assert.equal(await client.grade.count({where:{studentId:'scope',examId:'scope-exam'}}),1,'stale protected marker replaced once');
+ // No hidden grace and no automatic result: the stale pre-registration marker
+ // is removed and nothing is recorded in its place.
+ assert.equal(await client.grade.count({where:{studentId:'scope',examId:'scope-exam'}}),0,'moving exam after registration removes the stale marker without recording a result');
  // Removing an earlier deduction may also remove a later automatic dismissal.
  // The historical safeguard must not preserve effects the old replay produced
  // and the changed replay legitimately removes.
@@ -368,7 +369,7 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  // in the SAME chapter. Its before snapshot must precede marker replacement.
  await pg.exec(`INSERT INTO "Course"(id,name) VALUES('history-course','دورة اختبار التسويات');
  INSERT INTO "CourseChapter"(id,"courseId","chapterId",active) VALUES('history-cc','history-course','ch',true);
- INSERT INTO "Student"(id,name,"nameKey",gender,code,"courseId","mainSite","createdAt","baseOpportunities",opportunities,"accountingGraceDays") VALUES('history-student','تاريخ محفوظ','history-student','ذكر','HISTORY','history-course','بغداد','2026-06-01',3,0,0);
+ INSERT INTO "Student"(id,name,"nameKey",gender,code,"courseId","mainSite","createdAt","baseOpportunities",opportunities) VALUES('history-student','تاريخ محفوظ','history-student','ذكر','HISTORY','history-course','بغداد','2026-06-01',3,0);
  INSERT INTO "Exam"(id,name,type,date,"courseIds","mainSite","fullMark","passMark","discountMark","opportunitiesPenalty") VALUES
  ('history-settled','امتحان تمت تسويته','يومي','2026-06-05','["history-course"]','بغداد',20,10,7,'1'),
  ('history-moving','امتحان ننقل تاريخه','يومي','2026-06-08','["history-course"]','بغداد',20,10,7,'1'),

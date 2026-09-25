@@ -10,6 +10,7 @@ const NON_REPLAYABLE_MAINTENANCE_ENDPOINTS = new Set([
   "/api/students/clamp-opportunities",
   "/api/course-chapters/second-chapter-transition",
   "/api/logs/clear",
+  "/api/grace-periods/legacy",
 ]);
 
 function endpointPath(endpoint: string): string {

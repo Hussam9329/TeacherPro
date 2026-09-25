@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
+import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
+import type { GracePeriodRange } from "@/lib/grace-periods";
 import { normalizeArabicText } from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
 import {
@@ -249,6 +251,15 @@ const databaseComputedGradeFilters = new Set<GradeStatusFilter>([
   "has-grade",
 ]);
 
+/** Attaches each student's active grace periods (the only grace input). */
+async function attachExportGracePeriods<T extends { id: string }>(students: T[]): Promise<void> {
+  const periods = await loadActiveGracePeriodsByStudent(db, students.map((student) => student.id));
+  for (const student of students) {
+    (student as T & { gracePeriods?: GracePeriodRange[] }).gracePeriods =
+      periods.get(student.id) || [];
+  }
+}
+
 function exportClassificationKind(
   grade: GradeWithRelations,
 ): GradeClassificationKind {
@@ -267,7 +278,7 @@ function protectedGradeActionText(kind: GradeClassificationKind): string {
     return "لا إجراء - الامتحان قبل تسجيل الطالب";
   }
   if (kind === "grace-period") {
-    return "لا إجراء - الطالب ضمن فترة السماح";
+    return "لا إجراء - مجاز — فترة سماح";
   }
   if (kind === "unavailable-exam") {
     return "لا إجراء حالياً - الامتحان غير متاح أو غير محتسب";
@@ -406,7 +417,7 @@ function predictedMissingActionText(
     return "لا إجراء - الامتحان قبل تسجيل الطالب";
   }
   if (kind === "grace-period") {
-    return "لا إجراء - الطالب ضمن فترة السماح";
+    return "لا إجراء - مجاز — فترة سماح";
   }
   if (kind === "unavailable-exam") {
     return "لا إجراء حالياً - الامتحان غير متاح أو غير محتسب";
@@ -450,6 +461,7 @@ async function completeGradeExportRows(searchParams: URLSearchParams) {
     }),
   ]);
 
+  await attachExportGracePeriods(students);
   const exams = examCandidates.filter((exam) => {
     const courseIds = completeExportExamCourseIds(exam);
     return !requestedCourseId || courseIds.includes(requestedCourseId);
@@ -548,6 +560,7 @@ export async function GET(req: NextRequest) {
         include: { student: { include: { studentLeaves: true } }, exam: true },
       });
       await annotateGradeSettlementEffects(allGrades);
+      await attachExportGracePeriods(allGrades.map((grade) => grade.student));
       const grades = allGrades.filter((grade) =>
         gradeMatchesExportStatusFilter(statusFilter, grade),
       );
@@ -575,6 +588,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     await annotateGradeSettlementEffects(grades);
+    await attachExportGracePeriods(grades.map((grade) => grade.student));
     return NextResponse.json({
       grades,
       total: grades.length,

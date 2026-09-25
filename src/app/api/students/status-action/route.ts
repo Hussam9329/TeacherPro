@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+import { studentsWithGracePeriodsForResponse } from "@/lib/grace-periods-server";
 import type { Prisma } from "@prisma/client";
 import { requirePermissionPrincipal } from "@/lib/server-auth";
 import { ARCHIVED_STUDENT_STATUS } from "@/lib/student-delete-impact";
@@ -260,9 +261,11 @@ export async function POST(req: NextRequest) {
         return { student: updatedStudent, opportunityLogs: [opportunityLog].filter(Boolean), studentNotes: [studentNote] };
       });
 
-      const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
+      const [studentWithOpportunity] = await studentsWithGracePeriodsForResponse(
+      await attachStudentOpportunitySnapshots([
         result.student,
-      ]);
+      ]),
+    );
       return NextResponse.json({
         ok: true,
         action,
@@ -373,9 +376,11 @@ export async function POST(req: NextRequest) {
         };
       });
 
-      const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
+      const [studentWithOpportunity] = await studentsWithGracePeriodsForResponse(
+      await attachStudentOpportunitySnapshots([
         result.student,
-      ]);
+      ]),
+    );
       return NextResponse.json({
         ok: true,
         action,
@@ -510,9 +515,11 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
+    const [studentWithOpportunity] = await studentsWithGracePeriodsForResponse(
+      await attachStudentOpportunitySnapshots([
       result.student,
-    ]);
+    ]),
+    );
     return NextResponse.json({
       ok: true,
       action,

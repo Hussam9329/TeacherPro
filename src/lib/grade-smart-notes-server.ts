@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 
 export const GRADE_SMART_NOTE_CATEGORIES = [
   "DISMISSED_PENDING",
+  // Historical only: the retired grace system parked in-grace scores here.
+  // Nothing creates it anymore; old rows stay readable.
   "GRACE_SCORED",
   "BEFORE_REGISTRATION_PENDING",
   "LEAVE_PENDING",
@@ -14,9 +16,6 @@ export const GRADE_SMART_NOTE_STATUSES = [
   "CONFLICT",
   "REJECTED",
 ] as const;
-
-export const GRACE_SCORED_GRADE_EXCLUSION_REASON =
-  "درجة حقيقية أُدخلت لامتحان داخل فترة سماح الطالب، وهي مستبعدة دائماً من الخصم والفصل والمحاسبة الأكاديمية.";
 
 export function gradeSmartNoteExclusionSource(
   category: GradeSmartNoteCategory,

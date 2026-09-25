@@ -141,12 +141,12 @@ check(
 );
 
 check(
-  exportDialog.includes('GRACE_DEFERRED_REPORT_STATUS = "لا يحاسب الطالب ( ضمن فترة السماح )"') &&
-    exportDialog.includes('"درجة مؤجلة خلال فترة السماح"') &&
-    exportDialog.includes('"درجة مؤجلة خلال فترة سماح الطالب"') &&
-    exportDialog.includes('String(grade.status || "").trim() !== "درجة"') &&
+  !exportDialog.includes('GRACE_DEFERRED_') &&
+    !exportDialog.includes('درجة مؤجلة خلال فترة السماح') &&
+    exportDialog.includes('isStudentInGracePeriod(gracePeriods') &&
+    exportDialog.includes('GRACE_PERIOD_EXCUSE_LABEL') &&
     exportDialog.includes('const { notes: _notes, ...reportGrade } = grade'),
-  'تقرير HTML يحول فقط حالة «درجة» المؤجلة خلال السماح، ويتعرف على صيغتي النظام ولا يحقن الملاحظات في الملف',
+  'تقرير HTML يحدد السماح من فترات الطالب وتاريخ الامتحان فقط (لا من نص الملاحظات) ولا يحقن الملاحظات في الملف',
 );
 check(
   !exportDialog.includes('<th>ملاحظات</th>') &&

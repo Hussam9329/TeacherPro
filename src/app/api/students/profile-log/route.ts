@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { attachGracePeriods } from "@/lib/grace-periods-server";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { requireAnyPermissionPrincipal } from "@/lib/server-auth";
 import { attachStudentOpportunitySnapshotsWithClient } from "@/lib/student-opportunity-snapshot-server";
@@ -130,11 +131,12 @@ export async function GET(req: NextRequest) {
 
     const snapshot = await db.$transaction(
       async (tx) => {
-        const student = await tx.student.findUnique({
+        const storedStudent = await tx.student.findUnique({
           where: { id: studentId },
           select: STUDENT_PROFILE_STUDENT_SELECT,
         });
-        if (!student) return null;
+        if (!storedStudent) return null;
+        const [student] = await attachGracePeriods(tx, [storedStudent]);
 
         const enrollmentArchives = await tx.studentEnrollmentArchive.findMany({
           where: { studentId },

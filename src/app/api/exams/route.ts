@@ -19,7 +19,7 @@ import {
   ensureProtectedGradeMarkers,
   reconcileProtectedGradeMarkersForExamEdit,
 } from '@/lib/protected-grade-markers-server';
-import { repairProtectedAbsencesForStudents } from '@/lib/grace-period-repair-server';
+import { repairPreRegistrationAbsencesForStudents } from '@/lib/pre-registration-absence-repair-server';
 import {
   parseExamNumber,
   validateExamForm,
@@ -666,11 +666,11 @@ export async function PUT(req: NextRequest) {
       const protectedMarkerReconciliation = protectedScopeChanged
         ? await reconcileProtectedGradeMarkersForExamEdit(tx, exam.id)
         : null;
+      // Editing an exam never records absences automatically. Only leave and
+      // pre-registration markers follow the new definition; grace periods are
+      // evaluated from the new exam date by the accounting engine.
       if (protectedScopeChanged || wasAvailable !== candidateAvailability.available) {
-        await ensureProtectedGradeMarkers(tx, {
-          examIds: [exam.id],
-          includeAbsent: protectedScopeChanged,
-        });
+        await ensureProtectedGradeMarkers(tx, { examIds: [exam.id] });
       }
       if (protectedScopeChanged) {
         const examGradeStudents = await tx.grade.findMany({
@@ -679,7 +679,7 @@ export async function PUT(req: NextRequest) {
           select: { studentId: true },
         });
         if (examGradeStudents.length > 0) {
-          await repairProtectedAbsencesForStudents(
+          await repairPreRegistrationAbsencesForStudents(
             tx,
             examGradeStudents.map((grade) => grade.studentId),
             { examIds: [exam.id] },

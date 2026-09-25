@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { baghdadDateKey } from "@/lib/baghdad-time";
+import { normalizeGracePeriodRanges, type GracePeriodRange } from "@/lib/grace-periods";
+import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
 
 type PrismaClientLike = typeof db | Prisma.TransactionClient;
 
@@ -19,11 +21,9 @@ export async function buildStudentAcademicImpactToken(
   client: PrismaClientLike,
   input: {
     studentId: string;
-    proposedCreatedAt: Date | string;
-    proposedGraceDays: number;
-    proposedGraceStartDate?: Date | string | null;
-    proposedGraceEndedAt?: Date | string | null;
-    proposedGraceHistory?: unknown;
+    proposedCreatedAt?: Date | string;
+    /** Proposed active grace periods of a grace-management change. */
+    proposedGracePeriods?: GracePeriodRange[];
   },
 ): Promise<string> {
   const student = await client.student.findUnique({
@@ -38,10 +38,6 @@ export async function buildStudentAcademicImpactToken(
       opportunities: true,
       baseOpportunities: true,
       createdAt: true,
-      accountingGraceDays: true,
-      gracePeriodStartDate: true,
-      gracePeriodEndedAt: true,
-      gracePeriodHistory: true,
       dismissalReason: true,
       dismissalNotes: true,
     },
@@ -55,6 +51,7 @@ export async function buildStudentAcademicImpactToken(
     exams,
     courseLinks,
     chapters,
+    gracePeriodsByStudent,
   ] = await Promise.all([
     client.grade.findMany({
       where: { studentId: input.studentId },
@@ -165,23 +162,20 @@ export async function buildStudentAcademicImpactToken(
       select: { id: true, name: true, opportunities: true },
       orderBy: { id: "asc" },
     }),
+    loadActiveGracePeriodsByStudent(client, [input.studentId]),
   ]);
+  const gracePeriods = (gracePeriodsByStudent.get(input.studentId) || [])
+    .map(({ id, startDate, endDate }) => ({ id, startDate, endDate }));
 
   const payload = {
-    version: 7,
+    version: 8,
     student,
-    proposedCreatedAt: dayKey(input.proposedCreatedAt),
-    proposedGraceStartDate: input.proposedGraceStartDate
-      ? dayKey(input.proposedGraceStartDate)
-      : "",
-    proposedGraceEndedAt: input.proposedGraceEndedAt
-      ? dayKey(input.proposedGraceEndedAt)
-      : "",
-    proposedGraceHistory: input.proposedGraceHistory ?? student?.gracePeriodHistory ?? [],
-    proposedGraceDays: Math.min(
-      30,
-      Math.max(0, Math.trunc(Number(input.proposedGraceDays || 0))),
-    ),
+    gracePeriods,
+    proposedCreatedAt: input.proposedCreatedAt ? dayKey(input.proposedCreatedAt) : "",
+    proposedGracePeriods: input.proposedGracePeriods
+      ? normalizeGracePeriodRanges(input.proposedGracePeriods)
+          .map(({ startDate, endDate }) => ({ startDate, endDate }))
+      : null,
     grades,
     leaves,
     opportunityLogs,

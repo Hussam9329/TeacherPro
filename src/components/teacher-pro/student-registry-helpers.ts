@@ -7,10 +7,12 @@ import {
   toLatinDigits,
 } from "@/lib/format";
 import {
-  getStudentGraceDaysRemaining,
-  getStudentGraceWindow,
-  isStudentCurrentlyInGrace as isStudentCurrentlyInGraceUnified,
-} from "@/lib/student-grace";
+  GRACE_PERIOD_EXCUSE_LABEL,
+  findStudentGracePeriod,
+  formatGraceDate,
+  gracePeriodState,
+  type GracePeriodRange,
+} from "@/lib/grace-periods";
 import {
   normalizeTelegramIdentifier,
   sanitizeTelegramInput,
@@ -80,7 +82,7 @@ export const studentExportColumns: ExportColumn<any>[] = [
   { key: "status", label: "الحالة", value: (student) => student.status || "" },
   { key: "dismissalReason", label: "سبب الفصل", value: (student) => student.dismissalReason || "", defaultSelected: false },
   { key: "opportunities", label: "الفرص", value: (student) => student.opportunities ?? "" },
-  { key: "grace", label: "السماح المتبقي", value: (student) => formatStudentGraceRemaining(student) },
+  { key: "grace", label: "فترة السماح", value: (student) => formatStudentCurrentGrace(student) },
   { key: "createdAt", label: "تاريخ التسجيل", value: (student) => formatAppDate(student.createdAt) },
   { key: "phone", label: "الهاتف", value: (student) => student.phone || "" },
   { key: "parentPhone", label: "ولي الأمر", value: (student) => student.parentPhone || "" },
@@ -91,7 +93,7 @@ export function academicImpactKindLabel(kind: string): string {
   const labels: Record<string, string> = {
     missing: "غير مكتملة",
     excused: "إجازة",
-    "grace-period": "ضمن السماح",
+    "grace-period": GRACE_PERIOD_EXCUSE_LABEL,
     "before-registration": "قبل التسجيل",
     "unavailable-exam": "امتحان غير متاح",
     cheating: "غش",
@@ -144,7 +146,6 @@ export type StudentEditForm = {
   courseId: string;
   subSite: string;
   createdAt: string;
-  accountingGraceDays: string;
 };
 
 export const emptyEditForm: StudentEditForm = {
@@ -163,7 +164,6 @@ export const emptyEditForm: StudentEditForm = {
   courseId: "",
   subSite: "",
   createdAt: baghdadTodayKey(),
-  accountingGraceDays: "0",
 };
 
 export function getStudentEditForm(student: Student): StudentEditForm {
@@ -183,7 +183,6 @@ export function getStudentEditForm(student: Student): StudentEditForm {
     courseId: student.courseId,
     subSite: student.subSite || "",
     createdAt: baghdadDateKey(student.createdAt) || baghdadTodayKey(),
-    accountingGraceDays: String(student.accountingGraceDays ?? 0),
   };
 }
 
@@ -248,46 +247,22 @@ export function describeTelegramHandle(student: {
   return { label: "تيليكرام", value: "", href: "" };
 }
 
-export function normalizeGraceDaysInput(value: string): string {
-  const digits = toLatinDigits(value).replace(/\D/g, "");
-  return digits ? String(Math.min(Number(digits), 30)) : "0";
+/** Read-only: the student's grace period that covers today (Baghdad), if any. */
+export function currentStudentGracePeriod(
+  student: Pick<Student, "gracePeriods">,
+  todayKey: string = baghdadTodayKey(),
+): GracePeriodRange | null {
+  const period = findStudentGracePeriod(student.gracePeriods, todayKey);
+  return period && gracePeriodState(period, todayKey) === "current" ? period : null;
 }
 
-export function isValidGraceDays(value: string): boolean {
-  if (!/^\d+$/.test(value)) return false;
-  const days = Number(value);
-  return Number.isInteger(days) && days >= 0 && days <= 30;
-}
-
-export function graceEndDate(student: Student): string {
-  const graceWindow = getStudentGraceWindow(student);
-  if (!graceWindow) {
-    return formatAppDate(
-      student.createdAt,
-      String(student.createdAt || "").slice(0, 10) || "-",
-    );
-  }
-  const end = new Date(graceWindow.endExclusive);
-  end.setUTCDate(end.getUTCDate() - 1);
-  return formatAppDate(end);
-}
-
-export function isStudentCurrentlyInGrace(student: Student): boolean {
-  return isStudentCurrentlyInGraceUnified(student);
-}
-
-export function studentGraceRemainingDays(
-  student: Student,
-  now: Date = new Date(),
-): number {
-  return getStudentGraceDaysRemaining(student, now);
-}
-
-export function formatStudentGraceRemaining(
-  student: Student,
-  now: Date = new Date(),
+/** «ضمن فترة السماح حتى 28/09/2026» or "" when no period covers today. */
+export function formatStudentCurrentGrace(
+  student: Pick<Student, "gracePeriods">,
+  todayKey: string = baghdadTodayKey(),
 ): string {
-  return `${studentGraceRemainingDays(student, now)} يوم`;
+  const period = currentStudentGracePeriod(student, todayKey);
+  return period ? `ضمن فترة السماح حتى ${formatGraceDate(period.endDate)}` : "";
 }
 
 export function studentMatchesRegistrySearch(

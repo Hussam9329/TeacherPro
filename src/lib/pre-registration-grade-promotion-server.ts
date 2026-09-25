@@ -4,7 +4,6 @@ import { baghdadDateKey } from "@/lib/baghdad-time";
 import { normalizeStudentLeave } from "@/lib/academic-engine";
 import type { Prisma } from "@prisma/client";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
-import { captureStudentGraceHistory } from "@/lib/student-grace-history-server";
 
 const BATCH_SIZE = 500;
 
@@ -113,17 +112,6 @@ export async function promotePendingPreRegistrationGrades(
     await tx.student.updateMany({
       where: { id: note.studentId, createdAt: { gt: note.exam.date } },
       data: { createdAt: note.exam.date },
-    });
-    await tx.student.update({
-      where: { id: note.studentId },
-      data: {
-        accountingGraceDays: 0,
-        gracePeriodStartDate: null,
-        gracePeriodEndedAt: student.gracePeriodEndedAt || now,
-        gracePeriodHistory: await captureStudentGraceHistory(tx, student, {
-          now, includeToday: false, excludeExamId: note.examId,
-        }),
-      },
     });
     if (existing?.status === "درجة" && existing.score !== null) {
       await tx.grade.update({

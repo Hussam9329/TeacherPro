@@ -13,17 +13,14 @@ import {
   ensureProtectedGradeMarkers,
   reconcileProtectedGradeMarkersForExamEdit,
 } from "@/lib/protected-grade-markers-server";
-import { repairProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
+import { repairPreRegistrationAbsencesForStudents } from "@/lib/pre-registration-absence-repair-server";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import {
-  getExamEntryAvailability,
   isExamOnOrAfterStudentRegistration,
   splitSelection,
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
-import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 import { parseCourseIds } from "@/lib/exam-course-links";
-import { baghdadDateKey, baghdadTodayKey } from "@/lib/baghdad-time";
 import { studentLeaveAppliesToExam } from "@/lib/grade-classification";
 
 type IntegrityCandidate = {
@@ -50,7 +47,9 @@ function isAuthorized(req: NextRequest): boolean {
 async function inspectCandidates(client: typeof db | Prisma.TransactionClient) {
   const grades = await client.grade.findMany({
     where: {
-      status: { in: ["قبل تسجيل الطالب", "ضمن فترة السماح", "مجاز", "غائب"] },
+      // Retired grace placeholders are handled only by the legacy grace
+      // conversion in the grace-management screen, never here.
+      status: { in: ["قبل تسجيل الطالب", "مجاز", "غائب"] },
       student: { status: { not: "مؤرشف" } },
     },
     orderBy: [{ examId: "asc" }, { studentId: "asc" }],
@@ -66,10 +65,6 @@ async function inspectCandidates(client: typeof db | Prisma.TransactionClient) {
           subSite: true,
           locationScope: true,
           createdAt: true,
-          accountingGraceDays: true,
-          gracePeriodStartDate: true,
-          gracePeriodEndedAt: true,
-          gracePeriodHistory: true,
         },
       },
       exam: {
@@ -118,7 +113,6 @@ async function inspectCandidates(client: typeof db | Prisma.TransactionClient) {
       studentLeaveAppliesToExam(leave, exam),
     );
     const registered = eligible && isExamOnOrAfterStudentRegistration(student, exam);
-    const withinGrace = registered && isExamWithinStudentGraceWindow(student, exam);
     let expectedStatus = grade.status;
 
     if (!eligible) {
@@ -129,14 +123,10 @@ async function inspectCandidates(client: typeof db | Prisma.TransactionClient) {
       expectedStatus = "مجاز";
     } else if (!registered) {
       expectedStatus = "قبل تسجيل الطالب";
-    } else if (withinGrace) {
-      expectedStatus = "ضمن فترة السماح";
     } else if (grade.status !== "غائب") {
-      expectedStatus =
-        getExamEntryAvailability(exam).available &&
-        baghdadDateKey(exam.date) < baghdadTodayKey()
-          ? "غائب"
-          : "بدون سجل محمي";
+      // A stale protected marker is removed; an absence is never created
+      // automatically. Grace periods are evaluated by exam date at read time.
+      expectedStatus = "بدون سجل محمي";
     }
 
     if (expectedStatus !== grade.status) {
@@ -232,10 +222,9 @@ export async function POST(req: NextRequest) {
         await ensureProtectedGradeMarkers(tx, {
           examIds: [examId],
           studentIds: examStudentIds,
-          includeAbsent: true,
         });
       }
-      await repairProtectedAbsencesForStudents(tx, preview.studentIds);
+      await repairPreRegistrationAbsencesForStudents(tx, preview.studentIds);
       const recalculation = await recalculateStudentsAcademicState(preview.studentIds, { tx });
       recalculatedStudents = recalculation.students.length;
       await tx.auditLog.create({
