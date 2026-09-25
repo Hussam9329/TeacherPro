@@ -17,7 +17,8 @@ export type GradeNoteBannerKey =
   | "auto-absent"
   | "before-registration"
   | "grace"
-  | "excused";
+  | "excused"
+  | "deferred";
 
 export interface GradeNoteBannerInfo {
   key: GradeNoteBannerKey;
@@ -37,6 +38,7 @@ export const CANONICAL_GRADE_NOTE_TEXTS = [
   "قبل تسجيل الطالب",
   "فترة سماح",
   "إجازة",
+  "درجة مؤجلة أثناء الفصل",
 ] as const;
 
 /** العبارات الآلية القديمة الطويلة (تاريخية — لا يولّدها السيرفر بعدُ) */
@@ -54,6 +56,10 @@ const LEGACY_PATTERNS = {
     "الطالب مجاز من هذا الامتحان",
   ],
 } as const;
+
+/** بادئة ملاحظة «درجة مؤجلة أثناء الفصل» — النص القديم كان يلحق سبباً ثابتاً بعدها */
+const PREFIX_DEFERRED = "درجة مؤجلة أثناء الفصل";
+const DEFERRED_LEGACY = ["درجة مؤجلة أثناء فصل الطالب"] as const;
 
 const containsAny = (notes: string, patterns: readonly string[]): boolean =>
   patterns.some((p) => notes.includes(p));
@@ -146,6 +152,18 @@ export function resolveGradeNoteBanner(
       key: "grace",
       label: "فترة سماح",
       title: "سُجّل تلقائياً لأن الطالب كان ضمن فترة السماح",
+    };
+  }
+
+  // درجة مؤجلة أثناء الفصل — أدخلها أحد أثناء فصل الطالب، ونُقلت للسجل بعد
+  // إعادة تفعيله للتوثيق فقط (النص القديم كان: البادئة + سبب ثابت طويل)
+  if (raw.startsWith(PREFIX_DEFERRED) || containsAny(raw, DEFERRED_LEGACY)) {
+    return {
+      key: "deferred",
+      label: "درجة مؤجلة",
+      detail: "أُدخلت أثناء فصل الطالب وحُفظت بعد إعادة التفعيل",
+      title:
+        "درجة أُدخلت أثناء فصل الطالب؛ نُقلت إلى السجل بعد إعادة تفعيله للتوثيق فقط — بلا خصم أو فصل أو محاسبة أكاديمية",
     };
   }
 

@@ -1302,10 +1302,7 @@ export function GradeRecordsView() {
                   ) : null}
                   {grade.academicEffectExcluded && (
                     <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium leading-5 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
-                      <span className="font-bold">توثيق فقط - بلا أثر أكاديمي.</span>
-                      {grade.academicEffectExclusionReason
-                        ? ` السبب: ${grade.academicEffectExclusionReason}`
-                        : ""}
+                      توثيق فقط - بلا خصم أو فصل أو محاسبة.
                     </div>
                   )}
                   {!isExamOnOrAfterStudentRegistration(student, exam) && (
@@ -1414,10 +1411,7 @@ export function GradeRecordsView() {
                       </Badge>
                       {grade.academicEffectExcluded && (
                         <p className="mt-1 text-[11px] font-medium text-sky-700 dark:text-sky-300">
-                          توثيق فقط - بلا خصم أو فصل
-                          {grade.academicEffectExclusionReason
-                            ? `: ${grade.academicEffectExclusionReason}`
-                            : ""}
+                          توثيق فقط - بلا خصم أو فصل.
                         </p>
                       )}
                       {!isExamOnOrAfterStudentRegistration(student, exam) && (

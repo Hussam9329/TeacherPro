@@ -260,9 +260,7 @@ function examPenaltyText(exam?: Exam): string {
 function gradeImpactLabel(kind: GradeClassificationKind, grade: Grade, student: Student, exam?: Exam): string {
   if (!exam) return "تعذر تحديد قاعدة الامتحان لأن الامتحان محذوف.";
   if (kind === "academic-effect-excluded")
-    return grade.academicEffectExclusionReason
-      ? `محفوظة للتوثيق فقط بلا أي خصم أو فصل: ${grade.academicEffectExclusionReason}`
-      : "محفوظة للتوثيق فقط بلا أي خصم أو فصل.";
+    return "محفوظة للتوثيق فقط بلا أي خصم أو فصل أو محاسبة.";
   if (kind === "excused") return "لم يتم الخصم: الطالب لديه إجازة تغطي هذا الامتحان.";
   if (kind === "before-registration") return "لم يتم الخصم: الامتحان قبل تاريخ تسجيل الطالب.";
   if (kind === "unavailable-exam") return "لم يتم الاحتساب: الامتحان غير متاح حالياً بحسب التفعيل أو الموعد.";

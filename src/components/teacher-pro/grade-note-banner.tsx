@@ -2,6 +2,7 @@
 
 import {
   CalendarClock,
+  FileClock,
   Hourglass,
   Leaf,
   PenLine,
@@ -51,6 +52,12 @@ const TONES: Record<
     wrapper:
       "border border-emerald-200/80 bg-gradient-to-l from-emerald-50 to-emerald-50/40 text-emerald-900 dark:border-emerald-900/50 dark:from-emerald-950/40 dark:to-emerald-950/20 dark:text-emerald-100",
     icon: "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/60 dark:text-emerald-300",
+  },
+  deferred: {
+    Icon: FileClock,
+    wrapper:
+      "border border-teal-200/80 bg-gradient-to-l from-teal-50 to-teal-50/40 text-teal-900 dark:border-teal-900/50 dark:from-teal-950/40 dark:to-teal-950/20 dark:text-teal-100",
+    icon: "bg-teal-100 text-teal-600 dark:bg-teal-900/60 dark:text-teal-300",
   },
 };
 

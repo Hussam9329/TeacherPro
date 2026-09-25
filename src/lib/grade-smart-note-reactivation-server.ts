@@ -122,9 +122,8 @@ export async function migrateDismissedPendingGradesAfterActivation(
             examId: note.examId,
             status: "درجة",
             score: note.score,
-            notes: note.reason
-              ? `درجة مؤجلة أثناء الفصل: ${note.reason}`
-              : "درجة مؤجلة أثناء فصل الطالب.",
+            // نص قصير معتمد — البانر في الواجهة يشرح القصة كاملة
+            notes: "درجة مؤجلة أثناء الفصل",
             academicAccountingChecked: false,
             academicEffectExcluded: true,
             academicEffectExclusionReason:
