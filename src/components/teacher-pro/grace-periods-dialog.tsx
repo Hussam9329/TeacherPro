@@ -18,34 +18,36 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
+  describeGraceRemaining,
   formatGraceDate,
   formatGraceDays,
   formatGracePeriod,
+  GRACE_PERIOD_LIST_FILTERS,
   gracePeriodDays,
   gracePeriodEndFromDays,
   gracePeriodState,
   MAX_GRACE_PERIOD_DAYS,
   validateGracePeriodInput,
+  type GracePeriodListFilter,
   type GracePeriodRecord,
 } from "@/lib/grace-periods";
 import {
   gracePeriodsApi,
   type GraceChangeInput,
   type GraceChangePreview,
+  type GracePeriodListResponse,
   type GracePeriodsResponse,
   type GraceStudentSearchResult,
 } from "@/lib/grace-periods-client";
 import { formatBaghdadDateTime } from "@/lib/baghdad-time";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
-import { LegacyGraceConversionPanel } from "./legacy-grace-conversion-panel";
 import "./grace-periods-dialog.css";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canManage: boolean;
-  canConvertLegacy: boolean;
 };
 
 type EditorState = {
@@ -73,7 +75,7 @@ function examDateLabel(value: string): string {
   return formatGraceDate(String(value || "").slice(0, 10));
 }
 
-export function GracePeriodsDialog({ open, onOpenChange, canManage, canConvertLegacy }: Props) {
+export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GraceStudentSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -85,7 +87,10 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage, canConvertLe
   const [preview, setPreview] = useState<GraceChangePreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState("");
-  const [showLegacy, setShowLegacy] = useState(false);
+  const [listFilter, setListFilter] = useState<GracePeriodListFilter>("all");
+  const [list, setList] = useState<GracePeriodListResponse | null>(null);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState("");
   const loadSequence = useRef(0);
 
   useEffect(() => {
@@ -97,8 +102,37 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage, canConvertLe
     setPreview(null);
     setActionError("");
     setLoadError("");
-    setShowLegacy(false);
+    setListFilter("all");
+    setList(null);
+    setListError("");
   }, [open]);
+
+  // The list follows the filter and the search text; it is re-read whenever
+  // the operator comes back from a student, so saved changes show up at once.
+  const trimmedQuery = query.trim();
+  const listQuery = trimmedQuery.length >= 2 ? trimmedQuery : "";
+  useEffect(() => {
+    if (!open || data) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setListLoading(true);
+      setListError("");
+      try {
+        const response = await gracePeriodsApi.list(listFilter, listQuery, controller.signal);
+        if (!controller.signal.aborted) setList(response);
+      } catch (cause) {
+        if (!controller.signal.aborted) {
+          setListError(cause instanceof Error ? cause.message : "تعذر تحميل قائمة فترات السماح.");
+        }
+      } finally {
+        if (!controller.signal.aborted) setListLoading(false);
+      }
+    }, listQuery ? 300 : 0);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [open, data, listFilter, listQuery]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -296,15 +330,6 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage, canConvertLe
             اليوم الأول والأخير محسوبان ضمن الفترة.
           </p>
 
-          {canConvertLegacy && (
-            <div className="tp-grace__legacy-toggle">
-              <Button type="button" variant="outline" size="sm" onClick={() => setShowLegacy((value) => !value)}>
-                {showLegacy ? "إخفاء نقل فترات السماح القديمة" : "نقل فترات السماح من النظام القديم"}
-              </Button>
-            </div>
-          )}
-          {canConvertLegacy && showLegacy && <LegacyGraceConversionPanel />}
-
           {!data && (
             <section className="tp-grace__search" aria-label="البحث عن طالب">
               <label className="tp-grace__field">
@@ -339,12 +364,87 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage, canConvertLe
                         </span>
                         <span className="tp-grace__result-meta">
                           {student.courseName && <span><BookOpen aria-hidden="true" />{student.courseName}</span>}
+                          {student.graceState === "current" && student.graceEndDate && (
+                            <span className="tp-grace__chip" data-state="current">
+                              ضمن فترة السماح حتى <span dir="ltr">{formatGraceDate(student.graceEndDate)}</span>
+                            </span>
+                          )}
+                          {student.graceState === "past" && (
+                            <span className="tp-grace__chip" data-state="past">فترة سماح منتهية</span>
+                          )}
                           <span className="tp-grace__status" data-status={student.status}>{student.status}</span>
                         </span>
                       </button>
                     </li>
                   ))}
                 </ul>
+              )}
+            </section>
+          )}
+
+          {!data && (
+            <section className="tp-grace__section" aria-labelledby="tp-grace-list">
+              <h3 id="tp-grace-list">
+                {listQuery ? "فترات السماح للطلاب المطابقين للبحث" : "فترات السماح"}
+              </h3>
+              <div role="group" aria-label="تصفية فترات السماح" className="tp-grace__filters">
+                {GRACE_PERIOD_LIST_FILTERS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className="tp-grace__filter"
+                    aria-pressed={listFilter === option.value}
+                    data-filter={option.value}
+                    onClick={() => setListFilter(option.value)}
+                  >
+                    <span>{option.label}</span>
+                    <span className="tp-grace__filter-count">{list ? list.counts[option.value] : "…"}</span>
+                  </button>
+                ))}
+              </div>
+              {listError && <p role="alert" className="tp-grace__error"><AlertCircle aria-hidden="true" />{listError}</p>}
+              {listLoading && !list && (
+                <p role="status" className="tp-grace__muted">
+                  <Loader2 className="inline size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> جارٍ تحميل فترات السماح…
+                </p>
+              )}
+              {list && list.periods.length === 0 && !listLoading && (
+                <p className="tp-grace__muted">
+                  {listFilter === "current"
+                    ? "لا توجد فترات سماح مستمرة."
+                    : listFilter === "past"
+                      ? "لا توجد فترات سماح منتهية."
+                      : "لا توجد فترات سماح."}
+                </p>
+              )}
+              {list && list.periods.length > 0 && (
+                <ul className="tp-grace__results" aria-busy={listLoading}>
+                  {list.periods.map((period) => {
+                    const state = gracePeriodState(period, list.today);
+                    return (
+                      <li key={period.id}>
+                        <button type="button" className="tp-grace__result" onClick={() => void loadStudent(period.studentId)} disabled={loading}>
+                          <span className="tp-grace__avatar" aria-hidden="true"><UserRound /></span>
+                          <span className="tp-grace__result-text">
+                            <strong>{period.studentName}</strong>
+                            <span dir="ltr">{period.studentCode}</span>
+                            {period.courseName && <span>{period.courseName}</span>}
+                          </span>
+                          <span className="tp-grace__list-period">
+                            <span dir="ltr" className="tp-grace__range-cell">{formatGracePeriod(period)}</span>
+                            <span className="tp-grace__muted">{formatGraceDays(gracePeriodDays(period))}</span>
+                            <span className="tp-grace__chip" data-state={state}>
+                              {state === "current" ? describeGraceRemaining(period, list.today) : "منتهية"}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {list?.truncated && (
+                <p className="tp-grace__muted">تُعرض أول {list.periods.length} فترة فقط؛ استخدم البحث لتضييق القائمة.</p>
               )}
             </section>
           )}

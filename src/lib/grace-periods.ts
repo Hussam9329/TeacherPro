@@ -163,6 +163,35 @@ export function gracePeriodState(period: GracePeriodRange, todayKey: string): Gr
   return todayKey && period.endDate < todayKey ? "past" : "current";
 }
 
+export type GracePeriodListFilter = "all" | GracePeriodState;
+
+/** Smart filter of the grace list in «إدارة فترة السماح». */
+export const GRACE_PERIOD_LIST_FILTERS: ReadonlyArray<{ value: GracePeriodListFilter; label: string }> = [
+  { value: "all", label: "فترات السماح (الكل)" },
+  { value: "current", label: "فترات السماح (المستمرة)" },
+  { value: "past", label: "فترات السماح (المنتهية)" },
+];
+
+export function normalizeGracePeriodListFilter(value: unknown): GracePeriodListFilter {
+  return value === "current" || value === "past" ? value : "all";
+}
+
+/** Days left counting today; 0 once the period has ended. */
+export function graceDaysRemaining(period: Pick<GracePeriodRange, "startDate" | "endDate">, todayKey: string): number {
+  if (!isValidGraceDateKey(todayKey) || period.endDate < todayKey) return 0;
+  const from = period.startDate > todayKey ? period.startDate : todayKey;
+  return gracePeriodDays({ startDate: from, endDate: period.endDate });
+}
+
+/** «آخر يوم اليوم» / «متبقي 3 أيام» / «منتهية». */
+export function describeGraceRemaining(period: Pick<GracePeriodRange, "startDate" | "endDate">, todayKey: string): string {
+  const left = graceDaysRemaining(period, todayKey);
+  if (left === 0) return "منتهية";
+  if (period.startDate > todayKey) return `تبدأ ${formatGraceDate(period.startDate)}`;
+  if (left === 1) return "آخر يوم اليوم";
+  return `متبقي ${formatGraceDays(left)}`;
+}
+
 export function formatGraceDate(key: string): string {
   const match = key.match(DATE_KEY_PATTERN);
   return match ? `${match[3]}/${match[2]}/${match[1]}` : "—";

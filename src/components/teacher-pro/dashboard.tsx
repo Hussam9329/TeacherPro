@@ -95,11 +95,6 @@ export function DashboardView({
     actor.roleId === "role_admin" ||
     actor.permissions?.includes("students.edit")
   ));
-  const canConvertLegacyGrace = Boolean(actor && (
-    actor.username?.trim().toLowerCase() === "admin" ||
-    actor.roleId === "role_admin" ||
-    actor.permissions?.includes("system.maintenance")
-  ));
   const [gracePeriodsOpen, setGracePeriodsOpen] = useState(false);
   const syncKey = useTeacherProSyncKey(["dashboard", "students", "grades", "opportunities", "exams"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
@@ -335,7 +330,6 @@ export function DashboardView({
           open={gracePeriodsOpen}
           onOpenChange={setGracePeriodsOpen}
           canManage={canManageGracePeriods}
-          canConvertLegacy={canConvertLegacyGrace}
         />
       )}
       {canViewCodeClosures && (

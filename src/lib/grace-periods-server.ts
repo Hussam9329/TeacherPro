@@ -122,7 +122,7 @@ export async function isStudentInGracePeriodForExam(
   return isStudentInGracePeriod(periods.get(studentId), dateKey);
 }
 
-/** Legacy Student grace columns. Read only by the one-time legacy conversion. */
+/** Retired Student grace columns. Nothing reads them; responses strip them. */
 export const LEGACY_STUDENT_GRACE_FIELDS = [
   "accountingGraceDays",
   "gracePeriodStartDate",

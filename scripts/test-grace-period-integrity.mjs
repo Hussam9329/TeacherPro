@@ -40,6 +40,11 @@ const retired = [
   "src/lib/grade-smart-note-grace-expiry-server.ts",
   "src/lib/student-grace-history-server.ts",
   "src/app/api/internal/grace-smart-notes/settle/route.ts",
+  // The one-time transfer from the old system is finished and removed.
+  "src/lib/legacy-grace-conversion.ts",
+  "src/lib/legacy-grace-conversion-server.ts",
+  "src/app/api/grace-periods/legacy/route.ts",
+  "src/components/teacher-pro/legacy-grace-conversion-panel.tsx",
 ];
 for (const file of retired) check(!exists(file), `الملف القديم محذوف: ${file}`);
 const retiredImports = filesMatching(
@@ -48,21 +53,21 @@ const retiredImports = filesMatching(
 check(retiredImports.length === 0, `لا يوجد استيراد لوحدات السماح القديمة ${retiredImports.join(", ")}`);
 const retiredNames = filesMatching(
   /\b(?:getStudentGraceWindow|isExamInsideGracePeriod|isGradeInsideGracePeriod|endStudentGracePeriod|settleGraceSmartNotes|GRACE_DEFERRED_[A-Z_]+|DEFAULT_GRACE_DAYS)\b/,
-).filter((file) => file !== "src/lib/legacy-grace-conversion.ts");
+);
 check(retiredNames.length === 0, `لا توجد دوال أو ثوابت السماح القديمة ${retiredNames.join(", ")}`);
 
-// 2. Old Student grace columns are read only by the one-time conversion.
+// 2. Old Student grace columns are only named to strip or refuse them.
 const legacyColumnReaders = filesMatching(/\b(?:accountingGraceDays|gracePeriodStartDate|gracePeriodEndedAt|gracePeriodHistory)\b/);
 const allowedLegacyReaders = new Set([
-  "src/lib/legacy-grace-conversion.ts",
-  "src/lib/legacy-grace-conversion-server.ts",
   "src/lib/grace-periods-server.ts",
   "src/app/api/students/route.ts",
 ]);
 check(
   legacyColumnReaders.every((file) => allowedLegacyReaders.has(file)),
-  `حقول السماح القديمة لا تُقرأ إلا في أداة النقل ${legacyColumnReaders.filter((file) => !allowedLegacyReaders.has(file)).join(", ")}`,
+  `حقول السماح القديمة لا يقرأها أي كود ${legacyColumnReaders.filter((file) => !allowedLegacyReaders.has(file)).join(", ")}`,
 );
+check(!read("src/lib/mutation-replay-policy.ts").includes("/api/grace-periods/legacy"), "لا يبقى أي أثر لمسار النقل القديم");
+check(!read("src/components/teacher-pro/grace-periods-dialog.tsx").includes("نقل فترات السماح من النظام القديم"), "زر «نقل فترات السماح من النظام القديم» أُزيل");
 const studentsRoute = read("src/app/api/students/route.ts");
 check(
   /LEGACY_STUDENT_GRACE_FIELDS|accountingGraceDays",\s*\n\s*"gracePeriodStartDate/.test(studentsRoute) &&
@@ -70,11 +75,11 @@ check(
   "مسار الطلاب يرفض حقول السماح القديمة ولا يكتبها",
 );
 
-// 3. GracePeriod rows are written only by the management screen and the conversion.
+// 3. GracePeriod rows are written only by the management screen.
 const graceWriters = filesMatching(/\bgracePeriod\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\b/);
 check(
-  graceWriters.join(",") === "src/lib/grace-period-plan-server.ts,src/lib/legacy-grace-conversion-server.ts",
-  `كتابة فترات السماح محصورة بإدارة فترة السماح وأداة النقل (${graceWriters.join(", ")})`,
+  graceWriters.join(",") === "src/lib/grace-period-plan-server.ts",
+  `كتابة فترات السماح محصورة بإدارة فترة السماح (${graceWriters.join(", ")})`,
 );
 
 // 4. Nothing writes the retired «ضمن فترة السماح» placeholder any more.
@@ -115,7 +120,7 @@ check(
 const graceApiCallers = filesMatching(/["'`]\/api\/grace-periods/).filter((file) => !file.startsWith("src/app/api/"));
 check(
   graceApiCallers.every((file) =>
-    ["src/lib/grace-periods-client.ts", "src/components/teacher-pro/legacy-grace-conversion-panel.tsx", "src/lib/mutation-replay-policy.ts"].includes(file),
+    ["src/lib/grace-periods-client.ts"].includes(file),
   ),
   `واجهة فترات السماح تُستدعى من شاشة الإدارة فقط (${graceApiCallers.join(", ")})`,
 );
@@ -141,11 +146,22 @@ check(
   "سياسة الترحيل تتضمن ترحيل جدول السماح",
 );
 
-// 8. Legacy conversion: dry run before apply, never replayed offline.
-const legacyRoute = read("src/app/api/grace-periods/legacy/route.ts");
-check(/dry-run/.test(legacyRoute) && /apply/.test(legacyRoute), "النقل من النظام القديم فيه تشغيل تجريبي ثم تطبيق");
-check(/system\.maintenance/.test(legacyRoute), "النقل مقصور على صلاحية الصيانة");
-check(read("src/lib/mutation-replay-policy.ts").includes("/api/grace-periods/legacy"), "النقل لا يعاد تشغيله من طابور عدم الاتصال");
+// 8. Smart list: الكل / المستمرة / المنتهية, read-only, ongoing includes the last day.
+const listRoute = read("src/app/api/grace-periods/list/route.ts");
+const dialog = read("src/components/teacher-pro/grace-periods-dialog.tsx");
+check(
+  ["فترات السماح (الكل)", "فترات السماح (المستمرة)", "فترات السماح (المنتهية)"].every((label) => engineSource.includes(label)) &&
+    dialog.includes("GRACE_PERIOD_LIST_FILTERS.map"),
+  "فلترة ذكية: فترات السماح (الكل) / (المستمرة) / (المنتهية)",
+);
+check(
+  /cancelledAt:\s*null/.test(listRoute) &&
+    /endDate:\s*\{\s*gte:\s*todayColumn\s*\}/.test(listRoute) &&
+    /endDate:\s*\{\s*lt:\s*todayColumn\s*\}/.test(listRoute) &&
+    !/\.(?:create|update|delete|upsert)\w*\(/.test(listRoute),
+  "القائمة للقراءة فقط: الملغاة مستبعدة، والمستمرة تشمل اليوم الأخير",
+);
+check(/requirePermission\(req, "students\.view"\)/.test(listRoute), "القائمة تتطلب صلاحية عرض الطلاب");
 
 // 9. Tests are wired.
 const pkg = JSON.parse(read("package.json"));

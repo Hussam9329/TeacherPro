@@ -32,7 +32,6 @@ const grace = require(path.join(root, "src/lib/grace-periods.ts"));
 const { recalculateAcademicState, isAutomaticOpportunityLog } = require(path.join(root, "src/lib/academic-engine.ts"));
 const { classifyGradeAcademicImpact } = require(path.join(root, "src/lib/grade-classification.ts"));
 const { recalculateWithGraceReview } = require(path.join(root, "src/lib/grace-dismissal-review.ts"));
-const legacy = require(path.join(root, "src/lib/legacy-grace-conversion.ts"));
 
 const PERIOD = { id: "p1", startDate: "2026-03-25", endDate: "2026-03-28" };
 
@@ -217,62 +216,24 @@ test("granting grace over the dismissal exam lifts only that automatic dismissal
   assert.equal(reviewed.students[0].opportunities, recalculated({ ...withGrace, students: [{ ...stored, status: "نشط", dismissalReason: "", gracePeriods: [{ startDate: causeDate, endDate: causeDate }] }] }).opportunities, "with the real remaining balance, no grant");
 });
 
-test("legacy conversion keeps exactly the old protected days", () => {
-  const baseStudent = {
-    id: "s",
-    createdAt: "2026-09-20T09:00:00.000Z",
-    accountingGraceDays: 0,
-    gracePeriodStartDate: null,
-    gracePeriodEndedAt: null,
-    gracePeriodHistory: [],
-  };
-  const plan = (studentOverrides, extra = {}) => legacy.planLegacyStudentConversion({
-    student: { ...baseStudent, ...studentOverrides },
-    examDateById: new Map([["ex-end", "2026-09-22"], ["ex-one", "2026-09-05"]]),
-    placeholders: [],
-    existingPeriods: [],
-    todayKey: "2026-09-26",
-    ...extra,
-  });
-
-  const automatic = plan({});
-  assert.deepEqual(automatic.periods.map(({ startDate, endDate }) => [startDate, endDate]), [["2026-09-20", "2026-09-22"]]);
-
-  const manual = plan({ accountingGraceDays: 4, gracePeriodStartDate: "2026-09-22T00:00:00.000Z" });
-  assert.deepEqual(manual.periods.map(({ startDate, endDate }) => [startDate, endDate]), [["2026-09-22", "2026-09-25"]], "manual replaces automatic");
-
-  const ended = plan({
-    gracePeriodEndedAt: "2026-09-22T10:00:00.000Z",
-    gracePeriodHistory: [{ start: "2026-09-20", endExclusive: "2026-09-23", excludedExamIds: ["ex-end"] }],
-  });
-  assert.deepEqual(ended.periods.map(({ startDate, endDate }) => [startDate, endDate]), [["2026-09-20", "2026-09-21"]], "the exam that ended grace stays chargeable");
-  assert.equal(ended.conflicts.length, 1);
-
-  const perExam = plan({
-    gracePeriodEndedAt: "2026-09-10T00:00:00.000Z",
-    gracePeriodHistory: [{ start: "2026-09-05", endExclusive: "2026-09-06", excludedExamIds: [], examIds: ["ex-one"] }],
-  });
-  assert.deepEqual(perExam.periods.map(({ startDate, endDate }) => [startDate, endDate]), [["2026-09-05", "2026-09-05"]]);
-  assert.equal(perExam.uncertainReasons.length, 1);
-
-  const orphan = plan({ gracePeriodEndedAt: "2026-09-10T00:00:00.000Z" }, {
-    placeholders: [{ examId: "a", examDate: "2026-09-08" }, { examId: "b", examDate: "2026-09-30" }],
-  });
-  assert.deepEqual(orphan.periods.map(({ startDate, endDate }) => [startDate, endDate]), [["2026-09-08", "2026-09-08"]], "past orphan placeholder keeps its day");
-  assert.equal(orphan.futurePlaceholders, 1, "a future orphan placeholder is not protected");
-  assert.equal(orphan.placeholdersToDelete, 2);
-
-  const merged = plan({
-    accountingGraceDays: 2,
-    gracePeriodStartDate: "2026-09-24T00:00:00.000Z",
-    gracePeriodHistory: [{ start: "2026-09-20", endExclusive: "2026-09-24", excludedExamIds: [] }],
-  });
-  assert.deepEqual(merged.periods.map(({ startDate, endDate }) => [startDate, endDate]), [["2026-09-20", "2026-09-25"]], "touching ranges merge into one non-overlapping period");
-
-  const already = plan({}, { existingPeriods: [{ id: "x", startDate: "2026-09-20", endDate: "2026-09-22", source: "legacy", cancelled: false }] });
-  assert.equal(already.status, "already-converted", "conversion is idempotent");
-
-  const manualWins = plan({}, { existingPeriods: [{ id: "m", startDate: "2026-09-21", endDate: "2026-09-25", source: "manual", cancelled: false }] });
-  assert.deepEqual(manualWins.periods.map(({ startDate, endDate }) => [startDate, endDate]), [["2026-09-20", "2026-09-20"]]);
-  assert.equal(manualWins.conflicts.length, 1);
+test("smart list filter: all, ongoing (last day included) and ended", () => {
+  assert.deepEqual(
+    grace.GRACE_PERIOD_LIST_FILTERS.map((option) => [option.value, option.label]),
+    [
+      ["all", "فترات السماح (الكل)"],
+      ["current", "فترات السماح (المستمرة)"],
+      ["past", "فترات السماح (المنتهية)"],
+    ],
+  );
+  assert.equal(grace.normalizeGracePeriodListFilter("current"), "current");
+  assert.equal(grace.normalizeGracePeriodListFilter("past"), "past");
+  assert.equal(grace.normalizeGracePeriodListFilter("anything"), "all");
+  assert.equal(grace.gracePeriodState(PERIOD, "2026-03-28"), "current");
+  assert.equal(grace.gracePeriodState(PERIOD, "2026-03-29"), "past");
+  assert.equal(grace.graceDaysRemaining(PERIOD, "2026-03-25"), 4);
+  assert.equal(grace.graceDaysRemaining(PERIOD, "2026-03-27"), 2);
+  assert.equal(grace.graceDaysRemaining(PERIOD, "2026-03-29"), 0);
+  assert.equal(grace.describeGraceRemaining(PERIOD, "2026-03-26"), "متبقي 3 أيام");
+  assert.equal(grace.describeGraceRemaining(PERIOD, "2026-03-28"), "آخر يوم اليوم");
+  assert.equal(grace.describeGraceRemaining(PERIOD, "2026-03-29"), "منتهية");
 });

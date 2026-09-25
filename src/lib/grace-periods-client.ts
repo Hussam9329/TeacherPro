@@ -1,6 +1,6 @@
 import { ownerHeaders } from "@/lib/outbox-session";
 import { withReadDeadline } from "@/lib/read-deadline";
-import type { GracePeriodRange, GracePeriodRecord } from "@/lib/grace-periods";
+import type { GracePeriodListFilter, GracePeriodRange, GracePeriodRecord } from "@/lib/grace-periods";
 
 export type GraceStudentSearchResult = {
   id: string;
@@ -9,6 +9,26 @@ export type GraceStudentSearchResult = {
   status: string;
   telegram: string;
   courseName: string;
+  graceState: "current" | "past" | "none";
+  graceEndDate: string | null;
+};
+
+export type GracePeriodListItem = GracePeriodRange & {
+  id: string;
+  source: string;
+  studentId: string;
+  studentName: string;
+  studentCode: string;
+  studentStatus: string;
+  courseName: string;
+};
+
+export type GracePeriodListResponse = {
+  today: string;
+  filter: GracePeriodListFilter;
+  counts: { all: number; current: number; past: number };
+  truncated: boolean;
+  periods: GracePeriodListItem[];
 };
 
 export type GraceStudentCard = {
@@ -97,6 +117,19 @@ export const gracePeriodsApi = {
         headers: ownerHeaders(),
       });
       return readJson(response, "تعذر البحث عن الطالب. أعد المحاولة.");
+    }, signal);
+  },
+  list(filter: GracePeriodListFilter, query: string, signal?: AbortSignal): Promise<GracePeriodListResponse> {
+    return withReadDeadline(async (requestSignal) => {
+      const params = new URLSearchParams({ filter });
+      if (query.trim().length >= 2) params.set("q", query.trim());
+      const response = await fetch(`/api/grace-periods/list?${params.toString()}`, {
+        credentials: "same-origin",
+        cache: "no-store",
+        signal: requestSignal,
+        headers: ownerHeaders(),
+      });
+      return readJson(response, "تعذر تحميل قائمة فترات السماح. أعد المحاولة.");
     }, signal);
   },
   load(studentId: string, signal?: AbortSignal): Promise<GracePeriodsResponse> {
