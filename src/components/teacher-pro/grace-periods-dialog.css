@@ -248,6 +248,40 @@ a.tp-grace__tg:focus-visible { outline: 2px solid var(--grace-telegram); outline
 .tp-grace__state[data-light="yellow"] { background: color-mix(in srgb, var(--grace-yellow) 18%, transparent); color: var(--status-warning-fg); }
 .tp-grace__state[data-light="red"] { background: color-mix(in srgb, var(--grace-red) 12%, transparent); color: var(--status-danger-fg); }
 
+/* Archived students: visible, never openable or editable. */
+.tp-grace__card[data-archived="true"],
+.tp-grace__student[data-archived="true"] {
+  border-style: dashed;
+  border-inline-start-style: solid;
+  background: color-mix(in srgb, var(--muted) 55%, var(--grace-surface));
+}
+.tp-grace__card[data-archived="true"] .tp-grace__identity,
+.tp-grace__card[data-archived="true"] .tp-grace__card-period { opacity: 0.6; }
+.tp-grace__card[data-archived="true"]:hover { box-shadow: none; }
+.tp-grace__card[data-archived="true"] .tp-grace__card-open { cursor: not-allowed; }
+.tp-grace__archived {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.7rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.tp-grace__archived-note {
+  margin: 0;
+  padding: 0.6rem 0.85rem;
+  border: 1px dashed var(--border);
+  border-radius: 0.85rem;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
 /* ── Selected student ───────────────────────────────────────────────── */
 
 .tp-grace__student {

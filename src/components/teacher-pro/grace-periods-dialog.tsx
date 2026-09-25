@@ -85,6 +85,14 @@ function registrationDateLabel(createdAt: string): string {
   return key ? formatGraceDate(key) : "—";
 }
 
+const ARCHIVED_STATUS = "مؤرشف";
+const ARCHIVED_HINT = "الطالب مؤرشف — لا يمكن إضافة فترة سماح أو تعديلها";
+
+/** Archived students are shown but never editable; the tag says why. */
+function ArchivedTag() {
+  return <span className="tp-grace__archived" title={ARCHIVED_HINT}>مؤرشف</span>;
+}
+
 /** The status light in front of a student: green, yellow (ends today) or red. */
 function GraceLightDot({ light }: { light: GraceLight | null }) {
   if (!light) return null;
@@ -98,16 +106,18 @@ type StudentIdentityProps = {
   username: string;
   createdAt: string;
   light: GraceLight | null;
+  archived?: boolean;
 };
 
 /** The student card shows only: name, Telegram (opens the app) and registration date. */
-function StudentIdentity({ name, telegram, username, createdAt, light }: StudentIdentityProps) {
+function StudentIdentity({ name, telegram, username, createdAt, light, archived = false }: StudentIdentityProps) {
   const handle = describeTelegramHandle({ telegram, username });
   return (
     <div className="tp-grace__identity">
       <strong className="tp-grace__name">
         <GraceLightDot light={light} />
         <span className="tp-grace__name-text">{name}</span>
+        {archived && <ArchivedTag />}
       </strong>
       <div className="tp-grace__meta">
         {handle.href ? (
@@ -251,8 +261,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
   );
   const studentLight = data ? studentGraceLight(activePeriods, today) : null;
   const currentLight = currentPeriod ? gracePeriodLight(currentPeriod, today) : null;
-  const archived = data?.student.status === "مؤرشف";
-  const editable = canManage && !archived;
+  const archived = data?.student.status === ARCHIVED_STATUS;
 
   const proposed = editor && editor.action !== "cancel" ? editorPeriod(editor) : null;
   const validation = editor && editor.action !== "cancel" && proposed
@@ -359,13 +368,14 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
   }
 
   function renderPeriodActions(period: GracePeriodRecord) {
-    if (!editable || period.cancelledAt) return null;
+    if (!canManage || period.cancelledAt) return null;
+    const locked = archived || busy;
     return (
-      <div className="tp-grace__period-actions">
-        <Button type="button" size="sm" variant="outline" onClick={() => startUpdate(period)} disabled={busy}>
+      <div className="tp-grace__period-actions" title={archived ? ARCHIVED_HINT : undefined}>
+        <Button type="button" size="sm" variant="outline" onClick={() => startUpdate(period)} disabled={locked}>
           <PencilLine className="size-4" aria-hidden="true" />تعديل
         </Button>
-        <Button type="button" size="sm" variant="ghost" className="tp-grace__danger" onClick={() => startCancel(period)} disabled={busy}>
+        <Button type="button" size="sm" variant="ghost" className="tp-grace__danger" onClick={() => startCancel(period)} disabled={locked}>
           <XCircle className="size-4" aria-hidden="true" />إلغاء
         </Button>
       </div>
@@ -414,14 +424,17 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                     <ul className="tp-grace__cards">
                       {results.map((student) => {
                         const light = searchResultLight(student);
+                        const isArchived = student.status === ARCHIVED_STATUS;
                         return (
-                          <li key={student.id} className="tp-grace__card" data-light={light || "none"}>
+                          <li key={student.id} className="tp-grace__card" data-light={light || "none"} data-archived={isArchived}>
                             <button
                               type="button"
                               className="tp-grace__card-open"
                               onClick={() => void loadStudent(student.id)}
-                              disabled={loading}
-                              aria-label={`فتح فترات السماح للطالب ${student.name}`}
+                              disabled={loading || isArchived}
+                              aria-disabled={isArchived}
+                              aria-label={isArchived ? `${student.name}: ${ARCHIVED_HINT}` : `فتح فترات السماح للطالب ${student.name}`}
+                              title={isArchived ? ARCHIVED_HINT : undefined}
                             />
                             <StudentIdentity
                               name={student.name}
@@ -429,6 +442,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                               username={student.username}
                               createdAt={student.createdAt}
                               light={light}
+                              archived={isArchived}
                             />
                           </li>
                         );
@@ -482,14 +496,17 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                   <ul className="tp-grace__cards" aria-busy={listLoading}>
                     {list.periods.map((period) => {
                       const light = gracePeriodLight(period, list.today);
+                      const isArchived = period.studentStatus === ARCHIVED_STATUS;
                       return (
-                        <li key={period.id} className="tp-grace__card" data-light={light}>
+                        <li key={period.id} className="tp-grace__card" data-light={light} data-archived={isArchived}>
                           <button
                             type="button"
                             className="tp-grace__card-open"
                             onClick={() => void loadStudent(period.studentId)}
-                            disabled={loading}
-                            aria-label={`فتح فترات السماح للطالب ${period.studentName}`}
+                            disabled={loading || isArchived}
+                            aria-disabled={isArchived}
+                            aria-label={isArchived ? `${period.studentName}: ${ARCHIVED_HINT}` : `فتح فترات السماح للطالب ${period.studentName}`}
+                            title={isArchived ? ARCHIVED_HINT : undefined}
                           />
                           <StudentIdentity
                             name={period.studentName}
@@ -497,6 +514,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                             username={period.studentUsername}
                             createdAt={period.studentCreatedAt}
                             light={light}
+                            archived={isArchived}
                           />
                           <div className="tp-grace__card-period">
                             <span className="tp-grace__card-range" dir="ltr">{formatGracePeriod(period)}</span>
@@ -519,13 +537,14 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
 
           {data && (
             <>
-              <section className="tp-grace__student" data-light={studentLight || "none"} aria-label="الطالب">
+              <section className="tp-grace__student" data-light={studentLight || "none"} data-archived={archived} aria-label="الطالب">
                 <StudentIdentity
                   name={data.student.name}
                   telegram={data.student.telegram}
                   username={data.student.username}
                   createdAt={data.student.createdAt}
                   light={studentLight}
+                  archived={archived}
                 />
                 <Button
                   type="button"
@@ -539,7 +558,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                 </Button>
               </section>
 
-              {archived && <p className="tp-grace__muted">الطالب مؤرشف؛ فترات سماحه للعرض فقط.</p>}
+              {archived && <p role="note" className="tp-grace__archived-note">{ARCHIVED_HINT}.</p>}
 
               <section className="tp-grace__section" aria-labelledby="tp-grace-current">
                 <h3 id="tp-grace-current">الفترة الحالية</h3>
@@ -560,15 +579,15 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                 ) : (
                   <div className="tp-grace__empty">
                     <p>لا توجد فترة سماح حالية</p>
-                    {editable && !editor && (
-                      <Button type="button" onClick={startCreate} disabled={busy}>
+                    {canManage && !editor && (
+                      <Button type="button" onClick={startCreate} disabled={busy || archived} title={archived ? ARCHIVED_HINT : undefined}>
                         <CalendarPlus className="size-4" aria-hidden="true" />إضافة فترة سماح
                       </Button>
                     )}
                   </div>
                 )}
-                {currentPeriod && editable && !editor && (
-                  <Button type="button" variant="outline" size="sm" className="tp-grace__add-more" onClick={startCreate} disabled={busy}>
+                {currentPeriod && canManage && !editor && (
+                  <Button type="button" variant="outline" size="sm" className="tp-grace__add-more" onClick={startCreate} disabled={busy || archived} title={archived ? ARCHIVED_HINT : undefined}>
                     <CalendarPlus className="size-4" aria-hidden="true" />إضافة فترة سماح أخرى
                   </Button>
                 )}

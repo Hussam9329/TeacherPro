@@ -163,6 +163,16 @@ check(
 );
 check(/requirePermission\(req, "students\.view"\)/.test(listRoute), "القائمة تتطلب صلاحية عرض الطلاب");
 
+// 9. Archived students can never receive or change a grace period.
+const planServer = read("src/lib/grace-period-plan-server.ts");
+check(/ARCHIVED_STATUS = "مؤرشف"/.test(planServer) && /student\.status === ARCHIVED_STATUS[\s\S]{0,120}throw new GraceChangeError/.test(planServer), "الخادم يرفض أي تعديل سماح لطالب مؤرشف");
+check(
+  (dialog.match(/data-archived=\{isArchived\}/g) || []).length === 2 &&
+    (dialog.match(/disabled=\{loading \|\| isArchived\}/g) || []).length === 2 &&
+    /disabled=\{busy \|\| archived\}/.test(dialog),
+  "الطالب المؤرشف يظهر معطلاً في البحث والقائمة وزر الإضافة",
+);
+
 // 9. Tests are wired.
 const pkg = JSON.parse(read("package.json"));
 check(pkg.scripts["test:grace-period-integrity"]?.includes("test-grace-periods-behavior.mjs"), "اختبارات سلوك السماح الجديدة ضمن الحزمة");
