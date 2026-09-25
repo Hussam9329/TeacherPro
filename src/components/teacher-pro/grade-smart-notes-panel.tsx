@@ -8,6 +8,7 @@ import {
   FileWarning,
   RefreshCw,
   ShieldAlert,
+  UserRound,
   UserRoundX,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +70,16 @@ const STATUS_LABELS: Record<GradeSmartNoteStatus, string> = {
   PROCESSED: "معالجة ومغلقة",
   CONFLICT: "تحتاج معالجة تعارض",
   REJECTED: "مرفوضة بعد المراجعة",
+};
+
+const STATUS_VARIANTS: Record<
+  GradeSmartNoteStatus,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  PENDING: "secondary",
+  PROCESSED: "default",
+  CONFLICT: "destructive",
+  REJECTED: "outline",
 };
 
 const DEFAULT_VISIBLE_NOTES_COUNT = 5;
@@ -194,14 +205,14 @@ export function GradeSmartNotesPanel({
 
         <section aria-labelledby="smart-notes-list-title">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
+            <div className="min-w-0">
               <h3 id="smart-notes-list-title" className="text-sm font-black">
                 السجل المنظّم
               </h3>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 {activeCategory
-                  ? `عرض: ${CATEGORY_META[activeCategory].title}`
-                  : "عرض كل حالات هذا الامتحان"}
+                  ? `عرض: ${CATEGORY_META[activeCategory].title} — ${CATEGORY_META[activeCategory].decision}`
+                  : "عرض كل محاولات الدرجات المحفوظة لهذا الامتحان وحالة مراجعتها."}
               </p>
             </div>
             {activeCategory && (
@@ -263,64 +274,43 @@ export function GradeSmartNotesPanel({
                     key={note.id}
                     className="rounded-2xl border bg-background/90 p-4 shadow-sm"
                   >
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-black">{note.studentNameSnapshot}</p>
-                          <Badge variant="outline">
-                            {note.studentCodeSnapshot || "بدون كود"}
-                          </Badge>
-                          <Badge
-                            variant={
-                              note.status === "PENDING"
-                                ? "secondary"
-                                : note.status === "REJECTED"
-                                  ? "destructive"
-                                  : "outline"
-                            }
-                          >
-                            {STATUS_LABELS[note.status]}
-                          </Badge>
-                        </div>
-                        <p className="mt-2 text-xs leading-6 text-muted-foreground">
-                          {note.reason || meta.decision}
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <p className="break-words font-black">
+                          {note.studentNameSnapshot}
                         </p>
+                        <Badge variant="outline" className="shrink-0">
+                          {note.studentCodeSnapshot || "بدون كود"}
+                        </Badge>
+                        <Badge
+                          variant={STATUS_VARIANTS[note.status]}
+                          className="shrink-0"
+                        >
+                          {STATUS_LABELS[note.status]}
+                        </Badge>
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center gap-2">
                         <Badge className="text-sm tabular-nums">
-                          الدرجة المدخلة: {note.score ?? "—"}
+                          الدرجة: {note.score ?? "—"}
                         </Badge>
                         <Badge variant="outline">{meta.shortTitle}</Badge>
                       </div>
                     </div>
-
-                    <dl className="mt-3 grid grid-cols-1 gap-2 rounded-xl bg-muted/45 p-3 text-xs sm:grid-cols-2 xl:grid-cols-4">
-                      <div>
-                        <dt className="text-muted-foreground">قرار النظام</dt>
-                        <dd className="mt-1 font-semibold leading-5">
-                          {meta.decision}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">وقت الإدخال</dt>
-                        <dd className="mt-1 flex items-center gap-1 font-semibold tabular-nums">
-                          <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
-                          {formatSmartNoteTime(note.attemptedAt || note.createdAt)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">مدخل الدرجة</dt>
-                        <dd className="mt-1 font-semibold">
-                          {note.attemptedByName || "مستخدم النظام"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">نتيجة المراجعة</dt>
-                        <dd className="mt-1 font-semibold">
-                          {note.resolution || STATUS_LABELS[note.status]}
-                        </dd>
-                      </div>
-                    </dl>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1 tabular-nums">
+                        <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+                        {formatSmartNoteTime(note.attemptedAt || note.createdAt)}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
+                        {note.attemptedByName || "مستخدم النظام"}
+                      </span>
+                    </div>
+                    {note.resolution && note.status !== "PENDING" ? (
+                      <p className="mt-2 break-words rounded-xl bg-muted/45 px-3 py-2 text-xs font-medium leading-5 [overflow-wrap:anywhere]">
+                        {note.resolution}
+                      </p>
+                    ) : null}
                   </li>
                 );
                 })}
