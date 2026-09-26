@@ -169,6 +169,8 @@ type ScorePillTone =
   | "excused"
   | "sky"
   | "grace"
+  | "absent"
+  | "cheating"
   | "neutral";
 
 /**
@@ -178,11 +180,15 @@ type ScorePillTone =
  *
  * إصلاح: أي صف حالته «مجاز» يبقى أصفر حتى لو سقط تصنيفه بفرع التسوية
  * التاريخية («بلا أثر» لامتحانات الفصول السابقة) — كان يعرض أبيض.
+ *
+ * إصلاح: صف مُسوّى رصيدياً («بلا أثر») يعرض درجته بلون نتيجته الأكاديمية
+ * الفعلية (baseText) — سابقاً كان يسقط محايداً فتسرق قاعدة CSS القديمة
+ * للأصفار الرقمية لونه الأخضر (13/50 مخصوم تظهر خضراء).
  */
 function scorePillPresentation(
   grade: Grade,
   exam: Parameters<typeof gradeRecordScoreText>[1],
-  cls: { text: string; kind: string },
+  cls: { text: string; kind: string; baseText?: string },
 ): { text: string; tone: ScorePillTone } {
   const status = String(grade.status || "");
   if (cls.text === "مجاز" || status === "مجاز")
@@ -196,13 +202,14 @@ function scorePillPresentation(
     return { text: "قبل التسجيل", tone: "sky" };
   if (status === "درجة") {
     const text = gradeRecordScoreText(grade, exam);
-    if (cls.text === "مخصوم" || cls.text === "فصل") return { text, tone: "fail-dark" };
-    if (cls.text === "راسب" || cls.text === "بدون خصم") return { text, tone: "fail-light" };
-    if (cls.text === "ناجح") return { text, tone: "pass" };
+    const result = cls.baseText || cls.text;
+    if (result === "مخصوم" || result === "فصل") return { text, tone: "fail-dark" };
+    if (result === "راسب" || result === "بدون خصم") return { text, tone: "fail-light" };
+    if (result === "ناجح") return { text, tone: "pass" };
     return { text, tone: "neutral" };
   }
-  if (status === "غائب") return { text: "غائب", tone: "neutral" };
-  if (status === "غش") return { text: "غش", tone: "neutral" };
+  if (status === "غائب") return { text: "غائب", tone: "absent" };
+  if (status === "غش") return { text: "غش", tone: "cheating" };
   return { text: gradeRecordStatusText(status) || "—", tone: "neutral" };
 }
 

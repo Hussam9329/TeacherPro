@@ -217,9 +217,10 @@
   white-space: nowrap;
 }
 
-.tp-grade-dialog__score[data-kind="numeric"] { border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success-fg); }
-.tp-grade-dialog__score[data-kind="absent"] { border-color: transparent; background: var(--status-danger-solid); color: var(--status-danger-on); }
-.tp-grade-dialog__score[data-kind="cheating"] { border-color: transparent; background: var(--status-warning-solid); color: var(--status-warning-on); }
+/* لون الحبة يُدار حصرياً بـ data-tone — قواعد data-kind القديمة للحبة
+   أزيلت (كانت تجعل كل درجة رقمية خضراء افتراضياً فتتسرب لأي حالة
+   تسقط خارج النظام الست، مثل صف «بلا أثر» المسوّى رصيدياً 13/50).
+   حدود الصف نفسه (border-inline-start) بقيت على data-kind. */
 
 /* لون الحبة يلخّص الحالة — طلب صاحب النظام:
    ناجح أخضر · راسب/بدون خصم أحمر فاتح · مخصوم/فصل أحمر طوخ ·
@@ -230,6 +231,13 @@
 .tp-grade-dialog__score[data-tone="excused"] { border-color: var(--status-warning-border); background: var(--status-warning-bg); color: var(--status-warning-fg); }
 .tp-grade-dialog__score[data-tone="sky"] { border-color: var(--status-info-border); background: var(--status-info-bg); color: var(--status-info-fg); }
 .tp-grade-dialog__score[data-tone="grace"] { border-color: var(--status-grace-border); background: var(--status-grace-bg); color: var(--status-grace-fg); }
+
+/* غائب أحمر صلب وغش أصفر صلب — نفس العرض السابق (كان عبر data-kind) */
+.tp-grade-dialog__score[data-tone="absent"] { border-color: transparent; background: var(--status-danger-solid); color: var(--status-danger-on); }
+.tp-grade-dialog__score[data-tone="cheating"] { border-color: transparent; background: var(--status-warning-solid); color: var(--status-warning-on); }
+
+/* الحالات المحايدة فعلاً (غير محتسب/غير مسجل/نص حالة) بلا لون نتيجة */
+.tp-grade-dialog__score[data-tone="neutral"] { border-color: var(--tp-border-strong); background: transparent; color: var(--tp-text); }
 
 @container (min-width: 40rem) {
   .tp-grade-dialog__row {

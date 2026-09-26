@@ -919,7 +919,7 @@ interface TeacherState {
     grade: Grade | undefined,
     exam: Exam,
     student?: Student,
-  ) => { text: string; type: string; kind: string };
+  ) => { text: string; type: string; kind: string; baseText?: string };
 
   addUser: (user: Omit<User, "id">) => void;
   updateUser: (id: string, updates: Partial<Omit<User, "id">>) => void;
@@ -2451,8 +2451,11 @@ export const useTeacherStore = create<TeacherState>()(
         if (grade?.academicEffectExcluded)
           return { ...classifyNormally(), kind: "academic-effect-excluded" };
         // صفوف التسوية التاريخية: شارة محايدة قصيرة بدل العبارة الطويلة.
+        // baseText يكشف النتيجة الأكاديمية الفعلية (ناجح/راسب/مخصوم…) تحت
+        // التسوية — لون حبة النتيجة في سجل الدرجات يصف الدرجة نفسها، بينما
+        // بقاء kind=academic-effect-excluded يحمي استبعاد المحاسبة والفلاتر.
         if (grade?.effectiveImpactExcluded || settlementReason)
-          return { text: "بلا أثر", type: "info", kind: "academic-effect-excluded" };
+          return { text: "بلا أثر", type: "info", kind: "academic-effect-excluded", baseText: classifyNormally().text };
         return classifyNormally();
       },
 
