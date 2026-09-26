@@ -24,6 +24,7 @@ import { buildReportOpportunityContext, hasTwoOpportunityPledge, presentOpportun
 import { GRACE_PERIOD_EXCUSE_LABEL, isStudentInGracePeriod, normalizeGracePeriodRanges } from "@/lib/grace-periods";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
 import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
+import { hasStudentLeaveForExam, type StudentLeaveLike } from "@/lib/grade-classification";
 
 export type ExportColumn<T = Record<string, unknown>> = {
   key: string;
@@ -197,6 +198,7 @@ export type StudentProfileLogSnapshot = {
   grades?: Array<Record<string, unknown>> | null;
   allCourseExams?: Array<Record<string, unknown>> | null;
   opportunityLogs?: Array<Record<string, unknown>> | null;
+  studentLeaves?: StudentLeaveLike[] | null;
   /**
    * سياق الفصل النشط الحالي (من /api/students/profile-log): عند توفره
    * تُعرض درجات امتحانات الفصل النشط وحدها (الامتحانات المنشأة بعد بداية
@@ -278,7 +280,8 @@ export function buildStudentDetailsFromProfileLog(
     resolveActiveChapterExamFilter(profile);
   const examMap = new Map<string, Record<string, unknown>>();
   const exams = Array.isArray(profile.exams) ? profile.exams : [];
-  for (const exam of exams) {
+  const allCourseExams = Array.isArray(profile.allCourseExams) ? profile.allCourseExams : [];
+  for (const exam of [...allCourseExams, ...exams]) {
     const examRecord = exam as Record<string, unknown>;
     const examId = String(examRecord.id || "");
     if (examId) examMap.set(examId, examRecord);
@@ -289,37 +292,42 @@ export function buildStudentDetailsFromProfileLog(
   const logScope = resolveActiveChapterLogScope(profile);
   const scopedLogs = rawLogs.filter(log => opportunityLogWithinActiveChapter(log, logScope));
   const gracePeriods = normalizeGracePeriodRanges(profile.student?.gracePeriods);
+  const studentLeaves = Array.isArray(profile.studentLeaves) ? profile.studentLeaves : [];
   const opportunityContext = {
     ...buildReportOpportunityContext(rawLogs, String(profile.currentChapter?.id || "")),
     gracePeriods,
     registeredAt: profile.student?.createdAt as string | Date | null | undefined,
   };
-  // Keep a recorded cheating result visible; protection changes its effect,
-  // not the incident. Grace comes only from the student's periods/exam date.
-  // The retired grace placeholder is not a result.
-  const reportStatus = (status: unknown, examDate: unknown): string =>
-    status === "غش" ? "غش" : !isExamOnOrAfterStudentRegistration(
+  const includeExam = (status: unknown, exam: Record<string, unknown> | undefined): boolean =>
+    status !== "قبل تسجيل الطالب" && isExamOnOrAfterStudentRegistration(
       { createdAt: opportunityContext.registeredAt },
-      { date: examDate as string | Date | null | undefined },
-    ) ? "قبل تسجيل الطالب"
-      : isStudentInGracePeriod(gracePeriods, examDate as string | null | undefined)
+      { date: exam?.date as string | Date | null | undefined },
+    );
+  // Keep incidents visible; classify excuses from the actual leave/period data.
+  // An empty result never establishes an absence.
+  const reportStatus = (status: unknown, exam: Record<string, unknown> | undefined): string =>
+    status === "غش" ? "غش"
+      : status === "مجاز" || hasStudentLeaveForExam(studentLeaves, {
+        id: String(exam?.id || ""), date: exam?.date as string | Date | null | undefined,
+      }) ? "مجاز"
+      : isStudentInGracePeriod(gracePeriods, exam?.date as string | Date | null | undefined)
       ? GRACE_PERIOD_EXCUSE_LABEL
       : status === LEGACY_GRACE_PLACEHOLDER_STATUS ? "" : String(status || "");
-  const gradeExamIds = new Set<string>();
+  // Include filtered records so a hidden pre-registration marker cannot be
+  // reintroduced as a missing grade from the course exam list.
+  const gradeExamIds = new Set(rawGrades.map(grade => String(grade.examId || "")));
   const grades: StudentGradeDetail[] = rawGrades
     // درجات امتحانات الفصل النشط الحالي فقط: عند توفر سياق الفصل النشط
     // (currentChapter) نخفي درجات الامتحانات المنشأة قبل بداية الفصل النشط
     // حتى يعرض التقرير فصل الطالب الحالي وحده — غياب السياق = بلا فلترة.
-    .filter((rawGrade) =>
-      chapterExamIds
-        ? chapterExamIds.has(String((rawGrade as Record<string, unknown>).examId || ""))
-        : true,
-    )
+    .filter((rawGrade) => {
+      const examId = String(rawGrade.examId || "");
+      return (!chapterExamIds || chapterExamIds.has(examId)) && includeExam(rawGrade.status, examMap.get(examId));
+    })
     .map((rawGrade) => {
-      const grade = rawGrade as Record<string, unknown>;
-      const examId = String(grade.examId || "");
-      gradeExamIds.add(examId);
+      const examId = String(rawGrade.examId || "");
       const exam = examMap.get(examId);
+      const grade: Record<string, unknown> & { status: string } = { ...rawGrade, status: reportStatus(rawGrade.status, exam) };
       const score = grade.score;
       const fullMark = exam?.fullMark;
       return {
@@ -330,7 +338,7 @@ export function buildStudentDetailsFromProfileLog(
         score: score === null || score === undefined ? null : Number(score),
         fullMark:
           fullMark === null || fullMark === undefined ? null : Number(fullMark),
-        status: reportStatus(grade.status, exam?.date),
+        status: grade.status,
         notes: grade.notes ? String(grade.notes) : null,
         outcome: reportGradeOutcome(grade, exam),
         opportunityEffect: reportGradeEffect(grade, exam, scopedLogs.filter(log => log.examId === examId), opportunityContext),
@@ -340,18 +348,17 @@ export function buildStudentDetailsFromProfileLog(
 
   // إضافة امتحانات الدورة التي ليس للطالب سجل درجات فيها — ضمن امتحانات
   // الفصل النشط الحالي فقط عند توفر سياق الفصل النشط.
-  const allCourseExams = Array.isArray(profile.allCourseExams)
-    ? profile.allCourseExams
-    : [];
   for (const rawExam of allCourseExams) {
     const examRecord = rawExam as Record<string, unknown>;
     const examId = String(examRecord.id || "");
     if (
       examId &&
       (!chapterExamIds || chapterExamIds.has(examId)) &&
-      !gradeExamIds.has(examId)
+      !gradeExamIds.has(examId) &&
+      includeExam(undefined, examRecord)
     ) {
       examMap.set(examId, examRecord);
+      const grade = { status: reportStatus("", examRecord), score: null };
       grades.push({
         examId,
         examName: String(examRecord.name || "امتحان غير محدد"),
@@ -362,10 +369,10 @@ export function buildStudentDetailsFromProfileLog(
           examRecord.fullMark === null || examRecord.fullMark === undefined
             ? null
             : Number(examRecord.fullMark),
-        status: reportStatus("غائب", examRecord.date),
+        status: grade.status,
         notes: null,
-        outcome: "غياب",
-        opportunityEffect: reportGradeEffect({ status: "غائب" }, examRecord, scopedLogs.filter(log => log.examId === examId), opportunityContext),
+        outcome: reportGradeOutcome(grade, examRecord),
+        opportunityEffect: reportGradeEffect(grade, examRecord, scopedLogs.filter(log => log.examId === examId), opportunityContext),
         passMark: reportNumber(examRecord.passMark),
       });
     }
@@ -864,11 +871,11 @@ const DETAILS_MODAL_JS = `
     } else {
       gradesBody.innerHTML = data.grades && data.grades.length ? data.grades.map(function(g){
         var score = g.status === 'غش' ? 'غش' : g.score === null || g.score === undefined
-          ? (g.status === ${JSON.stringify(GRACE_PERIOD_EXCUSE_LABEL)} || g.status === 'قبل تسجيل الطالب' ? 'مجاز' : 'غياب')
+          ? (g.status === 'مجاز' ? 'إجازة' : g.status === ${JSON.stringify(GRACE_PERIOD_EXCUSE_LABEL)} ? 'مجاز' : g.status === 'غائب' ? 'غياب' : 'بانتظار الدرجة')
           : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>';
         var effectText = String(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.').trim();
-        var effectClass = /^(لا يوجد خصم لهذا الامتحان|بدون خصم|قبل تسجيل الطالب$)/.test(effectText) ? 'tp-grade-no-deduction'
-          : /^(تم خصم |خُصمت فرصتان|عدد الفرص المخصومة لهذا الامتحان:)/.test(effectText) ? 'tp-grade-deduction' : '';
+        var effectClass = /^(لا خصم|بدون خصم|امتحان بدون خصم)/.test(effectText) ? 'tp-grade-no-deduction'
+          : /^خُصمت /.test(effectText) ? 'tp-grade-deduction' : '';
         return '<tr role="row">'
           + mobileCell('الامتحان', '<strong class="tp-event-title">' + esc(g.examName) + '</strong><span class="tp-event-exam">' + esc(g.examType) + '</span>')
           + mobileCell('تاريخ الامتحان', fmtDate(g.examDate) || 'غير مسجّل')

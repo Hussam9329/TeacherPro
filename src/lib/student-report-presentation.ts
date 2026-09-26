@@ -1,4 +1,4 @@
-import { findStudentGracePeriod, type GracePeriodRange } from "./grace-periods";
+import { findStudentGracePeriod, GRACE_PERIOD_EXCUSE_LABEL, type GracePeriodRange } from "./grace-periods";
 import { isExamOnOrAfterStudentRegistration } from "./exam-utils";
 /** Read-only wording for the published student report. Never replay the ledger. */
 export function reportNumber(value: unknown): number | null {
@@ -195,13 +195,13 @@ export function reportGradeOutcome(grade: Record<string, unknown>, exam?: Record
   const status = String(grade.status || "");
   if (status === "درجة") {
     const score = reportNumber(grade.score);
-    if (score === null) return "غياب";
+    if (score === null) return "بانتظار الدرجة";
     const full = reportNumber(exam?.fullMark);
     const pass = reportNumber(exam?.passMark);
     return full !== null && score === full ? "الدرجة كاملة" : pass === null ? "درجة مسجّلة" : score >= pass ? "ناجح" : "أقل من درجة النجاح";
   }
   // The retired grace placeholder is not a result: it records nothing.
-  return ({ "غائب": "غياب", "غش": "حالة غش", "مجاز": "إجازة", "ضمن فترة السماح": "لا توجد نتيجة مسجلة", "قبل تسجيل الطالب": "قبل تسجيلك" } as Record<string, string>)[status] || "غياب";
+  return ({ "غائب": "غياب", "غش": "غش", "مجاز": "إجازة", [GRACE_PERIOD_EXCUSE_LABEL]: "مجاز", "قبل تسجيل الطالب": "قبل تسجيلك" } as Record<string, string>)[status] || "بانتظار الدرجة";
 }
 
 export function reportGradeEffect(grade: Record<string, unknown>, exam: Record<string, unknown> | undefined, logs: Record<string, unknown>[], context?: ReportOpportunityContext): string {
@@ -221,23 +221,24 @@ export function reportGradeEffect(grade: Record<string, unknown>, exam: Record<s
   const deducted = deductions.reduce((sum, l) => sum + (reportNumber(l.appliedAmount) ?? reportNumber(l.amount) ?? 0), 0);
   const dismissed = effectiveLogs.some(l => String(l.action || "").startsWith("فصل"));
   const deductionText = deducted === 1
-    ? "تم خصم فرصة لهذا الامتحان"
+    ? "خُصمت فرصة"
     : deducted === 2
-      ? grade.status === "غش" ? "خُصمت فرصتان" : "تم خصم فرصتين لهذا الامتحان"
-      : deducted > 0 ? `عدد الفرص المخصومة لهذا الامتحان: ${deducted}` : "";
+      ? "خُصمت فرصتان"
+      : deducted > 0 ? `خُصمت ${deducted} فرص` : "";
   if (deducted || dismissed) return [deductionText, dismissed ? "سُجّل فصل بسبب هذا الامتحان" : ""].filter(Boolean).join(". ");
-  if (settledGrade) return "لا يوجد خصم لهذا الامتحان — مشمول بتسوية الرصيد";
+  if (settledGrade) return "لا خصم (قبل رصيدك الجديد)";
   if (grade.status === "قبل تسجيل الطالب" || !isExamOnOrAfterStudentRegistration(
     { createdAt: context?.registeredAt },
     { date: exam?.date as string | Date | null | undefined },
   )) return "قبل تسجيل الطالب";
-  if (grade.academicEffectExcluded) return "لا خصم: هذه الدرجة مستثناة من حساب الفرص.";
-  if (grade.status === "مجاز") return "لا خصم: لديك إجازة لهذا الامتحان.";
+  if (grade.academicEffectExcluded) return "لا خصم";
+  if (grade.status === "مجاز") return "لا خصم";
   const gracePeriod = findStudentGracePeriod(context?.gracePeriods, exam?.date as string | Date | null | undefined);
   if (gracePeriod) {
     const [year, month, day] = gracePeriod.endDate.split("-").map(Number);
     return `بدون خصم (فترة سماح لغاية ${day}-${month}-${year})`;
   }
-  if (exam?.noDiscount) return "هذا الامتحان لا يخصم فرصاً.";
-  return "لا يوجد خصم لهذا الامتحان";
+  if (reportNumber(grade.score) === null && grade.status !== "غائب" && grade.status !== "غش") return "—";
+  if (exam?.noDiscount) return "امتحان بدون خصم";
+  return "لا خصم";
 }

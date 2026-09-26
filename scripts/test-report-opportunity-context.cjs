@@ -8,7 +8,7 @@ require.extensions[".ts"] = (module, file) => module._compile(
   }).outputText,
   file,
 );
-const { buildReportOpportunityContext: context, reportGradeEffect: effect } =
+const { buildReportOpportunityContext: context, reportGradeEffect: effect, reportGradeOutcome: outcome } =
   require("../src/lib/student-report-presentation.ts");
 
 const grade = { id: "settled-grade", status: "غائب", examId: "exam" };
@@ -23,21 +23,21 @@ const grant = {
 const input = [debit, dismissal, grant];
 const original = JSON.stringify(input);
 const report = context(input, "chapter");
-assert.equal(effect(grade, exam, [debit, dismissal], report), "لا يوجد خصم لهذا الامتحان — مشمول بتسوية الرصيد");
+assert.equal(effect(grade, exam, [debit, dismissal], report), "لا خصم (قبل رصيدك الجديد)");
 assert.deepEqual(report.balanceNotes, [{ text: "أُعيد تفعيلك برصيد 3 من الفرص", date: grant.date }]);
 assert.doesNotMatch(JSON.stringify(report.balanceNotes), /PRIVATE|settled-grade/);
 assert.equal(JSON.stringify(input), original, "presentation never mutates source records");
 
 const laterManual = { ...debit, action: "خصم", amount: 1, appliedAmount: 1, date: "2026-09-17T12:00:00Z" };
-assert.equal(effect(grade, exam, [debit, laterManual], report), "تم خصم فرصة لهذا الامتحان", "manual deductions after recovery still apply");
-assert.equal(effect(grade, exam, [debit, { ...laterManual, date: grant.date }], report), "تم خصم فرصة لهذا الامتحان", "same-timestamp command follows engine >= boundary");
-assert.equal(effect(grade, exam, [debit, { ...laterManual, date: "2026-09-15" }], report), "لا يوجد خصم لهذا الامتحان — مشمول بتسوية الرصيد");
-assert.equal(effect(grade, exam, [debit, { ...laterManual, date: "invalid" }], report), "تم خصم فرصة لهذا الامتحان", "missing evidence cannot suppress a manual deduction");
+assert.equal(effect(grade, exam, [debit, laterManual], report), "خُصمت فرصة", "manual deductions after recovery still apply");
+assert.equal(effect(grade, exam, [debit, { ...laterManual, date: grant.date }], report), "خُصمت فرصة", "same-timestamp command follows engine >= boundary");
+assert.equal(effect(grade, exam, [debit, { ...laterManual, date: "2026-09-15" }], report), "لا خصم (قبل رصيدك الجديد)");
+assert.equal(effect(grade, exam, [debit, { ...laterManual, date: "invalid" }], report), "خُصمت فرصة", "missing evidence cannot suppress a manual deduction");
 
 const reset = { ...grant, action: "إعادة تعيين", amount: 1, balanceAfter: 1 };
 const resetContext = context([reset], "chapter");
-assert.equal(effect({ ...grade, id: "new-backdated-grade" }, exam, [debit], resetContext), "تم خصم فرصتين لهذا الامتحان", "an old exam date does not settle a later-entered grade");
-assert.equal(effect({ status: "غائب" }, exam, [debit], resetContext), "تم خصم فرصتين لهذا الامتحان", "missing grade identity must not infer settlement");
+assert.equal(effect({ ...grade, id: "new-backdated-grade" }, exam, [debit], resetContext), "خُصمت فرصتان", "an old exam date does not settle a later-entered grade");
+assert.equal(effect({ status: "غائب" }, exam, [debit], resetContext), "خُصمت فرصتان", "missing grade identity must not infer settlement");
 assert.deepEqual(resetContext.balanceNotes, [{ text: "حدّدت الإدارة رصيدك بـ 1 من الفرص", date: reset.date }]);
 const tieReset = { ...reset, settledGradeIds: JSON.stringify(["different-grade"]) };
 assert.equal(context([tieReset, grant], "chapter").settlement.settledGradeIds.has(grade.id), false, "equal-time reset wins over grant as in the engine");
@@ -59,13 +59,13 @@ for (const malformed of ["bad json", '{}', '["settled-grade",3]', '"settled-grad
   const badLatest = { ...reset, date: "2026-09-17", settledGradeIds: malformed };
   const c = context([grant, badLatest], "chapter");
   assert.equal(c.settlement.settledGradeIds.size, 0, "invalid latest membership never reuses an older grant's IDs");
-  assert.equal(effect(grade, exam, [debit], c), "تم خصم فرصتين لهذا الامتحان");
+  assert.equal(effect(grade, exam, [debit], c), "خُصمت فرصتان");
 }
 
 const add = { action: "إضافة", amount: 2, appliedAmount: 2, chapterId: "chapter", date: "2026-09-13", reason: "PRIVATE_ADDITION" };
 const adds = context([add, { ...add, date: "2026-09-14", appliedAmount: 0 }], "chapter");
 assert.equal(adds.settlement, null, "an addition never settles existing deductions");
-assert.equal(effect(grade, exam, [debit], adds), "تم خصم فرصتين لهذا الامتحان");
+assert.equal(effect(grade, exam, [debit], adds), "خُصمت فرصتان");
 assert.deepEqual(adds.balanceNotes, [{ text: "أضافت الإدارة فرصتين", date: add.date }]);
 assert.equal(context([add, grant], "chapter").balanceNotes.length, 1, "superseded addition is not shown as a new-balance addition");
 assert.deepEqual(context([grant, { ...add, date: "2026-09-17" }], "chapter").balanceNotes.map(n => n.text), [
@@ -75,6 +75,22 @@ assert.equal(context([{ ...grant, action: "رصيد بعد تعهد", amount: 2,
   "مُنحت رصيداً قدره 2 من الفرص بعد قبول التعهّد");
 assert.equal(context([{ ...reset, reason: "تسوية تاريخية: انتقال إلى فصل جديد" }], "chapter").balanceNotes.length, 0);
 assert.equal(context([{ ...reset, reason: "حماية P2: دون تغيير بتوجيه المالك" }], "chapter").balanceNotes.length, 0);
-assert.equal(effect(grade, exam, [debit]), "تم خصم فرصتين لهذا الامتحان", "existing callers without context retain their historical presentation");
+assert.equal(effect(grade, exam, [debit]), "خُصمت فرصتان", "existing callers without context retain their historical presentation");
 
-console.log("PASS: report context respects exact settlement IDs, later manual deductions, untouched backdated grades, active chapter, invalid metadata, factual grant notes and source immutability");
+for (const pending of [{}, { status: "درجة معلّقة" }, { status: "درجة", score: null }, { status: "ضمن فترة السماح" }, { status: "حالة غير معروفة" }]) {
+  assert.equal(outcome(pending, exam), "بانتظار الدرجة", "only a recorded absence can establish غياب");
+  assert.equal(effect(pending, exam, []), "—", "pending grades do not claim a completed no-deduction assessment");
+  assert.equal(effect(pending, exam, [debit]), "خُصمت فرصتان", "pending status cannot hide an actual ledger deduction");
+}
+assert.equal(outcome({ status: "مجاز" }, exam), "إجازة");
+assert.equal(effect({ status: "مجاز" }, exam, []), "لا خصم");
+assert.equal(outcome({ status: "غائب" }, exam), "غياب");
+assert.equal(effect({ status: "غائب" }, exam, []), "لا خصم");
+assert.equal(outcome({ status: "درجة", score: 0 }, exam), "درجة مسجّلة");
+assert.equal(effect({ status: "درجة", score: 0 }, exam, []), "لا خصم");
+assert.equal(effect({ status: "درجة", score: 0 }, { ...exam, noDiscount: true }, []), "امتحان بدون خصم");
+assert.equal(effect({ status: "غائب" }, exam, [{ ...debit, amount: 1 }]), "خُصمت فرصة");
+assert.equal(effect({ status: "غائب" }, exam, [{ ...debit, amount: 3 }]), "خُصمت 3 فرص");
+assert.equal(effect({ status: "غائب" }, exam, [debit, dismissal]), "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان");
+
+console.log("PASS: report context respects exact settlement IDs, later manual deductions, untouched backdated grades, active chapter, invalid metadata, factual grant notes, truthful result states, brief effects and source immutability");

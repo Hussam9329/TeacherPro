@@ -992,7 +992,7 @@ export function OpportunitiesView() {
                 fetchRows={fetchOpportunityExportRows}
                 columns={opportunityExportColumns}
                 triggerLabel="تصدير"
-                description="تقرير HTML لفرص الطلاب ودرجاتهم في الامتحانات المختارة. كل امتحان بلا درجة يظهر غياباً."
+                description="تقرير HTML لفرص الطلاب ودرجاتهم في الامتحانات المختارة."
                 fetchStudentDetails={fetchOpportunityStudentDetails}
                 selectHtmlExams
                 getRowId={(s) => String((s as Record<string, unknown>)?.id ?? "")}

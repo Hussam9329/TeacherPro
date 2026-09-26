@@ -84,6 +84,9 @@ function loadExportDialogModule() {
     // سلوك منطق عمل يجب فحصه، لا كعب صامت يرجع true دائماً.
     if (request === "@/lib/student-report-presentation") return require(path.join(projectRoot, "src/lib/student-report-presentation.ts"));
     if (request === "@/lib/grace-periods") return require(path.join(projectRoot, "src/lib/grace-periods.ts"));
+    if (request === "@/lib/grade-classification") return require(path.join(projectRoot, "src/lib/grade-classification.ts"));
+    if (request === "@/lib/grade-score") return require(path.join(projectRoot, "src/lib/grade-score.ts"));
+    if (request === "@/lib/baghdad-time") return require(path.join(projectRoot, "src/lib/baghdad-time.ts"));
     if (request === "@/lib/academic-types") return require(path.join(projectRoot, "src/lib/academic-types.ts"));
     if (request === "@/lib/exam-utils") return require(path.join(projectRoot, "src/lib/exam-utils.ts"));
     if (request === "@/lib/active-chapter-report") {
@@ -702,22 +705,94 @@ check("تركيبات خيارات التفاصيل غير الصالحة تعو
   }
 });
 
-check("الامتحان بلا درجة يظهر غياباً بلا اختراع خصم، حتى إذا ظهر الامتحان بسجل الفرص", () => {
+check("الامتحان بلا نتيجة مسجلة يبقى بانتظار الدرجة ولا يتحول إلى غياب", () => {
   const exam = { id: "exam-1", name: "امتحان الفصل", date: "2026-09-01", fullMark: 20 };
   const report = buildStudentDetailsFromProfileLog({
     exams: [exam], allCourseExams: [exam], grades: [], opportunityLogs: [],
     currentChapter: { id: "ch1", name: "الفصل الأول", since: null, examIds: [exam.id] },
   });
   assert.equal(report.grades.length, 1);
-  assert.equal(report.grades[0].status, "غائب");
-  assert.equal(report.grades[0].outcome, "غياب");
-  assert.equal(report.grades[0].opportunityEffect, "لا يوجد خصم لهذا الامتحان");
+  assert.notEqual(report.grades[0].status, "غائب");
+  assert.equal(report.grades[0].outcome, "بانتظار الدرجة");
+  assert.equal(report.grades[0].opportunityEffect, "—");
   const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: { s1: report } });
   const { dom } = executeInlineScripts(html, "missing-grade-cell");
   openStudentDetails(dom, "s1", "محمد علي حسن");
-  assert.match(dom.elements.tpGradesBody.innerHTML, /data-label="الدرجة"[^]*?tp-mobile-field-value">غياب<\/span>/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /data-label="الدرجة"[^]*?tp-mobile-field-value">بانتظار الدرجة<\/span>/);
   assert.doesNotMatch(dom.elements.tpGradesBody.innerHTML, /data-label="النتيجة"/);
   assert.equal(report.activeChapterSince, null);
+});
+
+check("HTML يميز الإجازة والغياب المثبت والدرجات المعلقة دون اختراع غياب أو إخفاء خصم", () => {
+  const cases = [
+    { label: "formal-leave", grade: { status: "مجاز", score: null }, cell: "إجازة", effect: "لا خصم" },
+    { label: "formal-leave-during-grace", grade: { status: "مجاز", score: null }, grace: true, cell: "إجازة", effect: "لا خصم" },
+    { label: "recorded-absence", grade: { status: "غائب", score: null }, cell: "غياب", effect: "لا خصم" },
+    { label: "recorded-absence-with-deduction", grade: { status: "غائب", score: null }, logs: [{ action: "خصم", amount: 1 }], cell: "غياب", effect: "خُصمت فرصة" },
+    { label: "pending-status", grade: { status: "درجة معلّقة", score: null }, cell: "بانتظار الدرجة", effect: "—" },
+    { label: "missing-status", grade: { score: null }, cell: "بانتظار الدرجة", effect: "—" },
+    { label: "unknown-status", grade: { status: "حالة قديمة غير معروفة", score: null }, cell: "بانتظار الدرجة", effect: "—" },
+    { label: "null-numeric-score", grade: { status: "درجة", score: null }, cell: "بانتظار الدرجة", effect: "—" },
+    { label: "missing-numeric-score", grade: { status: "درجة" }, cell: "بانتظار الدرجة", effect: "—" },
+    { label: "pending-with-deduction", grade: { status: "درجة معلّقة", score: null }, logs: [{ action: "خصم", amount: 1 }], cell: "بانتظار الدرجة", effect: "خُصمت فرصة" },
+    { label: "missing-with-deduction", logs: [{ action: "خصم تلقائي", amount: 2 }], cell: "بانتظار الدرجة", effect: "خُصمت فرصتان" },
+    { label: "formal-leave-with-recorded-deduction", grade: { status: "مجاز", score: null }, logs: [{ action: "خصم", amount: 1 }], cell: "إجازة", effect: "خُصمت فرصة" },
+    { label: "stored-zero", grade: { status: "درجة", score: 0 }, cell: "<bdi>0 / 20</bdi>", effect: "لا خصم" },
+    { label: "exam-without-deduction", grade: { status: "درجة", score: 12 }, noDiscount: true, cell: "<bdi>12 / 20</bdi>", effect: "امتحان بدون خصم" },
+  ];
+  for (const scenario of cases) {
+    const exam = { id: "status-exam", name: "امتحان الحالة الفعلية", date: "2026-09-05", fullMark: 20, noDiscount: scenario.noDiscount };
+    const profile = {
+      student: { opportunities: 2, gracePeriods: scenario.grace ? [{ startDate: "2026-09-01", endDate: "2026-09-10" }] : [] },
+      exams: [exam], allCourseExams: [exam],
+      grades: scenario.grade ? [{ id: "status-grade", examId: exam.id, ...scenario.grade }] : [],
+      opportunityLogs: (scenario.logs || []).map(log => ({ ...log, examId: exam.id, date: exam.date })),
+    };
+    const original = JSON.stringify(profile);
+    const details = buildStudentDetailsFromProfileLog(profile);
+    const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: { s1: details } });
+    const { dom } = executeInlineScripts(html, scenario.label);
+    openStudentDetails(dom, "s1", "محمد علي حسن");
+    const rendered = dom.elements.tpGradesBody.innerHTML;
+    assert.equal(rendered.match(/data-label="الدرجة"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], scenario.cell, scenario.label);
+    assert.equal(rendered.match(/data-label="الأثر على الفرص"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], scenario.effect, scenario.label);
+    if (scenario.logs) assert.match(rendered, /tp-grade-deduction/, scenario.label);
+    if (scenario.effect === "لا خصم") assert.match(rendered, /tp-grade-no-deduction/, scenario.label);
+    assert.equal(details.studentSnapshot.opportunities, 2);
+    assert.equal(JSON.stringify(profile), original, "presentation never mutates grades, leave, balances or logs");
+  }
+});
+
+check("الإجازات الفعلية تغطي الامتحان المحدد وحدود الفترة بتوقيت بغداد حتى بلا سجل درجة", () => {
+  const period = { leaveType: "period", dateFrom: "2026-09-01", dateTo: "2026-09-10" };
+  const cases = [
+    { label: "exam-leave-without-grade", date: "2026-09-04", leaves: [{ examId: "leave-exam" }], cell: "إجازة", effect: "لا خصم" },
+    { label: "unrelated-exam-leave", date: "2026-09-04", leaves: [{ examId: "other-exam" }], cell: "بانتظار الدرجة", effect: "—" },
+    { label: "period-start-baghdad", date: "2026-08-31T21:00:00Z", leaves: [period], cell: "إجازة", effect: "لا خصم" },
+    { label: "period-end-baghdad", date: "2026-09-10T20:59:59Z", leaves: [period], grade: { status: "غائب", score: null }, cell: "إجازة", effect: "لا خصم" },
+    { label: "before-period", date: "2026-08-31T20:59:59Z", leaves: [period], cell: "بانتظار الدرجة", effect: "—" },
+    { label: "after-period-recorded-absence", date: "2026-09-10T21:00:00Z", leaves: [period], grade: { status: "غائب", score: null }, cell: "غياب", effect: "لا خصم" },
+    { label: "period-zero-score-preserved", date: "2026-09-05", leaves: [period], grade: { status: "درجة", score: 0 }, cell: "<bdi>0 / 20</bdi>", effect: "لا خصم" },
+    { label: "period-cheating-remains-incident", date: "2026-09-05", leaves: [period], grade: { status: "غش", score: null }, cell: "غش", effect: "لا خصم" },
+  ];
+  for (const scenario of cases) {
+    const exam = { id: "leave-exam", name: "امتحان الإجازة", date: scenario.date, fullMark: 20 };
+    const profile = {
+      student: { opportunities: 3 }, studentLeaves: scenario.leaves,
+      exams: [exam], allCourseExams: [exam],
+      grades: scenario.grade ? [{ id: "leave-grade", examId: exam.id, ...scenario.grade }] : [],
+      opportunityLogs: [],
+    };
+    const original = JSON.stringify(profile);
+    const details = buildStudentDetailsFromProfileLog(profile);
+    const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: { s1: details } });
+    const { dom } = executeInlineScripts(html, scenario.label);
+    openStudentDetails(dom, "s1", "محمد علي حسن");
+    const rendered = dom.elements.tpGradesBody.innerHTML;
+    assert.equal(rendered.match(/data-label="الدرجة"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], scenario.cell, scenario.label);
+    assert.equal(rendered.match(/data-label="الأثر على الفرص"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], scenario.effect, scenario.label);
+    assert.equal(JSON.stringify(profile), original, "leave presentation cannot overwrite the stored result");
+  }
 });
 
 check("HTML يعرض غير الحاضر ضمن السماح مجازاً بتواريخ بغداد ويحفظ الدرجات والخصومات المسجلة", () => {
@@ -728,14 +803,14 @@ check("HTML يعرض غير الحاضر ضمن السماح مجازاً بتو
     { label: "recorded-absence", date: "2026-09-05", grade: { status: "غائب", score: null }, cell: "مجاز", effect: graceEffect },
     { label: "baghdad-first-instant", date: "2026-08-31T21:00:00Z", cell: "مجاز", effect: graceEffect },
     { label: "baghdad-last-instant", date: "2026-09-10T20:59:59Z", cell: "مجاز", effect: graceEffect },
-    { label: "before-start", date: "2026-08-31T20:59:59Z", cell: "غياب", effect: "لا يوجد خصم لهذا الامتحان" },
-    { label: "after-end", date: "2026-09-10T21:00:00Z", cell: "غياب", effect: "لا يوجد خصم لهذا الامتحان" },
-    { label: "cancelled-period", date: "2026-09-04", cancelledAt: "2026-09-02T10:00:00Z", cell: "غياب", effect: "لا يوجد خصم لهذا الامتحان" },
+    { label: "before-start", date: "2026-08-31T20:59:59Z", cell: "بانتظار الدرجة", effect: "—" },
+    { label: "after-end", date: "2026-09-10T21:00:00Z", cell: "بانتظار الدرجة", effect: "—" },
+    { label: "cancelled-period", date: "2026-09-04", cancelledAt: "2026-09-02T10:00:00Z", cell: "بانتظار الدرجة", effect: "—" },
     { label: "zero-score", date: "2026-09-04", grade: { status: "درجة", score: 0 }, cell: "<bdi>0 / 20</bdi>", effect: graceEffect },
     { label: "recorded-score", date: "2026-09-04", grade: { status: "درجة", score: 18 }, cell: "<bdi>18 / 20</bdi>", effect: graceEffect },
     { label: "legacy-placeholder", date: "2026-09-04", grade: { status: "ضمن فترة السماح", score: null }, cell: "مجاز", effect: graceEffect },
-    { label: "legacy-without-period", date: "2026-09-11", grade: { status: "ضمن فترة السماح", score: null }, cell: "غياب", effect: "لا يوجد خصم لهذا الامتحان" },
-    { label: "stored-deduction", date: "2026-09-04", logs: [{ action: "خصم", amount: 1 }], cell: "مجاز", effect: "تم خصم فرصة لهذا الامتحان" },
+    { label: "legacy-without-period", date: "2026-09-11", grade: { status: "ضمن فترة السماح", score: null }, cell: "بانتظار الدرجة", effect: "—" },
+    { label: "stored-deduction", date: "2026-09-04", logs: [{ action: "خصم", amount: 1 }], cell: "مجاز", effect: "خُصمت فرصة" },
   ];
   for (const scenario of cases) {
     const exam = { id: "grace-exam", name: "الأسبوعي 2", date: scenario.date, fullMark: 20 };
@@ -762,22 +837,25 @@ check("HTML يعرض غير الحاضر ضمن السماح مجازاً بتو
   }
 });
 
-check("HTML يعرض امتحان ما قبل التسجيل مجازاً ويميّزه عن يوم التسجيل نفسه", () => {
+check("HTML يحذف امتحانات ما قبل التسجيل ويحافظ على امتحانات يوم التسجيل بتوقيت بغداد", () => {
   const cases = [
-    { label: "missing-before-registration", cell: "مجاز" },
-    { label: "absence-before-registration", grade: { status: "غائب", score: null }, cell: "مجاز" },
-    { label: "stored-marker", registeredAt: null, grade: { status: "قبل تسجيل الطالب", score: null }, cell: "مجاز" },
-    { label: "same-baghdad-day", date: "2026-09-09T21:00:00Z", cell: "غياب", effect: "لا يوجد خصم لهذا الامتحان" },
-    { label: "later-exam", date: "2026-09-11", cell: "غياب", effect: "لا يوجد خصم لهذا الامتحان" },
-    { label: "missing-registration", registeredAt: null, cell: "غياب", effect: "لا يوجد خصم لهذا الامتحان" },
-    { label: "invalid-registration", registeredAt: "invalid", cell: "غياب", effect: "لا يوجد خصم لهذا الامتحان" },
-    { label: "zero-before-registration", grade: { status: "درجة", score: 0, academicEffectExcluded: true }, cell: "<bdi>0 / 20</bdi>" },
-    { label: "numeric-before-registration", grade: { status: "درجة", score: 18, academicEffectExcluded: true }, cell: "<bdi>18 / 20</bdi>" },
-    { label: "also-within-grace", gracePeriods: [{ startDate: "2026-09-01", endDate: "2026-09-15" }], cell: "مجاز" },
-    { label: "actual-deduction", logs: [{ action: "خصم", amount: 1 }], cell: "مجاز", effect: "تم خصم فرصة لهذا الامتحان" },
+    { label: "missing-before-registration", removed: true },
+    { label: "absence-before-registration", grade: { status: "غائب", score: null }, removed: true },
+    { label: "stored-marker", registeredAt: null, grade: { status: "قبل تسجيل الطالب", score: null }, removed: true },
+    { label: "missing-exam-date-marker", date: null, grade: { status: "قبل تسجيل الطالب", score: null }, removed: true },
+    { label: "invalid-exam-date-marker", date: "invalid", grade: { status: "قبل تسجيل الطالب", score: null }, removed: true },
+    { label: "same-baghdad-day", date: "2026-09-09T21:00:00Z", cell: "بانتظار الدرجة", effect: "—" },
+    { label: "later-exam", date: "2026-09-11", cell: "بانتظار الدرجة", effect: "—" },
+    { label: "missing-registration", registeredAt: null, cell: "بانتظار الدرجة", effect: "—" },
+    { label: "invalid-registration", registeredAt: "invalid", cell: "بانتظار الدرجة", effect: "—" },
+    { label: "zero-before-registration", grade: { status: "درجة", score: 0, academicEffectExcluded: true }, removed: true },
+    { label: "numeric-before-registration", grade: { status: "درجة", score: 18, academicEffectExcluded: true }, removed: true },
+    { label: "cheating-before-registration", grade: { status: "غش", score: null }, removed: true },
+    { label: "also-within-grace", gracePeriods: [{ startDate: "2026-09-01", endDate: "2026-09-15" }], removed: true },
+    { label: "actual-deduction", logs: [{ action: "خصم", amount: 1 }], removed: true },
   ];
   for (const scenario of cases) {
-    const exam = { id: "pre-registration-exam", name: "امتحان قبل التسجيل", date: scenario.date || "2026-09-09T20:59:59Z", fullMark: 20 };
+    const exam = { id: "pre-registration-exam", name: "امتحان قبل التسجيل", date: "date" in scenario ? scenario.date : "2026-09-09T20:59:59Z", fullMark: 20 };
     const profile = {
       student: {
         createdAt: "registeredAt" in scenario ? scenario.registeredAt : "2026-09-10T12:00:00Z",
@@ -793,10 +871,15 @@ check("HTML يعرض امتحان ما قبل التسجيل مجازاً ويم
     const { dom } = executeInlineScripts(html, scenario.label);
     openStudentDetails(dom, "s1", "محمد علي حسن");
     const rendered = dom.elements.tpGradesBody.innerHTML;
-    assert.equal(rendered.match(/data-label="الدرجة"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], scenario.cell, scenario.label);
-    const effect = scenario.effect || "قبل تسجيل الطالب";
-    assert.equal(rendered.match(/data-label="الأثر على الفرص"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], effect, scenario.label);
-    assert.match(rendered, scenario.logs ? /tp-grade-deduction/ : /tp-grade-no-deduction/);
+    if (scenario.removed) {
+      assert.equal(details.grades.length, 0, scenario.label);
+      assert.doesNotMatch(rendered, /امتحان قبل التسجيل|data-label="الدرجة"/, scenario.label);
+      assert.equal(getHtmlReportExams({ s1: details }).length, 0, "hidden pre-registration rows do not enter exam selection");
+    } else {
+      assert.equal(details.grades.length, 1, scenario.label);
+      assert.equal(rendered.match(/data-label="الدرجة"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], scenario.cell, scenario.label);
+      assert.equal(rendered.match(/data-label="الأثر على الفرص"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], scenario.effect, scenario.label);
+    }
     assert.equal(JSON.stringify(profile), original);
     assert.equal(details.studentSnapshot.opportunities, 3);
   }
@@ -807,14 +890,13 @@ check("HTML يعرض الغش بحالته الصحيحة وأثره من الخ
   const deduction = { action: "خصم تلقائي", amount: 2 };
   const cases = [
     { label: "cheating-two", logs: [deduction], effect: "خُصمت فرصتان", deduction: true },
-    { label: "cheating-one-applied", logs: [{ ...deduction, appliedAmount: 1 }], effect: "تم خصم فرصة لهذا الامتحان", deduction: true },
-    { label: "cheating-three", logs: [{ ...deduction, amount: 3 }], effect: "عدد الفرص المخصومة لهذا الامتحان: 3", deduction: true },
-    { label: "cheating-zero-applied", logs: [{ ...deduction, appliedAmount: 0 }], effect: "لا يوجد خصم لهذا الامتحان" },
-    { label: "cheating-without-log", effect: "لا يوجد خصم لهذا الامتحان" },
+    { label: "cheating-one-applied", logs: [{ ...deduction, appliedAmount: 1 }], effect: "خُصمت فرصة", deduction: true },
+    { label: "cheating-three", logs: [{ ...deduction, amount: 3 }], effect: "خُصمت 3 فرص", deduction: true },
+    { label: "cheating-zero-applied", logs: [{ ...deduction, appliedAmount: 0 }], effect: "لا خصم" },
+    { label: "cheating-without-log", effect: "لا خصم" },
     { label: "cheating-dismissal", logs: [deduction, { action: "فصل تلقائي", amount: 0 }], effect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان", deduction: true },
-    { label: "cheating-settled", logs: [deduction, { action: "إعادة تعيين", amount: 3, balanceAfter: 3, ledgerVersion: 2, date: "2026-09-06", settledGradeIds: '["cheating-grade"]' }], effect: "لا يوجد خصم لهذا الامتحان — مشمول بتسوية الرصيد" },
+    { label: "cheating-settled", logs: [deduction, { action: "إعادة تعيين", amount: 3, balanceAfter: 3, ledgerVersion: 2, date: "2026-09-06", settledGradeIds: '["cheating-grade"]' }], effect: "لا خصم (قبل رصيدك الجديد)" },
     { label: "cheating-during-grace", student: { gracePeriods: [{ startDate: "2026-09-01", endDate: "2026-09-10" }] }, effect: "بدون خصم (فترة سماح لغاية 10-9-2026)" },
-    { label: "cheating-before-registration", student: { createdAt: "2026-09-10" }, effect: "قبل تسجيل الطالب" },
   ];
   for (const scenario of cases) {
     const profile = {
@@ -888,7 +970,7 @@ check("تواريخ الامتحانات تستخدم يونيو ويوليو م
   assert.match(grades, /16 يوليو 2026/);
   assert.doesNotMatch(grades, /حزيران|تموز/);
   assert.match(grades, /<bdi>0 \/ 20<\/bdi>/, "درجة الصفر تبقى درجة ولا تتحول إلى غياب");
-  assert.match(grades, /tp-mobile-field-value">غياب<\/span>/);
+  assert.match(grades, /tp-mobile-field-value">بانتظار الدرجة<\/span>/);
   const headings = [...html.match(/<table class="tp-details-table tp-grades-table"[^]*?<\/thead>/)[0].matchAll(/role="columnheader">([^<]+)</g)].map(m => m[1]);
   assert.deepEqual(headings, ["الامتحان", "تاريخ الامتحان", "الدرجة", "الأثر على الفرص"]);
   assert.equal(labelsFromRenderedCells(grades).length, 8);
@@ -897,16 +979,16 @@ check("تواريخ الامتحانات تستخدم يونيو ويوليو م
 check("نص أثر الامتحان مبسط ويحفظ عدد الخصومات الفعلية والصفر والفصل", () => {
   const exam = { id: "exam", name: "امتحان", date: "2026-07-01", fullMark: 20 };
   function effect(logs) {
-    return buildStudentDetailsFromProfileLog({ exams: [exam], allCourseExams: [exam], grades: [],
+    return buildStudentDetailsFromProfileLog({ exams: [exam], allCourseExams: [exam], grades: [{ examId: exam.id, status: "غائب", score: null }],
       opportunityLogs: logs.map(log => ({ examId: exam.id, date: exam.date, ...log })),
     }).grades[0].opportunityEffect;
   }
-  assert.equal(effect([]), "لا يوجد خصم لهذا الامتحان");
-  assert.equal(effect([{ action: "خصم تلقائي", amount: 1 }]), "تم خصم فرصة لهذا الامتحان");
-  assert.equal(effect([{ action: "خصم", amount: 3, appliedAmount: 1 }]), "تم خصم فرصة لهذا الامتحان");
-  assert.equal(effect([{ action: "خصم", amount: 1, appliedAmount: 0 }]), "لا يوجد خصم لهذا الامتحان");
-  assert.equal(effect([{ action: "خصم", amount: 2 }]), "تم خصم فرصتين لهذا الامتحان");
-  assert.equal(effect([{ action: "خصم", amount: 3 }]), "عدد الفرص المخصومة لهذا الامتحان: 3");
+  assert.equal(effect([]), "لا خصم");
+  assert.equal(effect([{ action: "خصم تلقائي", amount: 1 }]), "خُصمت فرصة");
+  assert.equal(effect([{ action: "خصم", amount: 3, appliedAmount: 1 }]), "خُصمت فرصة");
+  assert.equal(effect([{ action: "خصم", amount: 1, appliedAmount: 0 }]), "لا خصم");
+  assert.equal(effect([{ action: "خصم", amount: 2 }]), "خُصمت فرصتان");
+  assert.equal(effect([{ action: "خصم", amount: 3 }]), "خُصمت 3 فرص");
   assert.match(effect([{ action: "فصل", amount: 0 }]), /سُجّل فصل بسبب هذا الامتحان/);
 });
 
@@ -1001,14 +1083,14 @@ function examSelectionFixture() {
   };
 }
 
-check("قائمة اختيار الامتحانات تجمع كل الطلاب وتميز المعرفات المتشابهة وتشمل الغياب ضمن الفصل فقط", () => {
+check("قائمة اختيار الامتحانات تجمع كل الطلاب وتميز المعرفات المتشابهة وتشمل الامتحانات بانتظار الدرجة ضمن الفصل فقط", () => {
   const { details } = examSelectionFixture();
   const choices = getHtmlReportExams(details);
   assert.deepEqual(choices.map(exam => exam.id), ["choice-hidden", "choice-b", "choice-a"]);
   assert.equal(choices.filter(exam => exam.name === "امتحان بالاسم نفسه").length, 2, "تشابه الاسم لا يدمج امتحانين مستقلين");
   assert.ok(!choices.some(exam => exam.id === "choice-old"), "امتحان الفصل السابق لا يعود إلى الاختيار");
   const missingGrade = details.s2.grades.find(grade => grade.examId === "choice-b");
-  assert.equal(missingGrade.status, "غائب");
+  assert.equal(missingGrade.outcome, "بانتظار الدرجة");
   assert.equal(missingGrade.score, null);
   assert.equal(details.s1.grades.find(grade => grade.examId === "choice-a").score, 0);
   assert.equal(details.s1.opportunityLogs.find(log => log.reason === "EXCLUDED_EXAM_UNIQUE_REASON").examId, "choice-hidden");
@@ -1049,7 +1131,7 @@ check("اختيار امتحان بالمعرف لا يظهر امتحاناً �
   const selected = selectHtmlReportExams(details, ["choice-b", "choice-b", "unknown-choice"]);
   assert.deepEqual(selected.s1.grades, []);
   assert.deepEqual(selected.s2.grades.map(grade => grade.examId), ["choice-b"]);
-  assert.equal(selected.s2.grades[0].status, "غائب");
+  assert.equal(selected.s2.grades[0].outcome, "بانتظار الدرجة");
   assert.deepEqual(selected.s1.opportunityLogs.map(log => log.action), ["رصيد بعد تعهد"]);
 });
 
@@ -1098,7 +1180,7 @@ check("استعادة برصيد جديد تمنع عرض خصم الامتحا�
   };
   const before = JSON.stringify(profile);
   const details = buildStudentDetailsFromProfileLog(profile);
-  assert.match(details.grades[0].opportunityEffect, /^لا يوجد خصم لهذا الامتحان.*تسوية/);
+  assert.equal(details.grades[0].opportunityEffect, "لا خصم (قبل رصيدك الجديد)");
   assert.equal(details.studentSnapshot.opportunities, 3);
   assert.equal(details.opportunityLogs.length, 2, "التقرير لا يحذف سجل التدقيق التاريخي");
   const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: { s1: details } });
@@ -1109,7 +1191,7 @@ check("استعادة برصيد جديد تمنع عرض خصم الامتحا�
   assert.match(dom.elements.tpStudentOverview.innerHTML, /16 سبتمبر 2026/);
   assert.doesNotMatch(dom.elements.tpStudentOverview.innerHTML, /PRIVATE_ADMIN_REASON/);
   assert.match(dom.elements.tpGradesBody.innerHTML, /tp-grade-no-deduction/);
-  assert.doesNotMatch(dom.elements.tpGradesBody.innerHTML, /تم خصم فرصتين/);
+  assert.doesNotMatch(dom.elements.tpGradesBody.innerHTML, /خُصمت فرصتان/);
   assert.match(dom.elements.tpGradesBody.innerHTML, /غياب/);
   const withoutExams = selectHtmlReportExams({ s1: details }, []);
   assert.deepEqual(withoutExams.s1.balanceNotes, details.balanceNotes);
@@ -1129,7 +1211,7 @@ check("إضافة الإدارة تظهر بجانب الرصيد دون إخف�
     ],
   };
   const details = buildStudentDetailsFromProfileLog(profile);
-  assert.equal(details.grades[0].opportunityEffect, "تم خصم فرصة لهذا الامتحان");
+  assert.equal(details.grades[0].opportunityEffect, "خُصمت فرصة");
   const sanitized = sanitizeStudentDetailsForHtml({ s1: details });
   assert.deepEqual(sanitizeStudentDetailsForHtml(sanitized), sanitized);
   const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: sanitized });
