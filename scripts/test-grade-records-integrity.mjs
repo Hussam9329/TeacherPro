@@ -109,6 +109,44 @@ must(
   "gradeCoverageStatsApi.get يجب أن يقبل ApiGetOptions."
 );
 
+const gradesRoute = read("src/app/api/grades/route.ts");
+
+must(
+  gradesRoute.includes('searchParams.get("groupBy") === "student"') &&
+    gradesRoute.includes("listGradesGroupedByStudent") &&
+    gradesRoute.includes('by: ["studentId", "status"]') &&
+    gradesRoute.includes("(b.lastAt?.getTime() ?? 0) - (a.lastAt?.getTime() ?? 0)"),
+  "API سجل الدرجات يجمع الدرجات لكل طالب مرة واحدة ويرتب من الأحدث إلى الأقدم",
+  "يجب أن يعيد API سجل الدرجات بطاقة واحدة لكل طالب مع عدد الامتحانات والدرجات والغياب، الأحدث أولاً."
+);
+
+must(
+  page.includes(".listByStudent(") &&
+    page.includes("GradeStudentCard") &&
+    page.includes("numericCount") &&
+    page.includes("absentCount") &&
+    !page.includes("paged.map((grade)"),
+  "سجل الدرجات يعرض الطالب ببطاقة واحدة مهما كان عدد امتحاناته",
+  "يجب ألا يتكرر الطالب في سجل الدرجات بعدد امتحاناته."
+);
+
+must(
+  page.includes("عرض درجات الطالب") &&
+    page.includes('label: "كل الدرجات"') &&
+    page.includes('label: "الدرجة الرقمية"') &&
+    page.includes('label: "الغياب"') &&
+    page.includes("examDateKey(b.exam) - examDateKey(a.exam)") &&
+    page.includes("من الأحدث إلى الأقدم"),
+  "نافذة درجات الطالب تعرض كل الدرجات والرقمية والغياب من الأحدث إلى الأقدم",
+  "يجب أن تعرض نافذة درجات الطالب ثلاث تبويبات مرتبة من الأحدث إلى الأقدم."
+);
+
+must(
+  page.includes("tp-management-workspace") && page.includes("tp-management-stats-rail"),
+  "سجل الدرجات يستخدم تخطيط الإدارة: النتائج مع شريط الإحصائيات الجانبي",
+  "يجب أن يتبع سجل الدرجات تخطيط سجل الطلاب وإدارة الفرص."
+);
+
 must(
   pkg.scripts?.["test:grade-records-integrity"] === "node scripts/test-grade-records-integrity.mjs",
   "سكريبت test:grade-records-integrity موجود",

@@ -1,0 +1,230 @@
+/* سجل الدرجات — one card per student inside the shared management layout
+   (filters on top, results beside the statistics rail). */
+
+.tp-grade-records-page :where(p, h3, dt, dd, span, label) {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.tp-grade-records__heading,
+.tp-grade-records__actions,
+.tp-grade-records__toolbar,
+.tp-grade-records__page-size {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-inline-size: 0;
+}
+
+.tp-grade-records__heading,
+.tp-grade-records__toolbar {
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.tp-grade-records__page-size [data-slot="select-trigger"] {
+  min-block-size: 2.5rem;
+}
+
+.tp-grade-records__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  inline-size: 100%;
+  min-block-size: 3.5rem;
+  block-size: auto;
+  padding: 0;
+  white-space: normal;
+}
+
+.tp-grade-records__stat[aria-pressed="true"] {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--ring);
+}
+
+.tp-grade-records__status,
+.tp-grade-records__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 1.5rem 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.tp-grade-records__pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding-block: 0.5rem;
+}
+
+/* Student cards */
+.tp-grade-students {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tp-grade-student {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+  min-inline-size: 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-inline-start: 4px solid color-mix(in srgb, var(--primary) 55%, var(--border));
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  box-shadow: var(--shadow-xs, none);
+  transition: border-color 160ms, box-shadow 160ms;
+}
+
+.tp-grade-student:hover {
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+  box-shadow: 0 14px 30px -24px color-mix(in srgb, var(--tp-deep) 60%, transparent);
+}
+
+.tp-grade-student__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+}
+
+.tp-grade-student__identity {
+  display: grid;
+  flex: 1 1 12rem;
+  gap: 0.2rem;
+  min-inline-size: 0;
+}
+
+.tp-grade-student__identity h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
+.tp-grade-student__counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.tp-grade-student__counts > div {
+  display: grid;
+  justify-items: center;
+  gap: 0.1rem;
+  padding: 0.5rem 0.4rem;
+  border: 1px solid var(--tone-line, var(--border));
+  border-radius: 0.8rem;
+  background: var(--tone-tint, var(--muted));
+}
+
+.tp-grade-student__counts dt {
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.tp-grade-student__counts dd {
+  margin: 0;
+  color: var(--tone-ink, var(--foreground));
+  font-size: 1.35rem;
+  font-weight: 900;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.tp-grade-student__latest {
+  margin: 0;
+  padding: 0.45rem 0.7rem;
+  border-radius: 0.7rem;
+  background: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.7;
+}
+
+.tp-grade-student__open {
+  justify-self: stretch;
+}
+
+/* Student grades window */
+.tp-grade-dialog__tabs {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr));
+}
+
+.tp-grade-dialog__tabs .tp-modal__filter-label {
+  white-space: normal;
+}
+
+.tp-grade-dialog__list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tp-grade-dialog__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "main" "result" "notes" "actions";
+  gap: 0.55rem 1rem;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--tp-border);
+  border-inline-start: 4px solid var(--tp-border-strong);
+  border-radius: 1rem;
+  background: var(--tp-surface);
+}
+
+.tp-grade-dialog__row[data-kind="numeric"] { border-inline-start-color: var(--status-success-vivid); }
+.tp-grade-dialog__row[data-kind="absent"] { border-inline-start-color: var(--status-danger-vivid); }
+.tp-grade-dialog__row[data-kind="cheating"] { border-inline-start-color: var(--status-warning-vivid); }
+
+.tp-grade-dialog__main { grid-area: main; display: grid; gap: 0.1rem; min-inline-size: 0; }
+.tp-grade-dialog__exam { margin: 0; color: var(--tp-text); font-size: 0.95rem; font-weight: 750; }
+.tp-grade-dialog__result { grid-area: result; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; }
+.tp-grade-dialog__notes { grid-area: notes; display: grid; gap: 0.4rem; min-inline-size: 0; }
+.tp-grade-dialog__actions { grid-area: actions; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+.tp-grade-dialog__score {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.7rem;
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 999px;
+  color: var(--tp-text);
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tp-grade-dialog__score[data-kind="numeric"] { border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success-fg); }
+.tp-grade-dialog__score[data-kind="absent"] { border-color: transparent; background: var(--status-danger-solid); color: var(--status-danger-on); }
+.tp-grade-dialog__score[data-kind="cheating"] { border-color: transparent; background: var(--status-warning-solid); color: var(--status-warning-on); }
+
+@container (min-width: 40rem) {
+  .tp-grade-dialog__row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas: "main result actions" "notes notes notes";
+    align-items: center;
+  }
+}

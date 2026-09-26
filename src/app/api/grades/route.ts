@@ -452,6 +452,141 @@ function normalizeGradeStatusFilter(
     : "all";
 }
 
+const LEGACY_GRACE_PLACEHOLDER = "ضمن فترة السماح";
+
+type StudentGradeCounts = {
+  total: number;
+  numeric: number;
+  absent: number;
+  cheating: number;
+  lastAt: Date | null;
+};
+
+/**
+ * Grade records, one entry per student: the filters decide which students
+ * appear (a student appears once, however many exams they sat); the counts
+ * always describe the student's whole grade record. Newest activity first.
+ */
+async function listGradesGroupedByStudent(
+  searchParams: URLSearchParams,
+  page: number,
+  pageSize: number,
+  statusFilter: GradeStatusFilter,
+) {
+  const baseWhere = await buildGradeWhereWithExamCourseFilter(searchParams);
+
+  let matchingStudentIds: string[];
+  if (databaseComputedGradeFilters.has(statusFilter)) {
+    const allGrades = await withStudentGracePeriods(await db.grade.findMany({
+      where: baseWhere,
+      include: { student: { include: { studentLeaves: true } }, exam: true },
+    }));
+    matchingStudentIds = [
+      ...new Set(
+        allGrades
+          .filter((grade) => gradeMatchesServerStatusFilter(statusFilter, grade))
+          .map((grade) => grade.studentId),
+      ),
+    ];
+  } else {
+    const statusWhere: Prisma.GradeWhereInput =
+      statusFilter === "absent"
+        ? { AND: [baseWhere, { status: "غائب" }] }
+        : statusFilter === "cheating"
+          ? { AND: [baseWhere, { status: "غش" }] }
+          : baseWhere;
+    const rows = await db.grade.groupBy({ by: ["studentId"], where: statusWhere });
+    matchingStudentIds = rows.map((row) => row.studentId);
+  }
+
+  const counts = new Map<string, StudentGradeCounts>();
+  for (const id of matchingStudentIds) {
+    counts.set(id, { total: 0, numeric: 0, absent: 0, cheating: 0, lastAt: null });
+  }
+  if (matchingStudentIds.length > 0) {
+    const groups = await db.grade.groupBy({
+      by: ["studentId", "status"],
+      where: { studentId: { in: matchingStudentIds } },
+      _count: { _all: true },
+      _max: { updatedAt: true },
+    });
+    for (const group of groups) {
+      const entry = counts.get(group.studentId);
+      if (!entry || group.status === LEGACY_GRACE_PLACEHOLDER) continue;
+      const count = group._count._all;
+      entry.total += count;
+      if (group.status === "درجة") entry.numeric += count;
+      else if (group.status === "غائب") entry.absent += count;
+      else if (group.status === "غش") entry.cheating += count;
+      const at = group._max.updatedAt;
+      if (at && (!entry.lastAt || at > entry.lastAt)) entry.lastAt = at;
+    }
+  }
+
+  const ordered = [...counts.entries()].sort(([idA, a], [idB, b]) => {
+    const diff = (b.lastAt?.getTime() ?? 0) - (a.lastAt?.getTime() ?? 0);
+    return diff !== 0 ? diff : idA.localeCompare(idB);
+  });
+  const totals = ordered.reduce(
+    (sum, [, entry]) => ({
+      records: sum.records + entry.total,
+      numeric: sum.numeric + entry.numeric,
+      absent: sum.absent + entry.absent,
+      cheating: sum.cheating + entry.cheating,
+    }),
+    { records: 0, numeric: 0, absent: 0, cheating: 0 },
+  );
+
+  const totalCount = ordered.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const pageEntries = ordered.slice((page - 1) * pageSize, page * pageSize);
+  const pageIds = pageEntries.map(([id]) => id);
+
+  const [students, latestGrades, gracePeriods] = await Promise.all([
+    db.student.findMany({ where: { id: { in: pageIds } } }),
+    db.grade.findMany({
+      where: {
+        studentId: { in: pageIds },
+        status: { not: LEGACY_GRACE_PLACEHOLDER },
+      },
+      orderBy: [{ studentId: "asc" }, { exam: { date: "desc" } }],
+      distinct: ["studentId"],
+      select: {
+        studentId: true,
+        status: true,
+        score: true,
+        exam: { select: { id: true, name: true, date: true, fullMark: true } },
+      },
+    }),
+    loadActiveGracePeriodsByStudent(db, pageIds),
+  ]);
+  const studentById = new Map(students.map((student) => [student.id, student]));
+  const latestByStudent = new Map(latestGrades.map((grade) => [grade.studentId, grade]));
+
+  return NextResponse.json({
+    students: pageEntries
+      .filter(([id]) => studentById.has(id))
+      .map(([id, entry]) => ({
+        student: {
+          ...withoutLegacyGraceFields(studentById.get(id)!),
+          gracePeriods: gracePeriods.get(id) || [],
+        },
+        totalExams: entry.total,
+        numericCount: entry.numeric,
+        absentCount: entry.absent,
+        cheatingCount: entry.cheating,
+        lastActivityAt: entry.lastAt,
+        latestGrade: latestByStudent.get(id) || null,
+      })),
+    totals: { students: totalCount, ...totals },
+    totalCount,
+    page,
+    pageSize,
+    totalPages,
+    hasMore: page < totalPages,
+  });
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, "grades.view");
   if (authError) return authError;
@@ -461,6 +596,10 @@ export async function GET(req: NextRequest) {
     const page = parsePositiveInt(searchParams.get("page"), 1, 1_000_000);
     const pageSize = parsePositiveInt(searchParams.get("pageSize"), 100, 500);
     const statusFilter = normalizeGradeStatusFilter(searchParams);
+
+    if (searchParams.get("groupBy") === "student") {
+      return await listGradesGroupedByStudent(searchParams, page, pageSize, statusFilter);
+    }
 
     // The old UI-only filters (full mark / discounted / failed / accounting / grace)
     // must be computed over the complete database result, then paginated after that.

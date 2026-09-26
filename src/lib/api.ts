@@ -1141,6 +1141,38 @@ export interface GradeListResponse {
   hasMore: boolean;
 }
 
+/** One student in the grade records, with counts over their whole record. */
+export interface GradeStudentSummary {
+  student: Record<string, unknown>;
+  totalExams: number;
+  numericCount: number;
+  absentCount: number;
+  cheatingCount: number;
+  lastActivityAt: string | null;
+  latestGrade: {
+    studentId: string;
+    status: string;
+    score: number | null;
+    exam: { id: string; name: string; date: string; fullMark: number } | null;
+  } | null;
+}
+
+export interface GradeStudentListResponse {
+  students: GradeStudentSummary[];
+  totals: {
+    students: number;
+    records: number;
+    numeric: number;
+    absent: number;
+    cheating: number;
+  };
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
 export interface GradeEntrySheetResponse {
   exam: Record<string, unknown>;
   students: Array<Record<string, unknown>>;
@@ -1610,6 +1642,26 @@ export const gradeApi = {
       `grades${queryString ? `?${queryString}` : ""}`,
       options,
     );
+  },
+  /** Grade records grouped by student (one card per student). */
+  listByStudent: async (
+    query: GradeListQuery = {},
+    options: ApiGetOptions = {},
+  ): Promise<GradeStudentListResponse | null> => {
+    const queryString = buildQueryString({
+      groupBy: "student",
+      examId: query.examId,
+      statusFilter: query.statusFilter,
+      q: query.q,
+      courseId: query.courseId,
+      courseProgram: query.courseProgram,
+      courseTerm: query.courseTerm,
+      studyType: query.studyType,
+      nameLetter: query.nameLetter,
+      page: query.page ?? 1,
+      pageSize: query.pageSize ?? 10,
+    });
+    return apiGet<GradeStudentListResponse>(`grades?${queryString}`, options);
   },
   add: (grade: Record<string, unknown>) => apiPost("grades", grade),
   markMissingAbsent: (examId: string, studentIds: string[]) =>
