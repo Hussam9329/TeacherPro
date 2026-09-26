@@ -134,6 +134,11 @@ function examDateKey(exam: unknown): number {
   return Number.isFinite(date.getTime()) ? date.getTime() : 0;
 }
 
+/** ملاحظات التسوية التاريخية («بلا أثر») لا تُعرض في بطاقة الدرجات — إزالة بطلب صاحب النظام. */
+const SETTLEMENT_NOTES_PREFIX = "تسوية تاريخية بلا أثر:";
+const showNotesInCard = (notes: string | null | undefined): boolean =>
+  Boolean(notes && !notes.startsWith(SETTLEMENT_NOTES_PREFIX));
+
 const STUDENT_GRADES_TABS: Array<{ value: StudentGradesTab; label: string; tone?: "success" | "danger" }> = [
   { value: "all", label: "كل الدرجات" },
   { value: "numeric", label: "الدرجة الرقمية", tone: "success" },
@@ -1446,15 +1451,19 @@ export function GradeRecordsView() {
                           <span className="tp-grade-dialog__score" data-kind={kind} dir={kind === "numeric" ? "ltr" : undefined}>
                             {kind === "numeric"
                               ? gradeRecordScoreText(grade, exam)
-                              : gradeRecordStatusText(grade.status) || "—"}
+                              : grade.status === "قبل تسجيل الطالب"
+                                // البانر يشرح الحالة — لا داعي لتكرار نصها هنا
+                                ? "—"
+                                : gradeRecordStatusText(grade.status) || "—"}
                           </span>
-                          {cls.text && (
+                          {/* شارتا «قبل التسجيل» و«بلا أثر» تكرران للبانر — أُزيلتا بطلب صاحب النظام */}
+                          {cls.text && cls.text !== "قبل التسجيل" && cls.text !== "بلا أثر" && (
                             <Badge variant={classificationVariant(cls.type)}>{cls.text}</Badge>
                           )}
                         </div>
-                        {(grade.notes || !availability.available) && (
+                        {(showNotesInCard(grade.notes) || !availability.available) && (
                           <div className="tp-grade-dialog__notes">
-                            {grade.notes ? <GradeNoteBanner notes={grade.notes} /> : null}
+                            {showNotesInCard(grade.notes) ? <GradeNoteBanner notes={grade.notes} /> : null}
                             {!availability.available && (
                               <p className="rounded-xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft px-3 py-2 text-xs font-medium leading-5 text-warning">
                                 غير محتسبة حالياً: {availability.reason}
