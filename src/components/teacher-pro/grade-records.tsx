@@ -175,6 +175,9 @@ type ScorePillTone =
  * حبة النتيجة: نص ولون واحد لكل حالة — بدون تكرار (طلب صاحب النظام):
  * ناجح أخضر · راسب/بدون خصم أحمر فاتح · مخصوم/فصل أحمر طوخ ·
  * مجاز أصفر · قبل التسجيل سمائي · فترة السماح بنفسجي.
+ *
+ * إصلاح: أي صف حالته «مجاز» يبقى أصفر حتى لو سقط تصنيفه بفرع التسوية
+ * التاريخية («بلا أثر» لامتحانات الفصول السابقة) — كان يعرض أبيض.
  */
 function scorePillPresentation(
   grade: Grade,
@@ -182,7 +185,8 @@ function scorePillPresentation(
   cls: { text: string; kind: string },
 ): { text: string; tone: ScorePillTone } {
   const status = String(grade.status || "");
-  if (cls.text === "مجاز") return { text: "مجاز", tone: "excused" };
+  if (cls.text === "مجاز" || status === "مجاز")
+    return { text: "مجاز", tone: "excused" };
   if (cls.kind === "grace") {
     return status === "درجة"
       ? { text: gradeRecordScoreText(grade, exam), tone: "grace" }

@@ -1221,7 +1221,7 @@ export function StudentProfileDialog({
                               {historicalDeduction ? `خصم سابق: ${deductionLog.amount} — لا يؤثر على الفصل الحالي` : `خصم ${deductionLog.amount} فرصة`}
                             </Badge>
                           )}
-                          <Badge className="w-fit" variant={withinGrace || withoutDiscount ? "outline" : grade.status === "درجة" ? "default" : grade.status === "غائب" ? "destructive" : "secondary"}>{profileGradeStatus(grade.status)}</Badge>
+                          <Badge className="w-fit" variant={withinGrace || withoutDiscount ? "outline" : grade.status === "درجة" ? "default" : grade.status === "غائب" ? "destructive" : grade.status === "مجاز" ? "warning" : "secondary"}>{profileGradeStatus(grade.status)}</Badge>
                           {opportunityText !== "0/0" && <Badge variant="outline" className="text-[10px]">فرص: {opportunityText}</Badge>}
                         </div>
                         <span className="font-black">{formatScore(grade, exam)}</span>
@@ -1253,7 +1253,7 @@ export function StudentProfileDialog({
                     const deductionLog = deductionLogByExamId.get(exam.id);
                     return (
                       <div key={grade.id} className="min-w-0 rounded-2xl border bg-background/60 p-4">
-                        <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><div className="flex flex-wrap gap-1">{withinGrace && <Badge variant="warning">{GRACE_PERIOD_EXCUSE_LABEL}</Badge>}{!withinGrace && withoutDiscount && <Badge variant="info">بدون خصم</Badge>}{deductionLog && <Badge variant="destructive" title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>خصم {deductionLog.amount} فرصة</Badge>}<Badge>{profileGradeStatus(grade.status)}</Badge></div></div>
+                        <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><div className="flex flex-wrap gap-1">{withinGrace && <Badge variant="warning">{GRACE_PERIOD_EXCUSE_LABEL}</Badge>}{!withinGrace && withoutDiscount && <Badge variant="info">بدون خصم</Badge>}{deductionLog && <Badge variant="destructive" title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>خصم {deductionLog.amount} فرصة</Badge>}<Badge variant={grade.status === "مجاز" ? "warning" : undefined}>{profileGradeStatus(grade.status)}</Badge></div></div>
                         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{formatGradeScore(grade, exam, "—")}</b><p>درجة الطالب</p></div></div>
                         {grade.notes ? <div className="mt-3"><GradeNoteBanner notes={grade.notes} /></div> : null}
                       </div>
