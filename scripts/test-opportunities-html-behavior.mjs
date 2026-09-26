@@ -288,32 +288,10 @@ function clickFirstSuggestion(dom, index = 0) {
   });
 }
 
-function openStudentDetails(dom, studentId, studentName) {
-  const labelClone = {
-    textContent: studentName,
-    querySelector() {
-      return null;
-    },
-  };
-  const firstCell = {
-    querySelector() {
-      return null;
-    },
-    cloneNode() {
-      return labelClone;
-    },
-  };
-  const row = {
-    querySelector() {
-      return firstCell;
-    },
-  };
+function openStudentDetails(dom, studentId) {
   const button = {
     getAttribute(name) {
       return name === "data-sid" ? studentId : null;
-    },
-    closest(selector) {
-      return selector === "tr" ? row : null;
     },
   };
   const target = {
@@ -443,21 +421,29 @@ check("كل JavaScript المضمّن في التقرير التفاعلي صا�
   compileInlineScripts(validHtml, "opportunities-search-report");
 });
 
-check("بطاقة الطالب وجداول التفاصيل تعرض data-label لكل قيمة على الهاتف", () => {
+check("اختيار الطالب يفتح التفاصيل ويترك سطراً مختصراً لإعادة فتحها بدون جدول مكرر", () => {
   const { dom } = executeInlineScripts(validHtml, "opportunities-interaction");
   dom.elements.tpStudentSearch.value = "محمد علي";
   dom.elements.tpStudentSearch.dispatch("input", {});
   clickFirstSuggestion(dom);
 
   const studentCardHtml = dom.elements.tpStudentCard.innerHTML;
-  assert.deepEqual(labelsFromRenderedCells(studentCardHtml), [
-    "الطالب",
-    "الدورة",
-    "عدد الفرص",
-    "تفاصيل الطالب",
-  ]);
+  assert.match(studentCardHtml, /محمد علي حسن/);
+  assert.match(studentCardHtml, /فرصك: <strong>2<\/strong>/);
+  assert.match(studentCardHtml, /data-sid="s1">افتح التفاصيل<\/button>/);
+  assert.doesNotMatch(studentCardHtml, /<table|الدورة الشتوية|tp-pledge-note|tp-balance-note/);
+  assert.ok(dom.elements.tpDetailsModal.classList.contains("open"));
+  const originalGrades = dom.elements.tpGradesBody.innerHTML;
+  const originalOverview = dom.elements.tpStudentOverview.innerHTML;
 
-  openStudentDetails(dom, "s1", "محمد علي حسن");
+  dom.elements.tpModalClose.dispatch("click", {});
+  assert.ok(!dom.elements.tpDetailsModal.classList.contains("open"));
+  assert.ok(dom.elements.tpStudentCard.classList.contains("visible"));
+
+  openStudentDetails(dom, "s1");
+  assert.equal(dom.elements.tpModalTitleText.textContent, "محمد علي حسن");
+  assert.equal(dom.elements.tpGradesBody.innerHTML, originalGrades);
+  assert.equal(dom.elements.tpStudentOverview.innerHTML, originalOverview);
   assert.deepEqual(labelsFromRenderedCells(dom.elements.tpGradesBody.innerHTML), [
     "الامتحان",
     "تاريخ الامتحان",
@@ -1086,7 +1072,7 @@ check("عبارة التعهد تشمل التسوية والتعهد اليدو
     dom.elements.tpStudentSearch.value = "محمد علي";
     dom.elements.tpStudentSearch.dispatch("input", {});
     clickFirstSuggestion(dom);
-    assert.ok(dom.elements.tpStudentCard.innerHTML.includes(message));
+    assert.ok(!dom.elements.tpStudentCard.innerHTML.includes(message), "توضيح التعهد يظهر داخل التفاصيل فقط");
     assert.ok(dom.elements.tpStudentOverview.innerHTML.includes(message));
     assert.match(dom.elements.tpStudentOverview.innerHTML, /<strong>1<\/strong>/);
     assert.equal((dom.elements.tpStudentOverview.innerHTML.match(/tp-summary-item/g) || []).length, 1);

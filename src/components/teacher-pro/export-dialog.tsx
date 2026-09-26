@@ -597,8 +597,10 @@ const DETAILS_MODAL_CSS = `
   .tp-empty-search { padding: 16px; color: #5B6674; }
   .tp-student-card { display: none; max-width: 700px; margin: auto; }
   .tp-student-card.visible { display: block; }
-  .tp-student-card table { width: 100%; min-width: 0; table-layout: fixed; font-weight: 400; }
-  .tp-student-card td, .tp-student-card th { overflow-wrap: anywhere; }
+  .tp-student-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid #E6E3D9; }
+  .tp-student-summary-name { flex: 1 1 220px; min-width: 0; font-weight: 700; line-height: 1.8; overflow-wrap: anywhere; }
+  .tp-student-summary-balance { white-space: nowrap; }
+  .tp-student-summary .tp-details-btn { margin-inline-start: auto; }
   .tp-details-btn, .tp-modal-close { min-height: 44px; max-width: 100%; touch-action: manipulation; padding: 10px 16px; border: 1px solid #19293A; border-radius: 10px; background: #19293A; color: #FBF9EB; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 700; white-space: normal; }
   .tp-details-btn:hover, .tp-modal-close:hover { background: #0E1F36; }
   .tp-details-btn:focus-visible, .tp-modal-close:focus-visible { outline: 3px solid #5B6674; outline-offset: 3px; }
@@ -655,17 +657,17 @@ const DETAILS_MODAL_CSS = `
     .tp-modal-close { padding-inline: 10px; }
     .tp-summary-item { padding: 12px; }
     .tp-summary-item strong { font-size: 16px; }
-    .tp-details-table, .tp-details-table tbody, .tp-details-table tr, .tp-student-card table, .tp-student-card tbody, .tp-student-card tr { display: block; width: 100%; min-width: 0; }
-    .tp-details-table, .tp-student-card table { border: 0; background: transparent; }
-    .tp-details-table thead, .tp-student-card thead { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-    .tp-details-table tr, .tp-student-card tr { border: 1px solid #E6E3D9; border-radius: 12px; margin-bottom: 12px; padding: 6px 12px; background: #FBF9EB; }
+    .tp-details-table, .tp-details-table tbody, .tp-details-table tr { display: block; width: 100%; min-width: 0; }
+    .tp-details-table { border: 0; background: transparent; }
+    .tp-details-table thead { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .tp-details-table tr { border: 1px solid #E6E3D9; border-radius: 12px; margin-bottom: 12px; padding: 6px 12px; background: #FBF9EB; }
     .tp-grades-table tbody tr.tp-grade-row-dismissed { border-color: #991B1B; border-inline-start-width: 4px; }
     .tp-grades-table tbody tr.tp-grade-row-dismissed > td:first-child { border-inline-start: 0; padding-inline-start: 0; }
-    .tp-details-table tr:not(.tp-empty-row) td, .tp-student-card td { display: grid; grid-template-columns: minmax(96px, 38%) minmax(0, 1fr); gap: 10px; width: 100%; min-width: 0; min-height: 44px; padding: 10px 0; border: 0; border-bottom: 1px solid #E6E3D9; }
+    .tp-details-table tr:not(.tp-empty-row) td { display: grid; grid-template-columns: minmax(96px, 38%) minmax(0, 1fr); gap: 10px; width: 100%; min-width: 0; min-height: 44px; padding: 10px 0; border: 0; border-bottom: 1px solid #E6E3D9; }
     .tp-mobile-field-label { display: block; color: #5B6674; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
     .tp-mobile-field-value { display: block; overflow-wrap: anywhere; }
     .tp-details-table tr:last-child td { border-bottom: 1px solid #E6E3D9; }
-    .tp-details-table tr td:last-child, .tp-student-card td:last-child { border-bottom: 0; }
+    .tp-details-table tr td:last-child { border-bottom: 0; }
   }
   @media screen and (max-width: 420px) { .tp-details-table tr:not(.tp-empty-row) td { grid-template-columns: minmax(76px, 32%) minmax(0, 1fr); gap: 8px; } }
 `;
@@ -853,20 +855,11 @@ const DETAILS_MODAL_JS = `
 
   function renderStudentCard(student){
     var id = esc(student.id);
-    var html = '<table class="tp-student-summary-table" role="table" aria-label="ملخص الطالب المختار">'
-      + '<thead><tr role="row">'
-      + '<th scope="col" role="columnheader">الطالب</th>'
-      + '<th scope="col" role="columnheader">الدورة</th>'
-      + '<th scope="col" role="columnheader">عدد الفرص</th>'
-      + '<th scope="col" role="columnheader">تفاصيل الطالب</th>'
-      + '</tr></thead>'
-      + '<tbody><tr role="row">'
-      + mobileCell('الطالب', esc(student.name) + ' ' + dismissedBadgeHtml(student), 'tp-student-name-cell')
-      + mobileCell('الدورة', esc(student.courseName || '—'))
-      + mobileCell('عدد الفرص', fmtNum(student.opportunities) + pledgeNoteHtml(student.id) + balanceNotesHtml(student.id))
-      + mobileCell('تفاصيل الطالب', '<button type="button" class="tp-details-btn" data-sid="' + id + '">إظهار التفاصيل</button>', 'tp-details-cell')
-      + '</tr></tbody>'
-      + '</table>';
+    var html = '<div class="tp-student-summary" role="group" aria-label="الطالب المختار">'
+      + '<span class="tp-student-summary-name">' + esc(student.name) + dismissedBadgeHtml(student) + '</span>'
+      + '<span class="tp-student-summary-balance">فرصك: <strong>' + fmtNum(student.opportunities) + '</strong></span>'
+      + '<button type="button" class="tp-details-btn" data-sid="' + id + '">افتح التفاصيل</button>'
+      + '</div>';
     cardEl.innerHTML = html;
     cardEl.classList.add('visible');
   }
@@ -1032,25 +1025,12 @@ const DETAILS_MODAL_JS = `
     }
   });
 
-  // فتح نافذة التفاصيل عند الضغط على زر «إظهار التفاصيل».
+  // إعادة فتح تفاصيل الطالب المختار من السطر المختصر.
   document.addEventListener('click', function(e){
     var btn = e.target.closest && e.target.closest('.tp-details-btn');
     if (btn) {
       var sid = btn.getAttribute('data-sid') || '';
-      var label = '';
-      var row = btn.closest('tr');
-      if (row) {
-        var firstCell = row.querySelector('td:not(.tp-details-cell)');
-        if (firstCell) {
-          // اسم الطالب فقط بدون نص شارة «مفصول» — الشارة تُعرض في رأس النافذة.
-          var valueCell = firstCell.querySelector('.tp-mobile-field-value') || firstCell;
-          var labelClone = valueCell.cloneNode(true);
-          var badgeInLabel = labelClone.querySelector('.tp-dismissed-badge');
-          if (badgeInLabel && badgeInLabel.parentNode) badgeInLabel.parentNode.removeChild(badgeInLabel);
-          label = labelClone.textContent.trim();
-        }
-      }
-      showDetails(sid, label);
+      showDetails(sid);
     }
   });
 
@@ -1682,8 +1662,12 @@ export function ExportDialog<T = Record<string, unknown>>({
       <DialogContent dir="rtl" className="max-h-[90dvh] min-w-0 overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{htmlExamSelectionOpen ? "اختر امتحانات تقرير HTML" : title}</DialogTitle>
-          {htmlExamSelectionOpen ? <DialogDescription>إخفاء امتحان من التقرير لا يغيّر رصيد الفرص.</DialogDescription>
-            : description ? <DialogDescription>{description}</DialogDescription> : null}
+          {description || htmlExamSelectionOpen ? (
+            <DialogDescription>
+              {description}
+              {htmlExamSelectionOpen ? <span className="block">إخفاء امتحان من التقرير لا يغيّر رصيد الفرص.</span> : null}
+            </DialogDescription>
+          ) : null}
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="grid grid-cols-1 gap-2 rounded-xl border bg-muted/30 p-3 text-sm sm:grid-cols-2">
