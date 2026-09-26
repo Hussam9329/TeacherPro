@@ -674,10 +674,10 @@ const DETAILS_MODAL_CSS = `
 
 const DETAILS_MODAL_HTML = `
 <div class="tp-search-wrap">
-  <label class="tp-search-label" for="tpStudentSearch">ابحث عن اسمك</label>
-  <input type="text" id="tpStudentSearch" class="tp-search-input" autocomplete="off" placeholder="اكتب اسمك واسم أبيك" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="tpSuggestions" aria-describedby="tpSearchHint">
+  <label class="tp-search-label" for="tpStudentSearch">البحث عن الطالب</label>
+  <input type="text" id="tpStudentSearch" class="tp-search-input" autocomplete="off" placeholder="أدخل الاسم الثنائي أو الكامل" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="tpSuggestions" aria-describedby="tpSearchHint">
   <div id="tpSuggestions" class="tp-suggestions" role="listbox" aria-label="الطلاب المطابقون"></div>
-  <p class="tp-search-hint" id="tpSearchHint" role="status" aria-live="polite">اكتب اسمك واسم أبيك، ثم اختر اسمك الكامل من النتائج.</p>
+  <p class="tp-search-hint" id="tpSearchHint" role="status" aria-live="polite">يرجى إدخال الاسم الثنائي أو الكامل، ثم اختيار الطالب من النتائج.</p>
 </div>
 <div id="tpStudentCard" class="tp-student-card" aria-live="polite"></div>
 <div id="tpDetailsModal" class="tp-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="tpModalTitle" aria-hidden="true">
@@ -881,7 +881,7 @@ const DETAILS_MODAL_JS = `
       hideSuggestions();
       cardEl.classList.remove('visible');
       cardEl.innerHTML = '';
-      hintEl.textContent = 'اكتب اسمك واسم أبيك، ثم اختر اسمك الكامل.';
+      hintEl.textContent = 'يرجى إدخال الاسم الثنائي أو الكامل، ثم اختيار الطالب من النتائج.';
       return;
     }
 
@@ -889,11 +889,11 @@ const DETAILS_MODAL_JS = `
       hideSuggestions();
       cardEl.classList.remove('visible');
       cardEl.innerHTML = '';
-      hintEl.textContent = 'اكتب كلمة أخرى على الأقل (مثال: «محمد علي» بدل «محمد» فقط) لعرض قائمة الطلاب.';
+      hintEl.textContent = 'يرجى إدخال مقطعين من اسم الطالب على الأقل لعرض النتائج.';
       return;
     }
 
-    hintEl.textContent = 'اختر اسمك الكامل من النتائج.';
+    hintEl.textContent = 'يرجى اختيار الطالب من النتائج.';
 
     var matches = STUDENTS.filter(function(s){
       return matchesQuery(s, q);
