@@ -578,7 +578,7 @@ check("بيانات الطلاب لا تستطيع كسر عنصر script وتب
             examName: breakoutPayload,
           },
         ],
-        balanceNotes: [{ text: breakoutPayload, date: "2026-09-01" }],
+        timelineEvents: [{ text: breakoutPayload, date: "2026-09-01", kind: "add", balanceAfter: 3 }],
       },
     },
   });
@@ -603,10 +603,10 @@ check("بيانات الطلاب لا تستطيع كسر عنصر script وتب
     sandbox.STUDENT_DETAILS.s1.grades[0].examName,
     breakoutPayload,
   );
-  assert.equal(sandbox.STUDENT_DETAILS.s1.balanceNotes[0].text, breakoutPayload);
+  assert.equal(sandbox.STUDENT_DETAILS.s1.timelineEvents[0].text, breakoutPayload);
   openStudentDetails(dom, "s1", breakoutPayload);
   assert.match(dom.elements.tpGradesBody.innerHTML, /&lt;\/script&gt;&lt;script&gt;/);
-  assert.match(dom.elements.tpStudentOverview.innerHTML, /&lt;\/script&gt;&lt;script&gt;/);
+  assert.doesNotMatch(dom.elements.tpStudentOverview.innerHTML, /script/);
   assert.doesNotMatch(dom.elements.tpGradesBody.innerHTML, /<script>/);
   assert.equal(sandbox.__teacherProBreakout, undefined);
 });
@@ -888,7 +888,7 @@ check("HTML يعرض الغش بحالته الصحيحة وأثره من الخ
     { label: "cheating-zero-applied", logs: [{ ...deduction, appliedAmount: 0 }], effect: "لا خصم" },
     { label: "cheating-without-log", effect: "لا خصم" },
     { label: "cheating-dismissal", logs: [deduction, { action: "فصل تلقائي", amount: 0 }], effect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان", deduction: true },
-    { label: "cheating-settled", logs: [deduction, { action: "إعادة تعيين", amount: 3, balanceAfter: 3, ledgerVersion: 2, date: "2026-09-06", settledGradeIds: '["cheating-grade"]' }], effect: "لا خصم (قبل رصيدك الجديد)" },
+    { label: "cheating-settled-history-retained", logs: [deduction, { action: "إعادة تعيين", amount: 3, balanceAfter: 3, ledgerVersion: 2, date: "2026-09-06", settledGradeIds: '["cheating-grade"]' }], effect: "خُصمت فرصتان", deduction: true },
     { label: "cheating-during-grace", student: { gracePeriods: [{ startDate: "2026-09-01", endDate: "2026-09-10" }] }, effect: "بدون خصم (فترة سماح لغاية 10-9-2026)" },
   ];
   for (const scenario of cases) {
@@ -1008,9 +1008,9 @@ check("ألوان صفوف التقرير تعتمد على أثر الامتح�
     { label: "deduction-precedes-leave", grade: { status: "مجاز" }, logs: [debit], tone: "deducted", effect: "خُصمت فرصتان" },
     { label: "dismissal-strongest", grade: { status: "غش" }, grace: true, logs: [debit, dismissal], tone: "dismissed", effect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان" },
     { label: "dismissal-with-zero-deduction", grade: { status: "غائب" }, logs: [{ ...debit, appliedAmount: 0 }, dismissal], tone: "dismissed", effect: "سُجّل فصل بسبب هذا الامتحان" },
-    { label: "settled-old-dismissal-no-red", grade: { status: "غائب" }, logs: [debit, dismissal, settlement], tone: "ordinary", effect: "لا خصم (قبل رصيدك الجديد)" },
-    { label: "later-manual-deduction-remains-pink", grade: { status: "غائب" }, logs: [debit, dismissal, settlement, { action: "خصم", amount: 1, date: "2026-09-17" }], tone: "deducted", effect: "خُصمت فرصة" },
-    { label: "later-manual-dismissal-remains-strong", grade: { status: "غائب" }, logs: [debit, dismissal, settlement, { action: "فصل", amount: 0, date: "2026-09-17" }], tone: "dismissed", effect: "سُجّل فصل بسبب هذا الامتحان" },
+    { label: "settled-old-dismissal-retained", grade: { status: "غائب" }, logs: [debit, dismissal, settlement], tone: "dismissed", effect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان" },
+    { label: "later-manual-deduction-keeps-complete-history", grade: { status: "غائب" }, logs: [debit, dismissal, settlement, { action: "خصم", amount: 1, date: "2026-09-17" }], tone: "dismissed", effect: "خُصمت 3 فرص. سُجّل فصل بسبب هذا الامتحان" },
+    { label: "later-manual-dismissal-keeps-earlier-deduction", grade: { status: "غائب" }, logs: [debit, dismissal, settlement, { action: "فصل", amount: 0, date: "2026-09-17" }], tone: "dismissed", effect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان" },
     { label: "student-status-alone-does-not-color-exam", studentStatus: "مفصول", grade: { status: "درجة", score: 18 }, tone: "ordinary", effect: "لا خصم" },
   ];
   for (const scenario of cases) {
@@ -1045,7 +1045,7 @@ check("ألوان صفوف التقرير تعتمد على أثر الامتح�
   }
 });
 
-check("عبارة التعهد تشمل التسوية والتعهد اليدوي وتبقى بجانب الرصيد الفعلي", () => {
+check("التعهد خارج الفصل الحالي لا يعود كشعار ثابت أو كحدث في تفاصيل الفصل", () => {
   const pledgeLogs = [
     { action: "رصيد بعد تعهد", amount: 2, reason: "تسوية تاريخية: تثبيت رصيد الطالب عند 2/3 بموجب تعهده للامتحان الفاينل للفصل الأول" },
     { action: "رصيد إعادة التفعيل", amount: 2, reason: "تم تعهد الطالب: إرجاعه إلى الحالة النشطة برصيد فرصتين بسبب التعهد" },
@@ -1073,7 +1073,9 @@ check("عبارة التعهد تشمل التسوية والتعهد اليدو
     dom.elements.tpStudentSearch.dispatch("input", {});
     clickFirstSuggestion(dom);
     assert.ok(!dom.elements.tpStudentCard.innerHTML.includes(message), "توضيح التعهد يظهر داخل التفاصيل فقط");
-    assert.ok(dom.elements.tpStudentOverview.innerHTML.includes(message));
+    assert.ok(!dom.elements.tpStudentOverview.innerHTML.includes(message));
+    assert.doesNotMatch(dom.elements.tpGradesBody.innerHTML, /tp-timeline-event|تم قبول التعهّد/);
+    assert.equal(details.timelineEvents.length, 0);
     assert.match(dom.elements.tpStudentOverview.innerHTML, /<strong>1<\/strong>/);
     assert.equal((dom.elements.tpStudentOverview.innerHTML.match(/tp-summary-item/g) || []).length, 1);
     assert.equal(JSON.stringify(profile), before, "الإظهار لا يغيّر الرصيد أو سجل الطالب");
@@ -1173,7 +1175,9 @@ check("إلغاء امتحان يحذفه من بيانات HTML ودرجاته 
   assert.equal(sandbox.STUDENT_LIST[0].status, "مفصول");
   openStudentDetails(dom, "s1", studentList[0].name);
   assert.match(dom.elements.tpGradesBody.innerHTML, /0 \/ 20/);
-  assert.match(dom.elements.tpStudentOverview.innerHTML, /تم منح الطالب فرصتين بسبب تعهده/);
+  assert.doesNotMatch(dom.elements.tpStudentOverview.innerHTML, /تم منح الطالب فرصتين بسبب تعهده/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /tp-timeline-event-return/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /تم قبول التعهّد/);
   assert.equal(labelsFromRenderedCells(dom.elements.tpGradesBody.innerHTML).length, 4);
   assert.equal(JSON.stringify(details), originalDetails);
   assert.equal(JSON.stringify(profile), originalProfile);
@@ -1219,7 +1223,7 @@ check("حماية الرصيد القديم لا توصف كمنح فرص جدي
   assert.doesNotMatch(details.s1.opportunityLogs[0].reason, /P2|المالك|احتساب/);
 });
 
-check("استعادة برصيد جديد تمنع عرض خصم الامتحان المسوّى كخصم حالي وتوضح مصدر الرصيد", () => {
+check("استعادة برصيد جديد تظهر بعد الخصم التاريخي دون محوه أو تغييره", () => {
   const exam = { id: "restored-exam", name: "امتحان قبل الاستعادة", date: "2026-09-12", type: "تراكمي", fullMark: 100 };
   const profile = {
     student: { name: studentList[0].name, code: "BIO-TEST", status: "نشط", opportunities: 3, opportunityLimit: 3 },
@@ -1233,25 +1237,26 @@ check("استعادة برصيد جديد تمنع عرض خصم الامتحا�
   };
   const before = JSON.stringify(profile);
   const details = buildStudentDetailsFromProfileLog(profile);
-  assert.equal(details.grades[0].opportunityEffect, "لا خصم (قبل رصيدك الجديد)");
+  assert.equal(details.grades[0].opportunityEffect, "خُصمت فرصتان");
   assert.equal(details.studentSnapshot.opportunities, 3);
   assert.equal(details.opportunityLogs.length, 2, "التقرير لا يحذف سجل التدقيق التاريخي");
   const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: { s1: details } });
   const { dom } = executeInlineScripts(html, "settled-opportunity-report");
   openStudentDetails(dom, "s1", studentList[0].name);
   assert.match(dom.elements.tpStudentOverview.innerHTML, /<strong>3<\/strong>/);
-  assert.match(dom.elements.tpStudentOverview.innerHTML, /أُعيد تفعيلك برصيد 3 من الفرص/);
-  assert.match(dom.elements.tpStudentOverview.innerHTML, /16 سبتمبر 2026/);
+  assert.doesNotMatch(dom.elements.tpStudentOverview.innerHTML, /أُعيد تفعيلك|16 سبتمبر 2026/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /أُعيد تفعيلك برصيد 3 فرص/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /16 سبتمبر 2026/);
   assert.doesNotMatch(dom.elements.tpStudentOverview.innerHTML, /PRIVATE_ADMIN_REASON/);
-  assert.match(dom.elements.tpGradesBody.innerHTML, /tp-grade-no-deduction/);
-  assert.doesNotMatch(dom.elements.tpGradesBody.innerHTML, /خُصمت فرصتان/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /tp-grade-deduction/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /خُصمت فرصتان/);
   assert.match(dom.elements.tpGradesBody.innerHTML, /غياب/);
   const withoutExams = selectHtmlReportExams({ s1: details }, []);
-  assert.deepEqual(withoutExams.s1.balanceNotes, details.balanceNotes);
+  assert.deepEqual(withoutExams.s1.timelineEvents, details.timelineEvents);
   assert.equal(JSON.stringify(profile), before, "الرصيد والدرجات والسجل لا تتغير أثناء العرض");
 });
 
-check("إضافة الإدارة تظهر بجانب الرصيد دون إخفاء خصومات صحيحة أو اختراع تسوية", () => {
+check("إضافة الإدارة تظهر كسطر مؤرخ بعد الامتحان دون إخفاء خصمه الصحيح", () => {
   const exam = { id: "deducted-exam", name: "امتحان", date: "2026-09-12", fullMark: 50 };
   const profile = {
     student: { name: studentList[0].name, status: "نشط", opportunities: 3, opportunityLimit: 3 },
@@ -1270,10 +1275,145 @@ check("إضافة الإدارة تظهر بجانب الرصيد دون إخف�
   const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: sanitized });
   const { dom } = executeInlineScripts(html, "manual-grant-report");
   openStudentDetails(dom, "s1", studentList[0].name);
-  assert.match(dom.elements.tpStudentOverview.innerHTML, /أضافت الإدارة فرصتين/);
-  assert.match(dom.elements.tpStudentOverview.innerHTML, /13 سبتمبر 2026/);
+  assert.doesNotMatch(dom.elements.tpStudentOverview.innerHTML, /أضافت الإدارة|13 سبتمبر 2026/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /أضافت الإدارة فرصتين/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /13 سبتمبر 2026/);
   assert.match(dom.elements.tpGradesBody.innerHTML, /tp-grade-deduction/);
   assert.match(dom.elements.tpStudentOverview.innerHTML, /<strong>3<\/strong>/);
+});
+
+function renderedTimeline(profile, label) {
+  const details = buildStudentDetailsFromProfileLog(profile);
+  const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: { s1: details } });
+  const run = executeInlineScripts(html, label);
+  openStudentDetails(run.dom, "s1");
+  const rendered = run.dom.elements.tpGradesBody.innerHTML;
+  const sequence = [...rendered.matchAll(/<tr\b[^]*?<\/tr>/g)].map(([row]) => {
+    const eventDate = row.match(/<time datetime="([^"]+)"/)?.[1];
+    return eventDate ? `event:${eventDate}` : row.match(/class="tp-event-title">([^<]+)/)?.[1];
+  }).filter(Boolean);
+  return { details, html, ...run, rendered, sequence };
+}
+
+check("الحركات تظهر قبل الامتحان وبين الامتحانات وبعدها بوقت دقيق والتعهد المزدوج صف واحد", () => {
+  const exams = [
+    { id: "first", name: "الامتحان الأول", date: "2026-09-01T08:00:00.000Z", fullMark: 20 },
+    { id: "second", name: "الامتحان الثاني", date: "2026-09-01T12:00:00.000Z", fullMark: 20 },
+    { id: "third", name: "الامتحان الثالث", date: "2026-09-02T08:00:00.000Z", fullMark: 20 },
+  ];
+  const profile = {
+    student: { status: "نشط", opportunities: 1 },
+    currentChapter: { id: "timeline", name: "الفصل الحالي", since: "2026-09-01", examIds: exams.map(exam => exam.id) },
+    exams, allCourseExams: exams,
+    grades: exams.map(exam => ({ id: `grade-${exam.id}`, examId: exam.id, status: "درجة", score: 18, createdAt: exam.date })),
+    // Deliberately reverse several commands: presentation must order their
+    // exact timestamps and must not throw away credits before the latest reset.
+    opportunityLogs: [
+      { action: "رصيد إعادة التفعيل", amount: 1, balanceAfter: 1, ledgerVersion: 2, settledGradeIds: JSON.stringify(exams.map(exam => `grade-${exam.id}`)), date: "2026-09-03T07:00:00.000Z", reason: "PRIVATE_LATEST_RESTORE" },
+      { action: "إضافة", amount: 1, appliedAmount: 1, balanceAfter: 1, date: "2026-09-01T07:00:00.000Z", reason: "PRIVATE_FIRST_CREDIT" },
+      { action: "إعادة تفعيل", amount: 0, balanceAfter: 2, date: "2026-09-01T10:00:00.000Z", reason: "تم تعهد الطالب" },
+      { action: "رصيد إعادة التفعيل", amount: 2, balanceAfter: 2, ledgerVersion: 2, date: "2026-09-01T10:00:00.001Z", reason: "تم تعهد الطالب PRIVATE_PLEDGE" },
+      { action: "إضافة", amount: 2, appliedAmount: 1, balanceAfter: 3, date: "2026-09-01T14:00:00.000Z", reason: "PRIVATE_LATER_CREDIT" },
+      { action: "إضافة", amount: 3, appliedAmount: 0, balanceAfter: 3, date: "2026-09-01T15:00:00.000Z", reason: "PRIVATE_ZERO_CREDIT" },
+    ].map(log => ({ chapterId: "timeline", ...log })),
+  };
+  const before = JSON.stringify(profile);
+  const { details, sequence, rendered, html, dom } = renderedTimeline(profile, "all-credit-positions");
+  assert.deepEqual(sequence, [
+    "event:2026-09-01T07:00:00.000Z", "الامتحان الأول",
+    "event:2026-09-01T10:00:00.001Z", "الامتحان الثاني",
+    "event:2026-09-01T14:00:00.000Z", "الامتحان الثالث",
+    "event:2026-09-03T07:00:00.000Z",
+  ]);
+  assert.equal(details.timelineEvents.length, 4, "one row per actual grant; paired status and zero-applied credits add none");
+  assert.match(details.timelineEvents[1].text, /التعهّد.*برصيد فرصتين/);
+  assert.match(details.timelineEvents[2].text, /أضافت الإدارة فرصة واحدة.*أصبح الرصيد 3/);
+  assert.match(details.timelineEvents[3].text, /أُعيد تفعيلك برصيد فرصة واحدة/);
+  assert.equal((rendered.match(/class="tp-timeline-event /g) || []).length, 4);
+  assert.equal((rendered.match(/<td colspan="4" role="cell">/g) || []).length, 4);
+  assert.match(html, /\.tp-details-table tr\.tp-timeline-event > td \{ display: block;/, "event notice remains one full-width accessible row on mobile");
+  assert.doesNotMatch(dom.elements.tpStudentOverview.innerHTML, /تعهد|التعهّد|أضافت|أُعيد|tp-balance-note|tp-pledge-note/);
+  assert.doesNotMatch(html, /PRIVATE_/);
+  assert.equal(JSON.stringify(profile), before, "export is a read-only history projection");
+
+  const noExams = selectHtmlReportExams({ s1: details }, []);
+  assert.deepEqual(noExams.s1.timelineEvents, details.timelineEvents, "hiding exams cannot remove any credit or restore");
+  const selectedRun = executeInlineScripts(buildHtml(rows, columns, "تقرير", { studentList, studentDetails: noExams }), "credits-without-exams");
+  openStudentDetails(selectedRun.dom, "s1");
+  assert.equal((selectedRun.dom.elements.tpGradesBody.innerHTML.match(/class="tp-timeline-event /g) || []).length, 4);
+  assert.equal(labelsFromRenderedCells(selectedRun.dom.elements.tpGradesBody.innerHTML).length, 0);
+});
+
+check("الإدخال المتأخر بعد الإضافة يظهر بعدها مع بقاء تاريخ الامتحان والتعديل اللاحق لا يغيّر التسلسل", () => {
+  const exams = [
+    { id: "late", name: "غياب أُدخل بعد المنح", date: "2026-09-01T08:00:00.000Z", fullMark: 20 },
+    { id: "edited", name: "درجة عُدّلت لاحقاً", date: "2026-09-01T09:00:00.000Z", fullMark: 20 },
+    { id: "same", name: "نتيجة بوقت المنح", date: "2026-09-01T09:30:00.000Z", fullMark: 20 },
+  ];
+  const profile = {
+    student: { opportunities: 2, status: "نشط" },
+    currentChapter: { id: "timeline", name: "الفصل الحالي", since: null, examIds: exams.map(exam => exam.id) },
+    exams, allCourseExams: exams,
+    grades: [
+      { id: "late-grade", examId: "late", status: "غائب", createdAt: "2026-09-01T12:00:00.000Z", updatedAt: "2026-09-02T16:00:00Z" },
+      { id: "edited-grade", examId: "edited", status: "درجة", score: 18, createdAt: "2026-09-01T09:00:00.000Z", updatedAt: "2026-09-02T17:00:00Z" },
+      { id: "same-grade", examId: "same", status: "درجة", score: 18, createdAt: "2026-09-01T10:00:00.000Z" },
+    ],
+    opportunityLogs: [
+      { action: "إضافة", amount: 3, appliedAmount: 3, balanceBefore: 0, balanceAfter: 3, chapterId: "timeline", ledgerVersion: 2, date: "2026-09-01T10:00:00.000Z" },
+      { action: "خصم تلقائي", amount: 1, appliedAmount: 1, examId: "late", chapterId: "timeline", date: exams[0].date },
+    ],
+  };
+  const { details, sequence, rendered } = renderedTimeline(profile, "late-entry-credit-order");
+  assert.deepEqual(sequence, ["درجة عُدّلت لاحقاً", "event:2026-09-01T10:00:00.000Z", "نتيجة بوقت المنح", "غياب أُدخل بعد المنح"]);
+  const late = details.grades.find(grade => grade.examId === "late");
+  const edited = details.grades.find(grade => grade.examId === "edited");
+  assert.equal(late.examDate, exams[0].date);
+  assert.equal(late.timelineDate, profile.grades[0].createdAt);
+  assert.equal(edited.timelineDate, exams[1].date, "updatedAt is never a financial ordering timestamp");
+  assert.match(rendered, /سُجّلت النتيجة:/);
+  assert.match(rendered, /خُصمت فرصة/);
+  assert.doesNotMatch(rendered, /2 سبتمبر/);
+});
+
+check("حالة خصم فرصتين ثم غياب ثم فصل تبقى بتاريخها بعد الاستعادة بفرصة واحدة", () => {
+  const exams = [
+    { id: "old-final", name: "امتحان تراكمي مسجل في الفصل الحالي", type: "تراكمي", date: "2026-09-12T00:00:00Z", fullMark: 100, passMark: 50 },
+    { id: "absence-1", name: "الامتحان الأول", type: "يومي", date: "2026-09-16T00:00:00Z", fullMark: 20 },
+    { id: "passing", name: "الامتحان الثاني", type: "تراكمي", date: "2026-09-19T00:00:00Z", fullMark: 50, passMark: 25 },
+    { id: "absence-2", name: "الامتحان الثالث", type: "يومي", date: "2026-09-23T00:00:00Z", fullMark: 20 },
+  ];
+  const grades = [
+    { id: "g-final", examId: "old-final", status: "درجة", score: 28, createdAt: "2026-09-15T13:22:00Z" },
+    { id: "g-a1", examId: "absence-1", status: "غائب", score: null, createdAt: "2026-09-19T05:51:00Z" },
+    { id: "g-pass", examId: "passing", status: "درجة", score: 45, createdAt: "2026-09-20T14:45:00Z" },
+    { id: "g-a2", examId: "absence-2", status: "غائب", score: null, createdAt: "2026-09-25T18:35:00Z" },
+  ];
+  const profile = {
+    student: { opportunities: 1, status: "نشط" },
+    currentChapter: { id: "third", name: "الفصل الثالث", since: "2026-09-13T13:22:00Z", examIds: exams.map(exam => exam.id) },
+    exams, allCourseExams: exams, grades,
+    opportunityLogs: [
+      { action: "إعادة تعيين", amount: 3, balanceAfter: 3, ledgerVersion: 2, settledGradeIds: "[]", date: "2026-09-13T13:22:00Z", reason: "انتقال فصل" },
+      { action: "خصم تلقائي", amount: 2, appliedAmount: 2, examId: "old-final", date: exams[0].date },
+      { action: "خصم تلقائي", amount: 1, appliedAmount: 1, examId: "absence-1", date: exams[1].date },
+      { action: "فصل تلقائي", amount: 0, examId: "absence-2", date: exams[3].date },
+      { action: "إعادة تفعيل", amount: 0, balanceAfter: 1, date: "2026-09-26T12:41:00Z", reason: "PRIVATE_CORRECTION" },
+      { action: "رصيد إعادة التفعيل", amount: 1, balanceAfter: 1, ledgerVersion: 2, settledGradeIds: JSON.stringify(grades.map(grade => grade.id)), date: "2026-09-26T12:41:00Z", reason: "PRIVATE_CORRECTION" },
+    ].map(log => ({ chapterId: "third", ...log })),
+  };
+  const { details, dom, rendered, sequence, html } = renderedTimeline(profile, "restore-one-complete-history");
+  assert.deepEqual(details.grades.map(grade => grade.opportunityEffect), ["خُصمت فرصتان", "خُصمت فرصة", "لا خصم", "سُجّل فصل بسبب هذا الامتحان"]);
+  assert.deepEqual(sequence, [
+    "event:2026-09-13T13:22:00Z", exams[0].name, exams[1].name, exams[2].name, exams[3].name,
+    "event:2026-09-26T12:41:00Z",
+  ]);
+  assert.equal(details.timelineEvents.length, 2);
+  assert.match(dom.elements.tpStudentOverview.innerHTML, /<strong>1<\/strong>/);
+  assert.equal(dom.elements.tpModalDismissedBadge.style.display, "none", "historical dismissal never marks the currently active student dismissed");
+  assert.match(rendered, /أُعيد تفعيلك برصيد فرصة واحدة/);
+  assert.match(rendered, /tp-grade-row-dismissed/);
+  assert.doesNotMatch(html, /لا خصم \(قبل رصيدك الجديد\)|PRIVATE_CORRECTION|تم منح الطالب فرصتين بسبب تعهده/);
 });
 
 // Recreate the previous wire payload and its snapshot-based balance read. All
@@ -1327,7 +1467,8 @@ function privatePayloadFixture() {
   const details = {
     activeChapterName: "الفصل الظاهر", activeChapterSince: "1999-01-01T01:23:45Z",
     generatedAt: "1999-02-02T02:34:56Z", hasTwoOpportunityPledge: true,
-    balanceNotes: [{ text: "أضافت الإدارة فرصتين", date: "2026-09-11", reason: "PRIVATE_BALANCE_REASON", futurePrivateNoteField: "PRIVATE_FUTURE_NOTE_FIELD" }],
+    balanceNotes: [{ text: "PRIVATE_OLD_BALANCE_NOTE", date: "2026-09-11" }],
+    timelineEvents: [{ text: "أضافت الإدارة فرصتين", date: "2026-09-11", kind: "add", balanceAfter: 2, id: "PRIVATE_EVENT_ID", reason: "PRIVATE_BALANCE_REASON", futurePrivateNoteField: "PRIVATE_FUTURE_NOTE_FIELD" }],
     studentSnapshot: {
       name: "محمد علي جديد", code: "BIO-NEW", courseName: "الدورة الجديدة", status: "مفصول", opportunities: 0,
       opportunityLimit: 3, registeredAt: "1999-03-03T03:45:56Z", phone: "PRIVATE_SNAPSHOT_PHONE", futurePrivateSnapshotField: "PRIVATE_FUTURE_SNAPSHOT_FIELD",
@@ -1343,7 +1484,7 @@ function privatePayloadFixture() {
   const fallback = { ...first, id: "s2", name: "محمد علي جديد", code: "BIO-FALLBACK", opportunities: 2 };
   const nullBalance = { ...first, id: "s3", name: "محمد علي فارغ", code: "BIO-EMPTY" };
   const missing = { ...first, id: "s4", name: "محمد علي ناقص", code: "BIO-MISSING" };
-  const fallbackDetails = { ...details, studentSnapshot: undefined, hasTwoOpportunityPledge: false, balanceNotes: [], grades: [] };
+  const fallbackDetails = { ...details, studentSnapshot: undefined, hasTwoOpportunityPledge: false, balanceNotes: [], timelineEvents: [], grades: [] };
   return {
     list: [first, fallback, nullBalance, missing],
     details: {
@@ -1362,14 +1503,14 @@ check("ملف HTML ينقل حقول العرض حصراً ويحذف السجل
   const { sandbox } = executeInlineScripts(html, "public-payload-whitelist");
   const publicDetails = JSON.parse(JSON.stringify(sandbox.STUDENT_DETAILS));
   const publicStudents = JSON.parse(JSON.stringify(sandbox.STUDENT_LIST));
-  const detailKeys = ["activeChapterName", "hasTwoOpportunityPledge", "balanceNotes", "grades"].sort();
-  const gradeKeys = ["examName", "examType", "examDate", "score", "fullMark", "status", "opportunityEffect", "opportunityTone"].sort();
+  const detailKeys = ["activeChapterName", "timelineEvents", "grades"].sort();
+  const gradeKeys = ["examName", "examType", "examDate", "timelineDate", "score", "fullMark", "status", "opportunityEffect", "opportunityTone"].sort();
   const studentKeys = ["id", "name", "code", "courseName", "opportunities", "status"].sort();
   assert.deepEqual(Object.keys(publicDetails).sort(), ["s1", "s2", "s3"]);
   for (const detail of Object.values(publicDetails)) {
     assert.deepEqual(Object.keys(detail).sort(), detailKeys);
     for (const grade of detail.grades) assert.deepEqual(Object.keys(grade).sort(), gradeKeys);
-    for (const note of detail.balanceNotes) assert.deepEqual(Object.keys(note).sort(), ["date", "text"]);
+    for (const event of detail.timelineEvents) assert.deepEqual(Object.keys(event).sort(), ["balanceAfter", "date", "kind", "text"]);
   }
   for (const student of publicStudents) assert.deepEqual(Object.keys(student).sort(), studentKeys);
   assert.equal(publicStudents[0].opportunities, 0);

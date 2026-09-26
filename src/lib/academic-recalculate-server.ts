@@ -9,7 +9,9 @@ import { historicalLeaveLogIds, recalculateWithLeaveReview, type LeaveDismissalR
 import { recalculateWithExamEditReview } from "@/lib/exam-dismissal-review";
 import { recalculateWithGraceReview, type GraceDismissalReview } from "@/lib/grace-dismissal-review";
 import {
+  getActiveChapterForStudent,
   isAutomaticOpportunityLog,
+  isReactivationBalanceOpportunityLog,
   recalculateAcademicState,
 } from "@/lib/academic-engine";
 import type {
@@ -504,6 +506,74 @@ export async function loadAcademicStateForStudents(
   };
 }
 
+/** A settlement stops old grades from spending the new balance, but does not
+ * erase the deductions that actually happened before it. Retain this evidence
+ * only at persistence, after all academic/dismissal reviews have finished: a
+ * saved historical dismissal must never become proof of a current dismissal.
+ * The latest structured boundary and its exact grade IDs are authoritative;
+ * dates alone, a legacy pledge, or an older boundary cannot settle a grade. */
+function settledAutomaticHistory(
+  state: AcademicStateInput,
+  result: ReturnType<typeof recalculateAcademicState>,
+  targetIds: Set<string>,
+): AcademicOpportunityLog[] {
+  const savedRows = new Set(state.opportunityLogs);
+  const resultIds = new Set(result.opportunityLogs.map(log => log.id));
+  const eventKey = (log: AcademicOpportunityLog) => JSON.stringify([
+    log.studentId, log.examId,
+  ]);
+  // A live event's newly generated result wins over any older ID for it.
+  const currentEvents = new Set(result.opportunityLogs
+    .filter(log => isAutomaticOpportunityLog(log) && !savedRows.has(log))
+    .map(eventKey));
+  const logsByStudent = new Map<string, AcademicOpportunityLog[]>();
+  const gradesByStudent = new Map<string, AcademicGrade[]>();
+  for (const log of state.opportunityLogs) {
+    const logs = logsByStudent.get(log.studentId) || [];
+    logs.push(log);
+    logsByStudent.set(log.studentId, logs);
+  }
+  for (const grade of state.grades) {
+    const grades = gradesByStudent.get(grade.studentId) || [];
+    grades.push(grade);
+    gradesByStudent.set(grade.studentId, grades);
+  }
+  const retained: AcademicOpportunityLog[] = [];
+  for (const student of state.students) {
+    if (!targetIds.has(student.id)) continue;
+    const chapter = getActiveChapterForStudent(student, state.courseChapters, state.chapters);
+    if (!chapter) continue;
+    const logs = logsByStudent.get(student.id) || [];
+    const boundaries = logs.filter(log => !isAutomaticOpportunityLog(log) &&
+      log.ledgerVersion === 2 && log.chapterId === chapter.id &&
+      (log.action === "إعادة تعيين" || isReactivationBalanceOpportunityLog(log)))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const reset = boundaries.filter(log => log.action === "إعادة تعيين").at(-1);
+    const grant = boundaries.filter(isReactivationBalanceOpportunityLog).at(-1);
+    // Match the engine's tie rule: a reset wins over an equal-time grant.
+    const boundary = reset && (!grant || reset.date >= grant.date) ? reset : grant;
+    if (!boundary || !Number.isFinite(Date.parse(boundary.date))) continue;
+    const balance = boundary.balanceAfter ?? boundary.amount;
+    if (!Number.isSafeInteger(balance) || balance < 0) continue;
+    let ids: unknown;
+    try { ids = JSON.parse(boundary.settledGradeIds || "null"); }
+    catch { continue; }
+    if (!Array.isArray(ids) || !ids.every(id => typeof id === "string" && id.trim())) continue;
+    const settledIds = new Set<string>(ids);
+    const settledExams = new Set((gradesByStudent.get(student.id) || [])
+      .filter(grade => settledIds.has(grade.id)).map(grade => grade.examId));
+    for (const log of logs) {
+      if (isAutomaticOpportunityLog(log) && log.chapterId === chapter.id &&
+          settledExams.has(log.examId) && !resultIds.has(log.id) &&
+          !currentEvents.has(eventKey(log)) && Number.isFinite(Date.parse(log.date)) &&
+          Date.parse(log.date) <= Date.parse(boundary.date)) {
+        retained.push(log);
+      }
+    }
+  }
+  return retained;
+}
+
 async function persistAcademicRecalculation(
   client: PrismaClientLike,
   studentIds: string[],
@@ -867,6 +937,9 @@ export async function recalculateStudentsAcademicState(
       ...state.opportunityLogs.filter(log => preservedHistory.has(log.id)),
     ];
   }
+  const settledHistory = settledAutomaticHistory(state, result, new Set(recalculableStudentIds));
+  for (const log of settledHistory) preservedHistory.add(log.id);
+  result.opportunityLogs.push(...settledHistory);
   // Explicit leave/exam edits may remove only a proved obsolete exam dismissal.
   // Neither creates a grant nor promotes dismissed pending grades.
   return persistAcademicRecalculation(

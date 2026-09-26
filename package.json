@@ -27,7 +27,7 @@
     "test:courses-integrity": "node scripts/test-courses-integrity.mjs",
     "test:chapters-integrity": "node scripts/test-chapters-integrity.mjs && node --test scripts/test-course-chapter-attach-behavior.mjs && node scripts/test-course-chapter-activation-behavior.cjs",
     "test:opportunities-integrity": "node scripts/test-opportunities-integrity.mjs && npm run test:opportunities-html-behavior",
-    "test:opportunities-html-behavior": "node scripts/test-report-opportunity-context.cjs && node scripts/test-opportunities-html-behavior.mjs",
+    "test:opportunities-html-behavior": "node scripts/test-report-opportunity-context.cjs && node scripts/test-report-timeline.cjs && node scripts/test-opportunities-html-behavior.mjs",
     "test:active-chapter-report-integrity": "node scripts/test-active-chapter-report-integrity.mjs",
     "test:student-register": "node scripts/test-student-register-integrity.mjs",
     "test:student-register-integrity": "node scripts/test-student-register-integrity.mjs",

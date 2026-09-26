@@ -49,10 +49,115 @@ export type ReportOpportunityContext = {
     settledGradeIds: ReadonlySet<string>;
   } | null;
   balanceNotes: ReportBalanceNote[];
+  /** Show recorded past effects alongside dated balance movements. */
+  historical?: boolean;
   /** The student's active grace periods: the only source of grace in reports. */
   gracePeriods?: readonly GracePeriodRange[];
   registeredAt?: string | Date | null;
 };
+
+export type ReportTimelineEvent = {
+  date: string;
+  text: string;
+  kind: "add" | "return" | "reset" | "deduct";
+  balanceAfter: number | null;
+};
+
+function reportOpportunityCount(amount: number): string {
+  return amount === 0 ? "0 من الفرص" : amount === 1 ? "فرصة واحدة"
+    : amount === 2 ? "فرصتين" : `${amount} فرص`;
+}
+
+function reportWholeNumber(value: unknown): number | null {
+  const amount = reportNumber(value);
+  return amount !== null && Number.isSafeInteger(amount) ? amount : null;
+}
+
+function reportPledgeRecorded(log: Record<string, unknown>): boolean {
+  const reason = studentReportText(log.reason).normalize("NFKD")
+    .replace(/[\u064B-\u065F\u0670]/g, "").replace(/[أإآٱ]/g, "ا");
+  if (/(?:بدون|دون|لا يوجد|عدم|الغاء)\s+(?:ال)?تعهد|لم\s+(?:يتعهد|يتم\s+(?:قبول\s+)?(?:ال)?تعهد)|تعهد\s+غير\s+مقبول/.test(reason)) return false;
+  return log.action === "رصيد بعد تعهد" || /تعهد/.test(reason);
+}
+
+/** Project dated, recorded commands into public wording. Inputs have already
+ * been scoped to this report; private reasons are used only for classification.
+ * This is a history projection, never a balance replay or a sum of grants. */
+export function buildReportTimelineEvents(
+  logs: readonly Record<string, unknown>[],
+  activeChapterId?: unknown,
+): ReportTimelineEvent[] {
+  const chapterId = typeof activeChapterId === "string" ? activeChapterId.trim() : "";
+  const ordered = logs.filter(log => {
+    const logChapter = String(log.chapterId || "").trim();
+    return (!chapterId || !logChapter || chapterId === logChapter) && reportLogDate(log) &&
+      log.action !== "خصم تلقائي" && log.action !== "فصل تلقائي" &&
+      !String(log.reason || "").startsWith("تلقائي:") &&
+      !/حماية P\d+|دون تغيير بتوجيه المالك/.test(String(log.reason || ""));
+  }).sort((a, b) => Date.parse(reportLogDate(a)!) - Date.parse(reportLogDate(b)!));
+  const targetBalance = (log: Record<string, unknown>) => reportWholeNumber(log.balanceAfter ?? log.amount);
+  const isSetter = (log: Record<string, unknown>) =>
+    log.action === "إعادة تعيين" || log.action === "رصيد بعد تعهد" || log.action === "رصيد إعادة التفعيل";
+  const grants = ordered.filter(log => isSetter(log) && targetBalance(log) !== null);
+  const events: ReportTimelineEvent[] = [];
+  for (const log of ordered) {
+    const action = String(log.action || "").trim();
+    const date = reportLogDate(log)!;
+    const after = reportWholeNumber(log.balanceAfter);
+    const pledge = reportPledgeRecorded(log);
+    if (action === "إضافة" || (action === "خصم" && !String(log.examId || "").trim())) {
+      const amount = reportWholeNumber(log.appliedAmount ?? log.amount);
+      if (amount === null || amount <= 0) continue;
+      const kind = action === "إضافة" ? "add" : "deduct";
+      const text = kind === "add"
+        ? `${pledge ? "بعد قبول التعهّد، أضافت الإدارة" : "أضافت الإدارة"} ${reportOpportunityCount(amount)}`
+        : `خصمت الإدارة ${reportOpportunityCount(amount)}`;
+      events.push({ date, text: text + (after === null ? "" : ` — أصبح الرصيد ${after}`), kind, balanceAfter: after });
+    } else if (isSetter(log)) {
+      const balance = targetBalance(log);
+      if (balance === null) continue;
+      const count = reportOpportunityCount(balance);
+      const returning = action === "رصيد بعد تعهد" || action === "رصيد إعادة التفعيل";
+      const chapterStart = action === "إعادة تعيين" && /انتقال|تحويل فصل/.test(String(log.reason || ""));
+      const text = chapterStart ? `بدأ حساب فرص الفصل برصيد ${count}`
+        : returning ? pledge ? `تم قبول التعهّد وإعادة تفعيلك برصيد ${count}` : `أُعيد تفعيلك برصيد ${count}`
+        : pledge ? `بعد قبول التعهّد، حُدّد رصيدك بـ ${count}` : `حدّدت الإدارة رصيدك بـ ${count}`;
+      events.push({ date, text, kind: returning ? "return" : "reset", balanceAfter: balance });
+    } else if (action === "إعادة تفعيل" || action === "إعادة تفعيل بفرصتين") {
+      // The same recovery writes a status row and a balance row, sometimes
+      // milliseconds apart. Keep the grant, which carries the actual balance.
+      const paired = grants.some(grant =>
+        Math.abs(Date.parse(reportLogDate(grant)!) - Date.parse(date)) <= 1000 &&
+        (!log.chapterId || !grant.chapterId || log.chapterId === grant.chapterId) &&
+        (after === null || after === targetBalance(grant)));
+      if (paired) continue;
+      const legacyTwo = action === "إعادة تفعيل بفرصتين" || (pledge && /فرصتين/.test(String(log.reason || "")));
+      const balance = after ?? (legacyTwo ? 2 : null);
+      const text = pledge ? "تم قبول التعهّد وإعادة تفعيلك" : "أُعيد تفعيلك";
+      events.push({ date, text: text + (balance === null ? "" : ` برصيد ${reportOpportunityCount(balance)}`), kind: "return", balanceAfter: balance });
+    }
+  }
+  return events;
+}
+
+/** Preserve the exam's date while locating a late-entered result after a
+ * balance command that was already recorded when that result was entered. */
+export function reportGradeTimelineDate(
+  grade: Record<string, unknown>,
+  exam: Record<string, unknown> | undefined,
+  events: readonly ReportTimelineEvent[],
+): string {
+  const examDate = reportLogDate({ date: exam?.date });
+  const enteredDate = reportLogDate({ date: grade.createdAt });
+  if (!examDate) return enteredDate || "";
+  if (!enteredDate) return examDate;
+  const examTime = Date.parse(examDate);
+  const enteredTime = Date.parse(enteredDate);
+  return events.some(event => event.kind !== "deduct" &&
+    (event.kind !== "return" || event.balanceAfter !== null) &&
+    examTime < Date.parse(event.date) && Date.parse(event.date) <= enteredTime)
+    ? enteredDate : examDate;
+}
 
 function reportLogDate(log: Record<string, unknown>): string | null {
   if (log.date instanceof Date && !Number.isFinite(log.date.getTime())) return null;
@@ -207,11 +312,12 @@ export function reportGradeOutcome(grade: Record<string, unknown>, exam?: Record
 export type ReportGradeTone = "ordinary" | "excused" | "deducted" | "dismissed";
 export type ReportGradePresentation = { text: string; tone: ReportGradeTone };
 
-/** Text and row emphasis use the same effective ledger, including settlements. */
+/** Text and row emphasis use the same recorded ledger. Ordinary callers see
+ * the effective balance; historical reports retain effects before a grant. */
 export function reportGradePresentation(grade: Record<string, unknown>, exam: Record<string, unknown> | undefined, logs: Record<string, unknown>[], context?: ReportOpportunityContext): ReportGradePresentation {
   const settlement = context?.settlement;
   const settledGrade = Boolean(settlement && typeof grade.id === "string" && settlement.settledGradeIds.has(grade.id));
-  const effectiveLogs = settlement ? logs.filter(log => {
+  const effectiveLogs = settlement && !context?.historical ? logs.filter(log => {
     const automatic = log.action === "خصم تلقائي" || log.action === "فصل تلقائي" ||
       String(log.reason || "").startsWith("تلقائي:");
     if (automatic) return !settledGrade;
@@ -237,7 +343,7 @@ export function reportGradePresentation(grade: Record<string, unknown>, exam: Re
   const withoutPenalty = (text: string): ReportGradePresentation => ({
     text, tone: grade.status === "مجاز" || gracePeriod ? "excused" : "ordinary",
   });
-  if (settledGrade) return withoutPenalty("لا خصم (قبل رصيدك الجديد)");
+  if (settledGrade && !context?.historical) return withoutPenalty("لا خصم (قبل رصيدك الجديد)");
   if (grade.status === "قبل تسجيل الطالب" || !isExamOnOrAfterStudentRegistration(
     { createdAt: context?.registeredAt },
     { date: exam?.date as string | Date | null | undefined },
@@ -250,6 +356,19 @@ export function reportGradePresentation(grade: Record<string, unknown>, exam: Re
   }
   if (reportNumber(grade.score) === null && grade.status !== "غائب" && grade.status !== "غش") return withoutPenalty("—");
   if (exam?.noDiscount) return withoutPenalty("امتحان بدون خصم");
+  if (settledGrade && context?.historical) {
+    const score = reportNumber(grade.score);
+    const discountMark = reportNumber(exam?.discountMark);
+    const dismissalGrade = reportNumber(exam?.dismissalGrade);
+    const passMark = reportNumber(exam?.passMark);
+    const mayHavePenalty = grade.status === "غائب" || grade.status === "غش" ||
+      (score !== null && (exam?.type === "فاينل"
+        ? score === 0 || (dismissalGrade !== null && score <= dismissalGrade)
+        : discountMark !== null ? score <= discountMark : passMark !== null && score < passMark));
+    // A threshold can identify a missing historical explanation, but cannot
+    // establish that any opportunities were actually deducted.
+    if (mayHavePenalty) return withoutPenalty("لا يوجد خصم مسجّل");
+  }
   return withoutPenalty("لا خصم");
 }
 

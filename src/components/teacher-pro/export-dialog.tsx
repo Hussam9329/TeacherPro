@@ -20,7 +20,7 @@ import { toast } from "@/lib/user-toast";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 import { buildProfessionalXlsx } from "@/lib/xlsx-export";
 import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
-import { buildReportOpportunityContext, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, type ReportBalanceNote, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
+import { buildReportOpportunityContext, buildReportTimelineEvents, reportGradeTimelineDate, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, type ReportBalanceNote, type ReportTimelineEvent, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
 import { GRACE_PERIOD_EXCUSE_LABEL, isStudentInGracePeriod, normalizeGracePeriodRanges } from "@/lib/grace-periods";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
 import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
@@ -43,6 +43,8 @@ export type StudentGradeDetail = {
   examName: string;
   examType: string;
   examDate: string;
+  /** Date of the effect in the timeline; the original exam date stays visible. */
+  timelineDate?: string;
   score: number | null;
   fullMark: number | null;
   status: string;
@@ -82,6 +84,8 @@ export type StudentDetails = {
   hasTwoOpportunityPledge?: boolean;
   /** Recorded balance changes, independent of which exams are shown. */
   balanceNotes?: ReportBalanceNote[];
+  /** Public explanations of recorded changes, interleaved with exam results. */
+  timelineEvents?: ReportTimelineEvent[];
   studentSnapshot?: {
     name: string; code: string; status: string; opportunities: number | null; courseName?: string;
     opportunityLimit: number | null; registeredAt: string | null;
@@ -167,6 +171,7 @@ export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): Stude
         generatedAt: studentDetails.generatedAt ?? null,
         hasTwoOpportunityPledge: studentDetails.hasTwoOpportunityPledge === true,
         balanceNotes: (studentDetails.balanceNotes || []).map(({ text, date }) => ({ text, date })),
+        timelineEvents: (studentDetails.timelineEvents || []).map(({ date, text, kind, balanceAfter }) => ({ date, text, kind, balanceAfter })),
         studentSnapshot: studentDetails.studentSnapshot,
         grades: (studentDetails.grades || [])
           .map((grade) => {
@@ -192,9 +197,9 @@ export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): Stude
   );
 }
 
-type PublicStudentHtmlDetails = Pick<StudentDetails, "activeChapterName" | "hasTwoOpportunityPledge" | "balanceNotes"> & {
+type PublicStudentHtmlDetails = Pick<StudentDetails, "activeChapterName" | "timelineEvents"> & {
   grades: Array<Pick<StudentGradeDetail,
-    "examName" | "examType" | "examDate" | "score" | "fullMark" | "status" | "opportunityEffect" | "opportunityTone"
+    "examName" | "examType" | "examDate" | "timelineDate" | "score" | "fullMark" | "status" | "opportunityEffect" | "opportunityTone"
   >>;
 };
 
@@ -208,12 +213,12 @@ function buildPublicStudentHtmlData(details: StudentDetailsMap, students: Studen
     const code = snapshot ? snapshot.code : student.code;
     if (detail) publicDetails.push([student.id, {
       activeChapterName: detail.activeChapterName ?? null,
-      hasTwoOpportunityPledge: detail.hasTwoOpportunityPledge === true,
-      balanceNotes: (detail.balanceNotes || []).map(({ text, date }) => ({ text, date })),
+      timelineEvents: (detail.timelineEvents || []).map(({ date, text, kind, balanceAfter }) => ({ date, text, kind, balanceAfter })),
       grades: (detail.grades || []).map(grade => ({
         examName: grade.examName,
         examType: grade.examType,
         examDate: grade.examDate,
+        timelineDate: grade.timelineDate || grade.examDate,
         score: grade.score,
         fullMark: grade.fullMark,
         status: grade.status,
@@ -335,12 +340,14 @@ export function buildStudentDetailsFromProfileLog(
   const rawLogs = Array.isArray(profile.opportunityLogs) ? profile.opportunityLogs : [];
   const logScope = resolveActiveChapterLogScope(profile);
   const scopedLogs = rawLogs.filter(log => opportunityLogWithinActiveChapter(log, logScope));
+  const timelineEvents = buildReportTimelineEvents(scopedLogs, profile.currentChapter?.id);
   const gracePeriods = normalizeGracePeriodRanges(profile.student?.gracePeriods);
   const studentLeaves = Array.isArray(profile.studentLeaves) ? profile.studentLeaves : [];
   const opportunityContext = {
     ...buildReportOpportunityContext(rawLogs, String(profile.currentChapter?.id || "")),
     gracePeriods,
     registeredAt: profile.student?.createdAt as string | Date | null | undefined,
+    historical: true,
   };
   const includeExam = (status: unknown, exam: Record<string, unknown> | undefined): boolean =>
     status !== "قبل تسجيل الطالب" && isExamOnOrAfterStudentRegistration(
@@ -380,6 +387,7 @@ export function buildStudentDetailsFromProfileLog(
         examName: String(exam?.name || "امتحان غير محدد"),
         examType: String(exam?.type || ""),
         examDate: String(exam?.date || ""),
+        timelineDate: reportGradeTimelineDate(rawGrade, exam, timelineEvents),
         score: score === null || score === undefined ? null : Number(score),
         fullMark:
           fullMark === null || fullMark === undefined ? null : Number(fullMark),
@@ -455,7 +463,7 @@ export function buildStudentDetailsFromProfileLog(
 
   const student = profile.student;
   return {
-    grades, opportunityLogs, activeChapterName,
+    grades, opportunityLogs, activeChapterName, timelineEvents,
     // Pledges from the full enrollment history must survive exam/chapter filters.
     hasTwoOpportunityPledge: hasTwoOpportunityPledge(rawLogs),
     balanceNotes: opportunityContext.balanceNotes,
@@ -617,7 +625,7 @@ const DETAILS_MODAL_CSS = `
   .tp-summary-item:first-child { background: #E4E4D9; border-color: #ACB0AD; }
   .tp-summary-item:first-child strong { font-size: 32px; }
   .tp-summary-label { display: block; font-size: 13px; color: #5B6674; margin-bottom: 6px; }
-  .tp-pledge-note, .tp-balance-note { display: block; margin-top: 6px; font-size: 13px; font-weight: 400; line-height: 1.8; color: #5B6674; overflow-wrap: anywhere; }
+  .tp-timeline-hint { margin: 0 0 14px; color: #5B6674; font-size: 13px; line-height: 1.9; }
   .tp-details-section { min-width: 0; margin: 28px 0 0; scroll-margin-top: 90px; }
   .tp-details-section h3 { font-size: 20px; line-height: 1.7; color: #0E1F36; margin: 0 0 6px; }
   .tp-details-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 14px; font-weight: 400; border: 1px solid #E6E3D9; border-radius: 12px; }
@@ -639,6 +647,17 @@ const DETAILS_MODAL_CSS = `
   .tp-grade-deduction .tp-mobile-field-value { color: #9F1239; font-weight: 700; }
   .tp-grade-dismissal .tp-mobile-field-value { color: #7F1D1D; font-weight: 800; }
   .tp-grade-no-deduction .tp-mobile-field-value { color: #166534; font-weight: 700; }
+  .tp-grades-table tbody tr.tp-timeline-event { background: #EAF4EF; }
+  .tp-grades-table tbody tr.tp-timeline-event-reset { background: #EDF2F8; }
+  .tp-grades-table tbody tr.tp-timeline-event-deduct { background: #FFF1F2; }
+  .tp-timeline-event > td { border-inline-start: 4px solid #287451; padding: 16px; }
+  .tp-timeline-event-reset > td { border-inline-start-color: #49627E; }
+  .tp-timeline-event-deduct > td { border-inline-start-color: #9F1239; }
+  .tp-timeline-notice { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 18px; }
+  .tp-timeline-notice strong { color: #12372A; font-size: 14px; line-height: 1.9; }
+  .tp-timeline-event-deduct strong { color: #9F1239; }
+  .tp-timeline-notice time, .tp-recorded-date { color: #5B6674; font-size: 12px; line-height: 1.8; }
+  .tp-recorded-date { display: block; margin-top: 4px; }
   .tp-event-title { display: block; font-weight: 700; color: #19293A; margin-bottom: 4px; }
   .tp-event-exam { display: block; font-size: 12px; color: #5B6674; margin-top: 5px; }
   .tp-empty-row td { padding: 20px; color: #5B6674; text-align: center; }
@@ -668,6 +687,11 @@ const DETAILS_MODAL_CSS = `
     .tp-mobile-field-value { display: block; overflow-wrap: anywhere; }
     .tp-details-table tr:last-child td { border-bottom: 1px solid #E6E3D9; }
     .tp-details-table tr td:last-child { border-bottom: 0; }
+    .tp-details-table tr.tp-timeline-event { padding: 12px 14px; border-inline-start: 4px solid #287451; }
+    .tp-details-table tr.tp-timeline-event-reset { border-inline-start-color: #49627E; }
+    .tp-details-table tr.tp-timeline-event-deduct { border-inline-start-color: #9F1239; }
+    .tp-details-table tr.tp-timeline-event > td { display: block; min-height: 0; padding: 0; border: 0; }
+    .tp-timeline-notice { display: grid; gap: 5px; }
   }
   @media screen and (max-width: 420px) { .tp-details-table tr:not(.tp-empty-row) td { grid-template-columns: minmax(76px, 32%) minmax(0, 1fr); gap: 8px; } }
 `;
@@ -689,6 +713,7 @@ const DETAILS_MODAL_HTML = `
     <div id="tpStudentOverview"></div>
     <section class="tp-details-section" aria-labelledby="tpGradesSectionTitle">
       <h3 id="tpGradesSectionTitle">درجاتك في الامتحانات</h3>
+      <p class="tp-timeline-hint">الامتحانات وحركات الفرص حسب تسلسلها. الخصومات المعروضة هي ما سُجّل وقتها، وتظهر إضافة الفرص أو إعادة التفعيل في سطر مستقل.</p>
       <table class="tp-details-table tp-grades-table" role="table" aria-label="درجات الطالب">
         <thead><tr role="row">
           <th scope="col" role="columnheader">الامتحان</th>
@@ -740,6 +765,15 @@ const DETAILS_MODAL_JS = `
     try {
       return d.toLocaleDateString('ar-EG-u-nu-latn', {day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Baghdad'});
     } catch(e){ return esc(s); }
+  }
+  function fmtEventDate(s){
+    var date = fmtDate(s);
+    if (!s || String(s).indexOf('T') < 0) return date;
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return date;
+    try {
+      return date + '، ' + d.toLocaleTimeString('ar-EG-u-nu-latn', {hour:'numeric',minute:'2-digit',timeZone:'Asia/Baghdad'});
+    } catch(e){ return date; }
   }
 
   function mobileCell(label, valueHtml, extraClass){
@@ -841,18 +875,6 @@ const DETAILS_MODAL_JS = `
     searchInput.removeAttribute('aria-activedescendant');
   }
 
-  function pledgeNoteHtml(studentId){
-    return DATA[studentId] && DATA[studentId].hasTwoOpportunityPledge === true
-      ? '<span class="tp-pledge-note">تم منح الطالب فرصتين بسبب تعهده</span>' : '';
-  }
-
-  function balanceNotesHtml(studentId){
-    var notes = DATA[studentId] && DATA[studentId].balanceNotes;
-    return Array.isArray(notes) ? notes.map(function(note){
-      return '<span class="tp-balance-note">' + esc(note.text) + (note.date ? ' بتاريخ ' + fmtDate(note.date) : '') + '.</span>';
-    }).join('') : '';
-  }
-
   function renderStudentCard(student){
     var id = esc(student.id);
     var html = '<div class="tp-student-summary" role="group" aria-label="الطالب المختار">'
@@ -915,12 +937,29 @@ const DETAILS_MODAL_JS = `
     if (gradesTitleEl) gradesTitleEl.textContent = data && data.activeChapterName ? 'درجاتك — ' + data.activeChapterName : 'درجاتك في الامتحانات';
     if (overview) {
       overview.innerHTML = '<div class="tp-report-summary">'
-        + '<div class="tp-summary-item"><span class="tp-summary-label">فرصك المتبقية</span><strong>' + fmtNum(balance) + '</strong>' + pledgeNoteHtml(studentId) + balanceNotesHtml(studentId) + '</div></div>';
+        + '<div class="tp-summary-item"><span class="tp-summary-label">فرصك المتبقية</span><strong>' + fmtNum(balance) + '</strong></div></div>';
     }
     if (!data) {
       gradesBody.innerHTML = '<tr class="tp-empty-row tp-error-row" role="row"><td colspan="4" role="cell">تفاصيل هذا الطالب غير موجودة في هذه النسخة. اطلب نسخة جديدة من الإدارة.</td></tr>';
     } else {
-      gradesBody.innerHTML = data.grades && data.grades.length ? data.grades.map(function(g){
+      var timeline = (data.grades || []).map(function(g, index){
+        return { grade: g, date: g.timelineDate || g.examDate, order: index, event: null };
+      }).concat((data.timelineEvents || []).map(function(event, index){
+        return { event: event, date: event.date, order: index, grade: null };
+      }));
+      timeline.sort(function(a, b){
+        var difference = (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0);
+        return difference || (a.event && !b.event ? -1 : !a.event && b.event ? 1 : a.order - b.order);
+      });
+      gradesBody.innerHTML = timeline.map(function(entry){
+        if (entry.event) {
+          var event = entry.event;
+          var kind = ['add', 'return', 'reset', 'deduct'].indexOf(event.kind) >= 0 ? event.kind : 'reset';
+          return '<tr role="row" class="tp-timeline-event tp-timeline-event-' + kind + '"><td colspan="4" role="cell">'
+            + '<div class="tp-timeline-notice"><strong>' + esc(event.text) + '</strong>'
+            + '<time datetime="' + esc(event.date) + '">' + fmtEventDate(event.date) + '</time></div></td></tr>';
+        }
+        var g = entry.grade;
         var score = g.status === 'غش' ? 'غش' : g.score === null || g.score === undefined
           ? (g.status === 'مجاز' ? 'إجازة' : g.status === ${JSON.stringify(GRACE_PERIOD_EXCUSE_LABEL)} ? 'مجاز' : g.status === 'غائب' ? 'غياب' : 'بانتظار الدرجة')
           : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>';
@@ -931,11 +970,13 @@ const DETAILS_MODAL_JS = `
           : /^خُصمت /.test(effectText) ? 'tp-grade-deduction' : '';
         return '<tr role="row" class="tp-grade-row-' + tone + '">'
           + mobileCell('الامتحان', '<strong class="tp-event-title">' + esc(g.examName) + '</strong><span class="tp-event-exam">' + esc(g.examType) + '</span>')
-          + mobileCell('تاريخ الامتحان', fmtDate(g.examDate) || 'غير مسجّل')
+          + mobileCell('تاريخ الامتحان', (fmtDate(g.examDate) || 'غير مسجّل')
+            + (g.timelineDate && g.timelineDate !== g.examDate ? '<span class="tp-recorded-date">سُجّلت النتيجة: ' + fmtEventDate(g.timelineDate) + '</span>' : ''))
           + mobileCell('الدرجة', score)
           + mobileCell('الأثر على الفرص', esc(effectText), effectClass)
           + '</tr>';
-      }).join('') : '<tr class="tp-empty-row" role="row"><td colspan="4" role="cell">لا توجد امتحانات لعرضها في هذه النسخة.</td></tr>';
+      }).join('');
+      if (!data.grades || !data.grades.length) gradesBody.innerHTML += '<tr class="tp-empty-row" role="row"><td colspan="4" role="cell">لا توجد امتحانات لعرضها في هذه النسخة.</td></tr>';
     }
     if (!overlay.classList.contains('open')) {
       previouslyFocusedElement = document.activeElement;

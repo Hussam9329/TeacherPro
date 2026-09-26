@@ -112,7 +112,7 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  mocks.set('@/lib/protected-grade-markers-server',Object.fromEntries(Object.entries(markers).map(([key,fn])=>[key,async(...args)=>{markerCalls.push(key);return fn(...args);}])));
  mocks.set('@/lib/pre-registration-absence-repair-server',{...repairs,repairPreRegistrationAbsencesForStudents:async(...args)=>{markerCalls.push('repairPreRegistrationAbsencesForStudents');return repairs.repairPreRegistrationAbsencesForStudents(...args);}});
  const route=require('../src/app/api/exams/route.ts');
- const {previewStudentsAcademicState}=require('../src/lib/academic-recalculate-server.ts');
+ const {previewStudentsAcademicState,recalculateStudentsAcademicState}=require('../src/lib/academic-recalculate-server.ts');
  await pg.exec(`INSERT INTO "Course"(id,name) VALUES('c','الصيفية الأولى'),('isolated','دورة أخرى');
  INSERT INTO "Chapter"(id,name,opportunities) VALUES('ch','الفصل الثاني',3),('old-ch','الفصل الأول',3);
  INSERT INTO "CourseChapter"(id,"courseId","chapterId",active) VALUES('cc','c','ch',true),('ic','isolated','ch',true);
@@ -407,6 +407,76 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  assert.equal((await client.grade.findFirst({where:{studentId:'history-student',examId:'history-moving'}})).status,'قبل تسجيل الطالب','new grade scope is reconciled');
  const deniedBefore=await snapshot();deny=true;assert.equal((await put({id:'e9',noDiscount:false})).status,403);deny=false;assert.deepEqual(await snapshot(),deniedBefore);
  assert.ok(audits.some(a=>a[3]?.examId==='e9'&&a[3]?.recalculatedStudents>=1000));
+
+ // Ordinary grade-save recalculation must retain exact, already-settled
+ // deductions too. The engine still omits them from current-effect previews;
+ // persistence appends the existing rows only AFTER all dismissal reviews.
+ const savedSettled=await row('opportunityLog',settledCurrent.id);
+ const savedS5=await row('student','s5');
+ assert.ok(savedSettled);
+ const ordinary=()=>recalculateStudentsAcademicState(['s5'],{tx:client});
+ for(let attempt=0;attempt<2;attempt++){
+  const writeStart=statements.length,result=await ordinary();
+  assert.deepEqual(await row('opportunityLog',savedSettled.id),savedSettled,'ordinary replay retains the complete historical ledger row');
+  const returned=result.opportunityLogs.find(log=>log.id===savedSettled.id);
+  assert.ok(returned,'ordinary response includes saved settled history');
+  for(const field of ['requestedAmount','appliedAmount','balanceBefore','balanceAfter','ledgerVersion','settledGradeIds'])assert.deepEqual(returned[field],savedSettled[field],'ordinary response preserves '+field);
+  assert.deepEqual(await row('student','s5'),savedS5,'retention does not change the current balance or status');
+  assert.equal(statements.slice(writeStart).filter(sql=>/INSERT INTO "OpportunityLog"/.test(sql)).length,0,'identical historical rows are not reinserted through the chapter guard');
+ }
+ await client.grade.update({where:{id:'s5_e8'},data:{status:'درجة',score:20}});
+ await ordinary();
+ assert.deepEqual(await row('opportunityLog',savedSettled.id),savedSettled,'editing the same settled grade does not rewrite the deduction that already happened');
+ await pg.exec(`INSERT INTO "Exam"(id,name,type,date,"courseIds","mainSite","fullMark","passMark","discountMark","opportunitiesPenalty")
+ VALUES('post-settlement','غياب لاحق للتسوية','يومي','2026-09-14','["c"]','بغداد',20,10,7,'1');
+ INSERT INTO "Grade"(id,"studentId","examId",status,"createdAt","updatedAt")
+ VALUES('s5-post-settlement','s5','post-settlement','غائب','2026-09-15','2026-09-15');`);
+ for(let attempt=0;attempt<2;attempt++){
+  const result=await ordinary();
+  assert.equal(result.students[0].opportunities,savedS5.opportunities-1,'a later absence spends one current chance, never the historical deduction again');
+  assert.equal(result.students[0].status,'نشط');
+  assert.deepEqual(await row('opportunityLog',savedSettled.id),savedSettled);
+  assert.equal(result.automaticOpportunityLogs.filter(log=>log.examId==='post-settlement').length,1,'repeated replay creates no duplicate current effect');
+ }
+
+ // Exact membership, student and chapter scope are mandatory. No dates-only
+ // inference, older-settlement fallback, or replacement-grade inheritance.
+ const variants=['valid-grant','valid-pledge','latest-empty','equal-time-reset','invalid-membership','invalid-balance','wrong-chapter','foreign-grade','recreated-grade','old-log-chapter','live-collision','same-id-collision'];
+ const oldDate=new Date('2026-06-05'),boundaryDate=new Date('2026-06-10');
+ for(const variant of variants){
+  const id='retention-'+variant,gradeId=id+'-grade',examId=id+'-exam';
+  await client.student.create({data:{id,name:id,nameKey:id,gender:'ذكر',code:id,courseId:'c',mainSite:'بغداد',createdAt:new Date('2026-06-01'),baseOpportunities:3,opportunities:2}});
+  await client.exam.create({data:{id:examId,name:examId,type:'يومي',date:oldDate,courseIds:'["c"]',mainSite:'بغداد',fullMark:20,passMark:10,discountMark:7,opportunitiesPenalty:'1'}});
+  await client.grade.create({data:{id:gradeId,studentId:id,examId,status:variant.endsWith('collision')?'غائب':'درجة',score:variant.endsWith('collision')?null:20,createdAt:oldDate,updatedAt:oldDate}});
+  const oldLog={id:id+'-history',studentId:id,examId,action:'خصم تلقائي',amount:2,reason:'تلقائي: خصم تاريخي',date:oldDate,chapterId:variant==='old-log-chapter'?'old-ch':'ch',chapterNameSnapshot:'الفصل الثاني',ledgerVersion:2,requestedAmount:2,appliedAmount:2,balanceBefore:3,balanceAfter:1};
+  if(variant==='same-id-collision'){
+   const live=await previewStudentsAcademicState([id],{tx:client});
+   oldLog.id=live.automaticOpportunityLogs[0].id;
+  }
+  await client.opportunityLog.create({data:oldLog});
+  if(variant==='live-collision')await client.opportunityLog.create({data:{...oldLog,id:id+'-old-dismissal',action:'فصل تلقائي',amount:0,reason:'تلقائي: فصل قديم'}});
+  await client.opportunityLog.create({data:{id:id+'-older',studentId:id,action:'إعادة تعيين',amount:2,balanceAfter:2,date:new Date('2026-06-08'),chapterId:'ch',ledgerVersion:2,settledGradeIds:JSON.stringify([gradeId])}});
+  const membership=['latest-empty','equal-time-reset'].includes(variant)?[]:variant==='invalid-membership'?[gradeId,{}]:variant==='foreign-grade'?['s5_e8']:variant==='recreated-grade'?[id+'-deleted-grade']:[gradeId];
+  const boundaryAction=variant==='valid-pledge'?'رصيد بعد تعهد':variant==='valid-grant'||variant.endsWith('collision')?'رصيد إعادة التفعيل':'إعادة تعيين';
+  await client.opportunityLog.create({data:{id:id+'-boundary',studentId:id,action:boundaryAction,amount:2,balanceAfter:variant==='invalid-balance'?-1:2,date:boundaryDate,chapterId:variant==='wrong-chapter'?'old-ch':'ch',ledgerVersion:2,settledGradeIds:JSON.stringify(membership),reason:variant.endsWith('collision')?'[academic-reactivation-link:sourceExamId=missing&reactivationMode=test]':'تسوية صريحة'}});
+  if(variant==='equal-time-reset')await client.opportunityLog.create({data:{id:id+'-same-time-grant',studentId:id,action:'رصيد إعادة التفعيل',amount:2,balanceAfter:2,date:boundaryDate,chapterId:'ch',ledgerVersion:2,settledGradeIds:JSON.stringify([gradeId]),reason:'استعادة يدوية'}});
+  if(variant==='wrong-chapter'||variant.endsWith('collision'))await client.opportunityLog.deleteMany({where:{id:id+'-older'}});
+  const beforePreview=await previewStudentsAcademicState([id],{tx:client});
+  const persisted=await recalculateStudentsAcademicState([id],{tx:client});
+  assert.deepEqual(persisted.students,beforePreview.students,'history retention never changes computed state '+variant);
+  if(variant.endsWith('collision')){
+   const generated=persisted.automaticOpportunityLogs.filter(log=>log.examId===examId);
+   assert.equal(generated.length,1,'current event takes precedence over older evidence '+variant);
+   assert.equal(generated[0].amount,1,'the live penalty wins even over a colliding saved ID');
+   assert.equal((await client.opportunityLog.findMany({where:{studentId:id,action:'خصم تلقائي'}})).length,1);
+  }else if(variant.startsWith('valid-')){
+   assert.equal(beforePreview.automaticOpportunityLogs.length,0,'historical grant evidence stays out of academic preview');
+   assert.deepEqual(await row('opportunityLog',oldLog.id),{...oldLog,reversalOfLogId:null,settledGradeIds:null},'exact settled grants and pledges preserve their original history');
+  }else{
+   assert.equal(await row('opportunityLog',oldLog.id),null,'insufficient exact current-chapter membership does not preserve a historical row '+variant);
+  }
+ }
+ console.log('PASS: ordinary recalculation retains settled reset/grant/pledge history without respending it; strict membership, scope, metadata retention and current-event collision precedence');
  await pg.close();
  console.log('PASS: actual exams PUT + migrations, 1,000-student no-discount update, unchanged Baghdad day and grade/leave/backups/history and settled current-chapter evidence preserved, obsolete automatic dismissal recovered at actual 0/1 balance, manual/later causes retained, proof-gated reason rename, bounded student SQL writes, idempotence, stale edit, authorization, recovery rollback and real date-scope reconciliation');
 })().catch(e=>{console.error(e);process.exitCode=1});
