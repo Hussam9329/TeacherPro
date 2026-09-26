@@ -86,6 +86,7 @@ type OpportunityLogWithRelations = {
   examId?: string | null;
   action: string;
   amount: number;
+  appliedAmount?: number | null;
   reason?: string | null;
   date: string;
   chapterId?: string | null;
@@ -434,7 +435,8 @@ export function OpportunitiesView() {
   const selectedDetailsStats = useMemo(() => {
     return selectedDetailsLogs.reduce(
       (acc, log) => {
-        if (log.action === "خصم") acc.deducted += Number(log.amount) || 0;
+        if (log.action === "خصم" || log.action === "خصم تلقائي")
+          acc.deducted += Number(log.appliedAmount ?? log.amount) || 0;
         if (
           log.action === "إضافة" ||
           log.action === "رصيد بعد تعهد" ||

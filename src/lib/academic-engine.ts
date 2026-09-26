@@ -952,13 +952,40 @@ export function recalculateAcademicState(
       }
     };
 
-    for (const grade of studentGrades) {
+    // A newly recorded result must be able to use a credit that was already
+    // applied when it was entered, even if its exam has an earlier date-only
+    // timestamp. Otherwise replay can dismiss at zero before applying that
+    // credit, then discard the credited balance because dismissal is sticky.
+    // Only real versioned additions in this chapter establish this boundary.
+    // Use createdAt, never updatedAt: editing an already-accounted grade must
+    // not move its old deduction across a later credit. Exam dates still own
+    // chapter, registration, leave/grace and reactivation eligibility below.
+    const creditTimes = pendingCommands
+      .filter(log => log.action === "إضافة" && Number(log.appliedAmount ?? log.amount) > 0)
+      .map(log => Date.parse(log.date))
+      .filter(Number.isFinite);
+    const gradesInLedgerOrder = studentGrades.map((grade) => {
+      const examDate = String(examsById.get(grade.examId)?.date || grade.createdAt || "");
+      const examTime = Date.parse(examDate);
+      const enteredTime = Date.parse(grade.createdAt);
+      const followsCredit = Number.isFinite(examTime) && Number.isFinite(enteredTime) &&
+        creditTimes.some(time => examTime < time && time <= enteredTime);
+      return { grade, ledgerDate: followsCredit ? grade.createdAt : examDate };
+    }).sort((a, b) => {
+      const timeA = Date.parse(a.ledgerDate);
+      const timeB = Date.parse(b.ledgerDate);
+      return Number.isFinite(timeA) && Number.isFinite(timeB)
+        ? timeA - timeB
+        : a.ledgerDate.localeCompare(b.ledgerDate);
+    });
+
+    for (const { grade, ledgerDate } of gradesInLedgerOrder) {
       const eventExam = examsById.get(grade.examId);
       // Retain historical grades above to resolve recorded pledge grants.
       // Their exam effects cannot cross the chapter boundary, even when an
       // old settlement note requests an academic effect.
       if (eventExam && examChapterExclusion(eventExam, student.courseId, activeChapter?.id)) continue;
-      applyCommandsThrough(String(eventExam?.date || grade.createdAt || ""));
+      applyCommandsThrough(ledgerDate);
       if (settledGradeIds.has(grade.id)) continue;
       const exam = examsById.get(grade.examId);
       if (!exam) continue;
@@ -966,9 +993,9 @@ export function recalculateAcademicState(
       if (grade.status === "مجاز" || historicalGradeExclusion(grade, exam, historicalSettlementDate)) continue;
       if (!isExamAvailableForEntry(exam)) continue;
       if (!isGradeEntered(grade, exam)) continue;
-      // Academic chronology belongs to the exam day, not to the timestamp at
-      // which a grade happened to be entered/edited. This is essential when an
-      // administrator corrects an exam date after grades already exist.
+      // Eligibility still belongs to the exam day, including after an exam
+      // date correction. The credit boundary above changes ledger ordering,
+      // not registration, leave/grace or reactivation eligibility.
       const gradeEventDate = dayKey(
         exam.date || grade.updatedAt || grade.createdAt || "",
       );
