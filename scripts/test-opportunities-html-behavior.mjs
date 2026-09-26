@@ -1371,7 +1371,9 @@ check("الإدخال المتأخر بعد الإضافة يظهر بعدها �
   assert.equal(late.examDate, exams[0].date);
   assert.equal(late.timelineDate, profile.grades[0].createdAt);
   assert.equal(edited.timelineDate, exams[1].date, "updatedAt is never a financial ordering timestamp");
-  assert.match(rendered, /سُجّلت النتيجة:/);
+  assert.doesNotMatch(rendered, /سُجّلت النتيجة|tp-recorded-date/);
+  const examDateCells = [...rendered.matchAll(/data-label="تاريخ الامتحان"[^]*?tp-mobile-field-value">([^]*?)<\/span>/g)].map(match => match[1]);
+  assert.deepEqual(examDateCells, ["1 سبتمبر 2026", "1 سبتمبر 2026", "1 سبتمبر 2026"], "exam rows display only the original exam date while timeline ordering remains intact");
   assert.match(rendered, /خُصمت فرصة/);
   assert.doesNotMatch(rendered, /2 سبتمبر/);
 });

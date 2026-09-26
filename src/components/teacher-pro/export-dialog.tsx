@@ -655,8 +655,7 @@ const DETAILS_MODAL_CSS = `
   .tp-timeline-notice { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 18px; }
   .tp-timeline-notice strong { color: #12372A; font-size: 14px; line-height: 1.9; }
   .tp-timeline-event-deduct strong { color: #9F1239; }
-  .tp-timeline-notice time, .tp-recorded-date { color: #5B6674; font-size: 12px; line-height: 1.8; }
-  .tp-recorded-date { display: block; margin-top: 4px; }
+  .tp-timeline-notice time { color: #5B6674; font-size: 12px; line-height: 1.8; }
   .tp-event-title { display: block; font-weight: 700; color: #19293A; margin-bottom: 4px; }
   .tp-event-exam { display: block; font-size: 12px; color: #5B6674; margin-top: 5px; }
   .tp-empty-row td { padding: 20px; color: #5B6674; text-align: center; }
@@ -968,8 +967,7 @@ const DETAILS_MODAL_JS = `
           : /^خُصمت /.test(effectText) ? 'tp-grade-deduction' : '';
         return '<tr role="row" class="tp-grade-row-' + tone + '">'
           + mobileCell('الامتحان', '<strong class="tp-event-title">' + esc(g.examName) + '</strong><span class="tp-event-exam">' + esc(g.examType) + '</span>')
-          + mobileCell('تاريخ الامتحان', (fmtDate(g.examDate) || 'غير مسجّل')
-            + (g.timelineDate && g.timelineDate !== g.examDate ? '<span class="tp-recorded-date">سُجّلت النتيجة: ' + fmtEventDate(g.timelineDate) + '</span>' : ''))
+          + mobileCell('تاريخ الامتحان', fmtDate(g.examDate) || 'غير مسجّل')
           + mobileCell('الدرجة', score)
           + mobileCell('الأثر على الفرص', esc(effectText), effectClass)
           + '</tr>';
