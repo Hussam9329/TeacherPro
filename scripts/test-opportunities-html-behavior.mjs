@@ -802,6 +802,42 @@ check("HTML يعرض امتحان ما قبل التسجيل مجازاً ويم
   }
 });
 
+check("HTML يعرض الغش بحالته الصحيحة وأثره من الخصم المسجل دون اختراع فرص مخصومة", () => {
+  const exam = { id: "cheating-exam", name: "الشهري الأول", date: "2026-09-05", fullMark: 20 };
+  const deduction = { action: "خصم تلقائي", amount: 2 };
+  const cases = [
+    { label: "cheating-two", logs: [deduction], effect: "خُصمت فرصتان", deduction: true },
+    { label: "cheating-one-applied", logs: [{ ...deduction, appliedAmount: 1 }], effect: "تم خصم فرصة لهذا الامتحان", deduction: true },
+    { label: "cheating-three", logs: [{ ...deduction, amount: 3 }], effect: "عدد الفرص المخصومة لهذا الامتحان: 3", deduction: true },
+    { label: "cheating-zero-applied", logs: [{ ...deduction, appliedAmount: 0 }], effect: "لا يوجد خصم لهذا الامتحان" },
+    { label: "cheating-without-log", effect: "لا يوجد خصم لهذا الامتحان" },
+    { label: "cheating-dismissal", logs: [deduction, { action: "فصل تلقائي", amount: 0 }], effect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان", deduction: true },
+    { label: "cheating-settled", logs: [deduction, { action: "إعادة تعيين", amount: 3, balanceAfter: 3, ledgerVersion: 2, date: "2026-09-06", settledGradeIds: '["cheating-grade"]' }], effect: "لا يوجد خصم لهذا الامتحان — مشمول بتسوية الرصيد" },
+    { label: "cheating-during-grace", student: { gracePeriods: [{ startDate: "2026-09-01", endDate: "2026-09-10" }] }, effect: "بدون خصم (فترة سماح لغاية 10-9-2026)" },
+    { label: "cheating-before-registration", student: { createdAt: "2026-09-10" }, effect: "قبل تسجيل الطالب" },
+  ];
+  for (const scenario of cases) {
+    const profile = {
+      student: { opportunities: 1, ...scenario.student },
+      exams: [exam], allCourseExams: [exam],
+      currentChapter: { id: "ch1", name: "الفصل الأول", examIds: [exam.id] },
+      grades: [{ id: "cheating-grade", examId: exam.id, status: "غش", score: null }],
+      opportunityLogs: (scenario.logs || []).map(log => ({ examId: exam.id, chapterId: "ch1", date: exam.date, ...log })),
+    };
+    const original = JSON.stringify(profile);
+    const details = buildStudentDetailsFromProfileLog(profile);
+    const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: { s1: details } });
+    const { dom } = executeInlineScripts(html, scenario.label);
+    openStudentDetails(dom, "s1", "محمد علي حسن");
+    const rendered = dom.elements.tpGradesBody.innerHTML;
+    assert.equal(rendered.match(/data-label="الدرجة"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], "غش", scenario.label);
+    assert.equal(rendered.match(/data-label="الأثر على الفرص"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], scenario.effect, scenario.label);
+    assert.match(rendered, scenario.deduction ? /tp-grade-deduction/ : /tp-grade-no-deduction/);
+    assert.equal(JSON.stringify(profile), original);
+    assert.equal(details.studentSnapshot.opportunities, 1);
+  }
+});
+
 check("الرصيد من لقطة الطالب نفسها وليس قائمة قديمة، ولا تسرب حقولاً خاصة", () => {
   const details = buildStudentDetailsFromProfileLog({
     student: { name: "محمد علي جديد", code: "BIO-42", status: "نشط", opportunities: 0, opportunityLimit: 3, phone: "PRIVATE_PHONE", dismissalNotes: "PRIVATE_NOTES" },

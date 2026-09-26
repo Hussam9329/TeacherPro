@@ -294,10 +294,11 @@ export function buildStudentDetailsFromProfileLog(
     gracePeriods,
     registeredAt: profile.student?.createdAt as string | Date | null | undefined,
   };
-  // Grace comes only from the student's periods and the exam date. The retired
-  // grace placeholder is not a result, so it reports as nothing recorded.
+  // Keep a recorded cheating result visible; protection changes its effect,
+  // not the incident. Grace comes only from the student's periods/exam date.
+  // The retired grace placeholder is not a result.
   const reportStatus = (status: unknown, examDate: unknown): string =>
-    !isExamOnOrAfterStudentRegistration(
+    status === "غش" ? "غش" : !isExamOnOrAfterStudentRegistration(
       { createdAt: opportunityContext.registeredAt },
       { date: examDate as string | Date | null | undefined },
     ) ? "قبل تسجيل الطالب"
@@ -862,12 +863,12 @@ const DETAILS_MODAL_JS = `
       gradesBody.innerHTML = '<tr class="tp-empty-row tp-error-row" role="row"><td colspan="4" role="cell">تفاصيل هذا الطالب غير موجودة في هذه النسخة. اطلب نسخة جديدة من الإدارة.</td></tr>';
     } else {
       gradesBody.innerHTML = data.grades && data.grades.length ? data.grades.map(function(g){
-        var score = g.score === null || g.score === undefined
+        var score = g.status === 'غش' ? 'غش' : g.score === null || g.score === undefined
           ? (g.status === ${JSON.stringify(GRACE_PERIOD_EXCUSE_LABEL)} || g.status === 'قبل تسجيل الطالب' ? 'مجاز' : 'غياب')
           : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>';
         var effectText = String(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.').trim();
         var effectClass = /^(لا يوجد خصم لهذا الامتحان|بدون خصم|قبل تسجيل الطالب$)/.test(effectText) ? 'tp-grade-no-deduction'
-          : /^(تم خصم |عدد الفرص المخصومة لهذا الامتحان:)/.test(effectText) ? 'tp-grade-deduction' : '';
+          : /^(تم خصم |خُصمت فرصتان|عدد الفرص المخصومة لهذا الامتحان:)/.test(effectText) ? 'tp-grade-deduction' : '';
         return '<tr role="row">'
           + mobileCell('الامتحان', '<strong class="tp-event-title">' + esc(g.examName) + '</strong><span class="tp-event-exam">' + esc(g.examType) + '</span>')
           + mobileCell('تاريخ الامتحان', fmtDate(g.examDate) || 'غير مسجّل')

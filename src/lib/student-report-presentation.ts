@@ -223,7 +223,7 @@ export function reportGradeEffect(grade: Record<string, unknown>, exam: Record<s
   const deductionText = deducted === 1
     ? "تم خصم فرصة لهذا الامتحان"
     : deducted === 2
-      ? "تم خصم فرصتين لهذا الامتحان"
+      ? grade.status === "غش" ? "خُصمت فرصتان" : "تم خصم فرصتين لهذا الامتحان"
       : deducted > 0 ? `عدد الفرص المخصومة لهذا الامتحان: ${deducted}` : "";
   if (deducted || dismissed) return [deductionText, dismissed ? "سُجّل فصل بسبب هذا الامتحان" : ""].filter(Boolean).join(". ");
   if (settledGrade) return "لا يوجد خصم لهذا الامتحان — مشمول بتسوية الرصيد";
