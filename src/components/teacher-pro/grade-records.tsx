@@ -174,6 +174,46 @@ type ScorePillTone =
   | "neutral";
 
 /**
+ * قواعد النتيجة الرقمية نفسها في classification — احتياط يضمن ألا تبقى
+ * أي درجة رقمية بلا لون أبداً (طلب صاحب النظام: ممنوع درجات بيضاء):
+ * درجة على امتحان معطل («غير محتسب»)، أو مُسوّاة بمسار لا يمر بbaseText،
+ * أو أي نص تصنيف غير نتيجي مستقبلاً — تلون وفق درجتها وحدود الامتحان.
+ */
+function numericResultTone(
+  grade: Grade,
+  exam: Parameters<typeof formatGradeScore>[1],
+): ScorePillTone {
+  const e = exam as
+    | {
+        type?: string | null;
+        passMark?: number | null;
+        discountMark?: number | null;
+        noDiscount?: boolean | null;
+        dismissalGrade?: number | null;
+      }
+    | null
+    | undefined;
+  if (!e) return "neutral";
+  const score = Number(grade.score) || 0;
+  const passMark = Number(e.passMark || 0);
+  if (e.noDiscount) return score >= passMark ? "pass" : "fail-light";
+  if (e.type === "فاينل") {
+    if (
+      score === 0 ||
+      (e.dismissalGrade !== null &&
+        e.dismissalGrade !== undefined &&
+        score <= Number(e.dismissalGrade))
+    )
+      return "fail-dark";
+    return score >= passMark ? "pass" : "fail-light";
+  }
+  const discountMark = Number(e.discountMark || 0);
+  if (score >= passMark) return "pass";
+  if (score > discountMark && score < passMark) return "fail-light";
+  return "fail-dark";
+}
+
+/**
  * حبة النتيجة: نص ولون واحد لكل حالة — بدون تكرار (طلب صاحب النظام):
  * ناجح أخضر · راسب/بدون خصم أحمر فاتح · مخصوم/فصل أحمر طوخ ·
  * مجاز أصفر · قبل التسجيل سمائي · فترة السماح بنفسجي.
@@ -206,7 +246,9 @@ function scorePillPresentation(
     if (result === "مخصوم" || result === "فصل") return { text, tone: "fail-dark" };
     if (result === "راسب" || result === "بدون خصم") return { text, tone: "fail-light" };
     if (result === "ناجح") return { text, tone: "pass" };
-    return { text, tone: "neutral" };
+    // أي نص تصنيف غير نتيجي (بلا أثر/غير محتسب/غير مسجل…): الدرجة نفسها
+    // تُلون وفق حدود الامتحان — لا أبيض للدرجات الرقمية نهائياً.
+    return { text, tone: numericResultTone(grade, exam) };
   }
   if (status === "غائب") return { text: "غائب", tone: "absent" };
   if (status === "غش") return { text: "غش", tone: "cheating" };
