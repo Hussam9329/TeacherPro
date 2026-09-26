@@ -273,10 +273,10 @@ function executeInlineScripts(html, label) {
   return { dom, sandbox, historyCalls };
 }
 
-function clickFirstSuggestion(dom) {
+function clickFirstSuggestion(dom, index = 0) {
   const suggestion = {
     getAttribute(name) {
-      return name === "data-idx" ? "0" : null;
+      return name === "data-idx" ? String(index) : null;
     },
   };
   dom.elements.tpSuggestions.dispatch("click", {
@@ -586,12 +586,13 @@ check("بيانات الطلاب لا تستطيع كسر عنصر script وتب
     studentDetails: {
       s1: {
         ...studentDetails.s1,
-        opportunityLogs: [
+        grades: [
           {
-            ...studentDetails.s1.opportunityLogs[0],
-            reason: breakoutPayload,
+            ...studentDetails.s1.grades[0],
+            examName: breakoutPayload,
           },
         ],
+        balanceNotes: [{ text: breakoutPayload, date: "2026-09-01" }],
       },
     },
   });
@@ -601,7 +602,7 @@ check("بيانات الطلاب لا تستطيع كسر عنصر script وتب
     maliciousHtml,
     /<script>\s*globalThis\.__teacherProBreakout\s*=/,
   );
-  const { sandbox, historyCalls } = executeInlineScripts(
+  const { sandbox, historyCalls, dom } = executeInlineScripts(
     maliciousHtml,
     "opportunities-breakout",
   );
@@ -613,9 +614,15 @@ check("بيانات الطلاب لا تستطيع كسر عنصر script وتب
   );
   assert.equal(sandbox.STUDENT_LIST[0].name, breakoutPayload);
   assert.equal(
-    sandbox.STUDENT_DETAILS.s1.opportunityLogs[0].reason,
+    sandbox.STUDENT_DETAILS.s1.grades[0].examName,
     breakoutPayload,
   );
+  assert.equal(sandbox.STUDENT_DETAILS.s1.balanceNotes[0].text, breakoutPayload);
+  openStudentDetails(dom, "s1", breakoutPayload);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /&lt;\/script&gt;&lt;script&gt;/);
+  assert.match(dom.elements.tpStudentOverview.innerHTML, /&lt;\/script&gt;&lt;script&gt;/);
+  assert.doesNotMatch(dom.elements.tpGradesBody.innerHTML, /<script>/);
+  assert.equal(sandbox.__teacherProBreakout, undefined);
 });
 
 check("التنقل بالأسهم يبقى ضمن أول 50 نتيجة ظاهرة فقط", () => {
@@ -1281,6 +1288,198 @@ check("إضافة الإدارة تظهر بجانب الرصيد دون إخف�
   assert.match(dom.elements.tpStudentOverview.innerHTML, /13 سبتمبر 2026/);
   assert.match(dom.elements.tpGradesBody.innerHTML, /tp-grade-deduction/);
   assert.match(dom.elements.tpStudentOverview.innerHTML, /<strong>3<\/strong>/);
+});
+
+// Recreate the previous wire payload and its snapshot-based balance read. All
+// other rendering is unchanged, isolating the impact of the public data boundary.
+function legacyReportPayload(list, details) {
+  const reportDetails = sanitizeStudentDetailsForHtml(details);
+  return {
+    details: reportDetails,
+    students: list.map(student => {
+      const snapshot = reportDetails[student.id]?.studentSnapshot;
+      return snapshot ? {
+        id: student.id, name: snapshot.name || student.name, code: snapshot.code,
+        courseName: snapshot.courseName || student.courseName,
+        opportunities: snapshot.opportunities, status: snapshot.status,
+      } : student;
+    }),
+  };
+}
+
+function injectReportPayload(html, { details, students }) {
+  const safeJson = value => JSON.stringify(value)
+    .replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+  let result = html;
+  for (const [key, data] of [["STUDENT_DETAILS", details], ["STUDENT_LIST", students]]) {
+    const pattern = new RegExp(`<script>window\\.${key}=[\\s\\S]*?;</script>`);
+    assert.ok(pattern.test(result), `missing ${key} payload assignment`);
+    result = result.replace(pattern, () => `<script>window.${key}=${safeJson(data)};</script>`);
+  }
+  const currentBalanceRead = "    var balance = student.opportunities;\n    var status = student.status;";
+  const legacyBalanceRead = "    var snapshot = data && data.studentSnapshot;\n    var balance = snapshot ? snapshot.opportunities : student.opportunities;\n    var status = snapshot ? snapshot.status : student.status;";
+  assert.ok(result.includes(currentBalanceRead), "renderer balance read changed; update the legacy equivalence fixture explicitly");
+  result = result.replace(currentBalanceRead, legacyBalanceRead);
+  return result;
+}
+
+function privatePayloadFixture() {
+  const grades = [
+    { status: "درجة", score: 0, opportunityTone: "ordinary", opportunityEffect: "لا خصم" },
+    { status: "مجاز", score: null, opportunityTone: "excused", opportunityEffect: "لا خصم" },
+    { status: "مجاز — فترة سماح", score: null, opportunityTone: "excused", opportunityEffect: "بدون خصم (فترة سماح لغاية 10-9-2026)" },
+    { status: "غائب", score: null, opportunityTone: "deducted", opportunityEffect: "خُصمت فرصة" },
+    { status: "غش", score: null, opportunityTone: "dismissed", opportunityEffect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان" },
+    { status: "درجة معلّقة", score: null, opportunityTone: "ordinary", opportunityEffect: "—" },
+  ].map((grade, index) => ({
+    ...grade,
+    examName: `امتحان ظاهر ${index + 1}`, examType: "تراكمي", examDate: `2026-09-0${index + 1}`,
+    fullMark: 20, examId: `PRIVATE_EXAM_ID_${index}`, passMark: 11,
+    outcome: "PRIVATE_HIDDEN_OUTCOME", notes: "PRIVATE_GRADE_NOTE", futurePrivateGradeField: "PRIVATE_FUTURE_GRADE_FIELD",
+  }));
+  const details = {
+    activeChapterName: "الفصل الظاهر", activeChapterSince: "1999-01-01T01:23:45Z",
+    generatedAt: "1999-02-02T02:34:56Z", hasTwoOpportunityPledge: true,
+    balanceNotes: [{ text: "أضافت الإدارة فرصتين", date: "2026-09-11", reason: "PRIVATE_BALANCE_REASON", futurePrivateNoteField: "PRIVATE_FUTURE_NOTE_FIELD" }],
+    studentSnapshot: {
+      name: "محمد علي جديد", code: "BIO-NEW", courseName: "الدورة الجديدة", status: "مفصول", opportunities: 0,
+      opportunityLimit: 3, registeredAt: "1999-03-03T03:45:56Z", phone: "PRIVATE_SNAPSHOT_PHONE", futurePrivateSnapshotField: "PRIVATE_FUTURE_SNAPSHOT_FIELD",
+    },
+    grades,
+    opportunityLogs: [
+      { action: "خصم", amount: 2, reason: "PRIVATE_ADMIN_REASON", date: "2026-09-05", examName: grades[4].examName, balanceBefore: 2, balanceAfter: 0 },
+      { action: "فصل", amount: 0, reason: "PRIVATE_DISMISSAL_REASON", date: "2026-09-05", examName: grades[4].examName },
+    ],
+    futurePrivateDetailsField: "PRIVATE_FUTURE_DETAILS_FIELD",
+  };
+  const first = { id: "s1", name: "محمد علي قديم", code: "BIO-OLD", courseName: "الدورة القديمة", status: "نشط", opportunities: 3, phone: "PRIVATE_LIST_PHONE", futurePrivateListField: "PRIVATE_FUTURE_LIST_FIELD" };
+  const fallback = { ...first, id: "s2", name: "محمد علي جديد", code: "BIO-FALLBACK", opportunities: 2 };
+  const nullBalance = { ...first, id: "s3", name: "محمد علي فارغ", code: "BIO-EMPTY" };
+  const missing = { ...first, id: "s4", name: "محمد علي ناقص", code: "BIO-MISSING" };
+  const fallbackDetails = { ...details, studentSnapshot: undefined, hasTwoOpportunityPledge: false, balanceNotes: [], grades: [] };
+  return {
+    list: [first, fallback, nullBalance, missing],
+    details: {
+      s1: details,
+      s2: fallbackDetails,
+      s3: { ...fallbackDetails, studentSnapshot: { ...details.studentSnapshot, name: "", courseName: "", opportunities: null, status: "نشط" } },
+      "PRIVATE_ORPHAN_ID": { ...details, activeChapterName: "PRIVATE_ORPHAN_CHAPTER" },
+    },
+  };
+}
+
+check("ملف HTML ينقل حقول العرض حصراً ويحذف السجل والحقول الخاصة والطلاب خارج قائمة التصدير", () => {
+  const fixture = privatePayloadFixture();
+  const original = JSON.stringify(fixture);
+  const html = buildHtml(rows, columns, "تقرير", { studentList: fixture.list, studentDetails: fixture.details });
+  const { sandbox } = executeInlineScripts(html, "public-payload-whitelist");
+  const publicDetails = JSON.parse(JSON.stringify(sandbox.STUDENT_DETAILS));
+  const publicStudents = JSON.parse(JSON.stringify(sandbox.STUDENT_LIST));
+  const detailKeys = ["activeChapterName", "hasTwoOpportunityPledge", "balanceNotes", "grades"].sort();
+  const gradeKeys = ["examName", "examType", "examDate", "score", "fullMark", "status", "opportunityEffect", "opportunityTone"].sort();
+  const studentKeys = ["id", "name", "code", "courseName", "opportunities", "status"].sort();
+  assert.deepEqual(Object.keys(publicDetails).sort(), ["s1", "s2", "s3"]);
+  for (const detail of Object.values(publicDetails)) {
+    assert.deepEqual(Object.keys(detail).sort(), detailKeys);
+    for (const grade of detail.grades) assert.deepEqual(Object.keys(grade).sort(), gradeKeys);
+    for (const note of detail.balanceNotes) assert.deepEqual(Object.keys(note).sort(), ["date", "text"]);
+  }
+  for (const student of publicStudents) assert.deepEqual(Object.keys(student).sort(), studentKeys);
+  assert.equal(publicStudents[0].opportunities, 0);
+  assert.equal(publicStudents[0].status, "مفصول");
+  assert.equal(publicStudents[0].name, "محمد علي جديد");
+  assert.equal(publicStudents[0].courseName, "الدورة الجديدة");
+  assert.equal(publicStudents[1].opportunities, 2, "no snapshot keeps the list balance without leaking its private fields");
+  assert.equal(publicStudents[2].opportunities, null, "null snapshot balance must not fall back to a stale balance");
+  assert.equal(publicStudents[2].name, fixture.list[2].name, "empty snapshot names retain existing fallback semantics");
+  assert.equal(publicStudents[2].courseName, fixture.list[2].courseName);
+  assert.doesNotMatch(html, /PRIVATE_|1999-01-01T01:23:45Z|1999-02-02T02:34:56Z|1999-03-03T03:45:56Z/);
+  const wireData = JSON.stringify({ details: publicDetails, students: publicStudents });
+  assert.doesNotMatch(wireData, /"(?:opportunityLogs|studentSnapshot|passMark|registeredAt|generatedAt|activeChapterSince|examId|outcome|notes|reason)"/);
+  assert.equal(JSON.stringify(fixture), original, "preparing a public file must not mutate the full internal snapshot");
+});
+
+function renderedReportState(dom) {
+  return Object.fromEntries(Object.entries(dom.elements).map(([id, element]) => [id, {
+    html: element.innerHTML, text: element.textContent, value: element.value,
+    display: element.style.display ?? null,
+    ariaExpanded: element.getAttribute("aria-expanded"), ariaHidden: element.getAttribute("aria-hidden"),
+    open: element.classList.contains("open"), visible: element.classList.contains("visible"),
+  }]));
+}
+
+check("حذف البيانات غير المعروضة لا يغيّر البحث أو البطاقات أو الحالات أو الألوان أو التفاصيل", () => {
+  const fixture = privatePayloadFixture();
+  const compact = buildHtml(rows, columns, "تقرير", { studentList: fixture.list, studentDetails: fixture.details });
+  const legacy = injectReportPayload(compact, legacyReportPayload(fixture.list, fixture.details));
+  const currentRun = executeInlineScripts(compact, "compact-render-equivalence");
+  const legacyRun = executeInlineScripts(legacy, "legacy-render-equivalence");
+  const compare = label => assert.deepEqual(renderedReportState(currentRun.dom), renderedReportState(legacyRun.dom), label);
+  compare("initial UI");
+  for (const query of ["محمد", "مُحَمَّد علي", "اسم غير موجود", ""]) {
+    for (const run of [currentRun, legacyRun]) {
+      run.dom.elements.tpStudentSearch.value = query;
+      run.dom.elements.tpStudentSearch.dispatch("input", {});
+    }
+    compare(`search: ${query}`);
+  }
+  for (let index = 0; index < fixture.list.length; index += 1) {
+    for (const run of [currentRun, legacyRun]) {
+      run.dom.elements.tpStudentSearch.value = "محمد علي";
+      run.dom.elements.tpStudentSearch.dispatch("input", {});
+    }
+    compare(`suggestions including duplicate names before choice ${index}`);
+    for (const run of [currentRun, legacyRun]) clickFirstSuggestion(run.dom, index);
+    compare(`student ${index}: card, overview, title, dismissal badge, grades and tones`);
+  }
+  for (const selection of [["PRIVATE_EXAM_ID_0", "PRIVATE_EXAM_ID_4"], []]) {
+    const details = selectHtmlReportExams(fixture.details, selection);
+    const compactSelected = buildHtml(rows, columns, "تقرير", { studentList: fixture.list, studentDetails: details });
+    const legacySelected = injectReportPayload(compactSelected, legacyReportPayload(fixture.list, details));
+    const compactRun = executeInlineScripts(compactSelected, "compact-selected");
+    const originalRun = executeInlineScripts(legacySelected, "legacy-selected");
+    for (const run of [compactRun, originalRun]) openStudentDetails(run.dom, "s1", "محمد علي جديد");
+    assert.deepEqual(renderedReportState(compactRun.dom), renderedReportState(originalRun.dom), `selected exams: ${selection}`);
+  }
+  // No fetch/network API exists in this harness: all displayed details above are
+  // resolved entirely from the public payload, including after exam selection.
+});
+
+check("قياس تقرير اصطناعي من 400 طالب يثبت انخفاض حجم البيانات والملف الكامل", () => {
+  const fixture = privatePayloadFixture();
+  const list = [];
+  const details = {};
+  for (let index = 0; index < 400; index += 1) {
+    const id = `synthetic-${index}`;
+    list.push({ ...fixture.list[0], id });
+    details[id] = {
+      ...fixture.details.s1,
+      opportunityLogs: Array.from({ length: 24 }, (_, logIndex) => ({
+        action: "خصم", amount: 1, appliedAmount: 1, balanceBefore: 3, balanceAfter: 2,
+        reason: `PRIVATE_ADMIN_HISTORY_${index}_${logIndex} — سبب إداري محفوظ للمراجعة والتدقيق في سجل النظام فقط`,
+        date: "2026-09-05", examName: "امتحان التدقيق", examId: `history-exam-${logIndex}`,
+      })),
+    };
+  }
+  const html = buildHtml(rows, columns, "تقرير", { studentList: list, studentDetails: details });
+  const legacyPayload = legacyReportPayload(list, details);
+  const legacyHtml = injectReportPayload(html, legacyPayload);
+  const { sandbox } = executeInlineScripts(html, "synthetic-400-students");
+  const compactPayload = { details: sandbox.STUDENT_DETAILS, students: sandbox.STUDENT_LIST };
+  const metrics = {
+    students: 400, syntheticFixture: true,
+    payloadBeforeBytes: Buffer.byteLength(JSON.stringify(legacyPayload), "utf8"),
+    payloadAfterBytes: Buffer.byteLength(JSON.stringify(compactPayload), "utf8"),
+    fileBeforeBytes: Buffer.byteLength(legacyHtml, "utf8"),
+    fileAfterBytes: Buffer.byteLength(html, "utf8"),
+  };
+  assert.equal(sandbox.STUDENT_LIST.length, 400);
+  assert.equal(Object.keys(sandbox.STUDENT_DETAILS).length, 400);
+  assert.ok(metrics.payloadAfterBytes < metrics.payloadBeforeBytes);
+  assert.ok(metrics.fileAfterBytes < metrics.fileBeforeBytes);
+  assert.doesNotMatch(html, /PRIVATE_ADMIN_HISTORY/);
+  console.log(`   Synthetic payload size comparison: ${JSON.stringify(metrics)}`);
 });
 
 if (failures > 0) {

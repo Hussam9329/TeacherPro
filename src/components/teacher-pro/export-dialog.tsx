@@ -192,6 +192,49 @@ export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): Stude
   );
 }
 
+type PublicStudentHtmlDetails = Pick<StudentDetails, "activeChapterName" | "hasTwoOpportunityPledge" | "balanceNotes"> & {
+  grades: Array<Pick<StudentGradeDetail,
+    "examName" | "examType" | "examDate" | "score" | "fullMark" | "status" | "opportunityEffect" | "opportunityTone"
+  >>;
+};
+
+/** Final public-file boundary. Keep the shared/internal details intact and
+ * explicitly copy only fields consumed by this HTML's display and search. */
+function buildPublicStudentHtmlData(details: StudentDetailsMap, students: StudentRowBasic[]) {
+  const publicDetails: Array<[string, PublicStudentHtmlDetails]> = [];
+  const publicStudents = students.map(student => {
+    const detail = Object.hasOwn(details, student.id) ? details[student.id] : undefined;
+    const snapshot = detail?.studentSnapshot;
+    const code = snapshot ? snapshot.code : student.code;
+    if (detail) publicDetails.push([student.id, {
+      activeChapterName: detail.activeChapterName ?? null,
+      hasTwoOpportunityPledge: detail.hasTwoOpportunityPledge === true,
+      balanceNotes: (detail.balanceNotes || []).map(({ text, date }) => ({ text, date })),
+      grades: (detail.grades || []).map(grade => ({
+        examName: grade.examName,
+        examType: grade.examType,
+        examDate: grade.examDate,
+        score: grade.score,
+        fullMark: grade.fullMark,
+        status: grade.status,
+        opportunityEffect: grade.opportunityEffect,
+        opportunityTone: grade.opportunityTone,
+      })).sort((a, b) => (new Date(a.examDate).getTime() || 0) - (new Date(b.examDate).getTime() || 0)),
+    }]);
+    // Resolve the latest database snapshot before dropping its duplicate copy.
+    // Whitelist the fallback too: rows may carry private fields in other exports.
+    return {
+      id: student.id,
+      name: snapshot?.name || student.name,
+      code: code ? String(code) : "",
+      courseName: snapshot?.courseName || student.courseName,
+      opportunities: snapshot ? snapshot.opportunities : student.opportunities,
+      status: snapshot ? snapshot.status : student.status,
+    };
+  });
+  return { details: Object.fromEntries(publicDetails), students: publicStudents };
+}
+
 export type StudentProfileLogSnapshot = {
   student?: Record<string, unknown> | null;
   generatedAt?: string;
@@ -869,9 +912,8 @@ const DETAILS_MODAL_JS = `
   function showDetails(studentId, studentLabel){
     var data = DATA[studentId];
     var student = STUDENTS.find(function(s){ return String(s.id) === String(studentId); }) || {};
-    var snapshot = data && data.studentSnapshot;
-    var balance = snapshot ? snapshot.opportunities : student.opportunities;
-    var status = snapshot ? snapshot.status : student.status;
+    var balance = student.opportunities;
+    var status = student.status;
     var badgeEl = document.getElementById('tpModalDismissedBadge');
     var overview = document.getElementById('tpStudentOverview');
     var gradesTitleEl = document.getElementById('tpGradesSectionTitle');
@@ -1077,16 +1119,9 @@ export function buildHtml<T>(
   const interactiveMode = Boolean(
     options.studentDetails && options.studentList && options.studentList.length > 0,
   );
-  const reportDetails = interactiveMode ? sanitizeStudentDetailsForHtml(options.studentDetails || {}) : {};
-  // Prefer the per-student database snapshot over the earlier list request.
-  const reportStudents = (options.studentList || []).map(student => {
-    const snapshot = reportDetails[student.id]?.studentSnapshot;
-    return snapshot ? {
-      id: student.id, name: snapshot.name || student.name, code: snapshot.code,
-      courseName: snapshot.courseName || student.courseName,
-      opportunities: snapshot.opportunities, status: snapshot.status,
-    } : student;
-  });
+  const { details: reportDetails, students: reportStudents } = interactiveMode
+    ? buildPublicStudentHtmlData(options.studentDetails || {}, options.studentList || [])
+    : { details: {}, students: [] };
   const reportHeading = interactiveMode ? "درجاتك وفرصك" : title;
   const bodyClassName = interactiveMode ? "tp-search-report-body" : "";
   const reportClassName = interactiveMode ? "report report-search-mode" : "report";
@@ -1477,10 +1512,9 @@ export function ExportDialog<T = Record<string, unknown>>({
   const exportHtml = (exportRows: T[], detailsMap: StudentDetailsMap | null = null) => {
     if (!ensureExportable(exportRows)) return;
 
-    // ننظّف نسخة التقرير فقط: لا تتغير الدرجات أو السجلات الأصلية في النظام.
-    const reportDetailsMap = detailsMap
-      ? sanitizeStudentDetailsForHtml(detailsMap)
-      : null;
+    // buildHtml creates the minimal public payload after exam selection;
+    // internal details remain available to the other report consumers.
+    const reportDetailsMap = detailsMap;
 
     // في وضع البحث نمرّر قائمة الطلاب (id + name + courseName + opportunities + status)
     // لاستخدامها في خانة البحث بدل عرض كل الطلاب دفعة واحدة؛ الحالة تُستخدم
