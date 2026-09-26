@@ -11,6 +11,10 @@ import { parseStudentEnrollmentArchiveSnapshot } from "@/lib/student-enrollment-
 import { loadActiveChapterReportContext } from "@/lib/active-chapter-report";
 import { RETIRED_FOLLOWUP_NOTE_KIND } from "@/lib/retired-followup-compat";
 import {
+  buildAcademicOpportunityCommandEffects,
+  buildAcademicStateFromRows,
+} from "@/lib/academic-recalculate-server";
+import {
   buildStudentProfileDataVersion,
   loadStudentProfileAuditLogs,
   sanitizeEnrollmentArchiveSnapshot,
@@ -40,9 +44,11 @@ const OPPORTUNITY_LOG_SELECT = {
   id: true,
   action: true,
   amount: true,
+  requestedAmount: true,
   appliedAmount: true,
   balanceBefore: true,
   balanceAfter: true,
+  reversalOfLogId: true,
   ledgerVersion: true,
   settledGradeIds: true,
   reason: true,
@@ -110,6 +116,8 @@ const EXAM_SELECT = {
   noDiscount: true,
   active: true,
   scheduledActivateAt: true,
+  telegramOpenAt: true,
+  telegramCloseAt: true,
 } as const;
 
 /**
@@ -219,6 +227,27 @@ export async function GET(req: NextRequest) {
           : null;
         const [studentWithOpportunity] =
           await attachStudentOpportunitySnapshotsWithClient(tx, [student]);
+        const activeChapter = studentWithOpportunity.activeChapter;
+        // Reuse this transaction's already-loaded rows. No independent fetch
+        // or accounting write may participate in a report explanation.
+        const opportunityCommandEffects = access.grades && access.opportunities && activeChapter && currentChapter?.id === activeChapter.id
+          ? buildAcademicOpportunityCommandEffects(buildAcademicStateFromRows({
+              students: [student],
+              grades,
+              exams: Array.from(new Map([...exams, ...allCourseExams].map((exam) => [exam.id, exam])).values()),
+              courseChapters: [{
+                id: `profile-active-${student.courseId}-${activeChapter.id}`,
+                courseId: student.courseId,
+                chapterId: activeChapter.id,
+                active: true,
+                archived: false,
+              }],
+              chapters: [activeChapter],
+              opportunityLogs,
+              studentLeaves,
+              studentNotes,
+            }), studentId)
+          : [];
         const auditResult = access.logs
           ? await loadStudentProfileAuditLogs(tx, student, {
               from: currentEnrollmentStartedAt,
@@ -241,6 +270,7 @@ export async function GET(req: NextRequest) {
           allCourseExams,
           currentChapter,
           opportunityLogs,
+          opportunityCommandEffects,
           studentLeaves,
           studentCalls,
           studentNotes,
@@ -261,6 +291,7 @@ export async function GET(req: NextRequest) {
       allCourseExams,
       currentChapter,
       opportunityLogs,
+      opportunityCommandEffects,
       studentLeaves,
       studentCalls,
       studentNotes,
@@ -319,6 +350,7 @@ export async function GET(req: NextRequest) {
       exams: exams.filter((exam) => visibleExamIds.has(exam.id)),
       allCourseExams: access.grades ? allCourseExams : [],
       opportunityLogs: access.opportunities ? opportunityLogs : [],
+      opportunityCommandEffects: access.grades && access.opportunities ? opportunityCommandEffects : [],
       studentLeaves: access.followUp ? studentLeaves : [],
       studentCalls: access.followUp ? studentCalls : [],
       studentNotes: access.followUp ? studentNotes : [],

@@ -1,4 +1,6 @@
 import { baghdadDateKey } from "@/lib/baghdad-time";
+import { examChapterExclusion } from "@/lib/exam-chapter-scope";
+import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
@@ -10,6 +12,9 @@ import { recalculateWithExamEditReview } from "@/lib/exam-dismissal-review";
 import { recalculateWithGraceReview, type GraceDismissalReview } from "@/lib/grace-dismissal-review";
 import {
   getActiveChapterForStudent,
+  gradeHasAcademicEffect,
+  isExamInStudentGracePeriod,
+  isStudentExcusedForExam,
   isAutomaticOpportunityLog,
   isReactivationBalanceOpportunityLog,
   recalculateAcademicState,
@@ -20,6 +25,7 @@ import type {
   AcademicExam,
   AcademicGrade,
   AcademicOpportunityLog,
+  AcademicOpportunityCommandEffect,
   AcademicStateInput,
   AcademicStudent,
   AcademicStudentLeave,
@@ -268,6 +274,116 @@ function mapChapter(chapter: { id: string; name: string; opportunities: number }
   };
 }
 
+/** Shared normalization for accounting and read-only profile snapshots. */
+export interface AcademicStateRows {
+  students: Array<Parameters<typeof mapStudent>[0] & { gracePeriods?: GracePeriodRange[] }>;
+  grades: Array<Parameters<typeof mapGrade>[0]>;
+  exams: Array<Parameters<typeof toAcademicExam>[0]>;
+  courseChapters: Array<Parameters<typeof mapCourseChapter>[0]>;
+  chapters: Array<Parameters<typeof mapChapter>[0]>;
+  opportunityLogs: Array<Parameters<typeof mapOpportunityLog>[0]>;
+  studentLeaves: Array<Parameters<typeof mapStudentLeave>[0]>;
+  studentNotes: Array<Parameters<typeof mapStudentNote>[0]>;
+  gracePeriodsByStudent?: ReadonlyMap<string, GracePeriodRange[]>;
+}
+
+export function buildAcademicStateFromRows(rows: AcademicStateRows): AcademicStateInput {
+  return {
+    students: rows.students.map((student) => mapStudent(
+      student,
+      rows.gracePeriodsByStudent?.get(student.id) || student.gracePeriods || [],
+    )),
+    grades: rows.grades.map(mapGrade),
+    exams: rows.exams.map(toAcademicExam),
+    courseChapters: rows.courseChapters.map(mapCourseChapter),
+    chapters: rows.chapters.map(mapChapter),
+    opportunityLogs: rows.opportunityLogs.map(mapOpportunityLog),
+    studentLeaves: rows.studentLeaves.map(mapStudentLeave),
+    studentNotes: rows.studentNotes.map(mapStudentNote),
+  };
+}
+
+/** Explain only commands replayed by the authoritative engine. An unresolved
+ * stored/replayed state disagreement must not become a guessed report balance. */
+export function buildAcademicOpportunityCommandEffects(
+  state: AcademicStateInput,
+  studentId: string,
+): AcademicOpportunityCommandEffect[] {
+  const stored = state.students.find((student) => student.id === studentId);
+  if (!stored || stored.status === "مؤرشف") return [];
+  const activeChapter = getActiveChapterForStudent(stored, state.courseChapters, state.chapters);
+  if (!activeChapter) return [];
+  const manualLogs = state.opportunityLogs.filter((log) =>
+    log.studentId === studentId && !isAutomaticOpportunityLog(log));
+  const boundary = manualLogs.filter((log) => log.ledgerVersion === 2 &&
+    log.chapterId === activeChapter.id &&
+    (log.action === "إعادة تعيين" || isReactivationBalanceOpportunityLog(log)))
+    .sort((a, b) => a.date.localeCompare(b.date) ||
+      Number(a.action === "إعادة تعيين") - Number(b.action === "إعادة تعيين") ||
+      a.id.localeCompare(b.id)).at(-1);
+  const isBalanceCommand = (log: AcademicOpportunityLog) =>
+    ["إضافة", "خصم", "إعادة تعيين"].includes(log.action) || isReactivationBalanceOpportunityLog(log);
+  const currentGradeExamIds = new Set(state.grades.filter((grade) => grade.studentId === studentId).map((grade) => grade.examId));
+  const segmentStart = boundary?.date || [
+    ...manualLogs.filter((log) => log.ledgerVersion === 2 && log.chapterId === activeChapter.id && isBalanceCommand(log)).map((log) => log.date),
+    ...state.exams.filter((exam) => currentGradeExamIds.has(exam.id) && !examChapterExclusion(exam, stored.courseId, activeChapter.id)).map((exam) => exam.date),
+  ].filter(Boolean).sort()[0];
+  // Legacy balance movements are applied before dated commands by the
+  // engine. Explaining that mixed replay as calendar-ordered rows would be
+  // misleading even when the final balance happens to match. Earlier
+  // history covered by a structured settlement does not cause this fallback.
+  if (manualLogs.some((log) => log.ledgerVersion !== 2 &&
+      (!segmentStart || log.date >= segmentStart) && isBalanceCommand(log))) return [];
+  if (boundary && manualLogs.some((log) => log.id !== boundary.id &&
+      log.ledgerVersion === 2 && log.chapterId === activeChapter.id &&
+      log.date === boundary.date && isBalanceCommand(log))) return [];
+  const effects: AcademicOpportunityCommandEffect[] = [];
+  try {
+    const parsedIds: unknown = boundary?.settledGradeIds ? JSON.parse(boundary.settledGradeIds) : [];
+    if (!Array.isArray(parsedIds) || !parsedIds.every((id) => typeof id === "string")) return [];
+    const settledIds = new Set<string>(parsedIds);
+    const exams = new Map(state.exams.map((exam) => [exam.id, exam]));
+    // A replay initializes its latest fixed balance before processing any
+    // unsettled earlier result. That order cannot explain calendar rows with
+    // the result before the fixed-balance row, so do not project its commands.
+    if (boundary && state.grades.some((grade) => {
+      const exam = exams.get(grade.examId);
+      return grade.studentId === studentId && !settledIds.has(grade.id) && exam &&
+        baghdadDateKey(exam.date) < baghdadDateKey(boundary.date) &&
+        !examChapterExclusion(exam, stored.courseId, activeChapter.id) &&
+        gradeHasAcademicEffect(grade, exam) &&
+        isExamOnOrAfterStudentRegistration(stored, exam) &&
+        !isStudentExcusedForExam(state, stored.id, exam.id) &&
+        !isExamInStudentGracePeriod(stored, exam);
+    })) return [];
+    const result = recalculateAcademicState(state, new Set([studentId]), {
+      onOpportunityCommand: (effect) => effects.push(effect),
+    });
+    const calculated = result.students.find((student) => student.id === studentId);
+    if (calculated?.opportunities !== stored.opportunities || calculated.status !== stored.status) return [];
+    const settledExamIds = new Set(state.grades.filter((grade) =>
+      grade.studentId === studentId && settledIds.has(grade.id)).map((grade) => grade.examId));
+    const automaticEffects = (logs: AcademicOpportunityLog[]) => {
+      const totals = new Map<string, number>();
+      for (const log of logs) {
+        if (log.studentId !== studentId || log.chapterId !== activeChapter.id ||
+            !isAutomaticOpportunityLog(log) || settledExamIds.has(log.examId)) continue;
+        const key = JSON.stringify([log.examId, log.action]);
+        totals.set(key, (totals.get(key) || 0) + Number(log.appliedAmount ?? log.amount));
+      }
+      return JSON.stringify([...totals].sort(([a], [b]) => a.localeCompare(b)));
+    };
+    // The HTML uses saved deductions. Equal final balances alone cannot
+    // justify a trace that silently changes those deductions between exams.
+    return automaticEffects(state.opportunityLogs) === automaticEffects(result.opportunityLogs) ? effects : [];
+  } catch {
+    // An explanation must not turn an existing readable profile into a 500.
+    // Do not log student data, ledger content, or the rejected input.
+    console.warn("[profile-opportunity-effects] Academic replay explanation unavailable");
+    return [];
+  }
+}
+
 function automaticOpportunityLogWhere(studentIds: string[]): Prisma.OpportunityLogWhereInput {
   return {
     studentId: { in: studentIds },
@@ -492,18 +608,10 @@ export async function loadAcademicStateForStudents(
     loadActiveGracePeriodsByStudent(client, studentIds),
   ]);
 
-  return {
-    students: students.map((student) =>
-      mapStudent(student, gracePeriodsByStudent.get(student.id) || []),
-    ),
-    grades: grades.map(mapGrade),
-    exams: exams.map(toAcademicExam),
-    courseChapters: courseChapters.map(mapCourseChapter),
-    chapters: chapters.map(mapChapter),
-    opportunityLogs: opportunityLogs.map(mapOpportunityLog),
-    studentLeaves: studentLeaves.map(mapStudentLeave),
-    studentNotes: studentNotes.map(mapStudentNote),
-  };
+  return buildAcademicStateFromRows({
+    students, grades, exams, courseChapters, chapters, opportunityLogs,
+    studentLeaves, studentNotes, gracePeriodsByStudent,
+  });
 }
 
 /** A settlement stops old grades from spending the new balance, but does not

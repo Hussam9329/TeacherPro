@@ -34,15 +34,63 @@ const history = [
 const original = JSON.stringify(history);
 const events = timeline(history, "chapter");
 assert.deepEqual(events.map(event => event.kind), ["reset", "add", "return", "deduct", "return"]);
-assert.deepEqual(events.map(event => event.balanceAfter), [3, 3, 2, 1, 1]);
+assert.deepEqual(events.map(event => event.balanceAfter), [3, null, 2, null, 1]);
 assert.match(events[0].text, /بدأ حساب فرص الفصل برصيد 3 فرص/);
-assert.match(events[1].text, /أضافت الإدارة فرصتين — أصبح الرصيد 3/);
+assert.equal(events[1].text, "سُجّل منح فرصتين");
 assert.match(events[2].text, /تم قبول التعهّد وإعادة تفعيلك برصيد فرصتين/);
-assert.match(events[3].text, /خصمت الإدارة فرصة واحدة — أصبح الرصيد 1/);
+assert.equal(events[3].text, "خصمت الإدارة فرصة واحدة");
 assert.equal(events[4].text, "أُعيد تفعيلك برصيد فرصة واحدة");
 assert.doesNotMatch(JSON.stringify(events), /PRIVATE_|حماية|P2|تلقائي|reason|chapterId|examId/);
 for (const event of events) assert.deepEqual(Object.keys(event).sort(), ["balanceAfter", "date", "kind", "text"]);
 assert.equal(JSON.stringify(history), original, "history presentation does not mutate its source");
+
+const cappedCredit = log("إضافة", 18, {
+  id: "private-credit-command", studentId: "private-student", ledgerVersion: 2, amount: 2, appliedAmount: 2,
+  balanceBefore: 0, balanceAfter: 2, reason: "تعهد PRIVATE_ADMIN_REASON",
+});
+const projectedCappedEffect = {
+  studentId: "private-student", chapterId: "chapter", logId: "private-credit-command",
+  balanceBefore: 2, balanceAfter: 3, amount: 1, cap: 3,
+};
+const cappedInputs = JSON.stringify({ cappedCredit, projectedCappedEffect });
+const projectedCappedEvent = timeline([cappedCredit], "chapter", [projectedCappedEffect])[0];
+assert.equal(projectedCappedEvent.text, "بعد قبول التعهّد، أضافت الإدارة فرصة واحدة — ارتفع الرصيد من 2 إلى 3 (الحد الأعلى لفرص الفصل)");
+assert.equal(projectedCappedEvent.balanceAfter, 3, "public balance follows the evaluated command effect rather than an old saved snapshot");
+assert.equal(projectedCappedEvent.kind, "add");
+assert.deepEqual(Object.keys(projectedCappedEvent).sort(), ["balanceAfter", "date", "kind", "text"]);
+assert.doesNotMatch(JSON.stringify(projectedCappedEvent), /private-|PRIVATE_|studentId|chapterId|logId|cap|reason/);
+assert.equal(JSON.stringify({ cappedCredit, projectedCappedEffect }), cappedInputs, "projected presentation never rewrites source ledgers or calculation evidence");
+
+const ordinaryCredit = { ...cappedCredit, id: "ordinary-credit", amount: 1, appliedAmount: 1, balanceBefore: 2, balanceAfter: 3, reason: "PRIVATE_ADMIN_REASON" };
+const ordinaryEffect = { ...projectedCappedEffect, logId: ordinaryCredit.id, balanceBefore: 0, balanceAfter: 1, amount: 1 };
+assert.equal(timeline([ordinaryCredit], "chapter", [ordinaryEffect])[0].text, "أضافت الإدارة فرصة واحدة — أصبح الرصيد 1");
+const staleFallback = timeline([cappedCredit], "chapter");
+for (const patch of [
+  { studentId: "other-student" }, { chapterId: "other-chapter" }, { logId: "other-command" },
+  { amount: -1 }, { amount: 1.5 }, { balanceBefore: -1 }, { balanceAfter: 99 },
+  { amount: 2 }, { cap: 2 },
+]) {
+  assert.deepEqual(timeline([cappedCredit], "chapter", [{ ...projectedCappedEffect, ...patch }]), staleFallback,
+    "unrelated or invalid projection must not supply another command's actual balance: " + JSON.stringify(patch));
+}
+assert.deepEqual(timeline([cappedCredit], "chapter", [
+  { ...projectedCappedEffect, studentId: "other-student", balanceBefore: 0, balanceAfter: 1 },
+  { ...projectedCappedEffect, chapterId: "other-chapter", balanceBefore: 0, balanceAfter: 1 },
+  projectedCappedEffect,
+]), [projectedCappedEvent], "scoping finds the exact student/chapter/log command even when unrelated effects come first");
+
+assert.deepEqual(timeline([{ ...cappedCredit, ledgerVersion: undefined }], "chapter", [projectedCappedEffect]), staleFallback, "legacy commands do not consume versioned calculation evidence");
+assert.deepEqual(timeline([cappedCredit], "chapter", [projectedCappedEffect, projectedCappedEffect]), staleFallback, "ambiguous duplicate projections cannot establish one factual balance");
+assert.equal(staleFallback[0].balanceAfter, null, "without evaluated evidence an old additive balance must not be published as current history");
+assert.equal(staleFallback[0].text, "بعد قبول التعهّد، سُجّل منح فرصتين");
+assert.equal(timeline([cappedCredit], "chapter", undefined, 3)[0].text, "بعد قبول التعهّد، سُجّل منح فرصتين (بحدّ أقصى 3 للرصيد)");
+assert.equal(timeline([ordinaryCredit], "chapter", undefined, 3)[0].text, "سُجّل منح فرصة واحدة (بحدّ أقصى 3 للرصيد)");
+const projectedFullBalance = { ...projectedCappedEffect, amount: 0, balanceBefore: 3, balanceAfter: 3 };
+const fullBalanceEvent = timeline([cappedCredit], "chapter", [projectedFullBalance])[0];
+assert.equal(fullBalanceEvent.text, "بعد قبول التعهّد، بقي رصيدك مكتملًا عند 3 فرص (الحد الأعلى لفرص الفصل)");
+assert.equal(fullBalanceEvent.balanceAfter, 3);
+assert.equal(timeline([{ ...cappedCredit, reason: "PRIVATE_REASON" }], "chapter", [projectedFullBalance])[0].text, "بقي رصيدك مكتملًا عند 3 فرص (الحد الأعلى لفرص الفصل)");
+assert.equal(timeline([cappedCredit], "chapter", [projectedFullBalance]).length, 1, "a recorded grant capped to no change keeps an honest explanatory row");
 
 // Repeated real additions remain distinct, even at the same timestamp. A later
 // grant does not erase earlier movements from the public timeline.
@@ -68,7 +116,7 @@ for (const reason of ["بدون تعهد", "دون التعهد", "لا يوجد
 }
 assert.match(timeline([log("رصيد بعد تعهد", 5, { amount: 1 })], "chapter")[0].text, /التعهّد.*فرصة واحدة/);
 assert.match(timeline([log("إعادة تعيين", 5, { amount: 2, appliedAmount: 0, reason: "تثبيت رصيد بعد تعهد" })], "chapter")[0].text, /التعهّد.*فرصتين/);
-assert.match(timeline([log("إضافة", 5, { amount: 1, reason: "تعهد" })], "chapter")[0].text, /التعهّد.*أضافت الإدارة فرصة واحدة/);
+assert.match(timeline([log("إضافة", 5, { amount: 1, reason: "تعهد" })], "chapter")[0].text, /التعهّد.*سُجّل منح فرصة واحدة/);
 assert.equal(timeline([log("إعادة تفعيل", 5, { amount: 0, reason: "بعد تعهد الطالب بفرصتين" })], "chapter")[0].balanceAfter, 2);
 assert.equal(timeline([log("إعادة تفعيل", 5, { amount: 0 })], "chapter")[0].balanceAfter, null, "status-only zero is not a zero-balance grant");
 assert.equal(timeline([

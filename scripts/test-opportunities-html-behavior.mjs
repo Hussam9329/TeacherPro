@@ -1276,7 +1276,7 @@ check("إضافة الإدارة تظهر كسطر مؤرخ بعد الامتح�
   const { dom } = executeInlineScripts(html, "manual-grant-report");
   openStudentDetails(dom, "s1", studentList[0].name);
   assert.doesNotMatch(dom.elements.tpStudentOverview.innerHTML, /أضافت الإدارة|13 سبتمبر 2026/);
-  assert.match(dom.elements.tpGradesBody.innerHTML, /أضافت الإدارة فرصتين/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /سُجّل منح فرصتين/);
   assert.match(dom.elements.tpGradesBody.innerHTML, /13 سبتمبر 2026/);
   assert.match(dom.elements.tpGradesBody.innerHTML, /tp-grade-deduction/);
   assert.match(dom.elements.tpStudentOverview.innerHTML, /<strong>3<\/strong>/);
@@ -1327,7 +1327,8 @@ check("الحركات تظهر قبل الامتحان وبين الامتحان
   ]);
   assert.equal(details.timelineEvents.length, 4, "one row per actual grant; paired status and zero-applied credits add none");
   assert.match(details.timelineEvents[1].text, /التعهّد.*برصيد فرصتين/);
-  assert.match(details.timelineEvents[2].text, /أضافت الإدارة فرصة واحدة.*أصبح الرصيد 3/);
+  assert.equal(details.timelineEvents[2].text, "سُجّل منح فرصة واحدة");
+  assert.equal(details.timelineEvents[2].balanceAfter, null, "unprojected additions do not repeat an obsolete balance");
   assert.match(details.timelineEvents[3].text, /أُعيد تفعيلك برصيد فرصة واحدة/);
   assert.equal((rendered.match(/class="tp-timeline-event /g) || []).length, 4);
   assert.equal((rendered.match(/<td colspan="4" role="cell">/g) || []).length, 4);
@@ -1416,6 +1417,68 @@ check("حالة خصم فرصتين ثم غياب ثم فصل تبقى بتار�
   assert.match(rendered, /أُعيد تفعيلك برصيد فرصة واحدة/);
   assert.match(rendered, /tp-grade-row-dismissed/);
   assert.doesNotMatch(html, /لا خصم \(قبل رصيدك الجديد\)|PRIVATE_CORRECTION|تم منح الطالب فرصتين بسبب تعهده/);
+});
+
+check("حركة المنح تعرض أثرها المحسوب الصحيح مع سقف الفصل وتحافظ على البيانات المعلقة والخصوصية", () => {
+  const exams = [
+    { id: "PRIVATE_EXAM_BEFORE", name: "امتحان قبل المنح", type: "يومي", date: "2026-09-16T00:00:00Z", fullMark: 20 },
+    { id: "PRIVATE_EXAM_PENDING", name: "امتحان بانتظار الدرجة", type: "تراكمي", date: "2026-09-20T00:00:00Z", fullMark: 50 },
+  ];
+  for (const scenario of [
+    { label: "capped-two-intended-one-applied", requested: 2, before: 2, after: 3, amount: 1, reason: "تعهد PRIVATE_REASON", text: "بعد قبول التعهّد، أضافت الإدارة فرصة واحدة — ارتفع الرصيد من 2 إلى 3 (الحد الأعلى لفرص الفصل)" },
+    { label: "ordinary-one-applied", requested: 1, before: 0, after: 1, amount: 1, reason: "PRIVATE_REASON", text: "أضافت الإدارة فرصة واحدة — أصبح الرصيد 1" },
+    { label: "already-full-opportunities", requested: 2, before: 3, after: 3, amount: 0, reason: "تعهد PRIVATE_REASON", text: "بعد قبول التعهّد، بقي رصيدك مكتملًا عند 3 فرص (الحد الأعلى لفرص الفصل)" },
+  ]) {
+    const profile = {
+      student: { id: "PRIVATE_STUDENT_ID", name: studentList[0].name, status: "نشط", opportunities: scenario.after, opportunityLimit: 3 },
+      currentChapter: { id: "PRIVATE_CHAPTER_ID", name: "الفصل الحالي", examIds: exams.map(exam => exam.id) },
+      exams, allCourseExams: exams,
+      grades: [
+        { id: "PRIVATE_GRADE_ID", examId: exams[0].id, status: "غائب", score: null, createdAt: "2026-09-19T08:00:00Z" },
+        { id: "PRIVATE_PENDING_GRADE", examId: exams[1].id, status: "درجة معلّقة", score: null, createdAt: "2026-09-20T08:00:00Z", notes: "PRIVATE_PENDING_NOTE" },
+      ],
+      opportunityLogs: [
+        { id: "PRIVATE_DEBIT_ID", action: "خصم تلقائي", amount: 1, appliedAmount: 1, examId: exams[0].id, date: exams[0].date, chapterId: "PRIVATE_CHAPTER_ID", studentId: "PRIVATE_STUDENT_ID" },
+        { id: "PRIVATE_CREDIT_ID", action: "إضافة", ledgerVersion: 2, amount: scenario.requested, appliedAmount: scenario.requested, balanceBefore: 0, balanceAfter: 2, date: "2026-09-18T10:00:00Z", reason: scenario.reason, chapterId: "PRIVATE_CHAPTER_ID", studentId: "PRIVATE_STUDENT_ID" },
+      ],
+      opportunityCommandEffects: [
+        { studentId: "PRIVATE_OTHER_STUDENT", chapterId: "PRIVATE_CHAPTER_ID", logId: "PRIVATE_CREDIT_ID", balanceBefore: 0, balanceAfter: 1, amount: 1, cap: 3 },
+        { studentId: "PRIVATE_STUDENT_ID", chapterId: "PRIVATE_OTHER_CHAPTER", logId: "PRIVATE_CREDIT_ID", balanceBefore: 0, balanceAfter: 1, amount: 1, cap: 3 },
+        { studentId: "PRIVATE_STUDENT_ID", chapterId: "PRIVATE_CHAPTER_ID", logId: "PRIVATE_CREDIT_ID", balanceBefore: scenario.before, balanceAfter: scenario.after, amount: scenario.amount, cap: 3 },
+      ],
+      studentNotes: [{ id: "PRIVATE_NOTE_ID", text: "PRIVATE_PENDING_NOTE", kind: "متابعة" }],
+    };
+    const before = JSON.stringify(profile);
+    const { details, sequence, rendered, dom, html, sandbox } = renderedTimeline(profile, scenario.label);
+    assert.equal(details.timelineEvents.length, 1);
+    assert.equal(details.timelineEvents[0].text, scenario.text);
+    assert.equal(details.timelineEvents[0].balanceAfter, scenario.after);
+    assert.deepEqual(sequence, ["امتحان قبل المنح", "event:2026-09-18T10:00:00Z", "امتحان بانتظار الدرجة"]);
+    assert.match(rendered, /خُصمت فرصة/);
+    assert.match(rendered, /tp-mobile-field-value">بانتظار الدرجة<\/span>/);
+    assert.equal(details.grades[1].opportunityEffect, "—");
+    assert.match(dom.elements.tpStudentOverview.innerHTML, new RegExp(`<strong>${scenario.after}<\\/strong>`));
+    assert.equal(sandbox.STUDENT_LIST[0].opportunities, scenario.after);
+    assert.deepEqual(Object.keys(sandbox.STUDENT_DETAILS.s1).sort(), ["activeChapterName", "grades", "timelineEvents"]);
+    assert.doesNotMatch(html, /PRIVATE_|"(?:opportunityCommandEffects|balanceBefore|logId|studentId|settledGradeIds)"\s*:/);
+    assert.equal(JSON.stringify(profile), before, "computed display cannot alter grades, pending notes, stored commands or balances");
+
+    const hidden = selectHtmlReportExams({ s1: details }, []);
+    const hiddenHtml = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: hidden });
+    const hiddenRun = executeInlineScripts(hiddenHtml, scenario.label + "-all-exams-hidden");
+    openStudentDetails(hiddenRun.dom, "s1");
+    assert.equal(hiddenRun.sandbox.STUDENT_DETAILS.s1.timelineEvents[0].text, scenario.text);
+    assert.equal(hiddenRun.sandbox.STUDENT_DETAILS.s1.timelineEvents[0].balanceAfter, scenario.after);
+    assert.match(hiddenRun.dom.elements.tpGradesBody.innerHTML, /tp-timeline-event/);
+    assert.equal(labelsFromRenderedCells(hiddenRun.dom.elements.tpGradesBody.innerHTML).length, 0);
+    assert.doesNotMatch(hiddenHtml, /PRIVATE_|"(?:opportunityCommandEffects|balanceBefore|logId|studentId)"\s*:/);
+
+    const oldProfile = { ...profile, opportunityCommandEffects: undefined };
+    const oldDetails = buildStudentDetailsFromProfileLog(oldProfile);
+    assert.equal(oldDetails.timelineEvents[0].balanceAfter, null);
+    assert.match(oldDetails.timelineEvents[0].text, /سُجّل منح.*بحدّ أقصى 3 للرصيد/);
+    assert.doesNotMatch(oldDetails.timelineEvents[0].text, /أصبح الرصيد 2|ارتفع الرصيد|أضافت الإدارة/);
+  }
 });
 
 check("امتحان 16 سبتمبر يبقى قبل امتحان 19 سبتمبر رغم تسجيل نتيجته بعده", () => {

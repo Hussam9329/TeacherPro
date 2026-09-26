@@ -21,6 +21,7 @@ import type {
   AcademicCourseChapter,
   AcademicExam,
   AcademicGrade,
+  AcademicOpportunityCommandEffect,
   AcademicOpportunityLog,
   AcademicReactivationLink,
   AcademicRecalculationResult,
@@ -585,7 +586,10 @@ export function findAcademicReactivationSourceForStudent(
 export function recalculateAcademicState(
   state: AcademicStateInput,
   targetStudentIds?: Set<string>,
-  options: { respectLegacyReactivationDates?: boolean } = {},
+  options: {
+    respectLegacyReactivationDates?: boolean;
+    onOpportunityCommand?: (effect: AcademicOpportunityCommandEffect) => void;
+  } = {},
 ): AcademicRecalculationResult {
   const examsById = new Map(state.exams.map((exam) => [exam.id, exam]));
   const activeCourseChapterGroups = new Map<string, AcademicCourseChapter[]>();
@@ -652,7 +656,8 @@ export function recalculateAcademicState(
 
     const allStudentManualLogs = manualLogs
       .filter((log) => log.studentId === student.id)
-      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")) ||
+        String(a.id).localeCompare(String(b.id)));
     let historicalSettlementDate = latestStudentLogDate(
       allStudentManualLogs,
       (log) => String(log.reason || "").startsWith("تسوية تاريخية:"),
@@ -958,6 +963,7 @@ export function recalculateAcademicState(
         const log = pendingCommands[commandIndex++];
         const cap = Math.max(0, Number(activeChapter?.opportunities ?? student.baseOpportunities ?? 0));
         const amount = Math.abs(Number(log.appliedAmount ?? log.amount ?? 0));
+        const balanceBefore = opportunities;
         if (log.action === "إعادة تعيين") opportunities = Math.max(0, Math.min(cap, Number(log.balanceAfter ?? log.amount)));
         else if (log.action === "إضافة") {
           opportunities = Math.min(cap, opportunities + amount);
@@ -971,6 +977,15 @@ export function recalculateAcademicState(
             setDismissal(`مخالفة بعد انتهاء الفرص - خصم يدوي: ${log.reason || "بدون سبب مسجل"}`, 60);
           }
         }
+        options.onOpportunityCommand?.(Object.freeze({
+          studentId: student.id,
+          chapterId: activeChapter?.id || activeCourseChapter?.chapterId || "",
+          logId: log.id,
+          balanceBefore,
+          balanceAfter: opportunities,
+          amount: Math.abs(opportunities - balanceBefore),
+          cap,
+        }));
       }
     };
 
@@ -1273,6 +1288,7 @@ export type {
   AcademicCourseChapter,
   AcademicExam,
   AcademicGrade,
+  AcademicOpportunityCommandEffect,
   AcademicOpportunityLog,
   AcademicReactivationLink,
   AcademicRecalculationResult,

@@ -22,7 +22,7 @@ import { buildProfessionalXlsx } from "@/lib/xlsx-export";
 import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
 import { buildReportOpportunityContext, buildReportTimelineEvents, reportGradeTimelineDate, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, type ReportBalanceNote, type ReportTimelineEvent, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
 import { GRACE_PERIOD_EXCUSE_LABEL, isStudentInGracePeriod, normalizeGracePeriodRanges } from "@/lib/grace-periods";
-import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
+import { LEGACY_GRACE_PLACEHOLDER_STATUS, type AcademicOpportunityCommandEffect } from "@/lib/academic-types";
 import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
 import { hasStudentLeaveForExam, type StudentLeaveLike } from "@/lib/grade-classification";
 
@@ -247,6 +247,8 @@ export type StudentProfileLogSnapshot = {
   grades?: Array<Record<string, unknown>> | null;
   allCourseExams?: Array<Record<string, unknown>> | null;
   opportunityLogs?: Array<Record<string, unknown>> | null;
+  /** Read-only command effects from this snapshot's authoritative engine. */
+  opportunityCommandEffects?: AcademicOpportunityCommandEffect[];
   studentLeaves?: StudentLeaveLike[] | null;
   /**
    * سياق الفصل النشط الحالي (من /api/students/profile-log): عند توفره
@@ -340,7 +342,8 @@ export function buildStudentDetailsFromProfileLog(
   const rawLogs = Array.isArray(profile.opportunityLogs) ? profile.opportunityLogs : [];
   const logScope = resolveActiveChapterLogScope(profile);
   const scopedLogs = rawLogs.filter(log => opportunityLogWithinActiveChapter(log, logScope));
-  const timelineEvents = buildReportTimelineEvents(scopedLogs, profile.currentChapter?.id);
+  const timelineEvents = buildReportTimelineEvents(scopedLogs, profile.currentChapter?.id,
+    profile.opportunityCommandEffects, profile.student?.opportunityLimit);
   const gracePeriods = normalizeGracePeriodRanges(profile.student?.gracePeriods);
   const studentLeaves = Array.isArray(profile.studentLeaves) ? profile.studentLeaves : [];
   const opportunityContext = {

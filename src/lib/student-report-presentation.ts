@@ -1,6 +1,7 @@
 import { findStudentGracePeriod, GRACE_PERIOD_EXCUSE_LABEL, type GracePeriodRange } from "./grace-periods";
 import { isExamOnOrAfterStudentRegistration } from "./exam-utils";
 import { examResultTimelineDate } from "./academic-event-order";
+import type { AcademicOpportunityCommandEffect } from "./academic-types";
 /** Read-only wording for the published student report. Never replay the ledger. */
 export function reportNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
@@ -84,12 +85,38 @@ function reportPledgeRecorded(log: Record<string, unknown>): boolean {
   return log.action === "رصيد بعد تعهد" || /تعهد/.test(reason);
 }
 
-/** Project dated, recorded commands into public wording. Inputs have already
- * been scoped to this report; private reasons are used only for classification.
- * This is a history projection, never a balance replay or a sum of grants. */
+/** Match an effect produced by the accounting engine on this profile snapshot.
+ * Stored command balances belong to entry time; they are NOT running balances
+ * in the corrected exam chronology. Never fall back to those snapshots. */
+function reportCommandEffect(
+  log: Record<string, unknown>,
+  effects: readonly AcademicOpportunityCommandEffect[],
+): AcademicOpportunityCommandEffect | null {
+  if (log.ledgerVersion !== 2 || !log.id || !log.studentId || !log.chapterId) return null;
+  const matches = effects.filter(effect => effect.logId === log.id &&
+    effect.studentId === log.studentId && effect.chapterId === log.chapterId);
+  if (matches.length !== 1) return null;
+  const effect = matches[0];
+  if ([effect.balanceBefore, effect.balanceAfter, effect.amount, effect.cap]
+    .some(value => typeof value !== "number" || reportWholeNumber(value) === null)) return null;
+  const recorded = reportWholeNumber(log.appliedAmount ?? log.amount);
+  if (recorded === null) return null;
+  const expected = log.action === "إضافة"
+    ? Math.min(effect.cap, effect.balanceBefore + recorded)
+    : Math.max(0, effect.balanceBefore - recorded);
+  return effect.balanceAfter === expected &&
+    effect.amount === Math.abs(effect.balanceAfter - effect.balanceBefore) &&
+    effect.balanceBefore <= effect.cap && effect.balanceAfter <= effect.cap ? effect : null;
+}
+
+/** Present dated commands using effects from the SAME engine that calculates
+ * the balance. Older/superseded commands retain only their recorded grant;
+ * unknown history never manufactures a running balance. No accounting here. */
 export function buildReportTimelineEvents(
   logs: readonly Record<string, unknown>[],
   activeChapterId?: unknown,
+  commandEffects: readonly AcademicOpportunityCommandEffect[] = [],
+  opportunityLimit?: unknown,
 ): ReportTimelineEvent[] {
   const chapterId = typeof activeChapterId === "string" ? activeChapterId.trim() : "";
   const ordered = logs.filter(log => {
@@ -98,7 +125,8 @@ export function buildReportTimelineEvents(
       log.action !== "خصم تلقائي" && log.action !== "فصل تلقائي" &&
       !String(log.reason || "").startsWith("تلقائي:") &&
       !/حماية P\d+|دون تغيير بتوجيه المالك/.test(String(log.reason || ""));
-  }).sort((a, b) => Date.parse(reportLogDate(a)!) - Date.parse(reportLogDate(b)!));
+  }).sort((a, b) => Date.parse(reportLogDate(a)!) - Date.parse(reportLogDate(b)!) ||
+    String(a.id || "").localeCompare(String(b.id || "")));
   const targetBalance = (log: Record<string, unknown>) => reportWholeNumber(log.balanceAfter ?? log.amount);
   const isSetter = (log: Record<string, unknown>) =>
     log.action === "إعادة تعيين" || log.action === "رصيد بعد تعهد" || log.action === "رصيد إعادة التفعيل";
@@ -113,10 +141,29 @@ export function buildReportTimelineEvents(
       const amount = reportWholeNumber(log.appliedAmount ?? log.amount);
       if (amount === null || amount <= 0) continue;
       const kind = action === "إضافة" ? "add" : "deduct";
-      const text = kind === "add"
-        ? `${pledge ? "بعد قبول التعهّد، أضافت الإدارة" : "أضافت الإدارة"} ${reportOpportunityCount(amount)}`
-        : `خصمت الإدارة ${reportOpportunityCount(amount)}`;
-      events.push({ date, text: text + (after === null ? "" : ` — أصبح الرصيد ${after}`), kind, balanceAfter: after });
+      const effect = reportCommandEffect(log, commandEffects);
+      let text: string;
+      if (effect) {
+        if (kind === "add" && effect.amount === 0) {
+          text = `${pledge ? "بعد قبول التعهّد، " : ""}بقي رصيدك مكتملًا عند ${effect.balanceAfter} فرص (الحد الأعلى لفرص الفصل)`;
+        } else {
+          text = kind === "add"
+            ? `${pledge ? "بعد قبول التعهّد، أضافت الإدارة" : "أضافت الإدارة"} ${reportOpportunityCount(effect.amount)}`
+            : `خصمت الإدارة ${reportOpportunityCount(effect.amount)}`;
+          text += kind === "add" && effect.amount < amount
+            ? ` — ارتفع الرصيد من ${effect.balanceBefore} إلى ${effect.balanceAfter} (الحد الأعلى لفرص الفصل)`
+            : ` — أصبح الرصيد ${effect.balanceAfter}`;
+        }
+      } else {
+        // A retained historical grant is evidence of the command, not proof
+        // of its effective increment after later result corrections.
+        text = kind === "add"
+          ? `${pledge ? "بعد قبول التعهّد، سُجّل منح" : "سُجّل منح"} ${reportOpportunityCount(amount)}`
+          : `خصمت الإدارة ${reportOpportunityCount(amount)}`;
+        const limit = reportWholeNumber(opportunityLimit);
+        if (kind === "add" && limit !== null) text += ` (بحدّ أقصى ${limit} للرصيد)`;
+      }
+      events.push({ date, text, kind, balanceAfter: effect?.balanceAfter ?? null });
     } else if (isSetter(log)) {
       const balance = targetBalance(log);
       if (balance === null) continue;

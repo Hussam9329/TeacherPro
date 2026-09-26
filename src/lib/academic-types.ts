@@ -152,6 +152,18 @@ export interface AcademicRecalculationResult {
   opportunityLogs: AcademicOpportunityLog[];
 }
 
+/** Read-only effect of a command executed by the current academic replay. */
+export interface AcademicOpportunityCommandEffect {
+  readonly studentId: string;
+  readonly chapterId: string;
+  readonly logId: string;
+  readonly balanceBefore: number;
+  readonly balanceAfter: number;
+  /** Actual absolute change after applying the chapter's opportunity cap. */
+  readonly amount: number;
+  readonly cap: number;
+}
+
 export type GradeImpactType = "none" | "discount" | "dismissal";
 
 export interface GradeImpact {
