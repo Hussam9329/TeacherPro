@@ -8,7 +8,7 @@ require.extensions[".ts"] = (module, file) => module._compile(
   }).outputText,
   file,
 );
-const { buildReportOpportunityContext: context, reportGradeEffect: effect, reportGradeOutcome: outcome } =
+const { buildReportOpportunityContext: context, reportGradeEffect: effect, reportGradeOutcome: outcome, reportGradePresentation: presentation } =
   require("../src/lib/student-report-presentation.ts");
 
 const grade = { id: "settled-grade", status: "غائب", examId: "exam" };
@@ -93,4 +93,32 @@ assert.equal(effect({ status: "غائب" }, exam, [{ ...debit, amount: 1 }]), "�
 assert.equal(effect({ status: "غائب" }, exam, [{ ...debit, amount: 3 }]), "خُصمت 3 فرص");
 assert.equal(effect({ status: "غائب" }, exam, [debit, dismissal]), "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان");
 
-console.log("PASS: report context respects exact settlement IDs, later manual deductions, untouched backdated grades, active chapter, invalid metadata, factual grant notes, truthful result states, brief effects and source immutability");
+const graceContext = { settlement: null, balanceNotes: [], gracePeriods: [{ startDate: "2026-09-01", endDate: "2026-09-15" }] };
+const toneCases = [
+  { label: "ordinary scored result", grade: { status: "درجة", score: 18 }, tone: "ordinary" },
+  { label: "pending result", grade: {}, tone: "ordinary" },
+  { label: "no-discount exam alone is not an excuse", grade: { status: "درجة", score: 18 }, exam: { ...exam, noDiscount: true }, tone: "ordinary" },
+  { label: "recorded absence without deduction", grade, tone: "ordinary" },
+  { label: "formal leave", grade: { status: "مجاز" }, tone: "excused" },
+  { label: "grace with a preserved score", grade: { status: "درجة", score: 18 }, context: graceContext, tone: "excused" },
+  { label: "actual deduction", grade, logs: [debit], tone: "deducted" },
+  { label: "zero applied amount is not a deduction", grade, logs: [{ ...debit, appliedAmount: 0 }], tone: "ordinary" },
+  { label: "deduction overrides leave", grade: { status: "مجاز" }, logs: [debit], tone: "deducted" },
+  { label: "deduction overrides grace", grade, logs: [debit], context: graceContext, tone: "deducted" },
+  { label: "dismissal overrides deduction and grace", grade, logs: [debit, dismissal], context: graceContext, tone: "dismissed" },
+  { label: "dismissal with zero applied deduction", grade, logs: [{ ...debit, appliedAmount: 0 }, dismissal], tone: "dismissed" },
+  { label: "dismissal without a deduction movement", grade, logs: [dismissal], tone: "dismissed" },
+  { label: "settled old dismissal has no current red tone", grade, logs: [debit, dismissal], context: report, tone: "ordinary" },
+  { label: "later manual deduction on settled result", grade, logs: [debit, dismissal, laterManual], context: report, tone: "deducted" },
+  { label: "later manual dismissal on settled result", grade, logs: [debit, dismissal, { ...laterManual, action: "فصل", amount: 0 }], context: report, tone: "dismissed" },
+];
+for (const scenario of toneCases) {
+  const source = [scenario.grade, scenario.exam || exam, scenario.logs || [], scenario.context];
+  const before = JSON.stringify(source);
+  const result = presentation(...source);
+  assert.equal(result.tone, scenario.tone, scenario.label);
+  assert.equal(result.text, effect(...source), `${scenario.label}: tone and wording share the same effective ledger evidence`);
+  assert.equal(JSON.stringify(source), before, `${scenario.label}: presentation cannot mutate data`);
+}
+
+console.log("PASS: report context respects exact settlement IDs, later manual deductions, untouched backdated grades, active chapter, invalid metadata, factual grant notes, truthful result states, brief effects, evidence-based row tones and source immutability");

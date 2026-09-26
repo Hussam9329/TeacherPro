@@ -20,7 +20,7 @@ import { toast } from "@/lib/user-toast";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 import { buildProfessionalXlsx } from "@/lib/xlsx-export";
 import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
-import { buildReportOpportunityContext, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradeEffect, reportGradeOutcome, reportNumber, type ReportBalanceNote, type ReportMovementKind } from "@/lib/student-report-presentation";
+import { buildReportOpportunityContext, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, type ReportBalanceNote, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
 import { GRACE_PERIOD_EXCUSE_LABEL, isStudentInGracePeriod, normalizeGracePeriodRanges } from "@/lib/grace-periods";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
 import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
@@ -50,6 +50,7 @@ export type StudentGradeDetail = {
   notes?: string | null;
   outcome?: string;
   opportunityEffect?: string;
+  opportunityTone?: ReportGradeTone;
   passMark?: number | null;
 };
 
@@ -328,6 +329,7 @@ export function buildStudentDetailsFromProfileLog(
       const examId = String(rawGrade.examId || "");
       const exam = examMap.get(examId);
       const grade: Record<string, unknown> & { status: string } = { ...rawGrade, status: reportStatus(rawGrade.status, exam) };
+      const presentation = reportGradePresentation(grade, exam, scopedLogs.filter(log => log.examId === examId), opportunityContext);
       const score = grade.score;
       const fullMark = exam?.fullMark;
       return {
@@ -341,7 +343,8 @@ export function buildStudentDetailsFromProfileLog(
         status: grade.status,
         notes: grade.notes ? String(grade.notes) : null,
         outcome: reportGradeOutcome(grade, exam),
-        opportunityEffect: reportGradeEffect(grade, exam, scopedLogs.filter(log => log.examId === examId), opportunityContext),
+        opportunityEffect: presentation.text,
+        opportunityTone: presentation.tone,
         passMark: reportNumber(exam?.passMark),
       };
     });
@@ -359,6 +362,7 @@ export function buildStudentDetailsFromProfileLog(
     ) {
       examMap.set(examId, examRecord);
       const grade = { status: reportStatus("", examRecord), score: null };
+      const presentation = reportGradePresentation(grade, examRecord, scopedLogs.filter(log => log.examId === examId), opportunityContext);
       grades.push({
         examId,
         examName: String(examRecord.name || "امتحان غير محدد"),
@@ -372,7 +376,8 @@ export function buildStudentDetailsFromProfileLog(
         status: grade.status,
         notes: null,
         outcome: reportGradeOutcome(grade, examRecord),
-        opportunityEffect: reportGradeEffect(grade, examRecord, scopedLogs.filter(log => log.examId === examId), opportunityContext),
+        opportunityEffect: presentation.text,
+        opportunityTone: presentation.tone,
         passMark: reportNumber(examRecord.passMark),
       });
     }
@@ -581,13 +586,22 @@ const DETAILS_MODAL_CSS = `
   .tp-grades-table th:last-child { width: 30%; }
   .tp-mobile-field-label { display: none; }
   .tp-mobile-field-value { min-width: 0; }
-  .tp-grade-deduction .tp-mobile-field-value { color: #A34645; font-weight: 700; }
-  .tp-grade-no-deduction .tp-mobile-field-value { color: #19293A; font-weight: 700; }
+  .tp-grades-table tbody tr[class*="tp-grade-row-"] { background: #FFFFFF; }
+  .tp-grades-table tbody tr.tp-grade-row-excused { background: #F0FDF4; }
+  .tp-grades-table tbody tr.tp-grade-row-deducted { background: #FFF1F2; }
+  .tp-grades-table tbody tr.tp-grade-row-dismissed { background: #FEE2E2; }
+  .tp-grades-table tbody tr.tp-grade-row-dismissed > td:first-child { border-inline-start: 4px solid #991B1B; padding-inline-start: 14px; }
+  .tp-grade-deduction .tp-mobile-field-value { color: #9F1239; font-weight: 700; }
+  .tp-grade-dismissal .tp-mobile-field-value { color: #7F1D1D; font-weight: 800; }
+  .tp-grade-no-deduction .tp-mobile-field-value { color: #166534; font-weight: 700; }
   .tp-event-title { display: block; font-weight: 700; color: #19293A; margin-bottom: 4px; }
   .tp-event-exam { display: block; font-size: 12px; color: #5B6674; margin-top: 5px; }
   .tp-empty-row td { padding: 20px; color: #5B6674; text-align: center; }
   .tp-error-row td { color: #A34645; }
-  @media (forced-colors: active) { .tp-search-input:focus, .tp-suggestion.active { outline: 2px solid CanvasText; outline-offset: 2px; } }
+  @media (forced-colors: active) {
+    .tp-search-input:focus, .tp-suggestion.active { outline: 2px solid CanvasText; outline-offset: 2px; }
+    .tp-grades-table tbody tr.tp-grade-row-dismissed { outline: 2px solid CanvasText; outline-offset: -2px; }
+  }
   @media screen and (max-width: 960px) { .tp-modal { padding-inline: 16px; } .tp-details-table { font-size: 13px; } }
   @media screen and (max-width: 720px) {
     .tp-search-report-body { padding: 12px; padding-top: max(12px, env(safe-area-inset-top, 0px)); padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
@@ -602,6 +616,8 @@ const DETAILS_MODAL_CSS = `
     .tp-details-table, .tp-student-card table { border: 0; background: transparent; }
     .tp-details-table thead, .tp-student-card thead { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .tp-details-table tr, .tp-student-card tr { border: 1px solid #E6E3D9; border-radius: 12px; margin-bottom: 12px; padding: 6px 12px; background: #FBF9EB; }
+    .tp-grades-table tbody tr.tp-grade-row-dismissed { border-color: #991B1B; border-inline-start-width: 4px; }
+    .tp-grades-table tbody tr.tp-grade-row-dismissed > td:first-child { border-inline-start: 0; padding-inline-start: 0; }
     .tp-details-table tr:not(.tp-empty-row) td, .tp-student-card td { display: grid; grid-template-columns: minmax(96px, 38%) minmax(0, 1fr); gap: 10px; width: 100%; min-width: 0; min-height: 44px; padding: 10px 0; border: 0; border-bottom: 1px solid #E6E3D9; }
     .tp-mobile-field-label { display: block; color: #5B6674; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
     .tp-mobile-field-value { display: block; overflow-wrap: anywhere; }
@@ -874,9 +890,11 @@ const DETAILS_MODAL_JS = `
           ? (g.status === 'مجاز' ? 'إجازة' : g.status === ${JSON.stringify(GRACE_PERIOD_EXCUSE_LABEL)} ? 'مجاز' : g.status === 'غائب' ? 'غياب' : 'بانتظار الدرجة')
           : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>';
         var effectText = String(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.').trim();
-        var effectClass = /^(لا خصم|بدون خصم|امتحان بدون خصم)/.test(effectText) ? 'tp-grade-no-deduction'
+        var tone = ['ordinary', 'excused', 'deducted', 'dismissed'].indexOf(g.opportunityTone) >= 0 ? g.opportunityTone : 'ordinary';
+        var effectClass = tone === 'dismissed' ? 'tp-grade-deduction tp-grade-dismissal'
+          : /^(لا خصم|بدون خصم|امتحان بدون خصم)/.test(effectText) ? 'tp-grade-no-deduction'
           : /^خُصمت /.test(effectText) ? 'tp-grade-deduction' : '';
-        return '<tr role="row">'
+        return '<tr role="row" class="tp-grade-row-' + tone + '">'
           + mobileCell('الامتحان', '<strong class="tp-event-title">' + esc(g.examName) + '</strong><span class="tp-event-exam">' + esc(g.examType) + '</span>')
           + mobileCell('تاريخ الامتحان', fmtDate(g.examDate) || 'غير مسجّل')
           + mobileCell('الدرجة', score)

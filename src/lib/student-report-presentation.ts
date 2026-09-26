@@ -204,7 +204,11 @@ export function reportGradeOutcome(grade: Record<string, unknown>, exam?: Record
   return ({ "غائب": "غياب", "غش": "غش", "مجاز": "إجازة", [GRACE_PERIOD_EXCUSE_LABEL]: "مجاز", "قبل تسجيل الطالب": "قبل تسجيلك" } as Record<string, string>)[status] || "بانتظار الدرجة";
 }
 
-export function reportGradeEffect(grade: Record<string, unknown>, exam: Record<string, unknown> | undefined, logs: Record<string, unknown>[], context?: ReportOpportunityContext): string {
+export type ReportGradeTone = "ordinary" | "excused" | "deducted" | "dismissed";
+export type ReportGradePresentation = { text: string; tone: ReportGradeTone };
+
+/** Text and row emphasis use the same effective ledger, including settlements. */
+export function reportGradePresentation(grade: Record<string, unknown>, exam: Record<string, unknown> | undefined, logs: Record<string, unknown>[], context?: ReportOpportunityContext): ReportGradePresentation {
   const settlement = context?.settlement;
   const settledGrade = Boolean(settlement && typeof grade.id === "string" && settlement.settledGradeIds.has(grade.id));
   const effectiveLogs = settlement ? logs.filter(log => {
@@ -225,20 +229,30 @@ export function reportGradeEffect(grade: Record<string, unknown>, exam: Record<s
     : deducted === 2
       ? "خُصمت فرصتان"
       : deducted > 0 ? `خُصمت ${deducted} فرص` : "";
-  if (deducted || dismissed) return [deductionText, dismissed ? "سُجّل فصل بسبب هذا الامتحان" : ""].filter(Boolean).join(". ");
-  if (settledGrade) return "لا خصم (قبل رصيدك الجديد)";
+  if (deducted || dismissed) return {
+    text: [deductionText, dismissed ? "سُجّل فصل بسبب هذا الامتحان" : ""].filter(Boolean).join(". "),
+    tone: dismissed ? "dismissed" : "deducted",
+  };
+  const gracePeriod = findStudentGracePeriod(context?.gracePeriods, exam?.date as string | Date | null | undefined);
+  const withoutPenalty = (text: string): ReportGradePresentation => ({
+    text, tone: grade.status === "مجاز" || gracePeriod ? "excused" : "ordinary",
+  });
+  if (settledGrade) return withoutPenalty("لا خصم (قبل رصيدك الجديد)");
   if (grade.status === "قبل تسجيل الطالب" || !isExamOnOrAfterStudentRegistration(
     { createdAt: context?.registeredAt },
     { date: exam?.date as string | Date | null | undefined },
-  )) return "قبل تسجيل الطالب";
-  if (grade.academicEffectExcluded) return "لا خصم";
-  if (grade.status === "مجاز") return "لا خصم";
-  const gracePeriod = findStudentGracePeriod(context?.gracePeriods, exam?.date as string | Date | null | undefined);
+  )) return withoutPenalty("قبل تسجيل الطالب");
+  if (grade.academicEffectExcluded) return withoutPenalty("لا خصم");
+  if (grade.status === "مجاز") return withoutPenalty("لا خصم");
   if (gracePeriod) {
     const [year, month, day] = gracePeriod.endDate.split("-").map(Number);
-    return `بدون خصم (فترة سماح لغاية ${day}-${month}-${year})`;
+    return withoutPenalty(`بدون خصم (فترة سماح لغاية ${day}-${month}-${year})`);
   }
-  if (reportNumber(grade.score) === null && grade.status !== "غائب" && grade.status !== "غش") return "—";
-  if (exam?.noDiscount) return "امتحان بدون خصم";
-  return "لا خصم";
+  if (reportNumber(grade.score) === null && grade.status !== "غائب" && grade.status !== "غش") return withoutPenalty("—");
+  if (exam?.noDiscount) return withoutPenalty("امتحان بدون خصم");
+  return withoutPenalty("لا خصم");
+}
+
+export function reportGradeEffect(grade: Record<string, unknown>, exam: Record<string, unknown> | undefined, logs: Record<string, unknown>[], context?: ReportOpportunityContext): string {
+  return reportGradePresentation(grade, exam, logs, context).text;
 }

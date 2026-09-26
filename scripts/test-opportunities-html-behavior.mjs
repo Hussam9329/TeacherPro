@@ -992,6 +992,66 @@ check("نص أثر الامتحان مبسط ويحفظ عدد الخصومات 
   assert.match(effect([{ action: "فصل", amount: 0 }]), /سُجّل فصل بسبب هذا الامتحان/);
 });
 
+check("ألوان صفوف التقرير تعتمد على أثر الامتحان الفعلي وتبقى دلالته مكتوبة بجانب اللون", () => {
+  const exam = { id: "tone-exam", name: "امتحان لون الحالة", date: "2026-09-12", fullMark: 20 };
+  const debit = { action: "خصم تلقائي", amount: 2 };
+  const dismissal = { action: "فصل تلقائي", amount: 0 };
+  const settlement = {
+    action: "رصيد إعادة التفعيل", amount: 3, balanceAfter: 3, ledgerVersion: 2,
+    settledGradeIds: '["tone-grade"]', date: "2026-09-16T09:00:00Z",
+  };
+  const cases = [
+    { label: "ordinary-score", grade: { status: "درجة", score: 18 }, tone: "ordinary", effect: "لا خصم" },
+    { label: "ordinary-pending", tone: "ordinary", effect: "—" },
+    { label: "ordinary-no-discount", grade: { status: "درجة", score: 18 }, noDiscount: true, tone: "ordinary", effect: "امتحان بدون خصم" },
+    { label: "ordinary-recorded-absence", grade: { status: "غائب", score: null }, tone: "ordinary", effect: "لا خصم" },
+    { label: "formal-leave-green", grade: { status: "مجاز", score: null }, tone: "excused", effect: "لا خصم" },
+    { label: "effective-exam-leave-green", leaves: [{ examId: exam.id }], tone: "excused", effect: "لا خصم" },
+    { label: "grace-green", grace: true, tone: "excused", effect: "بدون خصم (فترة سماح لغاية 15-9-2026)" },
+    { label: "scored-grace-green", grade: { status: "درجة", score: 18 }, grace: true, tone: "excused", effect: "بدون خصم (فترة سماح لغاية 15-9-2026)" },
+    { label: "deduction-pink", grade: { status: "غائب" }, logs: [debit], tone: "deducted", effect: "خُصمت فرصتان" },
+    { label: "zero-applied-no-pink", grade: { status: "غائب" }, logs: [{ ...debit, appliedAmount: 0 }], tone: "ordinary", effect: "لا خصم" },
+    { label: "deduction-precedes-grace", grace: true, logs: [debit], tone: "deducted", effect: "خُصمت فرصتان" },
+    { label: "deduction-precedes-leave", grade: { status: "مجاز" }, logs: [debit], tone: "deducted", effect: "خُصمت فرصتان" },
+    { label: "dismissal-strongest", grade: { status: "غش" }, grace: true, logs: [debit, dismissal], tone: "dismissed", effect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان" },
+    { label: "dismissal-with-zero-deduction", grade: { status: "غائب" }, logs: [{ ...debit, appliedAmount: 0 }, dismissal], tone: "dismissed", effect: "سُجّل فصل بسبب هذا الامتحان" },
+    { label: "settled-old-dismissal-no-red", grade: { status: "غائب" }, logs: [debit, dismissal, settlement], tone: "ordinary", effect: "لا خصم (قبل رصيدك الجديد)" },
+    { label: "later-manual-deduction-remains-pink", grade: { status: "غائب" }, logs: [debit, dismissal, settlement, { action: "خصم", amount: 1, date: "2026-09-17" }], tone: "deducted", effect: "خُصمت فرصة" },
+    { label: "later-manual-dismissal-remains-strong", grade: { status: "غائب" }, logs: [debit, dismissal, settlement, { action: "فصل", amount: 0, date: "2026-09-17" }], tone: "dismissed", effect: "سُجّل فصل بسبب هذا الامتحان" },
+    { label: "student-status-alone-does-not-color-exam", studentStatus: "مفصول", grade: { status: "درجة", score: 18 }, tone: "ordinary", effect: "لا خصم" },
+  ];
+  for (const scenario of cases) {
+    const currentExam = { ...exam, noDiscount: Boolean(scenario.noDiscount) };
+    const profile = {
+      student: {
+        opportunities: 3, status: scenario.studentStatus || "نشط",
+        gracePeriods: scenario.grace ? [{ startDate: "2026-09-01", endDate: "2026-09-15" }] : [],
+      },
+      studentLeaves: scenario.leaves || [],
+      currentChapter: { id: "tone-chapter", name: "الفصل الحالي", since: null, examIds: [exam.id] },
+      exams: [currentExam], allCourseExams: [currentExam],
+      grades: scenario.grade ? [{ id: "tone-grade", examId: exam.id, ...scenario.grade }] : [],
+      opportunityLogs: (scenario.logs || []).map(log => ({ examId: exam.id, chapterId: "tone-chapter", date: exam.date, ...log })),
+    };
+    const before = JSON.stringify(profile);
+    const details = buildStudentDetailsFromProfileLog(profile);
+    assert.equal(details.grades[0].opportunityTone, scenario.tone, scenario.label);
+    assert.equal(details.grades[0].opportunityEffect, scenario.effect, scenario.label);
+    const sanitized = sanitizeStudentDetailsForHtml({ s1: details });
+    assert.equal(sanitized.s1.grades[0].opportunityTone, scenario.tone, `${scenario.label}: sanitizing preserves the evidence-based tone`);
+    const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: sanitized });
+    const { dom } = executeInlineScripts(html, scenario.label);
+    openStudentDetails(dom, "s1", studentList[0].name);
+    const rendered = dom.elements.tpGradesBody.innerHTML;
+    assert.match(rendered, new RegExp('<tr[^>]*class="[^"]*\\btp-grade-row-' + scenario.tone + '\\b'), scenario.label);
+    assert.equal((rendered.match(/tp-grade-row-(?:ordinary|excused|deducted|dismissed)/g) || []).length, 1, "one exam has one semantic row tone");
+    assert.equal(rendered.match(/data-label="الأثر على الفرص"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], scenario.effect, "color never replaces the factual effect text");
+    if (scenario.tone === "dismissed") assert.match(rendered, /سُجّل فصل بسبب هذا الامتحان/, scenario.label);
+    assert.equal(JSON.stringify(profile), before, "row styling never mutates balances, grades, excuses or ledger records");
+    assert.equal(details.studentSnapshot.opportunities, 3);
+  }
+});
+
 check("عبارة التعهد تشمل التسوية والتعهد اليدوي وتبقى بجانب الرصيد الفعلي", () => {
   const pledgeLogs = [
     { action: "رصيد بعد تعهد", amount: 2, reason: "تسوية تاريخية: تثبيت رصيد الطالب عند 2/3 بموجب تعهده للامتحان الفاينل للفصل الأول" },
