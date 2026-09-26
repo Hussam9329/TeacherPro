@@ -625,7 +625,6 @@ const DETAILS_MODAL_CSS = `
   .tp-summary-item:first-child { background: #E4E4D9; border-color: #ACB0AD; }
   .tp-summary-item:first-child strong { font-size: 32px; }
   .tp-summary-label { display: block; font-size: 13px; color: #5B6674; margin-bottom: 6px; }
-  .tp-timeline-hint { margin: 0 0 14px; color: #5B6674; font-size: 13px; line-height: 1.9; }
   .tp-details-section { min-width: 0; margin: 28px 0 0; scroll-margin-top: 90px; }
   .tp-details-section h3 { font-size: 20px; line-height: 1.7; color: #0E1F36; margin: 0 0 6px; }
   .tp-details-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 14px; font-weight: 400; border: 1px solid #E6E3D9; border-radius: 12px; }
@@ -713,7 +712,6 @@ const DETAILS_MODAL_HTML = `
     <div id="tpStudentOverview"></div>
     <section class="tp-details-section" aria-labelledby="tpGradesSectionTitle">
       <h3 id="tpGradesSectionTitle">درجاتك في الامتحانات</h3>
-      <p class="tp-timeline-hint">الامتحانات وحركات الفرص حسب تسلسلها. الخصومات المعروضة هي ما سُجّل وقتها، وتظهر إضافة الفرص أو إعادة التفعيل في سطر مستقل.</p>
       <table class="tp-details-table tp-grades-table" role="table" aria-label="درجات الطالب">
         <thead><tr role="row">
           <th scope="col" role="columnheader">الامتحان</th>
