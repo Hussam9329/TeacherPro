@@ -450,12 +450,9 @@ export async function POST(req: NextRequest) {
         where: { courseId: target.courseId, status: { not: "مؤرشف" } },
         data: { opportunities: 0, baseOpportunities: 0 },
       });
-      if (activeStudentIds.length) {
-        academicRecalculation = await recalculateStudentsAcademicState(
-          activeStudentIds,
-          { tx },
-        );
-      }
+      // Closing a chapter is an administrative archive, not an exam event.
+      // Preserve statuses and historical logs: there is no active chapter
+      // left for academic replay. Activation will restore/settle its balance.
 
       return {
         ok: true,

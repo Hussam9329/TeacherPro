@@ -608,6 +608,7 @@ export function recalculateAcademicState(
   );
   const hasScopedRecalculation = Boolean(targetStudentIds?.size);
   const automaticLogs: AcademicOpportunityLog[] = [];
+  const studentsWithoutActiveChapter = new Set<string>();
   const normalizedLeaves = (state.studentLeaves || []).map((leave) =>
     normalizeStudentLeave(leave),
   );
@@ -624,6 +625,23 @@ export function recalculateAcademicState(
     const isTargetStudent =
       !hasScopedRecalculation || targetStudentIds?.has(student.id);
     if (!isTargetStudent) return student;
+
+    const activeCourseChapter = activeCourseChapterByCourse.get(
+      student.courseId,
+    );
+    const activeChapter = activeCourseChapter
+      ? state.chapters.find(
+          (chapter) => chapter.id === activeCourseChapter.chapterId,
+        )
+      : null;
+    // Closing a chapter archives and zeros its balance administratively.
+    // Until a valid chapter is active again, there is no balance to replay
+    // exams against. Keep both the student's state and all ledger evidence;
+    // replaying at zero here could invent a dismissal and an unscoped log.
+    if (!activeChapter) {
+      studentsWithoutActiveChapter.add(student.id);
+      return student;
+    }
 
     const manualDismissal =
       student.status === "مفصول" && !isRuleManagedDismissal(student);
@@ -659,14 +677,6 @@ export function recalculateAcademicState(
     if (!hasScopedRecalculation && hasIndependentManualReactivation)
       return student;
 
-    const activeCourseChapter = activeCourseChapterByCourse.get(
-      student.courseId,
-    );
-    const activeChapter = activeCourseChapter
-      ? state.chapters.find(
-          (chapter) => chapter.id === activeCourseChapter.chapterId,
-        )
-      : null;
     const studentGrades = state.grades
       .filter((grade) => grade.studentId === student.id)
       .filter((grade) => {
@@ -1178,6 +1188,7 @@ export function recalculateAcademicState(
   });
 
   const keptAutomaticLogs = previousAutomaticLogs.filter((log) => {
+    if (studentsWithoutActiveChapter.has(log.studentId)) return true;
     if (hasScopedRecalculation && !targetStudentIds?.has(log.studentId))
       return true;
     const activeLinks = activeLinkedSourcesByStudent.get(log.studentId) || [];
@@ -1187,6 +1198,7 @@ export function recalculateAcademicState(
   });
 
   const keptManualLogs = manualLogs.filter((log) => {
+    if (studentsWithoutActiveChapter.has(log.studentId)) return true;
     if (hasScopedRecalculation && !targetStudentIds?.has(log.studentId))
       return true;
     const link =
