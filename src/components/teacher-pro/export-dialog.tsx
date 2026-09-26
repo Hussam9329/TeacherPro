@@ -856,9 +856,11 @@ const DETAILS_MODAL_JS = `
       gradesBody.innerHTML = '<tr class="tp-empty-row tp-error-row" role="row"><td colspan="4" role="cell">تفاصيل هذا الطالب غير موجودة في هذه النسخة. اطلب نسخة جديدة من الإدارة.</td></tr>';
     } else {
       gradesBody.innerHTML = data.grades && data.grades.length ? data.grades.map(function(g){
-        var score = g.score === null || g.score === undefined ? 'غياب' : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>';
+        var score = g.score === null || g.score === undefined
+          ? (g.status === ${JSON.stringify(GRACE_PERIOD_EXCUSE_LABEL)} ? 'مجاز' : 'غياب')
+          : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>';
         var effectText = String(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.').trim();
-        var effectClass = effectText.indexOf('لا يوجد خصم لهذا الامتحان') === 0 ? 'tp-grade-no-deduction'
+        var effectClass = /^(لا يوجد خصم لهذا الامتحان|بدون خصم)/.test(effectText) ? 'tp-grade-no-deduction'
           : /^(تم خصم |عدد الفرص المخصومة لهذا الامتحان:)/.test(effectText) ? 'tp-grade-deduction' : '';
         return '<tr role="row">'
           + mobileCell('الامتحان', '<strong class="tp-event-title">' + esc(g.examName) + '</strong><span class="tp-event-exam">' + esc(g.examType) + '</span>')

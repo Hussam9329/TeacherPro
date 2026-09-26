@@ -1,4 +1,4 @@
-import { findStudentGracePeriod, formatGracePeriod, type GracePeriodRange } from "./grace-periods";
+import { findStudentGracePeriod, type GracePeriodRange } from "./grace-periods";
 /** Read-only wording for the published student report. Never replay the ledger. */
 export function reportNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
@@ -229,7 +229,10 @@ export function reportGradeEffect(grade: Record<string, unknown>, exam: Record<s
   if (grade.status === "مجاز") return "لا خصم: لديك إجازة لهذا الامتحان.";
   if (grade.status === "قبل تسجيل الطالب") return "لا خصم: الامتحان قبل تسجيلك.";
   const gracePeriod = findStudentGracePeriod(context?.gracePeriods, exam?.date as string | Date | null | undefined);
-  if (gracePeriod) return `لا خصم: الامتحان ضمن فترة السماح ${formatGracePeriod(gracePeriod)}.`;
+  if (gracePeriod) {
+    const [year, month, day] = gracePeriod.endDate.split("-").map(Number);
+    return `بدون خصم (فترة سماح لغاية ${day}-${month}-${year})`;
+  }
   if (exam?.noDiscount) return "هذا الامتحان لا يخصم فرصاً.";
   return "لا يوجد خصم لهذا الامتحان";
 }

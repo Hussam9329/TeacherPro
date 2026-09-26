@@ -83,6 +83,8 @@ function loadExportDialogModule() {
     // المكتبة المشتركة تُحمَّل حقيقية: فلترة سجل الفرص على الفصل النشط
     // سلوك منطق عمل يجب فحصه، لا كعب صامت يرجع true دائماً.
     if (request === "@/lib/student-report-presentation") return require(path.join(projectRoot, "src/lib/student-report-presentation.ts"));
+    if (request === "@/lib/grace-periods") return require(path.join(projectRoot, "src/lib/grace-periods.ts"));
+    if (request === "@/lib/academic-types") return require(path.join(projectRoot, "src/lib/academic-types.ts"));
     if (request === "@/lib/active-chapter-report") {
       return require(
         path.join(projectRoot, "src/lib/active-chapter-report.ts"),
@@ -715,6 +717,48 @@ check("الامتحان بلا درجة يظهر غياباً بلا اخترا�
   assert.match(dom.elements.tpGradesBody.innerHTML, /data-label="الدرجة"[^]*?tp-mobile-field-value">غياب<\/span>/);
   assert.doesNotMatch(dom.elements.tpGradesBody.innerHTML, /data-label="النتيجة"/);
   assert.equal(report.activeChapterSince, null);
+});
+
+check("HTML يعرض غير الحاضر ضمن السماح مجازاً بتواريخ بغداد ويحفظ الدرجات والخصومات المسجلة", () => {
+  const period = { startDate: "2026-09-01", endDate: "2026-09-10" };
+  const graceEffect = "بدون خصم (فترة سماح لغاية 10-9-2026)";
+  const cases = [
+    { label: "missing-grade", date: "2026-09-04", cell: "مجاز", effect: graceEffect },
+    { label: "recorded-absence", date: "2026-09-05", grade: { status: "غائب", score: null }, cell: "مجاز", effect: graceEffect },
+    { label: "baghdad-first-instant", date: "2026-08-31T21:00:00Z", cell: "مجاز", effect: graceEffect },
+    { label: "baghdad-last-instant", date: "2026-09-10T20:59:59Z", cell: "مجاز", effect: graceEffect },
+    { label: "before-start", date: "2026-08-31T20:59:59Z", cell: "غياب", effect: "لا يوجد خصم لهذا الامتحان" },
+    { label: "after-end", date: "2026-09-10T21:00:00Z", cell: "غياب", effect: "لا يوجد خصم لهذا الامتحان" },
+    { label: "cancelled-period", date: "2026-09-04", cancelledAt: "2026-09-02T10:00:00Z", cell: "غياب", effect: "لا يوجد خصم لهذا الامتحان" },
+    { label: "zero-score", date: "2026-09-04", grade: { status: "درجة", score: 0 }, cell: "<bdi>0 / 20</bdi>", effect: graceEffect },
+    { label: "recorded-score", date: "2026-09-04", grade: { status: "درجة", score: 18 }, cell: "<bdi>18 / 20</bdi>", effect: graceEffect },
+    { label: "legacy-placeholder", date: "2026-09-04", grade: { status: "ضمن فترة السماح", score: null }, cell: "مجاز", effect: graceEffect },
+    { label: "legacy-without-period", date: "2026-09-11", grade: { status: "ضمن فترة السماح", score: null }, cell: "غياب", effect: "لا يوجد خصم لهذا الامتحان" },
+    { label: "stored-deduction", date: "2026-09-04", logs: [{ action: "خصم", amount: 1 }], cell: "مجاز", effect: "تم خصم فرصة لهذا الامتحان" },
+  ];
+  for (const scenario of cases) {
+    const exam = { id: "grace-exam", name: "الأسبوعي 2", date: scenario.date, fullMark: 20 };
+    const profile = {
+      student: { gracePeriods: [{ ...period, cancelledAt: scenario.cancelledAt }], opportunities: 3 },
+      generatedAt: "2026-09-26T00:00:00Z",
+      exams: [exam], allCourseExams: [exam],
+      grades: scenario.grade ? [{ id: "grace-grade", examId: exam.id, ...scenario.grade }] : [],
+      opportunityLogs: (scenario.logs || []).map(log => ({ ...log, examId: exam.id, date: exam.date })),
+    };
+    const original = JSON.stringify(profile);
+    const details = buildStudentDetailsFromProfileLog(profile);
+    const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: { s1: details } });
+    const { dom } = executeInlineScripts(html, scenario.label);
+    openStudentDetails(dom, "s1", "محمد علي حسن");
+    const rendered = dom.elements.tpGradesBody.innerHTML;
+    const gradeCell = rendered.match(/data-label="الدرجة"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1];
+    assert.equal(gradeCell, scenario.cell, scenario.label);
+    assert.ok(rendered.includes(scenario.effect), scenario.label);
+    if (scenario.effect === graceEffect) assert.match(rendered, /tp-grade-no-deduction/);
+    if (scenario.logs) assert.match(rendered, /tp-grade-deduction/);
+    assert.equal(JSON.stringify(profile), original, "report cannot mutate stored grades, periods or balance");
+    assert.equal(details.studentSnapshot.opportunities, 3);
+  }
 });
 
 check("الرصيد من لقطة الطالب نفسها وليس قائمة قديمة، ولا تسرب حقولاً خاصة", () => {
