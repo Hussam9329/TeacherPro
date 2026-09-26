@@ -137,14 +137,30 @@ assert.equal(presentation(grade, exam, [dismissal], historicalDismissalContext).
   "سُجّل فصل سابقاً بسبب هذا الامتحان", "historical wording does not invent a deduction");
 
 const between = timeline([log("إضافة", 11, { amount: 1 })], "chapter");
-assert.equal(gradeDate(grade, exam, between), grade.createdAt, "late-entered result follows an already granted credit");
-assert.equal(gradeDate({ ...grade, createdAt: at(9), updatedAt: at(20) }, exam, between), exam.date, "editing a grade never moves its historical event");
-assert.equal(gradeDate(grade, exam, timeline([log("خصم", 11, { amount: 1 })])), exam.date, "a debit does not establish a new balance");
-assert.equal(gradeDate(grade, exam, timeline([log("إعادة تفعيل", 11, { amount: 0 })])), exam.date, "status-only recovery with unknown balance does not establish a credit");
-assert.equal(gradeDate(grade, exam, timeline([log("إعادة تعيين", 11, { amount: 0 })])), grade.createdAt, "a saved reset is an explicit balance boundary");
-assert.equal(gradeDate(grade, exam, timeline([log("إضافة", 12, { amount: 1 })])), grade.createdAt, "credit recorded at entry time is already available");
+assert.equal(gradeDate(grade, exam, between), exam.date, "a later-day credit never moves an older exam to its entry day");
+const sameDayCredit = timeline([log("إضافة", 10, { date: at(10, "13:00:00.000"), amount: 1 })]);
+assert.equal(gradeDate(grade, exam, sameDayCredit), sameDayCredit[0].date, "same-day protection pins the grade to the credit time, not delayed entry");
+assert.equal(gradeDate({ ...grade, createdAt: at(10, "12:30:00.000"), updatedAt: at(20) }, exam, sameDayCredit), exam.date, "editing a grade never moves its historical event after a later same-day credit");
+assert.equal(gradeDate(grade, exam, timeline([log("خصم", 10, { date: at(10, "13:00:00.000"), amount: 1 })])), exam.date, "a debit does not establish a new balance");
+assert.equal(gradeDate(grade, exam, timeline([log("إعادة تفعيل", 10, { date: at(10, "13:00:00.000"), amount: 0 })])), exam.date, "status-only recovery with unknown balance does not establish a credit");
+assert.equal(gradeDate(grade, exam, timeline([log("إعادة تعيين", 11, { amount: 0 })])), exam.date, "even a saved reset cannot move an exam across calendar days");
+const sameDayReset = timeline([log("إعادة تعيين", 10, { date: at(10, "13:00:00.000"), amount: 0 })]);
+assert.equal(gradeDate(grade, exam, sameDayReset), sameDayReset[0].date, "a same-day saved reset is a balance boundary");
+assert.equal(gradeDate(grade, exam, timeline([log("إضافة", 12, { amount: 1 })])), exam.date, "a credit at the late entry time remains on its own later day");
+const exactEntry = { ...grade, createdAt: at(10, "13:00:00.000") };
+assert.equal(gradeDate(exactEntry, exam, sameDayCredit), exactEntry.createdAt, "a same-day credit recorded exactly at entry is already available");
 assert.equal(gradeDate(grade, exam, timeline([log("إضافة", 13, { amount: 1 })])), exam.date, "future credits never reorder an earlier result");
-assert.equal(gradeDate({ ...grade, createdAt: "bad" }, exam, between), exam.date);
+assert.equal(gradeDate({ ...grade, createdAt: "bad" }, exam, sameDayCredit), exam.date);
 assert.equal(gradeDate(grade, undefined, between), grade.createdAt);
 assert.equal(gradeDate({}, undefined, between), "");
+const unsortedBalances = timeline([
+  log("إضافة", 11, { amount: 1 }),
+  log("إضافة", 10, { date: at(10, "20:00:00.000"), amount: 1 }),
+  log("إضافة", 10, { date: at(10, "13:00:00.000"), amount: 1 }),
+  log("إضافة", 10, { date: at(10, "11:00:00.000"), amount: 1 }),
+  log("إضافة", 10, { date: at(10, "21:00:00.000"), amount: 1 }),
+]);
+assert.equal(gradeDate(grade, exam, unsortedBalances.reverse()), at(10, "20:00:00.000"), "latest qualifying balance on the exam's Baghdad day wins regardless of input order");
+assert.equal(gradeDate(grade, { ...exam, date: at(10, "21:30:00.000") }, timeline([log("إضافة", 11, { date: at(11, "07:00:00.000"), amount: 1 })])), at(11, "07:00:00.000"), "different UTC dates can share the same Baghdad exam day");
+assert.equal(gradeDate(grade, { ...exam, date: at(10, "20:59:59.000") }, timeline([log("إضافة", 10, { date: at(10, "21:00:00.000"), amount: 1 })])), at(10, "20:59:59.000"), "crossing Baghdad midnight excludes a later-day credit even on the same UTC date");
 console.log("PASS: report timeline preserves dated grants and actual history, merges paired recoveries, uses real amounts, handles delayed results and excludes private data");

@@ -1365,11 +1365,11 @@ check("حركات اليوم نفسه تحافظ على ترتيبها وتعر�
     ],
   };
   const { details, sequence, rendered } = renderedTimeline(profile, "late-entry-credit-order");
-  assert.deepEqual(sequence, ["درجة عُدّلت لاحقاً", "event:2026-09-01T10:00:00.000Z", "نتيجة بوقت المنح", "غياب أُدخل بعد المنح"]);
+  assert.deepEqual(sequence, ["درجة عُدّلت لاحقاً", "event:2026-09-01T10:00:00.000Z", "غياب أُدخل بعد المنح", "نتيجة بوقت المنح"]);
   const late = details.grades.find(grade => grade.examId === "late");
   const edited = details.grades.find(grade => grade.examId === "edited");
   assert.equal(late.examDate, exams[0].date);
-  assert.equal(late.timelineDate, profile.grades[0].createdAt);
+  assert.equal(late.timelineDate, profile.opportunityLogs[0].date, "same-day grade ordering is anchored to the credit instead of the entry timestamp");
   assert.equal(edited.timelineDate, exams[1].date, "updatedAt is never a financial ordering timestamp");
   assert.doesNotMatch(rendered, /سُجّلت النتيجة|tp-recorded-date/);
   const examDateCells = [...rendered.matchAll(/data-label="تاريخ الامتحان"[^]*?tp-mobile-field-value">([^]*?)<\/span>/g)].map(match => match[1]);
@@ -1436,7 +1436,7 @@ check("امتحان 16 سبتمبر يبقى قبل امتحان 19 سبتمبر
   const before = JSON.stringify(profile);
   const { details, sequence, rendered } = renderedTimeline(profile, "earlier-exam-entered-later");
   assert.deepEqual(sequence, ["event:2026-09-16T09:44:47Z", "امتحان يوم 16", "امتحان يوم 19"]);
-  assert.equal(details.grades.find(grade => grade.examId === "earlier").timelineDate, profile.grades[0].createdAt, "stored event-order metadata is retained");
+  assert.equal(details.grades.find(grade => grade.examId === "earlier").timelineDate, profile.opportunityLogs[0].date, "metadata uses the same-day restoration time and never the later entry day");
   assert.ok(rendered.indexOf("16 سبتمبر 2026") < rendered.lastIndexOf("19 سبتمبر 2026"));
   assert.doesNotMatch(rendered, /سُجّلت النتيجة|tp-recorded-date/);
   assert.equal(JSON.stringify(profile), before);
@@ -1462,8 +1462,8 @@ check("إدخال متأخر يعبر عدة منح لا ينقل الامتحا
   const { sequence, details } = renderedTimeline(profile, "late-entry-across-many-credits");
   assert.deepEqual(sequence, ["امتحان يوم 12", "event:2026-09-13T10:00:00Z", "امتحان يوم 17", "event:2026-09-18T10:00:00Z", "event:2026-09-21T10:00:00Z", "امتحان يوم 23"]);
   assert.equal(details.timelineEvents.length, 3);
-  assert.equal(details.grades[0].timelineDate, "2026-09-22T11:00:00Z");
-  assert.equal(details.grades[1].timelineDate, "2026-09-25T11:00:00Z");
+  assert.equal(details.grades[0].timelineDate, exams[0].date);
+  assert.equal(details.grades[1].timelineDate, exams[1].date);
 });
 
 check("بيانات ترتيب قديمة محفوظة لا تقلب الأيام الظاهرة وحدود اليوم تعتمد توقيت بغداد", () => {

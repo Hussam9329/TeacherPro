@@ -1,4 +1,5 @@
 import { historicalGradeExclusion } from "./grade-settlement";
+import { examResultTimelineDate } from "./academic-event-order";
 import { examChapterExclusion } from "./exam-chapter-scope";
 import {
   isExamAvailableForEntry,
@@ -784,6 +785,8 @@ export function recalculateAcademicState(
     let dismissalReason = "";
     let dismissalPriority = -1;
     let cheatCount = 0;
+    // This control balance exists only before a recorded replenishment.
+    let beforeLateResults: { creditId: string; balance: number } | null = null;
 
     const reactivationStartDate = latestStudentLogDate(
       studentManualLogs,
@@ -903,6 +906,7 @@ export function recalculateAcademicState(
       exam?: AcademicExam,
       sourceId?: string,
     ) => {
+      beforeLateResults = null;
       if (priority >= dismissalPriority) {
         dismissed = true;
         dismissalReason = reason;
@@ -945,15 +949,23 @@ export function recalculateAcademicState(
     }
     const pendingCommands = currentCommands.filter(log => log !== lastReset && (!lastReset || String(log.date) >= String(lastReset.date)) && (!latestGrant || String(log.date) >= String(latestGrant.date)));
     let commandIndex = 0;
+    // Counterfactual balance before the first credit following a late old
+    // result. It omits only those not-yet-entered results, so we can tell a
+    // newly introduced historical zero-balance violation from a real one.
+    // It never grants opportunities and expires at the first replenishment.
     const applyCommandsThrough = (through: string) => {
       while (commandIndex < pendingCommands.length && String(pendingCommands[commandIndex].date) <= through) {
         const log = pendingCommands[commandIndex++];
         const cap = Math.max(0, Number(activeChapter?.opportunities ?? student.baseOpportunities ?? 0));
         const amount = Math.abs(Number(log.appliedAmount ?? log.amount ?? 0));
         if (log.action === "إعادة تعيين") opportunities = Math.max(0, Math.min(cap, Number(log.balanceAfter ?? log.amount)));
-        else if (log.action === "إضافة") opportunities = Math.min(cap, opportunities + amount);
+        else if (log.action === "إضافة") {
+          opportunities = Math.min(cap, opportunities + amount);
+          if (amount > 0) beforeLateResults = null;
+        }
         else if (log.action === "خصم") {
           const effect = applyOpportunityPenalty(opportunities, amount);
+          if (beforeLateResults) beforeLateResults.balance = applyOpportunityPenalty(beforeLateResults.balance, amount).after;
           opportunities = effect.after;
           if ((effect.dismissalTrigger || hasZeroBalanceViolationMarker(log.reason)) && !undoneManualOpportunityLogIds.has(log.id)) {
             setDismissal(`مخالفة بعد انتهاء الفرص - خصم يدوي: ${log.reason || "بدون سبب مسجل"}`, 60);
@@ -962,25 +974,13 @@ export function recalculateAcademicState(
       }
     };
 
-    // A newly recorded result must be able to use a credit that was already
-    // applied when it was entered, even if its exam has an earlier date-only
-    // timestamp. Otherwise replay can dismiss at zero before applying that
-    // credit, then discard the credited balance because dismissal is sticky.
-    // Only real versioned additions in this chapter establish this boundary.
-    // Use createdAt, never updatedAt: editing an already-accounted grade must
-    // not move its old deduction across a later credit. Exam dates still own
-    // chapter, registration, leave/grace and reactivation eligibility below.
-    const creditTimes = pendingCommands
-      .filter(log => log.action === "إضافة" && Number(log.appliedAmount ?? log.amount) > 0)
-      .map(log => Date.parse(log.date))
-      .filter(Number.isFinite);
+    const recordedCredits = pendingCommands.filter(log =>
+      log.action === "إضافة" && Number(log.appliedAmount ?? log.amount) > 0 &&
+      Number.isFinite(Date.parse(log.date)));
+    const creditDates = recordedCredits.map(log => log.date);
     const gradesInLedgerOrder = studentGrades.map((grade) => {
       const examDate = String(examsById.get(grade.examId)?.date || grade.createdAt || "");
-      const examTime = Date.parse(examDate);
-      const enteredTime = Date.parse(grade.createdAt);
-      const followsCredit = Number.isFinite(examTime) && Number.isFinite(enteredTime) &&
-        creditTimes.some(time => examTime < time && time <= enteredTime);
-      return { grade, ledgerDate: followsCredit ? grade.createdAt : examDate };
+      return { grade, ledgerDate: examResultTimelineDate(examDate, grade.createdAt, creditDates) };
     }).sort((a, b) => {
       const timeA = Date.parse(a.ledgerDate);
       const timeB = Date.parse(b.ledgerDate);
@@ -1062,6 +1062,34 @@ export function recalculateAcademicState(
         continue;
       }
 
+      // An old result entered after a real credit spends only the old
+      // balance. Do not invent a pre-credit dismissal that existed solely
+      // because this previously unknown result moved earlier in the replay.
+      // A shadow balance proves that distinction; known zero violations,
+      // manual deductions, final/cheating rules and persisted dismissals
+      // retain their normal behavior. Nothing is deferred past the credit.
+      const ordinaryPenalty = exam.type !== "فاينل" && (grade.status === "غائب" ||
+        (grade.status === "درجة" && grade.score !== null && Number(grade.score) <= exam.discountMark));
+      let historicalZeroIntroduced = false;
+      if (ordinaryPenalty && !dismissed) {
+        const enteredTime = Date.parse(grade.createdAt);
+        const firstCredit = recordedCredits.find(log =>
+          dayKey(log.date) >= dayKey(exam.date) && Date.parse(log.date) <= enteredTime);
+        // A result already funded by its own day's credit cannot also defer
+        // responsibility to another replenishment on a later day.
+        const firstLaterCredit = firstCredit && dayKey(firstCredit.date) > dayKey(exam.date)
+          ? firstCredit : undefined;
+        if (firstLaterCredit && !beforeLateResults) {
+          beforeLateResults = { creditId: firstLaterCredit.id, balance: opportunities };
+        }
+        if (beforeLateResults) {
+          const omittedLateResult = firstLaterCredit?.id === beforeLateResults.creditId;
+          const knownEffect = applyOpportunityPenalty(beforeLateResults.balance, examPenaltyValue(exam));
+          historicalZeroIntroduced = omittedLateResult || !knownEffect.dismissalTrigger;
+          if (!omittedLateResult) beforeLateResults.balance = knownEffect.after;
+        }
+      }
+
       if (grade.status === "غائب") {
         if (exam.type === "فاينل") {
           setDismissal(
@@ -1086,7 +1114,7 @@ export function recalculateAcademicState(
               `غياب في امتحان ${exam.type}: ${exam.name}`,
             );
           }
-          if (opportunityEffect.dismissalTrigger) {
+          if (opportunityEffect.dismissalTrigger && !historicalZeroIntroduced) {
             setDismissal(
               `مخالفة بعد انتهاء الفرص - غياب في امتحان ${exam.type}: ${exam.name}`,
               60,
@@ -1137,7 +1165,7 @@ export function recalculateAcademicState(
               `درجة ${score} ضمن الخصم في امتحان: ${exam.name}`,
             );
           }
-          if (opportunityEffect.dismissalTrigger) {
+          if (opportunityEffect.dismissalTrigger && !historicalZeroIntroduced) {
             setDismissal(
               `مخالفة بعد انتهاء الفرص - درجة خصم (${score}) في امتحان: ${exam.name}`,
               60,

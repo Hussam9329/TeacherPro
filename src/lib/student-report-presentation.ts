@@ -1,5 +1,6 @@
 import { findStudentGracePeriod, GRACE_PERIOD_EXCUSE_LABEL, type GracePeriodRange } from "./grace-periods";
 import { isExamOnOrAfterStudentRegistration } from "./exam-utils";
+import { examResultTimelineDate } from "./academic-event-order";
 /** Read-only wording for the published student report. Never replay the ledger. */
 export function reportNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
@@ -143,8 +144,8 @@ export function buildReportTimelineEvents(
   return events;
 }
 
-/** Preserve the exam's date while locating a late-entered result after a
- * balance command that was already recorded when that result was entered. */
+/** Keep the exam's real day and use same-day balance movements only to
+ * resolve a date-only exam's position within that day. */
 export function reportGradeTimelineDate(
   grade: Record<string, unknown>,
   exam: Record<string, unknown> | undefined,
@@ -154,12 +155,9 @@ export function reportGradeTimelineDate(
   const enteredDate = reportLogDate({ date: grade.createdAt });
   if (!examDate) return enteredDate || "";
   if (!enteredDate) return examDate;
-  const examTime = Date.parse(examDate);
-  const enteredTime = Date.parse(enteredDate);
-  return events.some(event => event.kind !== "deduct" &&
-    (event.kind !== "return" || event.balanceAfter !== null) &&
-    examTime < Date.parse(event.date) && Date.parse(event.date) <= enteredTime)
-    ? enteredDate : examDate;
+  return examResultTimelineDate(examDate, enteredDate, events
+    .filter(event => event.kind !== "deduct" && (event.kind !== "return" || event.balanceAfter !== null))
+    .map(event => event.date));
 }
 
 function reportLogDate(log: Record<string, unknown>): string | null {
