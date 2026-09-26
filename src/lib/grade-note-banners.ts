@@ -59,7 +59,11 @@ const LEGACY_PATTERNS = {
 
 /** بادئة ملاحظة «درجة مؤجلة أثناء الفصل» — النص القديم كان يلحق سبباً ثابتاً بعدها */
 const PREFIX_DEFERRED = "درجة مؤجلة أثناء الفصل";
-const DEFERRED_LEGACY = ["درجة مؤجلة أثناء فصل الطالب"] as const;
+const DEFERRED_LEGACY = [
+  "درجة مؤجلة أثناء فصل الطالب",
+  // الصياغة الجديدة المعتمدة من صاحب النظام (تُحدَّث في السجلات القديمة)
+  "تم تعليق الدرجة لان الطالب امتحن وهو مفصول",
+] as const;
 
 const containsAny = (notes: string, patterns: readonly string[]): boolean =>
   patterns.some((p) => notes.includes(p));
@@ -161,7 +165,7 @@ export function resolveGradeNoteBanner(
     return {
       key: "deferred",
       label: "درجة مؤجلة",
-      detail: "أُدخلت أثناء فصل الطالب وحُفظت بعد إعادة التفعيل",
+      detail: "تم تعليق الدرجة لان الطالب امتحن وهو مفصول",
       title:
         "درجة أُدخلت أثناء فصل الطالب؛ حُفظت في السجل بعد إعادة التفعيل دون احتساب أكاديمي",
     };

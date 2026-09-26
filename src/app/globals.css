@@ -111,6 +111,12 @@
   --color-info-vivid: var(--status-info-vivid);
   --color-info-solid: var(--status-info-solid);
   --color-info-on: var(--status-info-on);
+  --color-grace: var(--status-grace-fg);
+  --color-grace-soft: var(--status-grace-bg);
+  --color-grace-line: var(--status-grace-border);
+  --color-grace-vivid: var(--status-grace-vivid);
+  --color-grace-solid: var(--status-grace-solid);
+  --color-grace-on: var(--status-grace-on);
   --color-overlay: var(--overlay);
 }
 
@@ -162,12 +168,14 @@
   --sig-warning: #f2a93b;      --sig-warning-ink: #8f570c;  --sig-warning-fill: #f2a93b;
   --sig-danger: #d15049;       --sig-danger-ink: #b3362f;   --sig-danger-fill: #c23b34;
   --sig-info: #2e86de;         --sig-info-ink: #1f66ad;     --sig-info-fill: #1f6fbf;
+  --sig-grace: #8b5cf6;        --sig-grace-ink: #6d28d9;    --sig-grace-fill: #7c3aed;
 }
 .dark {
   --sig-success: #3dd28f;      --sig-success-ink: #3dd28f;  --sig-success-fill: #3dd28f;
   --sig-warning: #f7be55;      --sig-warning-ink: #f7be55;  --sig-warning-fill: #f7be55;
   --sig-danger: #f2675e;       --sig-danger-ink: #f2675e;   --sig-danger-fill: #f2675e;
   --sig-info: #5fa8f0;         --sig-info-ink: #5fa8f0;     --sig-info-fill: #5fa8f0;
+  --sig-grace: #a78bfa;        --sig-grace-ink: #a78bfa;    --sig-grace-fill: #a78bfa;
 }
 
 :root {
@@ -240,6 +248,12 @@
   --status-info-vivid: var(--sig-info);
   --status-info-solid: var(--sig-info-fill);
   --status-info-on: var(--tp-bg);
+  --status-grace-fg: var(--sig-grace-ink);
+  --status-grace-bg: color-mix(in srgb, var(--sig-grace) 13%, var(--tp-bg));
+  --status-grace-border: color-mix(in srgb, var(--sig-grace) 50%, var(--tp-bg));
+  --status-grace-vivid: var(--sig-grace);
+  --status-grace-solid: var(--sig-grace-fill);
+  --status-grace-on: var(--tp-bg);
   --overlay: color-mix(in srgb, var(--tp-deep) 60%, transparent);
 }
 
@@ -308,6 +322,12 @@
   --status-info-vivid: var(--sig-info);
   --status-info-solid: var(--sig-info-fill);
   --status-info-on: var(--tp-deep);
+  --status-grace-fg: var(--sig-grace-ink);
+  --status-grace-bg: color-mix(in srgb, var(--sig-grace) 16%, var(--tp-ink));
+  --status-grace-border: color-mix(in srgb, var(--sig-grace) 50%, var(--tp-ink));
+  --status-grace-vivid: var(--sig-grace);
+  --status-grace-solid: var(--sig-grace-fill);
+  --status-grace-on: var(--tp-deep);
   --overlay: color-mix(in srgb, var(--tp-deep) 75%, transparent);
 }
 

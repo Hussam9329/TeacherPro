@@ -396,7 +396,8 @@ async function inspectNumericGradeAttempt(
   // syncAcademicGradeWriteback الذي ينهي الإجازة ويحفظ الدرجة.
   if (!beforeRegistration && student.status === "مفصول") {
     category = "DISMISSED_PENDING";
-    reason = "محاولة إدخال درجة رقمية لطالب مفصول؛ حُفظت للمراجعة دون أثر أكاديمي.";
+    // نص قصير بطلب صاحب النظام — بدل العبارة الطويلة القديمة
+    reason = "تم تعليق الدرجة لان الطالب امتحن وهو مفصول";
   }
 
   return { student, exam, category, reason, score };

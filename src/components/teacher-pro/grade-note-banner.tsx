@@ -31,6 +31,11 @@ const SIGNAL = {
     wrapper: "border border-success-line border-s-4 border-s-success-vivid bg-gradient-to-l from-success-soft to-success-soft/40 text-success",
     icon: "bg-success-solid text-success-on shadow-sm",
   },
+  // بنفسجي — فترة السماح (طلب صاحب النظام)
+  grace: {
+    wrapper: "border border-grace-line border-s-4 border-s-grace-vivid bg-gradient-to-l from-grace-soft to-grace-soft/40 text-grace",
+    icon: "bg-grace-solid text-grace-on shadow-sm",
+  },
 } as const;
 
 const TONES: Record<
@@ -42,11 +47,10 @@ const TONES: Record<
   "auto-absent": { Icon: UserX, ...SIGNAL.danger },
   "before-registration": {
     Icon: CalendarClock,
-    wrapper:
-      "border border-border/80 border-s-4 border-s-muted-foreground/60 bg-gradient-to-l from-muted to-muted/40 text-foreground",
-    icon: "bg-muted-foreground text-background",
+    // سمائي فاتح — طلب صاحب النظام بدل الرمادي المحايد
+    ...SIGNAL.info,
   },
-  grace: { Icon: Hourglass, ...SIGNAL.warning },
+  grace: { Icon: Hourglass, ...SIGNAL.grace },
   excused: { Icon: Leaf, ...SIGNAL.success },
   deferred: { Icon: FileClock, ...SIGNAL.info },
 };

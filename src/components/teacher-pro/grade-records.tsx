@@ -66,6 +66,7 @@ import {
 } from "lucide-react";
 
 import { GradeNoteBanner } from "@/components/teacher-pro/grade-note-banner";
+import { resolveGradeNoteBanner } from "@/lib/grade-note-banners";
 import { CountScopeSummary } from "./ui-kit";
 import {
   examMatchesAcademicFilters,
@@ -136,8 +137,71 @@ function examDateKey(exam: unknown): number {
 
 /** ملاحظات التسوية التاريخية («بلا أثر») لا تُعرض في بطاقة الدرجات — إزالة بطلب صاحب النظام. */
 const SETTLEMENT_NOTES_PREFIX = "تسوية تاريخية بلا أثر:";
-const showNotesInCard = (notes: string | null | undefined): boolean =>
-  Boolean(notes && !notes.startsWith(SETTLEMENT_NOTES_PREFIX));
+
+/**
+ * بانرات لا تُعرض في البطاقة: مكررة مع لون حبة النتيجة أو أزيلت بطلب صاحب النظام
+ * (الإجازة · الغياب الجماعي · قبل التسجيل · فترة السماح).
+ */
+const HIDDEN_BANNER_KEYS = new Set([
+  "excused",
+  "batch-absent",
+  "before-registration",
+  "grace",
+]);
+
+function bannerVisibleInCard(notes: string | null | undefined): boolean {
+  const raw = (notes ?? "").trim();
+  if (!raw || raw.startsWith(SETTLEMENT_NOTES_PREFIX)) return false;
+  const banner = resolveGradeNoteBanner(raw);
+  if (banner && HIDDEN_BANNER_KEYS.has(banner.key)) return false;
+  return true;
+}
+
+/**
+ * الشارات النتيجية أُزيلت — لون حبة النتيجة يلخّص الحالة.
+ * تبقى فقط الشارات التي تضيف معلومة غير ظاهرة من اللون.
+ */
+const VISIBLE_RESULT_BADGES = new Set(["فصل", "غير مسجل", "غير محتسب", "بدون خصم"]);
+
+type ScorePillTone =
+  | "pass"
+  | "fail-light"
+  | "fail-dark"
+  | "excused"
+  | "sky"
+  | "grace"
+  | "neutral";
+
+/**
+ * حبة النتيجة: نص ولون واحد لكل حالة — بدون تكرار (طلب صاحب النظام):
+ * ناجح أخضر · راسب/بدون خصم أحمر فاتح · مخصوم/فصل أحمر طوخ ·
+ * مجاز أصفر · قبل التسجيل سمائي · فترة السماح بنفسجي.
+ */
+function scorePillPresentation(
+  grade: Grade,
+  exam: Parameters<typeof gradeRecordScoreText>[1],
+  cls: { text: string; kind: string },
+): { text: string; tone: ScorePillTone } {
+  const status = String(grade.status || "");
+  if (cls.text === "مجاز") return { text: "مجاز", tone: "excused" };
+  if (cls.kind === "grace") {
+    return status === "درجة"
+      ? { text: gradeRecordScoreText(grade, exam), tone: "grace" }
+      : { text: "فترة سماح", tone: "grace" };
+  }
+  if (status === "قبل تسجيل الطالب" || cls.kind === "before-registration")
+    return { text: "قبل التسجيل", tone: "sky" };
+  if (status === "درجة") {
+    const text = gradeRecordScoreText(grade, exam);
+    if (cls.text === "مخصوم" || cls.text === "فصل") return { text, tone: "fail-dark" };
+    if (cls.text === "راسب" || cls.text === "بدون خصم") return { text, tone: "fail-light" };
+    if (cls.text === "ناجح") return { text, tone: "pass" };
+    return { text, tone: "neutral" };
+  }
+  if (status === "غائب") return { text: "غائب", tone: "neutral" };
+  if (status === "غش") return { text: "غش", tone: "neutral" };
+  return { text: gradeRecordStatusText(status) || "—", tone: "neutral" };
+}
 
 const STUDENT_GRADES_TABS: Array<{ value: StudentGradesTab; label: string; tone?: "success" | "danger" }> = [
   { value: "all", label: "كل الدرجات" },
@@ -1430,6 +1494,7 @@ export function GradeRecordsView() {
                     if (!exam) return null;
                     const student = studentById.get(grade.studentId) || openStudent;
                     const cls = classification(grade, exam, student);
+                    const pill = scorePillPresentation(grade, exam, cls);
                     const availability = getExamEntryAvailability(exam);
                     const kind =
                       grade.status === "درجة"
@@ -1448,22 +1513,21 @@ export function GradeRecordsView() {
                           </p>
                         </div>
                         <div className="tp-grade-dialog__result">
-                          <span className="tp-grade-dialog__score" data-kind={kind} dir={kind === "numeric" ? "ltr" : undefined}>
-                            {kind === "numeric"
-                              ? gradeRecordScoreText(grade, exam)
-                              : grade.status === "قبل تسجيل الطالب"
-                                // البانر يشرح الحالة — لا داعي لتكرار نصها هنا
-                                ? "—"
-                                : gradeRecordStatusText(grade.status) || "—"}
+                          <span
+                            className="tp-grade-dialog__score"
+                            data-kind={kind}
+                            data-tone={pill.tone}
+                            dir={kind === "numeric" ? "ltr" : undefined}
+                          >
+                            {pill.text}
                           </span>
-                          {/* شارتا «قبل التسجيل» و«بلا أثر» تكرران للبانر — أُزيلتا بطلب صاحب النظام */}
-                          {cls.text && cls.text !== "قبل التسجيل" && cls.text !== "بلا أثر" && (
+                          {cls.text && VISIBLE_RESULT_BADGES.has(cls.text) && (
                             <Badge variant={classificationVariant(cls.type)}>{cls.text}</Badge>
                           )}
                         </div>
-                        {(showNotesInCard(grade.notes) || !availability.available) && (
+                        {(bannerVisibleInCard(grade.notes) || !availability.available) && (
                           <div className="tp-grade-dialog__notes">
-                            {showNotesInCard(grade.notes) ? <GradeNoteBanner notes={grade.notes} /> : null}
+                            {bannerVisibleInCard(grade.notes) ? <GradeNoteBanner notes={grade.notes} /> : null}
                             {!availability.available && (
                               <p className="rounded-xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft px-3 py-2 text-xs font-medium leading-5 text-warning">
                                 غير محتسبة حالياً: {availability.reason}

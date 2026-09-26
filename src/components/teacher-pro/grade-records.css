@@ -221,6 +221,16 @@
 .tp-grade-dialog__score[data-kind="absent"] { border-color: transparent; background: var(--status-danger-solid); color: var(--status-danger-on); }
 .tp-grade-dialog__score[data-kind="cheating"] { border-color: transparent; background: var(--status-warning-solid); color: var(--status-warning-on); }
 
+/* لون الحبة يلخّص الحالة — طلب صاحب النظام:
+   ناجح أخضر · راسب/بدون خصم أحمر فاتح · مخصوم/فصل أحمر طوخ ·
+   مجاز أصفر · قبل التسجيل سمائي · فترة السماح بنفسجي */
+.tp-grade-dialog__score[data-tone="pass"] { border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success-fg); }
+.tp-grade-dialog__score[data-tone="fail-light"] { border-color: var(--status-danger-border); background: var(--status-danger-bg); color: var(--status-danger-fg); }
+.tp-grade-dialog__score[data-tone="fail-dark"] { border-color: transparent; background: var(--status-danger-solid); color: var(--status-danger-on); }
+.tp-grade-dialog__score[data-tone="excused"] { border-color: var(--status-warning-border); background: var(--status-warning-bg); color: var(--status-warning-fg); }
+.tp-grade-dialog__score[data-tone="sky"] { border-color: var(--status-info-border); background: var(--status-info-bg); color: var(--status-info-fg); }
+.tp-grade-dialog__score[data-tone="grace"] { border-color: var(--status-grace-border); background: var(--status-grace-bg); color: var(--status-grace-fg); }
+
 @container (min-width: 40rem) {
   .tp-grade-dialog__row {
     grid-template-columns: minmax(0, 1fr) auto auto;
