@@ -48,7 +48,6 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import {
   formatGradeScore,
   getExamEntryAvailability,
-  isExamOnOrAfterStudentRegistration,
   normalizeScore,
 } from "@/lib/exam-utils";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
@@ -1453,17 +1452,9 @@ export function GradeRecordsView() {
                             <Badge variant={classificationVariant(cls.type)}>{cls.text}</Badge>
                           )}
                         </div>
-                        {(grade.notes ||
-                          !isExamOnOrAfterStudentRegistration(student, exam) ||
-                          !availability.available) && (
+                        {(grade.notes || !availability.available) && (
                           <div className="tp-grade-dialog__notes">
                             {grade.notes ? <GradeNoteBanner notes={grade.notes} /> : null}
-                            {!isExamOnOrAfterStudentRegistration(student, exam) && (
-                              <p className="rounded-xl border border-info-line border-s-4 border-s-info-vivid bg-info-soft px-3 py-2 text-xs font-medium leading-5 text-info">
-                                محفوظة للمتابعة فقط ولا تخصم؛ تاريخ الامتحان يسبق تاريخ
-                                تسجيل الطالب في الدورة.
-                              </p>
-                            )}
                             {!availability.available && (
                               <p className="rounded-xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft px-3 py-2 text-xs font-medium leading-5 text-warning">
                                 غير محتسبة حالياً: {availability.reason}
