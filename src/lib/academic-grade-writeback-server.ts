@@ -37,6 +37,7 @@ import {
 // that does NOT match any of these patterns.
 const STALE_AUTOMATIC_ABSENCE_NOTES_PATTERNS = [
   "تسجيل جماعي كغائب",
+  "غياب جماعي",
   "تسجيل تلقائي: الامتحان يسبق تاريخ تسجيل الطالب",
   "تسجيل تلقائي: الطالب ضمن فترة السماح لهذا الامتحان",
   "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم",
@@ -62,8 +63,8 @@ function notesContainsStalePhrase(notes: string | null | undefined): boolean {
  *  1. If the status transitions from a non-"درجة" marker to "درجة"
  *     (teacher is correcting an absent/cheating row into a real grade),
  *     AND the caller-supplied notes are missing, empty, OR match the
- *     previous notes (echoed back unchanged) → replace with a fresh
- *     "تم تصحيح الدرجة يدوياً" note. This is the bug we are fixing.
+ *     previous notes (echoed back unchanged) → clear the notes entirely
+ *     (no automatic note is written anymore — removal by system owner).
  *
  *  2. Otherwise, return the caller-supplied notes unchanged. A user-typed
  *     note is always preserved exactly.
@@ -129,12 +130,13 @@ function sanitizeStaleAbsenceNotes(input: {
 
   // Rule 1: teacher corrected an absent/cheating row to a real grade,
   // and either didn't provide fresh notes, or echoed the old ones back.
-  // Replace with a clean "corrected manually" note.
+  // Clear the notes entirely — the stale absence phrase disappears and no
+  // automatic "corrected" note is written (system owner request).
   if (
     transitionedToScoredGrade &&
     (callerNotes === undefined || callerNotes === "" || echoedPreviousNotes)
   ) {
-    return "تصحيح يدوي";
+    return "";
   }
 
   // ROOT-CAUSE FIX (status="مجاز" with stale absence note): if the
@@ -164,8 +166,8 @@ function sanitizeStaleAbsenceNotes(input: {
       return callerNotes;
     }
     // Otherwise clear it — the previous stale phrase has no business
-    // sitting on a graded row.
-    return callerNotes === "" ? "" : "تم تصحيح الدرجة يدوياً.";
+    // sitting on a graded row, and no automatic note is written anymore.
+    return "";
   }
 
   // Rule 2: default — keep the caller's notes unchanged.
@@ -606,10 +608,10 @@ export async function syncAcademicGradeWriteback(
 
   // ROOT-CAUSE FIX (stale absence notes): When the teacher corrects an
   // absent / cheating / excused row into a real numeric grade, the previous
-  // automatic "تسجيل جماعي كغائب" / "تسجيل تلقائي" note becomes stale and
-  // contradictory (the row now has status="درجة" with a real score but a
-  // note saying the student was absent). Detect this transition and replace
-  // the stale note with a fresh "corrected manually" note.
+  // automatic "تسجيل جماعي كغائب" / "غياب جماعي" / "تسجيل تلقائي" note becomes
+  // stale and contradictory (the row now has status="درجة" with a real score
+  // but a note saying the student was absent). Detect this transition and
+  // clear the stale note — no automatic replacement note is written.
   //
   // The fix only triggers when the caller did not provide a fresh notes
   // string (or echoed the same one back), so a user-typed note is always

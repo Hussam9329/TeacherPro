@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
             score: null,
             notes: !registeredForExam
               ? "قبل تسجيل الطالب"
-              : "غياب جماعي",
+              : "",
             sourceLabel: "تسجيل الحالات الجماعي",
             allowBlankGrade: false,
             blockOnLeave: true,

@@ -5,7 +5,6 @@ import {
   FileClock,
   Hourglass,
   Leaf,
-  PenLine,
   StickyNote,
   UserX,
   type LucideIcon,
@@ -42,8 +41,6 @@ const TONES: Record<
   string,
   { Icon: LucideIcon; wrapper: string; icon: string }
 > = {
-  corrected: { Icon: PenLine, ...SIGNAL.info },
-  "batch-absent": { Icon: UserX, ...SIGNAL.danger },
   "auto-absent": { Icon: UserX, ...SIGNAL.danger },
   "before-registration": {
     Icon: CalendarClock,

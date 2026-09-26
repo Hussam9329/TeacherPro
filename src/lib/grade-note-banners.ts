@@ -12,8 +12,6 @@
  */
 
 export type GradeNoteBannerKey =
-  | "corrected"
-  | "batch-absent"
   | "auto-absent"
   | "before-registration"
   | "grace"
@@ -32,8 +30,6 @@ export interface GradeNoteBannerInfo {
 
 /** النصوص القصيرة المعتمدة التي يولّدها السيرفر من الآن فصاعداً */
 export const CANONICAL_GRADE_NOTE_TEXTS = [
-  "تصحيح يدوي",
-  "غياب جماعي",
   "غياب تلقائي",
   "قبل تسجيل الطالب",
   "فترة سماح",
@@ -43,8 +39,6 @@ export const CANONICAL_GRADE_NOTE_TEXTS = [
 
 /** العبارات الآلية القديمة الطويلة (تاريخية — لا يولّدها السيرفر بعدُ) */
 const LEGACY_PATTERNS = {
-  corrected: ["تم تصحيح الدرجة يدوياً"],
-  batchAbsent: ["تسجيل جماعي كغائب"],
   autoAbsent: ["لم تُدخل درجة الطالب في امتحان سابق"],
   beforeRegistration: [
     "تسجيل تلقائي: الامتحان يسبق تاريخ تسجيل الطالب",
@@ -110,22 +104,6 @@ export function resolveGradeNoteBanner(
       key: "excused",
       label: "إجازة",
       title: "الطالب مُجاز من هذا الامتحان بإجازة رسمية",
-    };
-  }
-
-  if (raw === "تصحيح يدوي" || containsAny(raw, LEGACY_PATTERNS.corrected)) {
-    return {
-      key: "corrected",
-      label: "تصحيح يدوي",
-      title: "أدخلها المشرف يدوياً بدلاً من التسجيل التلقائي السابق",
-    };
-  }
-
-  if (raw === "غياب جماعي" || containsAny(raw, LEGACY_PATTERNS.batchAbsent)) {
-    return {
-      key: "batch-absent",
-      label: "غياب جماعي",
-      title: "سُجّل غياباً تلقائياً لعدم إدخال درجة الطالب",
     };
   }
 

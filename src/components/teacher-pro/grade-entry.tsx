@@ -2862,7 +2862,7 @@ export function GradeEntryView() {
                           // a real numeric grade BUT a contradictory "absent"
                           // note. Clear the notes here so the server gets a
                           // fresh empty value and applies its own sanitization
-                          // (which will replace with the short "تصحيح يدوي").
+                          // (which clears the stale note — no automatic note).
                           const existing = getGrade(student.id);
                           const previousStatusWasMarker = Boolean(
                             existing && existing.status !== "درجة",
