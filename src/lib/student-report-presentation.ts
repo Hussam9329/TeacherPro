@@ -1,4 +1,5 @@
 import { findStudentGracePeriod, type GracePeriodRange } from "./grace-periods";
+import { isExamOnOrAfterStudentRegistration } from "./exam-utils";
 /** Read-only wording for the published student report. Never replay the ledger. */
 export function reportNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
@@ -50,6 +51,7 @@ export type ReportOpportunityContext = {
   balanceNotes: ReportBalanceNote[];
   /** The student's active grace periods: the only source of grace in reports. */
   gracePeriods?: readonly GracePeriodRange[];
+  registeredAt?: string | Date | null;
 };
 
 function reportLogDate(log: Record<string, unknown>): string | null {
@@ -225,9 +227,12 @@ export function reportGradeEffect(grade: Record<string, unknown>, exam: Record<s
       : deducted > 0 ? `عدد الفرص المخصومة لهذا الامتحان: ${deducted}` : "";
   if (deducted || dismissed) return [deductionText, dismissed ? "سُجّل فصل بسبب هذا الامتحان" : ""].filter(Boolean).join(". ");
   if (settledGrade) return "لا يوجد خصم لهذا الامتحان — مشمول بتسوية الرصيد";
+  if (grade.status === "قبل تسجيل الطالب" || !isExamOnOrAfterStudentRegistration(
+    { createdAt: context?.registeredAt },
+    { date: exam?.date as string | Date | null | undefined },
+  )) return "قبل تسجيل الطالب";
   if (grade.academicEffectExcluded) return "لا خصم: هذه الدرجة مستثناة من حساب الفرص.";
   if (grade.status === "مجاز") return "لا خصم: لديك إجازة لهذا الامتحان.";
-  if (grade.status === "قبل تسجيل الطالب") return "لا خصم: الامتحان قبل تسجيلك.";
   const gracePeriod = findStudentGracePeriod(context?.gracePeriods, exam?.date as string | Date | null | undefined);
   if (gracePeriod) {
     const [year, month, day] = gracePeriod.endDate.split("-").map(Number);

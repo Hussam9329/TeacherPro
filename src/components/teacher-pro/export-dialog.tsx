@@ -23,6 +23,7 @@ import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
 import { buildReportOpportunityContext, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradeEffect, reportGradeOutcome, reportNumber, type ReportBalanceNote, type ReportMovementKind } from "@/lib/student-report-presentation";
 import { GRACE_PERIOD_EXCUSE_LABEL, isStudentInGracePeriod, normalizeGracePeriodRanges } from "@/lib/grace-periods";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
+import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
 
 export type ExportColumn<T = Record<string, unknown>> = {
   key: string;
@@ -291,11 +292,16 @@ export function buildStudentDetailsFromProfileLog(
   const opportunityContext = {
     ...buildReportOpportunityContext(rawLogs, String(profile.currentChapter?.id || "")),
     gracePeriods,
+    registeredAt: profile.student?.createdAt as string | Date | null | undefined,
   };
   // Grace comes only from the student's periods and the exam date. The retired
   // grace placeholder is not a result, so it reports as nothing recorded.
   const reportStatus = (status: unknown, examDate: unknown): string =>
-    isStudentInGracePeriod(gracePeriods, examDate as string | null | undefined)
+    !isExamOnOrAfterStudentRegistration(
+      { createdAt: opportunityContext.registeredAt },
+      { date: examDate as string | Date | null | undefined },
+    ) ? "قبل تسجيل الطالب"
+      : isStudentInGracePeriod(gracePeriods, examDate as string | null | undefined)
       ? GRACE_PERIOD_EXCUSE_LABEL
       : status === LEGACY_GRACE_PLACEHOLDER_STATUS ? "" : String(status || "");
   const gradeExamIds = new Set<string>();
@@ -857,10 +863,10 @@ const DETAILS_MODAL_JS = `
     } else {
       gradesBody.innerHTML = data.grades && data.grades.length ? data.grades.map(function(g){
         var score = g.score === null || g.score === undefined
-          ? (g.status === ${JSON.stringify(GRACE_PERIOD_EXCUSE_LABEL)} ? 'مجاز' : 'غياب')
+          ? (g.status === ${JSON.stringify(GRACE_PERIOD_EXCUSE_LABEL)} || g.status === 'قبل تسجيل الطالب' ? 'مجاز' : 'غياب')
           : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>';
         var effectText = String(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.').trim();
-        var effectClass = /^(لا يوجد خصم لهذا الامتحان|بدون خصم)/.test(effectText) ? 'tp-grade-no-deduction'
+        var effectClass = /^(لا يوجد خصم لهذا الامتحان|بدون خصم|قبل تسجيل الطالب$)/.test(effectText) ? 'tp-grade-no-deduction'
           : /^(تم خصم |عدد الفرص المخصومة لهذا الامتحان:)/.test(effectText) ? 'tp-grade-deduction' : '';
         return '<tr role="row">'
           + mobileCell('الامتحان', '<strong class="tp-event-title">' + esc(g.examName) + '</strong><span class="tp-event-exam">' + esc(g.examType) + '</span>')
