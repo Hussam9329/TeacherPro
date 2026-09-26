@@ -1008,8 +1008,8 @@ check("ألوان صفوف التقرير تعتمد على أثر الامتح�
     { label: "deduction-precedes-leave", grade: { status: "مجاز" }, logs: [debit], tone: "deducted", effect: "خُصمت فرصتان" },
     { label: "dismissal-strongest", grade: { status: "غش" }, grace: true, logs: [debit, dismissal], tone: "dismissed", effect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان" },
     { label: "dismissal-with-zero-deduction", grade: { status: "غائب" }, logs: [{ ...debit, appliedAmount: 0 }, dismissal], tone: "dismissed", effect: "سُجّل فصل بسبب هذا الامتحان" },
-    { label: "settled-old-dismissal-retained", grade: { status: "غائب" }, logs: [debit, dismissal, settlement], tone: "dismissed", effect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان" },
-    { label: "later-manual-deduction-keeps-complete-history", grade: { status: "غائب" }, logs: [debit, dismissal, settlement, { action: "خصم", amount: 1, date: "2026-09-17" }], tone: "dismissed", effect: "خُصمت 3 فرص. سُجّل فصل بسبب هذا الامتحان" },
+    { label: "settled-old-dismissal-retained", grade: { status: "غائب" }, logs: [debit, dismissal, settlement], tone: "dismissed", effect: "خُصمت فرصتان. سُجّل فصل سابقاً بسبب هذا الامتحان" },
+    { label: "later-manual-deduction-keeps-complete-history", grade: { status: "غائب" }, logs: [debit, dismissal, settlement, { action: "خصم", amount: 1, date: "2026-09-17" }], tone: "dismissed", effect: "خُصمت 3 فرص. سُجّل فصل سابقاً بسبب هذا الامتحان" },
     { label: "later-manual-dismissal-keeps-earlier-deduction", grade: { status: "غائب" }, logs: [debit, dismissal, settlement, { action: "فصل", amount: 0, date: "2026-09-17" }], tone: "dismissed", effect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان" },
     { label: "student-status-alone-does-not-color-exam", studentStatus: "مفصول", grade: { status: "درجة", score: 18 }, tone: "ordinary", effect: "لا خصم" },
   ];
@@ -1039,7 +1039,7 @@ check("ألوان صفوف التقرير تعتمد على أثر الامتح�
     assert.match(rendered, new RegExp('<tr[^>]*class="[^"]*\\btp-grade-row-' + scenario.tone + '\\b'), scenario.label);
     assert.equal((rendered.match(/tp-grade-row-(?:ordinary|excused|deducted|dismissed)/g) || []).length, 1, "one exam has one semantic row tone");
     assert.equal(rendered.match(/data-label="الأثر على الفرص"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], scenario.effect, "color never replaces the factual effect text");
-    if (scenario.tone === "dismissed") assert.match(rendered, /سُجّل فصل بسبب هذا الامتحان/, scenario.label);
+    if (scenario.tone === "dismissed") assert.match(rendered, /سُجّل فصل (?:سابقاً )?بسبب هذا الامتحان/, scenario.label);
     assert.equal(JSON.stringify(profile), before, "row styling never mutates balances, grades, excuses or ledger records");
     assert.equal(details.studentSnapshot.opportunities, 3);
   }
@@ -1344,7 +1344,7 @@ check("الحركات تظهر قبل الامتحان وبين الامتحان
   assert.equal(labelsFromRenderedCells(selectedRun.dom.elements.tpGradesBody.innerHTML).length, 0);
 });
 
-check("الإدخال المتأخر بعد الإضافة يظهر بعدها مع بقاء تاريخ الامتحان والتعديل اللاحق لا يغيّر التسلسل", () => {
+check("حركات اليوم نفسه تحافظ على ترتيبها وتعرض تاريخ الامتحان فقط دون وقت إدخال النتيجة", () => {
   const exams = [
     { id: "late", name: "غياب أُدخل بعد المنح", date: "2026-09-01T08:00:00.000Z", fullMark: 20 },
     { id: "edited", name: "درجة عُدّلت لاحقاً", date: "2026-09-01T09:00:00.000Z", fullMark: 20 },
@@ -1405,9 +1405,9 @@ check("حالة خصم فرصتين ثم غياب ثم فصل تبقى بتار�
     ].map(log => ({ chapterId: "third", ...log })),
   };
   const { details, dom, rendered, sequence, html } = renderedTimeline(profile, "restore-one-complete-history");
-  assert.deepEqual(details.grades.map(grade => grade.opportunityEffect), ["خُصمت فرصتان", "خُصمت فرصة", "لا خصم", "سُجّل فصل بسبب هذا الامتحان"]);
+  assert.deepEqual(details.grades.map(grade => grade.opportunityEffect), ["خُصمت فرصتان", "خُصمت فرصة", "لا خصم", "سُجّل فصل سابقاً بسبب هذا الامتحان"]);
   assert.deepEqual(sequence, [
-    "event:2026-09-13T13:22:00Z", exams[0].name, exams[1].name, exams[2].name, exams[3].name,
+    exams[0].name, "event:2026-09-13T13:22:00Z", exams[1].name, exams[2].name, exams[3].name,
     "event:2026-09-26T12:41:00Z",
   ]);
   assert.equal(details.timelineEvents.length, 2);
@@ -1416,6 +1416,126 @@ check("حالة خصم فرصتين ثم غياب ثم فصل تبقى بتار�
   assert.match(rendered, /أُعيد تفعيلك برصيد فرصة واحدة/);
   assert.match(rendered, /tp-grade-row-dismissed/);
   assert.doesNotMatch(html, /لا خصم \(قبل رصيدك الجديد\)|PRIVATE_CORRECTION|تم منح الطالب فرصتين بسبب تعهده/);
+});
+
+check("امتحان 16 سبتمبر يبقى قبل امتحان 19 سبتمبر رغم تسجيل نتيجته بعده", () => {
+  const exams = [
+    { id: "earlier", name: "امتحان يوم 16", date: "2026-09-16T00:00:00Z", fullMark: 20 },
+    { id: "later", name: "امتحان يوم 19", date: "2026-09-19T00:00:00Z", fullMark: 50 },
+  ];
+  const profile = {
+    student: { status: "نشط", opportunities: 1 },
+    currentChapter: { id: "chronology", name: "الفصل الحالي", examIds: exams.map(exam => exam.id) },
+    exams, allCourseExams: exams,
+    grades: [
+      { id: "g-earlier", examId: "earlier", status: "غائب", createdAt: "2026-09-19T05:51:00Z" },
+      { id: "g-later", examId: "later", status: "درجة", score: 45, createdAt: "2026-09-20T14:45:00Z" },
+    ],
+    opportunityLogs: [{ action: "رصيد إعادة التفعيل", amount: 3, balanceAfter: 3, chapterId: "chronology", date: "2026-09-16T09:44:47Z" }],
+  };
+  const before = JSON.stringify(profile);
+  const { details, sequence, rendered } = renderedTimeline(profile, "earlier-exam-entered-later");
+  assert.deepEqual(sequence, ["event:2026-09-16T09:44:47Z", "امتحان يوم 16", "امتحان يوم 19"]);
+  assert.equal(details.grades.find(grade => grade.examId === "earlier").timelineDate, profile.grades[0].createdAt, "stored event-order metadata is retained");
+  assert.ok(rendered.indexOf("16 سبتمبر 2026") < rendered.lastIndexOf("19 سبتمبر 2026"));
+  assert.doesNotMatch(rendered, /سُجّلت النتيجة|tp-recorded-date/);
+  assert.equal(JSON.stringify(profile), before);
+});
+
+check("إدخال متأخر يعبر عدة منح لا ينقل الامتحان إلى يوم آخر في الجدول", () => {
+  const exams = [
+    { id: "day12", name: "امتحان يوم 12", date: "2026-09-12T00:00:00Z", fullMark: 20 },
+    { id: "day17", name: "امتحان يوم 17", date: "2026-09-17T00:00:00Z", fullMark: 20 },
+    { id: "day23", name: "امتحان يوم 23", date: "2026-09-23T00:00:00Z", fullMark: 20 },
+  ];
+  const profile = {
+    student: { status: "نشط", opportunities: 2 },
+    currentChapter: { id: "chronology", name: "الفصل الحالي", examIds: exams.map(exam => exam.id) },
+    exams, allCourseExams: exams,
+    grades: exams.map((exam, index) => ({ id: `g-${exam.id}`, examId: exam.id, status: "درجة", score: 18, createdAt: index === 0 ? "2026-09-22T11:00:00Z" : "2026-09-25T11:00:00Z" })),
+    opportunityLogs: [
+      { action: "إضافة", amount: 1, appliedAmount: 1, balanceAfter: 2, date: "2026-09-13T10:00:00Z" },
+      { action: "إضافة", amount: 1, appliedAmount: 1, balanceAfter: 3, date: "2026-09-18T10:00:00Z" },
+      { action: "رصيد إعادة التفعيل", amount: 2, balanceAfter: 2, date: "2026-09-21T10:00:00Z" },
+    ].map(log => ({ chapterId: "chronology", ...log })),
+  };
+  const { sequence, details } = renderedTimeline(profile, "late-entry-across-many-credits");
+  assert.deepEqual(sequence, ["امتحان يوم 12", "event:2026-09-13T10:00:00Z", "امتحان يوم 17", "event:2026-09-18T10:00:00Z", "event:2026-09-21T10:00:00Z", "امتحان يوم 23"]);
+  assert.equal(details.timelineEvents.length, 3);
+  assert.equal(details.grades[0].timelineDate, "2026-09-22T11:00:00Z");
+  assert.equal(details.grades[1].timelineDate, "2026-09-25T11:00:00Z");
+});
+
+check("بيانات ترتيب قديمة محفوظة لا تقلب الأيام الظاهرة وحدود اليوم تعتمد توقيت بغداد", () => {
+  const details = {
+    activeChapterName: "الفصل الحالي",
+    timelineEvents: [{ date: "2026-09-17T00:30:00Z", text: "بدأ حساب فرص الفصل برصيد 3 فرص", kind: "reset", balanceAfter: 3 }],
+    grades: [
+      { examName: "آخر دقيقة من يوم 16", examDate: "2026-09-16T20:59:00Z", timelineDate: "2026-09-30T00:00:00Z", score: 18 },
+      { examName: "بداية يوم 17 بتوقيت بغداد", examDate: "2026-09-16T21:05:00Z", timelineDate: "2026-09-20T00:00:00Z", score: 17 },
+      { examName: "بداية يوم 18 بتوقيت بغداد", examDate: "2026-09-17T21:00:00Z", timelineDate: "2026-09-17T21:00:00Z", score: 16 },
+    ].map(grade => ({ ...grade, fullMark: 20, status: "درجة", opportunityEffect: "لا خصم", opportunityTone: "ordinary" })),
+  };
+  const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: { s1: details } });
+  const { dom, sandbox } = executeInlineScripts(html, "saved-timeline-baghdad-calendar");
+  openStudentDetails(dom, "s1");
+  const rendered = dom.elements.tpGradesBody.innerHTML;
+  const expectedTextOrder = ["آخر دقيقة من يوم 16", "بدأ حساب فرص الفصل", "بداية يوم 17 بتوقيت بغداد", "بداية يوم 18 بتوقيت بغداد"];
+  for (let i = 1; i < expectedTextOrder.length; i += 1) assert.ok(rendered.indexOf(expectedTextOrder[i - 1]) < rendered.indexOf(expectedTextOrder[i]), expectedTextOrder.join(" → "));
+  const visibleDays = [...rendered.matchAll(/data-label="تاريخ الامتحان"[^]*?tp-mobile-field-value">([^]*?)<\/span>/g)].map(match => match[1]);
+  assert.deepEqual(visibleDays, ["16 سبتمبر 2026", "17 سبتمبر 2026", "18 سبتمبر 2026"]);
+  assert.equal(sandbox.STUDENT_DETAILS.s1.grades[0].timelineDate, details.grades[0].timelineDate, "legacy wire metadata remains unchanged");
+  assert.doesNotMatch(rendered, /30 سبتمبر|20 سبتمبر|سُجّلت النتيجة/);
+});
+
+check("رصيد بداية الفصل يسبق امتحان اليوم نفسه رغم تأخر إدخال النتيجة عدة أيام", () => {
+  const exam = { id: "same-day", name: "امتحان يوم بداية الفصل", date: "2026-09-13T00:00:00Z", fullMark: 100 };
+  const profile = {
+    student: { status: "نشط", opportunities: 1 },
+    currentChapter: { id: "chronology", name: "الفصل الحالي", examIds: [exam.id] },
+    exams: [exam], allCourseExams: [exam],
+    grades: [{ id: "same-day-grade", examId: exam.id, status: "درجة", score: 28, createdAt: "2026-09-15T13:22:00Z" }],
+    opportunityLogs: [
+      { action: "إعادة تعيين", amount: 3, balanceAfter: 3, date: "2026-09-13T13:22:00Z", reason: "انتقال فصل" },
+      { action: "خصم تلقائي", amount: 2, appliedAmount: 2, date: exam.date, examId: exam.id },
+    ].map(log => ({ chapterId: "chronology", ...log })),
+  };
+  const { sequence, rendered } = renderedTimeline(profile, "chapter-start-same-calendar-day");
+  assert.deepEqual(sequence, ["event:2026-09-13T13:22:00Z", "امتحان يوم بداية الفصل"]);
+  assert.match(rendered, /خُصمت فرصتان/);
+  assert.doesNotMatch(rendered, /15 سبتمبر|سُجّلت النتيجة/);
+});
+
+check("وصف الفصل السابق يتطلب استعادة لاحقة وحالة نشطة ولا يخفي شارة الفصل الحالي", () => {
+  const exam = { id: "dismissal-exam", name: "امتحان أثر الفصل", date: "2026-09-16T00:00:00Z", fullMark: 20 };
+  const cases = [
+    { label: "active-after-return", status: "نشط", action: "رصيد إعادة التفعيل", movementDate: "2026-09-18T10:00:00Z", former: true },
+    { label: "currently-dismissed-after-return", status: "مفصول", action: "رصيد إعادة التفعيل", movementDate: "2026-09-18T10:00:00Z", former: false },
+    { label: "active-without-return", status: "نشط", former: false },
+    { label: "return-precedes-dismissal", status: "نشط", action: "رصيد إعادة التفعيل", movementDate: "2026-09-15T10:00:00Z", former: false },
+    { label: "credit-is-not-return", status: "نشط", action: "إضافة", movementDate: "2026-09-18T10:00:00Z", former: false },
+    { label: "reset-is-not-return", status: "نشط", action: "إعادة تعيين", movementDate: "2026-09-18T10:00:00Z", former: false },
+  ];
+  for (const scenario of cases) {
+    const profile = {
+      student: { status: scenario.status, opportunities: scenario.status === "مفصول" ? 0 : 1 },
+      currentChapter: { id: "chronology", name: "الفصل الحالي", examIds: [exam.id] },
+      exams: [exam], allCourseExams: [exam],
+      grades: [{ id: "dismissal-grade", examId: exam.id, status: "غائب", createdAt: "2026-09-17T10:00:00Z" }],
+      opportunityLogs: [
+        { action: "فصل تلقائي", amount: 0, date: exam.date, examId: exam.id },
+        ...(scenario.action ? [{ action: scenario.action, amount: 1, appliedAmount: 1, balanceAfter: 1, date: scenario.movementDate }] : []),
+      ].map(log => ({ chapterId: "chronology", ...log })),
+    };
+    const before = JSON.stringify(profile);
+    const { details, dom, rendered } = renderedTimeline(profile, scenario.label);
+    const expected = scenario.former ? "سُجّل فصل سابقاً بسبب هذا الامتحان" : "سُجّل فصل بسبب هذا الامتحان";
+    assert.equal(details.grades[0].opportunityEffect, expected, scenario.label);
+    assert.match(rendered, new RegExp(expected), scenario.label);
+    assert.equal(details.grades[0].opportunityTone, "dismissed", "historic evidence retains its recorded severity");
+    assert.equal(dom.elements.tpModalDismissedBadge.style.display, scenario.status === "مفصول" ? "" : "none", scenario.label);
+    assert.equal(JSON.stringify(profile), before);
+  }
 });
 
 // Recreate the previous wire payload and its snapshot-based balance read. All

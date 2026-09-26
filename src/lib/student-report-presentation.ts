@@ -51,6 +51,9 @@ export type ReportOpportunityContext = {
   balanceNotes: ReportBalanceNote[];
   /** Show recorded past effects alongside dated balance movements. */
   historical?: boolean;
+  studentStatus?: string;
+  /** Completed returns to study only; additions and resets are not returns. */
+  reactivationDates?: readonly string[];
   /** The student's active grace periods: the only source of grace in reports. */
   gracePeriods?: readonly GracePeriodRange[];
   registeredAt?: string | Date | null;
@@ -329,14 +332,28 @@ export function reportGradePresentation(grade: Record<string, unknown>, exam: Re
   // Describe stored movements first; grade thresholds alone do not prove a deduction.
   const deductions = effectiveLogs.filter(l => l.action === "خصم" || l.action === "خصم تلقائي");
   const deducted = deductions.reduce((sum, l) => sum + (reportNumber(l.appliedAmount) ?? reportNumber(l.amount) ?? 0), 0);
-  const dismissed = effectiveLogs.some(l => String(l.action || "").startsWith("فصل"));
+  const dismissals = effectiveLogs.filter(l => String(l.action || "").startsWith("فصل"));
+  const dismissed = dismissals.length > 0;
+  const dismissalDates = dismissals.map(reportLogDate);
+  // Calling a dismissal historical requires both the current active status
+  // and a completed return after every recorded dismissal for this exam.
+  // Missing dates cannot establish that order, and a later new dismissal
+  // must not be explained away by an earlier return.
+  const historicalDismissal = Boolean(context?.historical && context.studentStatus === "نشط" &&
+    dismissed && dismissalDates.every(date => date !== null) &&
+    context.reactivationDates?.some(value => {
+      const date = reportLogDate({ date: value });
+      return date !== null && dismissalDates.every(dismissalDate => Date.parse(date) > Date.parse(dismissalDate!));
+    }));
   const deductionText = deducted === 1
     ? "خُصمت فرصة"
     : deducted === 2
       ? "خُصمت فرصتان"
       : deducted > 0 ? `خُصمت ${deducted} فرص` : "";
   if (deducted || dismissed) return {
-    text: [deductionText, dismissed ? "سُجّل فصل بسبب هذا الامتحان" : ""].filter(Boolean).join(". "),
+    text: [deductionText, dismissed
+      ? historicalDismissal ? "سُجّل فصل سابقاً بسبب هذا الامتحان" : "سُجّل فصل بسبب هذا الامتحان"
+      : ""].filter(Boolean).join(". "),
     tone: dismissed ? "dismissed" : "deducted",
   };
   const gracePeriod = findStudentGracePeriod(context?.gracePeriods, exam?.date as string | Date | null | undefined);

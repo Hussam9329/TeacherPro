@@ -43,7 +43,7 @@ export type StudentGradeDetail = {
   examName: string;
   examType: string;
   examDate: string;
-  /** Date of the effect in the timeline; the original exam date stays visible. */
+  /** Recorded effect time; only breaks ties within the same visible exam day. */
   timelineDate?: string;
   score: number | null;
   fullMark: number | null;
@@ -348,6 +348,8 @@ export function buildStudentDetailsFromProfileLog(
     gracePeriods,
     registeredAt: profile.student?.createdAt as string | Date | null | undefined,
     historical: true,
+    studentStatus: String(profile.student?.status || ""),
+    reactivationDates: timelineEvents.filter(event => event.kind === "return").map(event => event.date),
   };
   const includeExam = (status: unknown, exam: Record<string, unknown> | undefined): boolean =>
     status !== "قبل تسجيل الطالب" && isExamOnOrAfterStudentRegistration(
@@ -773,6 +775,19 @@ const DETAILS_MODAL_JS = `
     } catch(e){ return date; }
   }
 
+  // Use the same Baghdad calendar day the student sees, never the hidden
+  // result-entry day. Recorded times may only order rows within that day.
+  function timelineDay(s){
+    var date = new Date(s);
+    if (!s || isNaN(date.getTime())) return '';
+    var parts = new Intl.DateTimeFormat('en-US', {
+      year:'numeric', month:'2-digit', day:'2-digit', timeZone:'Asia/Baghdad'
+    }).formatToParts(date);
+    return ['year', 'month', 'day'].map(function(type){
+      return parts.find(function(part){ return part.type === type; }).value;
+    }).join('-');
+  }
+
   function mobileCell(label, valueHtml, extraClass){
     var className = extraClass ? ' class="' + extraClass + '"' : '';
     return '<td role="cell" data-label="' + esc(label) + '"' + className + '>'
@@ -940,13 +955,14 @@ const DETAILS_MODAL_JS = `
       gradesBody.innerHTML = '<tr class="tp-empty-row tp-error-row" role="row"><td colspan="4" role="cell">تفاصيل هذا الطالب غير موجودة في هذه النسخة. اطلب نسخة جديدة من الإدارة.</td></tr>';
     } else {
       var timeline = (data.grades || []).map(function(g, index){
-        return { grade: g, date: g.timelineDate || g.examDate, order: index, event: null };
+        return { grade: g, day: timelineDay(g.examDate), date: g.timelineDate || g.examDate, order: index, event: null };
       }).concat((data.timelineEvents || []).map(function(event, index){
-        return { event: event, date: event.date, order: index, grade: null };
+        return { event: event, day: timelineDay(event.date), date: event.date, order: index, grade: null };
       }));
       timeline.sort(function(a, b){
+        var dayDifference = a.day.localeCompare(b.day);
         var difference = (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0);
-        return difference || (a.event && !b.event ? -1 : !a.event && b.event ? 1 : a.order - b.order);
+        return dayDifference || difference || (a.event && !b.event ? -1 : !a.event && b.event ? 1 : a.order - b.order);
       });
       gradesBody.innerHTML = timeline.map(function(entry){
         if (entry.event) {
