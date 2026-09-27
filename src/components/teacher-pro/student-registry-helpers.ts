@@ -86,7 +86,7 @@ export const studentExportColumns: ExportColumn<any>[] = [
   { key: "createdAt", label: "تاريخ التسجيل", value: (student) => formatAppDate(student.createdAt) },
   { key: "phone", label: "الهاتف", value: (student) => student.phone || "" },
   { key: "parentPhone", label: "ولي الأمر", value: (student) => student.parentPhone || "" },
-  { key: "telegram", label: "التيليجرام", value: (student) => student.telegram || "" },
+  { key: "telegram", label: "Telegram ID", value: (student) => student.telegram || "" },
 ];
 
 export function academicImpactKindLabel(kind: string): string {

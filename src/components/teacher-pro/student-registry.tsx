@@ -2692,7 +2692,7 @@ export function StudentRegistryView() {
                       </Select>
                     </div>
                     <div className="space-y-2 tp-registry-editor__wide">
-                      <Label htmlFor="edit-telegram">معرف التيليجرام</Label>
+                      <Label htmlFor="edit-telegram">Telegram ID</Label>
                       <Input
                         id="edit-telegram"
                         name="telegram"
@@ -2706,7 +2706,7 @@ export function StudentRegistryView() {
                     </div>
                     <div className="space-y-2 tp-registry-editor__wide">
                       <Label htmlFor="edit-username">
-                        يوزر التيليجرام (المستعاد)
+                        Tele Username
                       </Label>
                       <Input
                         id="edit-username"
