@@ -3,6 +3,9 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
+import { annotateGradeRecordedImpacts } from "@/lib/grade-recorded-impact-server";
+import { annotateGradeSettlementEffects } from "@/lib/grade-settlement-server";
+import type { ReportGradePresentation } from "@/lib/student-report-presentation";
 import type { GracePeriodRange } from "@/lib/grace-periods";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
@@ -445,6 +448,23 @@ function leavesForExam(
     }
     return leave.examId === exam.id;
   });
+}
+
+/**
+ * The card's impact badge states what the opportunity log actually recorded
+ * for this exam, exactly as «سجل الدرجات» shows it: a debit that a later
+ * reset or return settled reads «لا أثر على الرصيد الحالي», and an absence
+ * the ledger never charged reads «لا يوجد خصم مسجّل». The exam rules alone
+ * never prove a deduction.
+ */
+function recordedImpactBadge(impact: ReportGradePresentation): CallBadgeInfo {
+  const charged = impact.tone === "deducted" || impact.tone === "dismissed";
+  const settled = impact.text.includes("لا أثر على الرصيد الحالي");
+  return {
+    label: impact.text,
+    tone: charged ? (settled ? "warning" : "deducted") : impact.tone === "excused" ? "safe" : "neutral",
+    detail: "من سجل الفرص: ما خُصم فعلاً بسبب هذا الامتحان وهل ما زال يؤثر على الرصيد الحالي.",
+  };
 }
 
 function buildGradeItem(args: {
@@ -920,6 +940,37 @@ export async function GET(req: NextRequest) {
         focusItem,
       };
     });
+
+    // Replace rule-based impact badges with the recorded ledger evidence.
+    // A derived absence has no stored grade and keeps its own badge.
+    const recordedItems = rows.flatMap((row) =>
+      row.items
+        .filter((item) => !item.grade.id.startsWith("implicit-absence:") && courseExamById.has(item.grade.examId))
+        .map((item) => ({ item, row })),
+    );
+    if (recordedItems.length) {
+      const annotated = recordedItems.map(({ item, row }) => ({
+        ...item.grade,
+        student: {
+          id: row.student.id,
+          status: row.student.status,
+          courseId: row.student.courseId,
+          createdAt: row.student.createdAt,
+          gracePeriods: row.student.gracePeriods || [],
+        },
+        exam: courseExamById.get(item.grade.examId)!,
+      })) as Array<Parameters<typeof annotateGradeRecordedImpacts>[0][number] & { recordedOpportunityImpact?: ReportGradePresentation }>;
+      // Same two steps as «سجل الدرجات»: settlements first, then the ledger.
+      await withDatabaseSchema(async () => {
+        await annotateGradeSettlementEffects(annotated);
+        await annotateGradeRecordedImpacts(annotated);
+      }, "StudentCallCandidates");
+      annotated.forEach((grade, index) => {
+        if (grade.recordedOpportunityImpact) {
+          recordedItems[index].item.badges = [recordedImpactBadge(grade.recordedOpportunityImpact)];
+        }
+      });
+    }
 
     return NextResponse.json({
       rows,

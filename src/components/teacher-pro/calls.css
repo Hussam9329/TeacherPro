@@ -160,28 +160,39 @@
 
 .tp-calls__list,
 .tp-calls__skeleton { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; }
+.tp-calls__skeleton > .tp-call-card { gap: 0.65rem; padding: 0.85rem 1rem; }
 
 .tp-calls__pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.6rem 1rem; font-size: 0.85rem; color: var(--muted-foreground); }
 .tp-calls__pager b { color: var(--foreground); font-variant-numeric: tabular-nums; }
 
-/* The short student card */
+/* The student card: a header line, then labelled rows beside the QR codes */
 .tp-call-card {
   --accent: var(--border);
   display: grid;
   align-content: start;
-  gap: 0.65rem;
+  gap: 0;
   min-inline-size: 0;
-  padding: 0.85rem 1rem;
   border: 1px solid var(--border);
   border-inline-start: 4px solid var(--accent);
   border-radius: var(--calls-radius);
   background: var(--card);
+  overflow: hidden;
 }
 .tp-call-card[data-contact="success"] { --accent: var(--status-success-vivid); }
 .tp-call-card[data-contact="warning"] { --accent: var(--status-warning-vivid); }
 .tp-call-card[data-contact="danger"] { --accent: var(--status-danger-vivid); }
 
-.tp-call-card__head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; }
+.tp-call-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+.tp-call-card__who { display: flex; flex: 1 1 18rem; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; min-inline-size: 0; }
 .tp-call-card__name { font-size: 1rem; font-weight: 800; line-height: 1.5; }
 .tp-call-card__code { color: var(--muted-foreground); font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.78rem; font-weight: 600; }
 .tp-call-card__opps {
@@ -194,15 +205,36 @@
   font-weight: 800;
   white-space: nowrap;
 }
+.tp-call-card__details { flex-shrink: 0; min-block-size: 2.25rem; }
+
+.tp-call-card__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem 1rem;
+  padding: 0.8rem 1rem 0.9rem;
+}
+
+/* Every row: a fixed label column, then its content. */
+.tp-call-card__rows { display: grid; align-content: start; gap: 0.55rem; margin: 0; min-inline-size: 0; }
+.tp-call-card__row {
+  display: grid;
+  grid-template-columns: 4.75rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  min-inline-size: 0;
+}
+.tp-call-card__row + .tp-call-card__row { padding-block-start: 0.55rem; border-top: 1px dashed var(--border); }
+.tp-call-card__row > dt { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 800; }
+.tp-call-card__row > dd { margin: 0; min-inline-size: 0; }
 
 .tp-call-card__focus { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.5rem; }
 .tp-call-card__result {
-  padding: 0.25rem 0.75rem;
+  padding: 0.2rem 0.7rem;
   border: 1px solid var(--tone-line);
   border-radius: 0.7rem;
   background: var(--tone-tint);
   color: var(--tone-ink);
-  font-size: 0.92rem;
+  font-size: 0.9rem;
   font-weight: 800;
 }
 .tp-call-card__label { color: var(--muted-foreground); font-size: 0.8rem; font-weight: 700; }
@@ -214,7 +246,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  min-block-size: 2.5rem;
+  min-block-size: 2.4rem;
   padding: 0.3rem 0.75rem;
   border: 1px solid var(--status-success-border);
   border-radius: 0.75rem;
@@ -234,7 +266,7 @@ a.tp-call-card__contact-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px
 
 .tp-call-card__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .tp-call-card__action {
-  min-block-size: 2.5rem;
+  min-block-size: 2.4rem;
   padding: 0.3rem 0.85rem;
   border: 1px solid var(--tone-line);
   border-radius: 0.75rem;
@@ -256,7 +288,7 @@ a.tp-call-card__contact-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  min-block-size: 2.5rem;
+  min-block-size: 2.4rem;
   min-inline-size: 0;
   margin: 0;
   padding: 0.35rem 0.75rem;
@@ -275,8 +307,20 @@ a.tp-call-card__contact-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px
 .tp-call-card__note-add svg { flex-shrink: 0; inline-size: 0.95rem; block-size: 0.95rem; }
 .tp-call-card__general { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 700; }
 
-.tp-call-card__foot { display: flex; justify-content: flex-end; }
-.tp-call-card__foot [data-slot="button"] { min-block-size: 2.25rem; }
+/* QR codes: on the card, beside the rows on wide screens, below them on phones. */
+.tp-call-card__qr {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: start;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  border: 1px dashed var(--border);
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+}
+.tp-call-card__qr > a { inline-size: 7.5rem; padding: 0.4rem; gap: 0.3rem; }
+.tp-call-card__qr svg { max-inline-size: 6rem; }
 
 /* Note editor (card and window) */
 .tp-call-note { display: grid; gap: 0.5rem; min-inline-size: 0; }
@@ -349,17 +393,15 @@ a.tp-call-card__contact-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px
 }
 .tp-call-modes__btn[aria-pressed="true"] { border-color: transparent; background: var(--tp-primary, var(--primary)); color: var(--tp-on-primary, var(--primary-foreground)); }
 
-.tp-call-qr { display: grid; gap: 0.5rem; padding: 0.75rem; border: 1px dashed var(--tp-border-strong, var(--border)); border-radius: 0.9rem; }
-.tp-call-qr__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: 0.6rem; }
 
 /* The «إدارة المكالمات» window on the dashboard */
 .tp-calls-window .tp-calls__setup,
 .tp-calls-window .tp-calls__filters { background: var(--tp-panel); border-color: var(--tp-border); }
 .tp-calls-window .tp-call-card { background: var(--tp-surface); border-color: var(--tp-border); }
 
-@container (min-width: 56rem) {
-  .tp-calls__list,
-  .tp-calls__skeleton { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container (min-width: 46rem) {
+  .tp-call-card[data-has-qr] .tp-call-card__body { grid-template-columns: minmax(0, 1fr) auto; }
+  .tp-call-card__qr { flex-wrap: nowrap; align-self: start; }
 }
 
 @container (max-width: 30rem) {
@@ -369,4 +411,6 @@ a.tp-call-card__contact-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px
   .tp-calls__status,
   .tp-calls__toggle { flex: 1 1 100%; }
   .tp-call-card__action { flex: 1 1 auto; }
+  .tp-call-card__row { grid-template-columns: minmax(0, 1fr); }
+  .tp-call-card__details { inline-size: 100%; }
 }

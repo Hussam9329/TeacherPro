@@ -400,6 +400,22 @@ assert(
   'كارت الطالب مختصر، والتفاصيل (السجل، QR، محرر الملاحظة، ملف الطالب) بنافذة',
 );
 
+assert(
+  candidates.includes('await annotateGradeSettlementEffects(annotated);') &&
+    candidates.includes('await annotateGradeRecordedImpacts(annotated);') &&
+    candidates.includes('recordedItems[index].item.badges = [recordedImpactBadge(grade.recordedOpportunityImpact)]') &&
+    candidates.includes('!item.grade.id.startsWith("implicit-absence:")'),
+  'شارة الأثر في كارت المكالمة تقرأ ما سُجل فعلاً في سجل الفرص مثل سجل الدرجات، لا قاعدة الامتحان وحدها',
+);
+assert(
+  followUp.includes('className="tp-call-card__qr"') &&
+    followUp.includes('<dt>الامتحان</dt>') &&
+    followUp.includes('<dt>التواصل</dt>') &&
+    followUp.includes('<dt>الإجراء</dt>') &&
+    followUp.includes('<dt>الملاحظة</dt>'),
+  'كارت الطالب مرتب بصفوف معنونة ورموز QR ظاهرة عليه مباشرة',
+);
+
 if (process.exitCode) {
   console.error('\nفشل اختبار سلامة تبويبة المكالمات. راجع الرسائل أعلاه.');
   process.exit(process.exitCode);
