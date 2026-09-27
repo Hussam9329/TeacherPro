@@ -223,3 +223,100 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Course card: the basics at a glance; settings live in «عرض إعدادات الدورة». */
+.tp-course-card[data-inactive] {
+  border-style: dashed;
+}
+
+.tp-course-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tp-course-card__chips > li {
+  padding: 0.1rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.tp-course-card__chips > li[data-kind="program"] {
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+  background: color-mix(in srgb, var(--primary) 8%, var(--card));
+}
+
+.tp-course-card__chips > li[data-kind="study"] {
+  border-color: var(--status-info-border);
+  background: var(--status-info-bg);
+  color: var(--status-info-fg);
+}
+
+.tp-course-card__chips > li[data-kind="empty"] {
+  border-color: var(--status-warning-border);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
+}
+
+/* «إعدادات الدورة» window */
+.tp-course-settings-dialog :where(p, dt, dd, span, li, h4) {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.tp-course-settings {
+  display: grid;
+  gap: 0.85rem;
+  min-inline-size: 0;
+}
+
+.tp-course-settings__section {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+}
+
+.tp-course-settings__section > h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
+.tp-course-settings__usage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.75rem;
+  font-size: 0.82rem;
+}
+
+.tp-course-settings__usage ul {
+  margin: 0.25rem 0 0;
+  padding-inline-start: 1.1rem;
+  list-style: disc;
+  color: var(--muted-foreground);
+}
+
+.tp-course-settings__footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.25rem;
+}
+
+.tp-course-settings .tp-course-card__facts {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: 0.4rem 1.25rem;
+  margin: 0;
+}

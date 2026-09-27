@@ -23,6 +23,7 @@ import {
 } from "@/lib/course-config";
 import {
   CourseBuilderForm,
+  CourseRegistrationPreview,
   type CourseFormState,
   emptyCourseForm,
   normalizeCourseLocationConfig,
@@ -66,7 +67,7 @@ import {
   useTeacherProSyncKey,
 } from "@/hooks/use-teacherpro-sync";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
-import { BookOpen, Plus, ChevronDown, Pencil, Pause, Play } from "lucide-react";
+import { BookOpen, Plus, Pencil, Pause, Play, Settings2, Trash2 } from "lucide-react";
 import { EmptyState } from "./ui-kit";
 import { formatAppDate } from "@/lib/format";
 
@@ -245,7 +246,7 @@ export function CoursesView() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
+  const [settingsCourseId, setSettingsCourseId] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
   const debouncedSearchText = useDebouncedValue(searchText, 250);
   const [statusFilter, setStatusFilter] = useState<CourseStatusFilter>("all");
@@ -626,16 +627,13 @@ export function CoursesView() {
 
   const renderCourseCard = (row: CourseOverviewRow) => {
     const programs = getAvailablePrograms(row.course);
-    const studyTypesByProgram = getStudyTypesByProgram(row.course);
-    const locationSummary = buildLocationSummary(row.course);
-    const studyTypeUsage = topUsageItems(row.usage.studyTypes);
-    const locationUsage = topUsageItems(row.usage.locations);
-    const isExpanded = expandedCourseId === row.id;
+    const studyTypes = getAvailableStudyTypes(row.course);
     return (
       <article
         key={row.id}
         className="tp-course-card"
         aria-labelledby={`course-title-${row.id}`}
+        data-inactive={!row.course.active || undefined}
       >
         <div className="tp-course-card__overview">
           <div className="tp-course-card__identity">
@@ -654,6 +652,15 @@ export function CoursesView() {
                 )}
               </dd>
             </dl>
+            <ul className="tp-course-card__chips" aria-label="خيارات الاشتراك والدراسة">
+              {programs.map((program) => (
+                <li key={program} data-kind="program">{program}</li>
+              ))}
+              {studyTypes.map((studyType) => (
+                <li key={studyType} data-kind="study">{studyType}</li>
+              ))}
+              {programs.length === 0 && <li data-kind="empty">لم تُضبط الخيارات بعد</li>}
+            </ul>
           </div>
           <dl className="tp-course-card__metrics">
             <div>
@@ -686,26 +693,23 @@ export function CoursesView() {
             className="text-xs font-bold"
             onClick={(event) => {
               courseDialogTrigger.current = event.currentTarget;
-              openEditDialog(row);
+              setSettingsCourseId(row.id);
             }}
-            aria-label={`تعديل ${row.course.name}`}
+            aria-label={`عرض إعدادات ${row.course.name}`}
           >
-            <Pencil aria-hidden="true" /> تعديل الدورة
+            <Settings2 aria-hidden="true" /> عرض إعدادات الدورة
           </Button>
           <Button
             variant="outline"
             size="sm"
             className="text-xs"
-            aria-expanded={isExpanded}
-            aria-controls={`course-details-${row.id}`}
-            aria-label={`تفاصيل ${row.course.name}`}
-            onClick={() => setExpandedCourseId(isExpanded ? null : row.id)}
+            onClick={(event) => {
+              courseDialogTrigger.current = event.currentTarget;
+              openEditDialog(row);
+            }}
+            aria-label={`تعديل ${row.course.name}`}
           >
-            التفاصيل{" "}
-            <ChevronDown
-              className={isExpanded ? "rotate-180" : undefined}
-              aria-hidden="true"
-            />
+            <Pencil aria-hidden="true" /> تعديل الدورة
           </Button>
           <Button
             variant="outline"
@@ -723,117 +727,106 @@ export function CoursesView() {
             {row.course.active ? "إيقاف التسجيل" : "تفعيل التسجيل"}
           </Button>
         </div>
-
-        {isExpanded && (
-          <div
-            id={`course-details-${row.id}`}
-            className="tp-course-card__details"
-            role="region"
-            aria-label={`تفاصيل ${row.course.name}`}
-          >
-            <section className="tp-course-card__detail-section">
-              <h4>إعدادات التسجيل</h4>
-              <dl className="tp-course-card__facts">
-                {programs.map((program) => (
-                  <div key={program}>
-                    <dt>{program}</dt>
-                    <dd>
-                      {(studyTypesByProgram[program] || []).join("، ") ||
-                        "بدون نظام دراسة"}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              {locationSummary ? (
-                <ul className="tp-course-card__locations">
-                  {locationSummary.split(" | ").map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-muted-foreground">
-                  لا توجد إعدادات مواقع مكتملة لهذه الدورة.
-                </p>
-              )}
-            </section>
-
-            <section className="tp-course-card__detail-section">
-              <h4>الطلاب والامتحانات</h4>
-              <dl className="tp-course-card__facts">
-                <div>
-                  <dt>طلاب نشطون</dt>
-                  <dd>{row.counts.activeStudents}</dd>
-                </div>
-                <div>
-                  <dt>طلاب مفصولون</dt>
-                  <dd>{row.counts.dismissedStudents}</dd>
-                </div>
-                <div>
-                  <dt>طلاب مؤرشفون</dt>
-                  <dd>{row.counts.archivedStudents}</dd>
-                </div>
-                <div>
-                  <dt>امتحانات فعالة</dt>
-                  <dd>{row.counts.activeExams}</dd>
-                </div>
-                <div>
-                  <dt>امتحانات معطلة</dt>
-                  <dd>{row.counts.inactiveExams}</dd>
-                </div>
-                <div>
-                  <dt>تاريخ الإنشاء</dt>
-                  <dd>{formatAppDate(row.course.createdAt)}</dd>
-                </div>
-              </dl>
-            </section>
-
-            {(studyTypeUsage.length > 0 || locationUsage.length > 0) && (
-              <section className="tp-course-card__detail-section">
-                {studyTypeUsage.length > 0 && (
-                  <>
-                    <h4>توزيع الطلاب حسب الدراسة</h4>
-                    <ul>
-                      {studyTypeUsage.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-                {locationUsage.length > 0 && (
-                  <>
-                    <h4>أكثر المواقع استخداماً</h4>
-                    <ul>
-                      {locationUsage.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </section>
-            )}
-
-            <section className="tp-course-card__detail-section tp-course-card__delete">
-              <h4>{courseDeleteBadge(row)}</h4>
-              <p>
-                {row.deleteSafety.blockers.length
-                  ? row.deleteSafety.blockers.join("، ")
-                  : "لا توجد روابط مانعة للحذف."}
-              </p>
-              <p className="text-muted-foreground">
-                إيقاف التسجيل لا يغيّر بيانات الطلاب الحاليين.
-              </p>
-              <Button
-                variant="ghost"
-                onClick={() => openDeleteDialog(row)}
-                className="text-danger hover:text-destructive"
-                aria-label={`حذف نهائي للدورة ${row.course.name}`}
-              >
-                حذف نهائي
-              </Button>
-            </section>
-          </div>
-        )}
       </article>
+    );
+  };
+
+  const settingsRow = settingsCourseId
+    ? rows.find((row) => row.id === settingsCourseId) || null
+    : null;
+
+  const renderCourseSettings = (row: CourseOverviewRow) => {
+    const studyTypeUsage = topUsageItems(row.usage.studyTypes);
+    const locationUsage = topUsageItems(row.usage.locations);
+    return (
+      <div className="tp-course-settings">
+        <section className="tp-course-settings__section" aria-labelledby="course-settings-registration">
+          <h4 id="course-settings-registration">ما يظهر للموظف عند تسجيل طالب</h4>
+          <CourseRegistrationPreview form={courseToForm(row.course)} />
+        </section>
+
+        <section className="tp-course-settings__section" aria-labelledby="course-settings-facts">
+          <h4 id="course-settings-facts">الطلاب والامتحانات</h4>
+          <dl className="tp-course-card__facts">
+            <div>
+              <dt>طلاب نشطون</dt>
+              <dd>{row.counts.activeStudents}</dd>
+            </div>
+            <div>
+              <dt>طلاب مفصولون</dt>
+              <dd>{row.counts.dismissedStudents}</dd>
+            </div>
+            <div>
+              <dt>طلاب مؤرشفون</dt>
+              <dd>{row.counts.archivedStudents}</dd>
+            </div>
+            <div>
+              <dt>امتحانات فعالة</dt>
+              <dd>{row.counts.activeExams}</dd>
+            </div>
+            <div>
+              <dt>امتحانات معطلة</dt>
+              <dd>{row.counts.inactiveExams}</dd>
+            </div>
+            <div>
+              <dt>تاريخ الإنشاء</dt>
+              <dd>{formatAppDate(row.course.createdAt)}</dd>
+            </div>
+          </dl>
+        </section>
+
+        {(studyTypeUsage.length > 0 || locationUsage.length > 0) && (
+          <section className="tp-course-settings__section" aria-labelledby="course-settings-usage">
+            <h4 id="course-settings-usage">توزيع الطلاب الحاليين</h4>
+            <div className="tp-course-settings__usage">
+              {studyTypeUsage.length > 0 && (
+                <div>
+                  <p className="font-bold">حسب الدراسة</p>
+                  <ul>
+                    {studyTypeUsage.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {locationUsage.length > 0 && (
+                <div>
+                  <p className="font-bold">أكثر المواقع استخداماً</p>
+                  <ul>
+                    {locationUsage.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        <section className="tp-course-settings__section tp-course-card__delete" aria-labelledby="course-settings-delete">
+          <h4 id="course-settings-delete">{courseDeleteBadge(row)}</h4>
+          <p>
+            {row.deleteSafety.blockers.length
+              ? row.deleteSafety.blockers.join("، ")
+              : "لا توجد روابط مانعة للحذف."}
+          </p>
+          <p className="text-muted-foreground">
+            إيقاف التسجيل لا يغيّر بيانات الطلاب الحاليين.
+          </p>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setSettingsCourseId(null);
+              openDeleteDialog(row);
+            }}
+            className="text-danger hover:text-destructive"
+            aria-label={`حذف نهائي للدورة ${row.course.name}`}
+          >
+            <Trash2 aria-hidden="true" />
+            حذف نهائي
+          </Button>
+        </section>
+      </div>
     );
   };
 
@@ -983,6 +976,48 @@ export function CoursesView() {
         </aside>
       </div>
 
+      <Dialog
+        open={Boolean(settingsRow)}
+        onOpenChange={(open) => {
+          if (!open) setSettingsCourseId(null);
+        }}
+      >
+        <DialogContent
+          dir="rtl"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            courseDialogTrigger.current?.focus();
+          }}
+          className="tp-course-settings-dialog sm:max-w-2xl"
+        >
+          <DialogHeader>
+            <DialogTitle>إعدادات الدورة</DialogTitle>
+            {settingsRow && (
+              <p className="text-sm text-muted-foreground">
+                {settingsRow.course.name} ·{" "}
+                {settingsRow.course.active ? "نشطة للتسجيل" : "موقوفة عن التسجيل"}
+              </p>
+            )}
+          </DialogHeader>
+          {settingsRow && renderCourseSettings(settingsRow)}
+          {settingsRow && (
+            <div className="tp-course-settings__footer">
+              <Button
+                type="button"
+                onClick={() => {
+                  const row = settingsRow;
+                  setSettingsCourseId(null);
+                  openEditDialog(row);
+                }}
+              >
+                <Pencil aria-hidden="true" />
+                تعديل إعدادات الدورة
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <CourseEditorDialog
         open={showCreateForm}
         onCloseFocus={() => courseDialogTrigger.current?.focus()}
@@ -1041,6 +1076,7 @@ export function CoursesView() {
           }
           onSubmit={handleEditSave}
           submitLabel="حفظ التعديلات"
+          mode="edit"
           submitDisabled={isSavingCourse || isApplyingCourseSync}
         />
       </CourseEditorDialog>
