@@ -14,13 +14,13 @@ const AR_DIGITS: Record<string, string> = {
 
 const AR_RE = /[٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹]/g;
 
-/** Convert any Arabic/Persian digit characters to Latin */
-export function toLatinDigits(text: string): string {
-  return text.replace(AR_RE, (ch) => AR_DIGITS[ch] ?? ch);
+/** Convert Arabic/Persian digits; missing optional values stay empty. */
+export function toLatinDigits(text: string | null | undefined): string {
+  return (text ?? '').replace(AR_RE, (ch) => AR_DIGITS[ch] ?? ch);
 }
 
 /** Keep phone input numeric only and limit it to 11 digits */
-export function sanitizePhoneInput(value: string): string {
+export function sanitizePhoneInput(value: string | null | undefined): string {
   return toLatinDigits(value).replace(/\D/g, '').slice(0, 11);
 }
 

@@ -167,12 +167,15 @@ export const emptyEditForm: StudentEditForm = {
 };
 
 export function getStudentEditForm(student: Student): StudentEditForm {
+  // API contact fields may be null (for example, an imported Telegram handle
+  // can exist only in username). Keep controlled inputs textual without
+  // changing the original record or copying a handle into the linking field.
   return {
     name: student.name,
     school: student.school || "",
     gender: student.gender,
-    phone: student.phone,
-    parentPhone: student.parentPhone,
+    phone: student.phone ?? "",
+    parentPhone: student.parentPhone ?? "",
     telegram: sanitizeTelegramInput(student.telegram),
     username: sanitizeTelegramInput(student.username || ""),
     courseProgram: student.courseProgram || "",

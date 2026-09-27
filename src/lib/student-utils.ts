@@ -34,7 +34,7 @@ export function normalizeStudentUniqueText(value: string | undefined | null): st
   return normalized || null;
 }
 
-export function sanitizeTelegramInput(value: string): string {
+export function sanitizeTelegramInput(value: string | null | undefined): string {
   return toLatinDigits(value).replace(/@/g, '').trim();
 }
 

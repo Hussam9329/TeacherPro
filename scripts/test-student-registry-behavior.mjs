@@ -102,6 +102,8 @@ const studentExportPagination = loadTypeScriptModule(
   "src/lib/student-export-pagination.ts",
 );
 const xlsxExport = loadTypeScriptModule("src/lib/xlsx-export.ts");
+const formatHelpers = loadTypeScriptModule("src/lib/format.ts");
+const studentUtils = loadTypeScriptModule("src/lib/student-utils.ts");
 
 function text(value, insensitive) {
   const result = String(value ?? "");
@@ -666,6 +668,84 @@ test("mutation reconciliation immediately removes stale filtered rows", () => {
   assert.equal(retained.rows[1].name, "Updated");
   assert.equal(retained.totalDelta, 0);
   assert.equal(original[1].name, "Old");
+});
+
+test("an imported student with no Telegram ID opens an independent recovered username", () => {
+  const student = deepFreeze({
+    ...registryViewHelpers.emptyEditForm,
+    id: "imported-student",
+    name: "طالب مستورد",
+    phone: "07701234567",
+    parentPhone: "07801234567",
+    telegram: null,
+    telegramKey: null,
+    username: "@recovered_۱۲٣",
+    createdAt: "2026-09-27",
+    mutationToken: "stored-row-token",
+  });
+
+  const form = registryViewHelpers.getStudentEditForm(student);
+
+  assert.equal(form.telegram, "");
+  assert.equal(form.username, "recovered_123");
+  assert.equal(form.phone, "07701234567");
+  assert.equal(form.parentPhone, "07801234567");
+  assert.equal(student.telegram, null);
+  assert.equal(student.telegramKey, null);
+  assert.equal(student.username, "@recovered_۱۲٣");
+  assert.equal(student.mutationToken, "stored-row-token");
+});
+
+test("nullable or absent student contacts become empty editable strings", () => {
+  for (const missing of [null, undefined]) {
+    const form = registryViewHelpers.getStudentEditForm({
+      ...registryViewHelpers.emptyEditForm,
+      name: "طالب قديم",
+      phone: missing,
+      parentPhone: missing,
+      telegram: missing,
+      username: missing,
+      createdAt: "2026-09-27",
+    });
+
+    for (const field of ["phone", "parentPhone", "telegram", "username"]) {
+      assert.equal(form[field], "", `${field} should have an empty input value`);
+      assert.equal(form[field].trim(), "");
+    }
+    assert.equal(
+      formatHelpers.getPhoneValidationError(form.phone, "رقم الطالب", true),
+      "رقم الطالب مطلوب",
+    );
+    assert.equal(
+      formatHelpers.getPhoneValidationError(form.parentPhone, "رقم ولي الأمر", true),
+      "رقم ولي الأمر مطلوب",
+    );
+  }
+});
+
+test("contact sanitizers accept missing values and preserve Latin digit normalization", () => {
+  for (const missing of [null, undefined, ""]) {
+    assert.equal(formatHelpers.toLatinDigits(missing), "");
+    assert.equal(formatHelpers.sanitizePhoneInput(missing), "");
+    assert.equal(studentUtils.sanitizeTelegramInput(missing), "");
+  }
+
+  assert.equal(formatHelpers.toLatinDigits("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹"), "01234567890123456789");
+  assert.equal(formatHelpers.sanitizePhoneInput("٠٧٧٠ ۱۲۳-٤٥٦٧"), "07701234567");
+  assert.equal(formatHelpers.sanitizePhoneInput("۰۷۸۰ ١٢٣-۴۵۶۷"), "07801234567");
+  assert.equal(studentUtils.sanitizeTelegramInput(" @student_١۲٣ "), "student_123");
+});
+
+test("an existing Telegram ID does not become the student's recovered username", () => {
+  const form = registryViewHelpers.getStudentEditForm({
+    ...registryViewHelpers.emptyEditForm,
+    telegram: " @original_١۲٣ ",
+    username: null,
+    createdAt: "2026-09-27",
+  });
+
+  assert.equal(form.telegram, "original_123");
+  assert.equal(form.username, "");
 });
 
 test("only the real admin receives full student identity management", () => {
