@@ -26,6 +26,7 @@ import {
 } from "@/hooks/use-teacherpro-sync";
 import { useLatestRequest } from "@/hooks/use-latest-request";
 import { CallNotesManagementDialog } from "./call-notes-management-dialog";
+import { CallsDialog } from "./calls-dialog";
 import { CodeClosuresDialog } from "./code-closures-dialog";
 import { GracePeriodsDialog } from "./grace-periods-dialog";
 import { LeavesDialog, LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog";
@@ -48,7 +49,6 @@ const dashboardShortcuts = [
   { section: "grade-entry", title: "تسجيل الدرجات", icon: PenLine, tone: "info" },
   { section: "grade-records", title: "سجل الدرجات", icon: ChartColumn, tone: "info" },
   { section: "exam-new", title: "إضافة امتحان", icon: FilePlus2, tone: "success" },
-  { section: "follow-up-calls", title: "المكالمات", icon: PhoneCall, tone: "success" },
 ] as const;
 
 function formatStatsTime(value?: string) {
@@ -81,6 +81,8 @@ export function DashboardView({
     actor.permissions?.includes("follow-up.manage")
   ));
   const [callNotesOpen, setCallNotesOpen] = useState(false);
+  // «إدارة المكالمات» opens the calls work list here; the calls tab stays too.
+  const [callsOpen, setCallsOpen] = useState(false);
   const canViewCodeClosures = canAccess("student-registry") || canAccess("dismissed-management");
   const canManageCodeClosures = Boolean(actor && (
     actor.username?.trim().toLowerCase() === "admin" ||
@@ -303,6 +305,20 @@ export function DashboardView({
             {canViewCallNotes && (
               <button
                 type="button"
+                onClick={() => setCallsOpen(true)}
+                aria-haspopup="dialog"
+                data-tone="success"
+                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
+              >
+                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                  <PhoneCall />
+                </span>
+                <span className="tp-dashboard__shortcut-label">إدارة المكالمات</span>
+              </button>
+            )}
+            {canViewCallNotes && (
+              <button
+                type="button"
                 onClick={() => setCallNotesOpen(true)}
                 aria-haspopup="dialog"
                 data-tone="success"
@@ -358,6 +374,9 @@ export function DashboardView({
             )}
           </div>
         </nav>
+      )}
+      {canViewCallNotes && (
+        <CallsDialog open={callsOpen} onOpenChange={setCallsOpen} />
       )}
       {canViewCallNotes && (
         <CallNotesManagementDialog

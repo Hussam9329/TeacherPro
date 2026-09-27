@@ -397,13 +397,11 @@ function gradeMatchesStatusFilter(
 }
 
 function includesSearch(query: string, values: Array<unknown>): boolean {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return true;
-  return values.some((value) =>
-    String(value ?? "")
-      .toLowerCase()
-      .includes(needle),
-  );
+  // One search box: every word must appear in one of the student's fields.
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const haystack = values.map((value) => String(value ?? "").toLowerCase());
+  return words.every((word) => haystack.some((value) => value.includes(word)));
 }
 
 function searchableValues(args: {

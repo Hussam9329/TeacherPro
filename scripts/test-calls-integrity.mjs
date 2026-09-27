@@ -56,7 +56,7 @@ assert(
 assert(
   followUp.includes('React.startTransition(() => {') &&
     followUp.includes('setCallRowsFromDb(nextRows);') &&
-    followUp.includes('className="teacherpro-heavy-row rounded-3xl'),
+    followUp.includes('className="teacherpro-heavy-row tp-call-card"'),
   'تحديث بطاقات المكالمات مجدول كواجهة غير عاجلة وكل بطاقة معزولة عن إعادة تخطيط الصفحة',
 );
 
@@ -287,8 +287,9 @@ assert(
   followUp.includes('callStatusSupportsGradeRange') &&
     followUp.includes('setCallGradeFrom("");') &&
     followUp.includes('setCallGradeTo("");') &&
-    followUp.includes('disabled={!callExamSelected || !callGradeRangeEnabled}'),
-  'اختيار الغائبين أو الغش يمسح نطاق الدرجة ويعطّل حقليه للحالات غير الرقمية',
+    followUp.includes('{callGradeRangeEnabled && (') &&
+    followUp.includes('<summary>فلاتر إضافية</summary>'),
+  'اختيار الغائبين أو الغش يمسح نطاق الدرجة ويخفي حقليه للحالات غير الرقمية',
 );
 assert(
   followUp.includes('gradeFrom: effectiveCallGradeFrom') &&
@@ -353,6 +354,50 @@ assert(
   followUp.includes('الطلاب الذين لم تُدخل') &&
     followUp.includes('درجاتهم بعد انتهاء الامتحان'),
   'الواجهة توضح أن الغائبين تشمل أيضاً غير المدخلة درجاتهم بعد انتهاء الامتحان',
+);
+
+// ── Simplified calls: short cards, filter buttons, details window ──────────
+const dashboardSource = read('src/components/teacher-pro/dashboard.tsx');
+const callsDialogSource = read('src/components/teacher-pro/calls-dialog.tsx');
+const layoutSource = read('src/components/teacher-pro/layout.tsx');
+assert(
+  callsDialogSource.includes('<CallsWorkspace variant="window" />') &&
+    dashboardSource.includes('إدارة المكالمات') &&
+    dashboardSource.includes('<CallsDialog open={callsOpen}') &&
+    layoutSource.includes('{ id: "follow-up-calls", title: "المكالمات", icon: PhoneCall }') &&
+    followUp.includes('return <CallsWorkspace variant="page" />;'),
+  'المكالمات تُفتح من زر «إدارة المكالمات» في لوحة النظام وتبقى تبويبة المكالمات بنفس الواجهة',
+);
+assert(
+  stats.includes('const contactCounts = { ...zeroStats.contactCounts, all: baseMatching.length };') &&
+    stats.includes('const matchingStudents = baseMatching.filter((student) => {') &&
+    followUp.includes('callContactFilterChips') &&
+    followUp.includes('contactCounts?.[chip.countKey]') &&
+    api.includes('contactCounts?:'),
+  'أزرار حالة التواصل تعرض أعدادها محسوبة بكل الفلاتر عدا فلتر التواصل نفسه',
+);
+assert(
+  candidates.includes('words.every((word) => haystack.some((value) => value.includes(word)))') &&
+    stats.includes('words.every((word) => haystack.some((value) => value.includes(word)))') &&
+    !followUp.includes('بحث داخل الفرز'),
+  'حقل بحث واحد: كل الكلمات المكتوبة لازم تنطبق بالقائمة والإحصائيات والتصدير',
+);
+assert(
+  followUp.includes('callContactActions.map((action) => (') &&
+    followUp.includes('saveCallStatus(row, contactStatus === action.value ? "" : action.value)') &&
+    followUp.includes('aria-pressed={contactStatus === action.value}'),
+  'إجراء التواصل ثلاث أزرار بضغطة وحدة، والضغط على المفعّل يرجعه «بدون إجراء»',
+);
+assert(
+  followUp.includes('renderDetailsWindow') &&
+    followUp.includes('className="tp-modal tp-call-details"') &&
+    followUp.includes('سجل الامتحانات') &&
+    followUp.includes('renderNoteArea(row, "window")') &&
+    followUp.includes('renderNoteArea(row, "card")') &&
+    followUp.includes('ملف الطالب') &&
+    followUp.includes('تصفير الفلاتر') &&
+    followUp.includes('لديهم ملاحظات'),
+  'كارت الطالب مختصر، والتفاصيل (السجل، QR، محرر الملاحظة، ملف الطالب) بنافذة',
 );
 
 if (process.exitCode) {

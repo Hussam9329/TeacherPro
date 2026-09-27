@@ -112,6 +112,9 @@ const zeroStats = {
   unanswered: 0,
   wrong: 0,
   noAction: 0,
+  // Counts per contact action with every filter except the contact filter
+  // itself, so the contact filter buttons never read zero for the others.
+  contactCounts: { all: 0, noAction: 0, contacted: 0, unanswered: 0, wrong: 0 },
   source: "database" as const,
 };
 
@@ -218,13 +221,11 @@ function gradeMatchesStatusFilter(
 }
 
 function includesSearch(query: string, values: Array<unknown>): boolean {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return true;
-  return values.some((value) =>
-    String(value ?? "")
-      .toLowerCase()
-      .includes(needle),
-  );
+  // One search box: every word must appear in one of the student's fields.
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const haystack = values.map((value) => String(value ?? "").toLowerCase());
+  return words.every((word) => haystack.some((value) => value.includes(word)));
 }
 
 function searchableValues(
@@ -452,7 +453,7 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    const matchingStudents = students.filter((student) => {
+    const baseMatching = students.filter((student) => {
       const storedGrade = gradeByStudentId.get(student.id);
       const studentLeaves = leavesByStudentId.get(student.id) || [];
       const absenceSource = resolveCallAbsenceSource({
@@ -484,8 +485,6 @@ export async function GET(req: NextRequest) {
         return false;
       }
       if (!callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)) return false;
-      const contactStatus = normalizeContactStatus(bestCallByStudentId.get(student.id));
-      if (!contactStatusMatchesFilter(contactStatusFilter, contactStatus)) return false;
       if (notesFilter === "with-notes" && !studentIdsWithNotes.has(student.id)) return false;
       if (
         generalSearch &&
@@ -506,6 +505,19 @@ export async function GET(req: NextRequest) {
       return true;
     });
 
+    const contactCounts = { ...zeroStats.contactCounts, all: baseMatching.length };
+    for (const student of baseMatching) {
+      const status = normalizeContactStatus(bestCallByStudentId.get(student.id));
+      if (status === "تم الاتصال") contactCounts.contacted += 1;
+      else if (status === "لم يرد") contactCounts.unanswered += 1;
+      else if (status === "الرقم خاطئ") contactCounts.wrong += 1;
+      else contactCounts.noAction += 1;
+    }
+    const matchingStudents = baseMatching.filter((student) => {
+      const contactStatus = normalizeContactStatus(bestCallByStudentId.get(student.id));
+      return contactStatusMatchesFilter(contactStatusFilter, contactStatus);
+    });
+
     const stats = matchingStudents.reduce(
       (acc, student) => {
         const status = normalizeContactStatus(
@@ -517,7 +529,7 @@ export async function GET(req: NextRequest) {
         else acc.noAction += 1;
         return acc;
       },
-      { ...zeroStats, total: matchingStudents.length },
+      { ...zeroStats, total: matchingStudents.length, contactCounts },
     );
 
     return NextResponse.json(stats);

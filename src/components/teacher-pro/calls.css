@@ -1,0 +1,372 @@
+/* «المكالمات» — one short card per student; details open in a window.
+   Used by the calls tab and the «إدارة المكالمات» window on the dashboard. */
+
+.tp-calls,
+.tp-call-details {
+  --calls-radius: 1rem;
+}
+
+.tp-calls [data-tone="muted"],
+.tp-call-details [data-tone="muted"] {
+  --tone: var(--muted-foreground);
+  --tone-ink: var(--muted-foreground);
+  --tone-tint: var(--muted);
+  --tone-line: var(--border);
+  --tone-solid: var(--muted-foreground);
+  --tone-on: var(--background);
+}
+
+.tp-calls {
+  container-type: inline-size;
+  display: grid;
+  gap: 0.9rem;
+  min-inline-size: 0;
+}
+
+.tp-calls :where(p, span, b, label) { min-inline-size: 0; overflow-wrap: anywhere; }
+
+.tp-calls__field { display: grid; gap: 0.35rem; min-inline-size: 0; }
+.tp-calls__field > [data-slot="label"] { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 700; }
+
+/* Course → exam, with export */
+.tp-calls__setup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--calls-radius);
+  background: var(--card);
+}
+.tp-calls__picker { display: flex; flex: 1 1 26rem; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem 0.75rem; min-inline-size: 0; }
+.tp-calls__picker > .tp-calls__field { flex: 1 1 12rem; }
+.tp-calls__arrow { flex-shrink: 0; inline-size: 1.1rem; block-size: 1.1rem; margin-block-end: 0.7rem; color: var(--muted-foreground); }
+.tp-calls__export { display: flex; flex: 0 0 auto; }
+.tp-calls__export [data-slot="button"] { min-block-size: 2.5rem; }
+
+.tp-calls__empty {
+  margin: 0;
+  padding: 1.5rem 1rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--calls-radius);
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* Filters */
+.tp-calls__filters {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--calls-radius);
+  background: var(--card);
+}
+.tp-calls__filter-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem 0.75rem; }
+.tp-calls__search { position: relative; flex: 1 1 16rem; min-inline-size: 0; }
+.tp-calls__search > svg {
+  position: absolute;
+  /* The input's backdrop blur paints it above earlier siblings. */
+  z-index: 1;
+  inset-inline-start: 0.8rem;
+  top: 50%;
+  inline-size: 1rem;
+  block-size: 1rem;
+  color: var(--muted-foreground);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.tp-calls__search > [data-slot="input"] { min-block-size: 2.5rem; padding-inline-start: 2.4rem; }
+.tp-calls__status { flex: 0 1 15rem; }
+
+.tp-calls__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-block-size: 2.5rem;
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.tp-calls__toggle svg { inline-size: 1rem; block-size: 1rem; }
+.tp-calls__toggle[aria-pressed="true"] { border-color: var(--primary); background: var(--primary); color: var(--primary-foreground); }
+.tp-calls__toggle:focus-visible,
+.tp-calls__chip:focus-visible,
+.tp-call-card__action:focus-visible,
+.tp-call-modes__btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 45%, transparent); }
+.tp-calls__reset { min-block-size: 2.5rem; }
+
+/* Contact filter buttons with their counts */
+.tp-calls__contact-filters { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.tp-calls__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-block-size: 2.5rem;
+  padding: 0.3rem 0.5rem 0.3rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.tp-calls__chip > b {
+  min-inline-size: 1.9rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+/* The tone comes from the global [data-tone] tokens; «الكل» has none. */
+.tp-calls__chip-dot { inline-size: 0.6rem; block-size: 0.6rem; border-radius: 50%; background: var(--tone, var(--primary)); }
+.tp-calls__chip[aria-pressed="true"] {
+  border-color: var(--tone, var(--primary));
+  background: var(--tone-tint, color-mix(in srgb, var(--primary) 12%, var(--background)));
+  box-shadow: inset 0 0 0 1px var(--tone, var(--primary));
+}
+.tp-calls__chip[aria-pressed="true"] > b { background: var(--tone-solid, var(--primary)); color: var(--tone-on, var(--primary-foreground)); }
+
+.tp-calls__more > summary { inline-size: fit-content; min-block-size: 2rem; padding-block: 0.3rem; color: var(--muted-foreground); font-size: 0.85rem; font-weight: 700; cursor: pointer; }
+.tp-calls__range { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: 0.6rem; margin-block-start: 0.5rem; max-inline-size: 28rem; }
+
+.tp-calls__hint {
+  margin: 0;
+  padding: 0.55rem 0.8rem;
+  border: 1px dashed var(--border);
+  border-radius: 0.8rem;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1.7;
+}
+.tp-calls__hint[data-tone] { border-style: solid; border-color: var(--tone-line); border-inline-start: 4px solid var(--tone); background: var(--tone-tint); color: var(--tone-ink); }
+
+.tp-calls__count { margin: 0; color: var(--muted-foreground); font-size: 0.85rem; font-weight: 650; }
+.tp-calls__count b { color: var(--foreground); font-variant-numeric: tabular-nums; }
+
+.tp-calls__list,
+.tp-calls__skeleton { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; }
+
+.tp-calls__pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.6rem 1rem; font-size: 0.85rem; color: var(--muted-foreground); }
+.tp-calls__pager b { color: var(--foreground); font-variant-numeric: tabular-nums; }
+
+/* The short student card */
+.tp-call-card {
+  --accent: var(--border);
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+  min-inline-size: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-inline-start: 4px solid var(--accent);
+  border-radius: var(--calls-radius);
+  background: var(--card);
+}
+.tp-call-card[data-contact="success"] { --accent: var(--status-success-vivid); }
+.tp-call-card[data-contact="warning"] { --accent: var(--status-warning-vivid); }
+.tp-call-card[data-contact="danger"] { --accent: var(--status-danger-vivid); }
+
+.tp-call-card__head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; }
+.tp-call-card__name { font-size: 1rem; font-weight: 800; line-height: 1.5; }
+.tp-call-card__code { color: var(--muted-foreground); font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.78rem; font-weight: 600; }
+.tp-call-card__opps {
+  padding: 0.1rem 0.6rem;
+  border: 1px solid var(--tone-line, var(--border));
+  border-radius: 999px;
+  background: var(--tone-tint, var(--muted));
+  color: var(--tone-ink, var(--foreground));
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.tp-call-card__focus { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.5rem; }
+.tp-call-card__result {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--tone-line);
+  border-radius: 0.7rem;
+  background: var(--tone-tint);
+  color: var(--tone-ink);
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+.tp-call-card__label { color: var(--muted-foreground); font-size: 0.8rem; font-weight: 700; }
+.tp-call-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.tp-call-badges__more { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 700; }
+
+.tp-call-card__contact { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.tp-call-card__contact-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-block-size: 2.5rem;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--status-success-border);
+  border-radius: 0.75rem;
+  background: var(--status-success-bg);
+  color: var(--status-success-fg);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+.tp-call-card__contact-btn[data-kind="telegram"] { border-color: var(--status-info-border); background: var(--status-info-bg); color: var(--status-info-fg); }
+.tp-call-card__contact-btn svg { flex-shrink: 0; inline-size: 1rem; block-size: 1rem; }
+a.tp-call-card__contact-btn:hover { border-color: transparent; background: var(--status-success-solid); color: var(--status-success-on); }
+a.tp-call-card__contact-btn[data-kind="telegram"]:hover { background: var(--status-info-solid); color: var(--status-info-on); }
+a.tp-call-card__contact-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 45%, transparent); }
+.tp-call-card__contact-btn[aria-disabled="true"] { border-color: var(--border); background: transparent; color: var(--muted-foreground); opacity: 0.55; cursor: not-allowed; }
+
+.tp-call-card__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.tp-call-card__action {
+  min-block-size: 2.5rem;
+  padding: 0.3rem 0.85rem;
+  border: 1px solid var(--tone-line);
+  border-radius: 0.75rem;
+  background: var(--background);
+  color: var(--tone-ink);
+  font-size: 0.84rem;
+  font-weight: 750;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.tp-call-card__action:hover:not(:disabled):not([aria-pressed="true"]) { background: var(--tone-tint); }
+.tp-call-card__action[aria-pressed="true"] { border-color: transparent; background: var(--tone-solid); color: var(--tone-on); box-shadow: 0 6px 16px -10px var(--tone); }
+.tp-call-card__action:disabled { cursor: not-allowed; opacity: 0.6; }
+.tp-call-card__last { color: var(--muted-foreground); font-size: 0.78rem; font-weight: 650; }
+
+.tp-call-card__note { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; min-inline-size: 0; }
+.tp-call-card__note-line,
+.tp-call-card__note-add {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-block-size: 2.5rem;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 0.84rem;
+  text-align: start;
+}
+.tp-call-card__note-line { flex: 1 1 14rem; cursor: pointer; }
+.tp-call-card__note-line[data-readonly="true"] { cursor: default; }
+.tp-call-card__note-line > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+.tp-call-card__note-add { border-style: dashed; background: transparent; color: var(--muted-foreground); font-weight: 700; cursor: pointer; }
+.tp-call-card__note-line svg,
+.tp-call-card__note-add svg { flex-shrink: 0; inline-size: 0.95rem; block-size: 0.95rem; }
+.tp-call-card__general { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 700; }
+
+.tp-call-card__foot { display: flex; justify-content: flex-end; }
+.tp-call-card__foot [data-slot="button"] { min-block-size: 2.25rem; }
+
+/* Note editor (card and window) */
+.tp-call-note { display: grid; gap: 0.5rem; min-inline-size: 0; }
+.tp-call-note__label { color: var(--muted-foreground); font-size: 0.78rem; font-weight: 700; }
+.tp-call-note__general { padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--muted); font-size: 0.85rem; }
+.tp-call-note__general p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tp-call-note__general p:first-child { margin-bottom: 0.2rem; color: var(--muted-foreground); font-size: 0.75rem; font-weight: 700; }
+.tp-call-note__input {
+  min-block-size: 6rem;
+  inline-size: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--input);
+  border-radius: 0.85rem;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 0.9rem;
+  line-height: 1.7;
+  outline: none;
+  resize: vertical;
+}
+.tp-call-note__input:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 45%, transparent); }
+.tp-call-note__conflict {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--status-warning-border);
+  border-inline-start: 4px solid var(--status-warning-vivid);
+  border-radius: 0.75rem;
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
+  font-size: 0.84rem;
+}
+.tp-call-note__conflict p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tp-call-note__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem; font-size: 0.78rem; color: var(--muted-foreground); }
+
+/* Details window */
+.tp-call-details[data-slot="dialog-content"] { max-width: 48rem; }
+.tp-call-exams { display: grid; gap: 0.6rem; margin: 0; padding: 0; list-style: none; }
+.tp-call-exam {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--tp-border, var(--border));
+  border-inline-start: 4px solid var(--tone);
+  border-radius: 0.9rem;
+  background: var(--tp-surface, var(--card));
+}
+.tp-call-exam__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
+.tp-call-exam__title { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; min-inline-size: 0; }
+.tp-call-exam__label { padding: 0.05rem 0.55rem; border-radius: 999px; background: var(--tone-tint); color: var(--tone-ink); font-size: 0.75rem; font-weight: 750; }
+.tp-call-exam__date { color: var(--tp-text-muted, var(--muted-foreground)); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.tp-call-exam__grade { padding: 0.25rem 0.7rem; border-radius: 0.7rem; background: var(--tone-tint); color: var(--tone-ink); font-size: 1.1rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.tp-call-exam__reason,
+.tp-call-exam__meta { margin: 0; color: var(--tp-text-muted, var(--muted-foreground)); font-size: 0.8rem; line-height: 1.7; }
+.tp-call-exam__grade-note { padding: 0.5rem 0.65rem; border: 1px solid var(--status-warning-border); border-inline-start: 4px solid var(--status-warning-vivid); border-radius: 0.7rem; background: var(--status-warning-bg); color: var(--status-warning-fg); font-size: 0.8rem; }
+.tp-call-exam__grade-note span { display: block; margin-bottom: 0.15rem; font-weight: 800; }
+.tp-call-exam__grade-note p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.tp-call-modes { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.tp-call-modes__btn {
+  min-block-size: 2.25rem;
+  padding: 0.25rem 0.8rem;
+  border: 1px solid var(--tp-border-strong, var(--border));
+  border-radius: 999px;
+  background: var(--tp-surface, var(--background));
+  color: var(--tp-text, var(--foreground));
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tp-call-modes__btn[aria-pressed="true"] { border-color: transparent; background: var(--tp-primary, var(--primary)); color: var(--tp-on-primary, var(--primary-foreground)); }
+
+.tp-call-qr { display: grid; gap: 0.5rem; padding: 0.75rem; border: 1px dashed var(--tp-border-strong, var(--border)); border-radius: 0.9rem; }
+.tp-call-qr__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: 0.6rem; }
+
+/* The «إدارة المكالمات» window on the dashboard */
+.tp-calls-window .tp-calls__setup,
+.tp-calls-window .tp-calls__filters { background: var(--tp-panel); border-color: var(--tp-border); }
+.tp-calls-window .tp-call-card { background: var(--tp-surface); border-color: var(--tp-border); }
+
+@container (min-width: 56rem) {
+  .tp-calls__list,
+  .tp-calls__skeleton { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container (max-width: 30rem) {
+  .tp-calls__arrow { display: none; }
+  .tp-calls__export,
+  .tp-calls__export [data-slot="button"] { inline-size: 100%; }
+  .tp-calls__status,
+  .tp-calls__toggle { flex: 1 1 100%; }
+  .tp-call-card__action { flex: 1 1 auto; }
+}

@@ -915,6 +915,8 @@ export interface CallStatsResponse {
   unanswered: number;
   wrong: number;
   noAction: number;
+  /** Per contact action, ignoring the contact filter itself (the filter buttons' counts). */
+  contactCounts?: { all: number; noAction: number; contacted: number; unanswered: number; wrong: number };
   source: "database";
 }
 
