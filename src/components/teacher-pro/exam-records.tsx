@@ -55,7 +55,7 @@ const examGradeExportColumns: ExportColumn<any>[] = [
   { key: "index", label: "#", value: (row) => Number(row.index ?? 0) + 1 },
   { key: "code", label: "الكود", value: (row) => row.student?.code || "" },
   { key: "student", label: "الطالب", value: (row) => row.student?.name || "" },
-  { key: "course", label: "الدورة", value: (row) => row.courseName || "" },
+  { key: "course", label: "اسم الدورة", value: (row) => row.courseName || "" },
   // The retired grace placeholder is not a result: export it as empty.
   {
     key: "status",
@@ -1013,7 +1013,7 @@ export function ExamRecordsView() {
           <div className="tp-filter-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6">
             <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="exam-records-course" className="text-xs">
-                الدورة
+                اسم الدورة
               </Label>
               <Select
                 value={filterCourseId || "all"}
@@ -1082,7 +1082,7 @@ export function ExamRecordsView() {
                 data-teacherpro-search="true"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="اسم الامتحان / التاريخ / الدورة / الحالة"
+                placeholder="اسم الامتحان / التاريخ / اسم الدورة / الحالة"
               />
             </div>
             <div className="tp-filter-field tp-filter-meta">

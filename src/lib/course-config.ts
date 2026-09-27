@@ -106,7 +106,7 @@ export function getStudyTypesByProgram(course: CourseSettingsSource): StudyTypes
     const selected = parseJsonArray<unknown>(rawMap[program]);
     const normalized = uniqueStudyTypes(selected);
 
-    // توافق خلفي: الدورات القديمة كانت تحفظ نوع البرنامج كقائمة عامة.
+    // توافق خلفي: الدورات القديمة كانت تحفظ نظام الدراسة كقائمة عامة.
     result[program] = normalized.length > 0 ? normalized : [...legacyStudyTypes];
   }
 
@@ -205,26 +205,26 @@ export function validateStudentCourseChoices(
 
   // 1. التحقق من courseProgram
   if (!choices.courseProgram) {
-    return { ok: false, error: "نوع الدورة مطلوب" };
+    return { ok: false, error: "نظام الاشتراك مطلوب" };
   }
   if (!availablePrograms.includes(choices.courseProgram as CourseProgram)) {
-    return { ok: false, error: `نوع الدورة "${choices.courseProgram}" غير متاح في هذه الدورة` };
+    return { ok: false, error: `نظام الاشتراك "${choices.courseProgram}" غير متاح في هذه الدورة` };
   }
 
   // 2. إذا كورسات، يجب اختيار كورس
   if (choices.courseProgram === "كورسات") {
     if (!choices.courseTerm || !COURSE_TERMS.includes(choices.courseTerm as CourseTerm)) {
-      return { ok: false, error: "يجب اختيار الكورس عند اختيار كورسات" };
+      return { ok: false, error: "يجب اختيار الكورس المطلوب عند اختيار كورسات" };
     }
   }
 
-  // 3. التحقق من studyType حسب نوع الدورة المختار
+  // 3. التحقق من studyType حسب نظام الاشتراك المختار
   const availableStudyTypes = getAvailableStudyTypesForProgram(course, choices.courseProgram);
   if (!choices.studyType) {
-    return { ok: false, error: "نوع البرنامج مطلوب" };
+    return { ok: false, error: "نظام الدراسة مطلوب" };
   }
   if (!availableStudyTypes.includes(choices.studyType as StudyType)) {
-    return { ok: false, error: `نوع البرنامج "${choices.studyType}" غير متاح لنوع الدورة "${choices.courseProgram}"` };
+    return { ok: false, error: `نظام الدراسة "${choices.studyType}" غير متاح لنظام الاشتراك "${choices.courseProgram}"` };
   }
 
   // 4. التحقق من locationScope
@@ -242,7 +242,7 @@ export function validateStudentCourseChoices(
   }
 
   if (!locationScopes.includes(choices.locationScope as LocationScope)) {
-    return { ok: false, error: `الموقع "${choices.locationScope}" غير متاح لنوع البرنامج المختار` };
+    return { ok: false, error: `الموقع "${choices.locationScope}" غير متاح لنظام الدراسة المختار` };
   }
 
   // 5. إذا بغداد

@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const courseError = requireText(body.courseId, "الدورة");
+    const courseError = requireText(body.courseId, "اسم الدورة");
     if (courseError) return validationError(courseError);
     const chapterError = requireText(body.chapterId, "الفصل");
     if (chapterError) return validationError(chapterError);

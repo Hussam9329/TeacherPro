@@ -739,7 +739,7 @@ export function CoursesView() {
                     <dt>{program}</dt>
                     <dd>
                       {(studyTypesByProgram[program] || []).join("، ") ||
-                        "بدون نوع دراسة"}
+                        "بدون نظام دراسة"}
                     </dd>
                   </div>
                 ))}
@@ -1103,7 +1103,7 @@ export function CoursesView() {
                       </p>
                       <div className="grid gap-1 sm:grid-cols-2">
                         <p>
-                          الفترة/نوع الدورة:{" "}
+                          الكورس المطلوب:{" "}
                           {courseSyncDialog.preview.fieldChanges.courseTerm}
                         </p>
                         <p>

@@ -53,7 +53,7 @@ import {
 const opportunityExportColumns: ExportColumn<any>[] = [
   { key: "student", label: "الطالب", value: (s) => s.name || "", defaultSelected: true },
   { key: "code", label: "الكود", value: (s) => s.code || "", defaultSelected: false },
-  { key: "course", label: "الدورة", value: (s) => s.courseName || "", defaultSelected: true },
+  { key: "course", label: "اسم الدورة", value: (s) => s.courseName || "", defaultSelected: true },
   { key: "status", label: "الحالة", value: (s) => s.status || "", defaultSelected: false },
   {
     key: "opportunities",
@@ -887,7 +887,7 @@ export function OpportunitiesView() {
           <div className="tp-filter-grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6">
             <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="opp-course" className="text-xs font-bold">
-                الدورة
+                اسم الدورة
               </Label>
               <Select
                 name="courseId"
@@ -1463,7 +1463,7 @@ export function OpportunitiesView() {
                   <p className="font-bold">{selectedDetailsStudent.code}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">الدورة</p>
+                  <p className="text-xs text-muted-foreground">اسم الدورة</p>
                   <p className="font-bold">
                     {courseName(selectedDetailsStudent.courseId)}
                   </p>

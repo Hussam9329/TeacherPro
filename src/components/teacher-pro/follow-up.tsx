@@ -211,7 +211,7 @@ const callExportColumns: ExportColumn<CallExportRow>[] = [
   },
   {
     key: "course",
-    label: "الدورة",
+    label: "اسم الدورة",
     value: ({ row, courseName }) => courseName(row.student.courseId),
   },
   {
@@ -2549,7 +2549,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 </div>
                 {selectedLeaveStudent && (
                   <p className="rounded-xl bg-muted/50 p-2 text-xs text-muted-foreground">
-                    نوع البرنامج: <b>{selectedLeaveStudent.studyType || "—"}</b>
+                    نظام الدراسة: <b>{selectedLeaveStudent.studyType || "—"}</b>
                     {studentHasExistingExamLeave && " — لديه إجازة امتحان سابقة"}
                     {studentHasExistingPeriodLeave && " — لديه إجازة فترة سابقة"}
                   </p>
@@ -2596,7 +2596,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <CardContent className="tp-filter-content space-y-4">
               <div className="tp-filter-grid grid-cols-1 md:grid-cols-6">
                 <div className="tp-filter-field tp-filter-primary">
-                  <Label>الدورة</Label>
+                  <Label>اسم الدورة</Label>
                   <Select
                     value={callCourseId || "__none__"}
                     onValueChange={(value) => {
@@ -2604,7 +2604,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="اختر الدورة أولاً" />
+                      <SelectValue placeholder="اختر اسم الدورة أولاً" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">بدون اختيار دورة</SelectItem>
@@ -2795,7 +2795,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     />
                   ) : (
                     <Button className="w-full" variant="outline" disabled>
-                      اختر الدورة والامتحان
+                      اختر اسم الدورة والامتحان
                     </Button>
                   )}
                 </div>
@@ -2825,7 +2825,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               ) : null}
               {!callCourseSelected ? (
                 <p className="rounded-2xl border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
-                  اختر الدورة أولاً حتى يتم تفعيل الامتحانات وبقية الفلاتر.
+                  اختر اسم الدورة أولاً حتى يتم تفعيل الامتحانات وبقية الفلاتر.
                 </p>
               ) : !callExamSelected ? (
                 <p className="rounded-2xl border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
@@ -2899,7 +2899,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               </div>
               {!callExamSelected ? (
                 <p className="empty-state py-8">
-                  اختر الدورة ثم الامتحان لعرض الطلاب.
+                  اختر اسم الدورة ثم الامتحان لعرض الطلاب.
                 </p>
               ) : callLoading && visibleCallRows.length === 0 ? (
                 renderCallLoadingSkeleton()

@@ -228,11 +228,11 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
                 </div>
               </label>
               <label className="tp-modal__field">
-                <span>الدورة</span>
+                <span>اسم الدورة</span>
                 <div className="tp-modal__select-wrap">
                   <BookOpen aria-hidden="true" />
                   <select
-                    aria-label="تصفية اغلاق الكودات حسب الدورة"
+                    aria-label="تصفية اغلاق الكودات حسب اسم الدورة"
                     value={courseId}
                     onChange={(event) => {
                       const value = event.target.value;
@@ -278,7 +278,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
               </div>
             ) : (
               <div className="tp-modal__cards" data-columns="1">
-                {visibleStudents.length > 0 && <div aria-hidden="true" className="tp-closures__headings"><span>الطالب والكود</span><span>الدورة</span><span>تاريخ الفصل</span><span>اغلاق كود</span></div>}
+                {visibleStudents.length > 0 && <div aria-hidden="true" className="tp-closures__headings"><span>الطالب والكود</span><span>اسم الدورة</span><span>تاريخ الفصل</span><span>اغلاق كود</span></div>}
                 {visibleStudents.map((student) => {
                   const telegram = describeTelegramHandle(student);
                   const reasonExpanded = expandedReasonIds.has(student.id);

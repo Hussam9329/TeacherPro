@@ -240,10 +240,10 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                 </div>
               </label>
               <label className="tp-modal__field">
-                <span>الدورة</span>
+                <span>اسم الدورة</span>
                 <div className="tp-modal__select-wrap" data-plain="true">
                   <select
-                    aria-label="تصفية حسب الدورة"
+                    aria-label="تصفية حسب اسم الدورة"
                     value={courseId}
                     onChange={(event) => selectCourse(event.target.value)}
                   >

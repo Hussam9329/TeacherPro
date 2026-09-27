@@ -70,7 +70,7 @@ function summarizeCourseConfigWarnings(input: {
       !Array.isArray(config.scopes) ||
       config.scopes.length === 0
     ) {
-      warnings.push(`نوع البرنامج "${studyType}" لا يحتوي إعداد مواقع مكتمل.`);
+      warnings.push(`نظام الدراسة "${studyType}" لا يحتوي إعداد مواقع مكتمل.`);
     }
   }
 

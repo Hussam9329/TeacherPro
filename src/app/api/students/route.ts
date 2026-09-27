@@ -381,7 +381,7 @@ export async function POST(req: NextRequest) {
     ["name", "اسم الطالب مطلوب"],
     ["school", "اسم المدرسة مطلوب"],
     ["gender", "الجنس مطلوب"],
-    ["courseId", "الدورة مطلوبة"],
+    ["courseId", "اسم الدورة مطلوب"],
     ["createdAt", "تاريخ إضافة الطالب مطلوب"],
   ] as const;
   const missingField = requiredFields.find(
@@ -861,7 +861,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "تغيير نوع البرنامج/الدورة/الموقع داخل نفس الدورة يحتاج اختياراً واضحاً: الإبقاء على الملف كما هو أو البدء كطالب جديد.",
+          "تغيير نظام الدراسة أو نظام الاشتراك أو الكورس المطلوب أو الموقع داخل نفس الدورة يحتاج اختياراً واضحاً: الإبقاء على الملف كما هو أو البدء كطالب جديد.",
         requiresTransferPolicy: true,
       },
       { status: 409 },

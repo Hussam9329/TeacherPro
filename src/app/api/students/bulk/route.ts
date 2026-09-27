@@ -271,7 +271,7 @@ export async function POST(req: NextRequest) {
         gender === "ذكر" || gender === "أنثى",
         `السطر ${rowNo}: الجنس يجب أن يكون ذكر أو أنثى`,
       ],
-      [Boolean(courseId), `السطر ${rowNo}: الدورة مطلوبة`],
+      [Boolean(courseId), `السطر ${rowNo}: اسم الدورة مطلوب`],
       [Boolean(course), `السطر ${rowNo}: الدورة المحددة غير موجودة`],
       [
         status === "نشط" || status === "مفصول",

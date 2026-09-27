@@ -1100,7 +1100,7 @@ export function StudentProfileDialog({
                   <InfoBox label="رقم ولي الأمر" value={<ContactLink href={whatsappLink(profileStudent.parentPhone)}>{profileStudent.parentPhone}</ContactLink>} />
                   <InfoBox label="يوزر تيليجرام" value={profileStudent.username ? <ContactLink href={telegramLink(profileStudent.username)}>{profileStudent.username}</ContactLink> : "—"} />
                   <InfoBox label="معرف تيليجرام" value={profileStudent.telegram ? (/^\d+$/.test(profileStudent.telegram) ? <span dir="ltr">{profileStudent.telegram}</span> : <ContactLink href={telegramLink(profileStudent.telegram)}>{profileStudent.telegram}</ContactLink>) : "—"} />
-                  <InfoBox label="أسلوب الدراسة" value={profileStudent.studyType || "—"} />
+                  <InfoBox label="نظام الدراسة" value={profileStudent.studyType || "—"} />
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
@@ -1108,8 +1108,8 @@ export function StudentProfileDialog({
                     <h4 className="mb-3 text-base font-black sm:mb-4 sm:text-lg">المعلومات العامة</h4>
                     <div className="grid gap-2 text-sm sm:grid-cols-2 sm:gap-3">
                       <InfoBox label="الجنس" value={profileStudent.gender} />
-                      <InfoBox label="نوع الدورة" value={profileStudent.courseProgram || "—"} />
-                      <InfoBox label="الكورس" value={profileStudent.courseTerm || "—"} />
+                      <InfoBox label="نظام الاشتراك" value={profileStudent.courseProgram || "—"} />
+                      <InfoBox label="الكورس المطلوب" value={profileStudent.courseTerm || "—"} />
                       <InfoBox label="الموقع الكامل" value={formatStudentLocation(profileStudent)} />
                       <InfoBox label="الفصل النشط" value={activeChapterText} />
                       <InfoBox label="تاريخ إضافة الطالب" value={formatAppDate(profileStudent.createdAt, profileStudent.createdAt || "—")} />
@@ -1399,8 +1399,8 @@ export function StudentProfileDialog({
                         <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2">
                           <InfoBox label="كود الملف السابق" value={oldStudent.code || "—"} />
                           <InfoBox label="الحالة السابقة" value={oldStudent.status || "—"} />
-                          <InfoBox label="البرنامج/الدورة" value={[oldStudent.courseProgram, oldStudent.courseTerm].filter(Boolean).join(" — ") || "—"} />
-                          <InfoBox label="أسلوب الدراسة" value={oldStudent.studyType || "—"} />
+                          <InfoBox label="نظام الاشتراك / الكورس المطلوب" value={[oldStudent.courseProgram, oldStudent.courseTerm].filter(Boolean).join(" — ") || "—"} />
+                          <InfoBox label="نظام الدراسة" value={oldStudent.studyType || "—"} />
                           <InfoBox label="الموقع السابق" value={[oldStudent.locationScope || oldStudent.mainSite, oldStudent.subSite].filter(Boolean).join(" — ") || "—"} />
                           <InfoBox label="الرصيد السابق" value={`${Number(oldStudent.opportunities || 0)}/${Number(oldStudent.baseOpportunities || 0)}`} />
                           <InfoBox label="تاريخ بداية الملف" value={formatAppDate(oldStudent.createdAt)} />

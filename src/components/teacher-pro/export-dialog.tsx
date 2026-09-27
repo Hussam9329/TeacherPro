@@ -868,7 +868,7 @@ const DETAILS_MODAL_JS = `
       var s = currentMatches[i];
       html += '<div class="tp-suggestion" id="tpSuggestion-' + i + '" role="option" aria-selected="false" data-idx="' + i + '">'
         + '<div class="tp-suggestion-name">' + esc(s.name) + ' ' + dismissedBadgeHtml(s) + '</div>'
-        + '<div class="tp-suggestion-meta">' + (s.code ? esc(s.code) + ' · ' : '') + 'الدورة: ' + esc(s.courseName || '—') + ' · الفرص: ' + fmtNum(s.opportunities) + (isDismissed(s) ? ' · الطالب مفصول' : '') + '</div>'
+        + '<div class="tp-suggestion-meta">' + (s.code ? esc(s.code) + ' · ' : '') + 'اسم الدورة: ' + esc(s.courseName || '—') + ' · الفرص: ' + fmtNum(s.opportunities) + (isDismissed(s) ? ' · الطالب مفصول' : '') + '</div>'
         + '</div>';
     }
     if (totalMatches > limit) {

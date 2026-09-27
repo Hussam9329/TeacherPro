@@ -73,10 +73,10 @@ const COLUMN_NAMES = [
   "اسم الطالب",
   "المدرسة",
   "الجنس",
-  "الدورة",
-  "نوع الدورة",
-  "الكورس",
-  "نوع البرنامج",
+  "اسم الدورة",
+  "نظام الاشتراك",
+  "الكورس المطلوب",
+  "نظام الدراسة",
   "الموقع الرئيسي",
   "الموقع الفرعي",
   "الحالة",
@@ -135,7 +135,7 @@ const PREVIEW_CATEGORY_COPY: Record<
   unknownCourseOrLocation: {
     title: "غير معروف الدورة/الموقع",
     description:
-      "الدورة غير موجودة، أو نوع البرنامج/الموقع غير مفعّل ضمن إعدادات الدورة.",
+      "الدورة غير موجودة، أو نظام الدراسة/الموقع غير مفعّل ضمن إعدادات الدورة.",
     badge: "دورة/موقع",
   },
 };
@@ -543,7 +543,7 @@ export function StudentBulkTextImportView() {
         );
       }
       if (!courseProgram || !COURSE_PROGRAMS.includes(courseProgram))
-        errors.push("نوع الدورة يجب أن يكون منهج كامل أو كورسات");
+        errors.push("نظام الاشتراك يجب أن يكون منهج كامل أو كورسات");
       if (
         courseProgram === "كورسات" &&
         (!courseTerm || !COURSE_TERMS.includes(courseTerm))
@@ -552,7 +552,7 @@ export function StudentBulkTextImportView() {
           "عند اختيار كورسات يجب تحديد الكورس الأول أو الكورس الثاني",
         );
       if (!studyType || !STUDY_TYPES.includes(studyType))
-        errors.push("نوع البرنامج يجب أن يكون إلكتروني أو حضوري أو مدمج");
+        errors.push("نظام الدراسة يجب أن يكون إلكتروني أو حضوري أو مدمج");
       if (!locationScope) errors.push("الموقع الرئيسي مطلوب");
       if (!subSite) errors.push("الموقع الفرعي مطلوب");
       if (!status) errors.push("الحالة يجب أن تكون نشط أو مفصول");
@@ -592,7 +592,7 @@ export function StudentBulkTextImportView() {
         const provinces = getProvinceOptions(course, studyType);
         if (provinces.length > 0 && !provinces.includes(subSite)) {
           errors.push(
-            `المحافظة "${subSite}" غير مفعّلة لهذه الدورة/نوع البرنامج`,
+            `المحافظة "${subSite}" غير مفعّلة لهذه الدورة/نظام الدراسة`,
           );
         }
       }
@@ -1140,13 +1140,13 @@ export function StudentBulkTextImportView() {
                                 الطالب
                               </th>
                               <th scope="col" className="p-3">
-                                الدورة
+                                اسم الدورة
                               </th>
                               <th scope="col" className="p-3">
-                                البرنامج
+                                نظام الاشتراك
                               </th>
                               <th scope="col" className="p-3">
-                                الدراسة
+                                نظام الدراسة
                               </th>
                               <th scope="col" className="p-3">
                                 الموقع

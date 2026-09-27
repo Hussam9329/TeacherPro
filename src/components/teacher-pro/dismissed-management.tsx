@@ -286,15 +286,15 @@ function buildHtmlReport(history: StudentHistory) {
   const info = [
     ["الاسم الرباعي", s.name],
     ["الكود", s.code],
-    ["الدورة", s.courseName],
+    ["اسم الدورة", s.courseName],
     ["المدرسة", s.school || "—"],
     ["رقم الطالب", s.phone || "—"],
     ["رقم ولي الأمر", s.parentPhone || "—"],
     ["يوزر تيليجرام", s.username || "—"],
     ["معرف تيليجرام", s.telegram || "—"],
-    ["نوع الاشتراك", s.courseProgram || "—"],
-    ["الكورس", s.courseTerm || "—"],
-    ["نوع البرنامج", s.studyType || "—"],
+    ["نظام الاشتراك", s.courseProgram || "—"],
+    ["الكورس المطلوب", s.courseTerm || "—"],
+    ["نظام الدراسة", s.studyType || "—"],
     ["الموقع", [s.locationScope, s.mainSite, s.subSite].filter(Boolean).join(" / ") || "—"],
     ["سبب الفصل", s.dismissalReason || "غير مسجل"],
     ["ملاحظات الفصل", s.dismissalNotes || "—"],
@@ -927,7 +927,7 @@ export function DismissedManagementView() {
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-1.5">
-            <Label>الدورة</Label>
+            <Label>اسم الدورة</Label>
             <Select
               value={courseId || "all"}
               onValueChange={(value) => {
@@ -1051,7 +1051,7 @@ export function DismissedManagementView() {
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span>الكود: {student.code}</span>
-                      <span>الدورة: {courseName(student.courseId)}</span>
+                      <span>اسم الدورة: {courseName(student.courseId)}</span>
                       <span>المدرسة: {student.school || "—"}</span>
                       <span>الجنس: {student.gender || "—"}</span>
                       <span>تاريخ التسجيل: {formatBaghdadDateTime(student.createdAt)}</span>

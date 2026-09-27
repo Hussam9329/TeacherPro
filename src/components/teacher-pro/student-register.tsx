@@ -58,7 +58,6 @@ import { baghdadTodayKey } from "@/lib/baghdad-time";
 import {
   AlertCircle,
   BookOpen,
-  CalendarDays,
   Loader2,
   MapPin,
   PhoneCall,
@@ -386,6 +385,23 @@ export function StudentRegisterView() {
     [form.locationScope, courseBaghdadMode, form.subSite],
   );
 
+  const subscriptionSummary = selectedCourse
+    ? [
+        selectedCourse.name,
+        effectiveCourseProgram || "نظام الاشتراك غير محدد",
+        ...(effectiveCourseProgram === "كورسات"
+          ? [form.courseTerm || "الكورس المطلوب غير محدد"]
+          : []),
+        form.studyType || "نظام الدراسة غير محدد",
+        isOutOfCountry
+          ? `${OUT_OF_COUNTRY_LOCATION_SCOPE}: ${effectiveSubSite.trim() || "الدولة غير محددة"}`
+          : effectiveSubSite ||
+            (subSiteOptions.length > 0
+              ? "الموقع الفرعي غير محدد"
+              : form.locationScope || "الموقع غير محدد"),
+      ].join(" — ")
+    : "اختر اسم الدورة لإظهار ملخص الاشتراك.";
+
   const duplicatePhoneStudent = useMemo(() => {
     const phoneKey = normalizePhoneForDuplicate(form.phone);
     if (!phoneKey) return null;
@@ -427,7 +443,13 @@ export function StudentRegisterView() {
   const formSteps = useMemo(
     () => [
       {
-        label: "الدورة والموقع",
+        label: "بيانات الطالب",
+        complete: Boolean(
+          form.name.trim() && form.school.trim() && form.gender && form.createdAt,
+        ),
+      },
+      {
+        label: "الاشتراك",
         complete: Boolean(
           form.courseId &&
             !selectedCourseCannotRegister &&
@@ -440,17 +462,8 @@ export function StudentRegisterView() {
         ),
       },
       {
-        label: "بيانات الطالب",
-        complete: Boolean(
-          form.name.trim() &&
-            form.school.trim() &&
-            form.phone.trim() &&
-            form.parentPhone.trim(),
-        ),
-      },
-      {
-        label: "إعدادات التسجيل",
-        complete: Boolean(form.createdAt),
+        label: "التواصل",
+        complete: Boolean(form.phone.trim() && form.parentPhone.trim()),
       },
     ],
     [
@@ -539,21 +552,21 @@ export function StudentRegisterView() {
         Boolean(form.courseId),
         filteredCourses.length === 0
           ? "لا توجد دورات مسجلة"
-          : "يرجى اختيار الدورة",
+          : "يرجى اختيار اسم الدورة",
       ],
     ];
 
     // Course program validation
     if (courseAvailablePrograms.length > 1 && !form.courseProgram) {
-      return "يرجى اختيار نوع الدورة (منهج كامل/كورسات)";
+      return "يرجى اختيار نظام الاشتراك (منهج كامل/كورسات)";
     }
     // Course term validation (only if كورسات)
     if (effectiveCourseProgram === "كورسات" && !form.courseTerm) {
-      return "يرجى اختيار الكورس";
+      return "يرجى اختيار الكورس المطلوب";
     }
     // Study type validation
     if (courseAvailableStudyTypes.length > 0 && !form.studyType) {
-      return "يرجى اختيار نوع البرنامج";
+      return "يرجى اختيار نظام الدراسة";
     }
     // Location scope validation
     if (courseLocationScopes.length > 0 && !form.locationScope) {
@@ -711,7 +724,132 @@ export function StudentRegisterView() {
             className="tp-register__form tp-validation-form"
           >
             <Card className="tp-register__section tp-management-results-card">
-              <SectionTitle icon={BookOpen} title="تفاصيل الدورة" />
+              <SectionTitle icon={User} title="بيانات الطالب" />
+              <CardContent className="tp-register__section-content">
+                <div className="tp-register__fields">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reg-name"
+                      className="text-xs font-bold text-foreground"
+                    >
+                      اسم الطالب <RequiredMark />
+                    </Label>
+                    <div className="relative">
+                      <FieldIcon icon={User} />
+                      <Input
+                        id="reg-name"
+                        name="name"
+                        autoComplete="off"
+                        value={form.name}
+                        onChange={(e) => updateForm("name", e.target.value)}
+                        required
+                        pattern={TEXT_ONLY_PATTERN}
+                        title="يجب إدخال نص فقط بدون أرقام أو رموز غير مسموحة"
+                        onInvalid={(event) =>
+                          event.currentTarget.setCustomValidity(
+                            event.currentTarget.validity.valueMissing
+                              ? "هذا الحقل مطلوب"
+                              : "يجب إدخال نص فقط",
+                          )
+                        }
+                        onInput={(event) =>
+                          event.currentTarget.setCustomValidity("")
+                        }
+                        placeholder="الاسم الرباعي واللقب"
+                        className={fieldBaseClass}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reg-school"
+                      className="text-xs font-bold text-foreground"
+                    >
+                      اسم المدرسة <RequiredMark />
+                    </Label>
+                    <div className="relative">
+                      <FieldIcon icon={School} />
+                      <Input
+                        id="reg-school"
+                        name="school"
+                        autoComplete="off"
+                        value={form.school}
+                        onChange={(e) => updateForm("school", e.target.value)}
+                        required
+                        placeholder="اسم المدرسة"
+                        className={fieldBaseClass}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reg-gender-male"
+                      className="text-xs font-bold text-foreground"
+                    >
+                      الجنس <RequiredMark />
+                    </Label>
+                    {/* radios labelled by their own wrapping labels */}
+                    <div className="tp-register__gender-options">
+                      <label className="tp-register__choice">
+                        <input
+                          type="radio"
+                          id="reg-gender-male"
+                          name="gender"
+                          value="ذكر"
+                          checked={form.gender === "ذكر"}
+                          onChange={() => updateForm("gender", "ذكر")}
+                          required
+                          className="h-5 w-5 accent-primary"
+                        />
+                        <span className="mr-2 font-medium text-foreground">
+                          ذكر
+                        </span>
+                      </label>
+                      <label className="tp-register__choice">
+                        <input
+                          type="radio"
+                          id="reg-gender-female"
+                          name="gender"
+                          value="أنثى"
+                          checked={form.gender === "أنثى"}
+                          onChange={() => updateForm("gender", "أنثى")}
+                          required
+                          className="h-5 w-5 accent-primary"
+                        />
+                        <span className="mr-2 font-medium text-foreground">
+                          أنثى
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reg-createdAt"
+                      className="text-xs font-bold text-foreground"
+                    >
+                      تاريخ تسجيل الطالب <RequiredMark />
+                    </Label>
+                    <DateInput
+                      id="reg-createdAt"
+                      name="createdAt"
+                      value={form.createdAt}
+                      onChange={(value) => updateForm("createdAt", value)}
+                      required
+                      className={fieldBaseClass}
+                    />
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      فترة السماح تُضاف من شاشة «إدارة فترة السماح».
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="tp-register__section tp-management-results-card">
+              <SectionTitle icon={BookOpen} title="الاشتراك" />
               <CardContent className="tp-register__section-content">
                 <div className="tp-register__fields">
                   <div className="tp-register__course-fields">
@@ -720,7 +858,7 @@ export function StudentRegisterView() {
                         htmlFor="reg-courseId"
                         className="text-xs font-bold text-foreground"
                       >
-                        الدورة <RequiredMark />
+                        اسم الدورة <RequiredMark />
                       </Label>
                       <Select
                         name="courseId"
@@ -741,7 +879,7 @@ export function StudentRegisterView() {
                             placeholder={
                               filteredCourses.length === 0
                                 ? "لا توجد دورات مسجلة"
-                                : "اختر الدورة..."
+                                : "اختر اسم الدورة..."
                             }
                           />
                         </SelectTrigger>
@@ -776,7 +914,7 @@ export function StudentRegisterView() {
                           htmlFor="reg-courseProgram"
                           className="text-xs font-bold text-foreground"
                         >
-                          نوع الدورة <RequiredMark />
+                          نظام الاشتراك <RequiredMark />
                         </Label>
                         <Select
                           name="courseProgram"
@@ -798,7 +936,7 @@ export function StudentRegisterView() {
                             className={selectTriggerClass}
                             aria-required="true"
                           >
-                            <SelectValue placeholder="اختر نوع الدورة..." />
+                            <SelectValue placeholder="اختر نظام الاشتراك..." />
                           </SelectTrigger>
                           <SelectContent>
                             {courseAvailablePrograms.map((p) => (
@@ -820,7 +958,7 @@ export function StudentRegisterView() {
                           htmlFor="reg-courseTerm"
                           className="text-xs font-bold text-foreground"
                         >
-                          الكورس <RequiredMark />
+                          الكورس المطلوب <RequiredMark />
                         </Label>
                         <Select
                           name="courseTerm"
@@ -841,7 +979,7 @@ export function StudentRegisterView() {
                             className={selectTriggerClass}
                             aria-required="true"
                           >
-                            <SelectValue placeholder="اختر الكورس..." />
+                            <SelectValue placeholder="اختر الكورس المطلوب..." />
                           </SelectTrigger>
                           <SelectContent>
                             {COURSE_TERMS.map((t) => (
@@ -863,7 +1001,7 @@ export function StudentRegisterView() {
                           htmlFor="reg-studyType"
                           className="text-xs font-bold text-foreground"
                         >
-                          نوع البرنامج <RequiredMark />
+                          نظام الدراسة <RequiredMark />
                         </Label>
                         <Select
                           name="studyType"
@@ -883,7 +1021,7 @@ export function StudentRegisterView() {
                             className={selectTriggerClass}
                             aria-required="true"
                           >
-                            <SelectValue placeholder="اختر نوع البرنامج..." />
+                            <SelectValue placeholder="اختر نظام الدراسة..." />
                           </SelectTrigger>
                           <SelectContent>
                             {courseAvailableStudyTypes.map((st) => (
@@ -1089,107 +1227,9 @@ export function StudentRegisterView() {
             </Card>
 
             <Card className="tp-register__section tp-management-results-card">
-              <SectionTitle icon={User} title="بيانات الطالب" />
+              <SectionTitle icon={PhoneCall} title="التواصل" />
               <CardContent className="tp-register__section-content">
                 <div className="tp-register__fields">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-name"
-                      className="text-xs font-bold text-foreground"
-                    >
-                      اسم الطالب <RequiredMark />
-                    </Label>
-                    <div className="relative">
-                      <FieldIcon icon={User} />
-                      <Input
-                        id="reg-name"
-                        name="name"
-                        autoComplete="off"
-                        value={form.name}
-                        onChange={(e) => updateForm("name", e.target.value)}
-                        required
-                        pattern={TEXT_ONLY_PATTERN}
-                        title="يجب إدخال نص فقط بدون أرقام أو رموز غير مسموحة"
-                        onInvalid={(event) =>
-                          event.currentTarget.setCustomValidity(
-                            event.currentTarget.validity.valueMissing
-                              ? "هذا الحقل مطلوب"
-                              : "يجب إدخال نص فقط",
-                          )
-                        }
-                        onInput={(event) =>
-                          event.currentTarget.setCustomValidity("")
-                        }
-                        placeholder="الاسم الرباعي واللقب"
-                        className={fieldBaseClass}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-school"
-                      className="text-xs font-bold text-foreground"
-                    >
-                      اسم المدرسة <RequiredMark />
-                    </Label>
-                    <div className="relative">
-                      <FieldIcon icon={School} />
-                      <Input
-                        id="reg-school"
-                        name="school"
-                        autoComplete="off"
-                        value={form.school}
-                        onChange={(e) => updateForm("school", e.target.value)}
-                        required
-                        placeholder="اسم المدرسة"
-                        className={fieldBaseClass}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-gender-male"
-                      className="text-xs font-bold text-foreground"
-                    >
-                      الجنس <RequiredMark />
-                    </Label>
-                    {/* radios labelled by their own wrapping labels */}
-                    <div className="tp-register__gender-options">
-                      <label className="tp-register__choice">
-                        <input
-                          type="radio"
-                          id="reg-gender-male"
-                          name="gender"
-                          value="ذكر"
-                          checked={form.gender === "ذكر"}
-                          onChange={() => updateForm("gender", "ذكر")}
-                          required
-                          className="h-5 w-5 accent-primary"
-                        />
-                        <span className="mr-2 font-medium text-foreground">
-                          ذكر
-                        </span>
-                      </label>
-                      <label className="tp-register__choice">
-                        <input
-                          type="radio"
-                          id="reg-gender-female"
-                          name="gender"
-                          value="أنثى"
-                          checked={form.gender === "أنثى"}
-                          onChange={() => updateForm("gender", "أنثى")}
-                          required
-                          className="h-5 w-5 accent-primary"
-                        />
-                        <span className="mr-2 font-medium text-foreground">
-                          أنثى
-                        </span>
-                      </label>
-                    </div>
-                  </div>
-
                   <div className="space-y-2">
                     <Label
                       htmlFor="reg-telegram"
@@ -1318,35 +1358,16 @@ export function StudentRegisterView() {
               </CardContent>
             </Card>
 
-            <Card className="tp-register__section tp-management-results-card">
-              <SectionTitle icon={CalendarDays} title="إعدادات التسجيل" />
-              <CardContent className="tp-register__section-content">
-                <div className="tp-register__fields">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-createdAt"
-                      className="text-xs font-bold text-foreground"
-                    >
-                      تاريخ تسجيل الطالب <RequiredMark />
-                    </Label>
-                    <DateInput
-                      id="reg-createdAt"
-                      name="createdAt"
-                      value={form.createdAt}
-                      onChange={(value) => updateForm("createdAt", value)}
-                      required
-                      className={fieldBaseClass}
-                    />
-                    <p className="text-xs leading-5 text-muted-foreground">
-                      فترة السماح تُضاف من شاشة «إدارة فترة السماح».
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
             <div className="tp-register__actions">
               <div className="min-w-0 space-y-2">
+                <div aria-live="polite" aria-atomic="true">
+                  <p className="text-xs font-bold text-muted-foreground">
+                    ملخص الاشتراك
+                  </p>
+                  <p className="text-sm font-bold leading-7" dir="rtl">
+                    {subscriptionSummary}
+                  </p>
+                </div>
                 {hasDraftData && (
                   <p className="text-xs text-muted-foreground" role="status">
                     المسودة محفوظة على هذا الجهاز

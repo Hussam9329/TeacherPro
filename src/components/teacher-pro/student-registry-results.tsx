@@ -623,15 +623,15 @@ function StudentRegistryRow({
         </div>
         <dl className="tp-registry-row__fields">
           <RegistryField
-            label="الدورة"
+            label="اسم الدورة"
             value={courseName(student.courseId) || "—"}
           />
           <RegistryField
-            label="نوع الدورة"
+            label="نظام الاشتراك"
             value={formatRegistryCourseProgram(student)}
           />
           <RegistryField
-            label="نوع البرنامج"
+            label="نظام الدراسة"
             value={student.studyType || "—"}
           />
           <RegistryField

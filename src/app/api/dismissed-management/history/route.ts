@@ -184,7 +184,7 @@ function gradeLabel(
 }
 
 function sourceCourseDetail(courseName: string): string {
-  return courseName ? `الدورة: ${courseName}` : "";
+  return courseName ? `اسم الدورة: ${courseName}` : "";
 }
 
 function pushOpportunityEvents(
@@ -736,13 +736,13 @@ export async function GET(req: NextRequest) {
         kind: "registration",
         title: "تسجيل الطالب في النظام",
         details: [
-          `الدورة الأولى: ${firstCourseName}`,
+          `اسم الدورة الأولى: ${firstCourseName}`,
           `الكود: ${student.code}`,
           text(firstArchiveStudent.courseProgram || student.courseProgram)
-            ? `نوع الاشتراك: ${text(firstArchiveStudent.courseProgram || student.courseProgram)}`
+            ? `نظام الاشتراك: ${text(firstArchiveStudent.courseProgram || student.courseProgram)}`
             : "",
           text(firstArchiveStudent.studyType || student.studyType)
-            ? `نوع البرنامج: ${text(firstArchiveStudent.studyType || student.studyType)}`
+            ? `نظام الدراسة: ${text(firstArchiveStudent.studyType || student.studyType)}`
             : "",
         ].filter(Boolean),
         tone: "success",

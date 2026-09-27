@@ -119,29 +119,29 @@ export function validateCourseForm(form: CourseFormState): string | null {
 
   for (const program of form.availablePrograms) {
     if ((form.studyTypesByProgram[program] || []).length === 0) {
-      return `يجب اختيار نوع دراسة واحد على الأقل لنوع الدورة "${program}"`;
+      return `يجب اختيار نظام دراسة واحد على الأقل لنظام الاشتراك "${program}"`;
     }
   }
 
   for (const studyType of form.availableStudyTypes) {
     const config = form.locationConfig[studyType];
     if (!config || config.scopes.length === 0) {
-      return `يجب تحديد إعدادات المواقع لنوع البرنامج "${studyType}"`;
+      return `يجب تحديد إعدادات المواقع لنظام الدراسة "${studyType}"`;
     }
     if (config.scopes.includes("بغداد") && !config.baghdadMode) {
-      return `يجب اختيار نوع بغداد لنوع البرنامج "${studyType}"`;
+      return `يجب اختيار نوع بغداد لنظام الدراسة "${studyType}"`;
     }
     if (
       config.baghdadMode === "بغداد - مخصص" &&
       (!config.baghdadSites || config.baghdadSites.length === 0)
     ) {
-      return `يجب اختيار موقع واحد على الأقل من مواقع بغداد لنوع البرنامج "${studyType}"`;
+      return `يجب اختيار موقع واحد على الأقل من مواقع بغداد لنظام الدراسة "${studyType}"`;
     }
     if (
       config.scopes.includes("محافظات") &&
       (!config.provinces || config.provinces.length === 0)
     ) {
-      return `يجب اختيار محافظة واحدة على الأقل لنوع البرنامج "${studyType}"`;
+      return `يجب اختيار محافظة واحدة على الأقل لنظام الدراسة "${studyType}"`;
     }
   }
 
@@ -165,7 +165,7 @@ function buildCourseFormSummary(form: CourseFormState) {
   );
   const programLines = form.availablePrograms.map((program) => {
     const studyTypes = form.studyTypesByProgram[program] || [];
-    return `${program}: ${formatListSummary(studyTypes, "لم يتم اختيار نوع دراسة")}`;
+    return `${program}: ${formatListSummary(studyTypes, "لم يتم اختيار نظام دراسة")}`;
   });
   const locationLines = form.availableStudyTypes.map((studyType) => {
     const rawConfig = normalizedLocationConfig[studyType] || { scopes: [] };
@@ -410,7 +410,7 @@ export function CourseBuilderForm({
       <fieldset className="tp-course-builder__section">
         <legend className="tp-course-builder__heading">
           <GraduationCap aria-hidden="true" />
-          نوع الدورة
+          نظام الاشتراك
         </legend>
         <div className="tp-course-builder__choices">
           {COURSE_PROGRAMS.map((program, programIndex) => (
@@ -442,7 +442,7 @@ export function CourseBuilderForm({
             className="tp-course-builder__heading"
           >
             <Monitor aria-hidden="true" />
-            نوع البرنامج
+            نظام الدراسة
           </h3>
           <div className="tp-course-builder__programs">
             {form.availablePrograms.map((program, programIndex) => (
@@ -665,7 +665,7 @@ export function CourseBuilderForm({
             {summary.courseName}
           </p>
           <p className="tp-course-builder__summary-counts">
-            أنواع الدورة: {summary.programCount} · أنواع الدراسة:{" "}
+            أنظمة الاشتراك: {summary.programCount} · أنظمة الدراسة:{" "}
             {summary.studyTypeCount}
           </p>
           <div className="tp-course-builder__summary-columns">

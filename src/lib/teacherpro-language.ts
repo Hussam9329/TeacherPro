@@ -10,7 +10,7 @@ export const TEACHERPRO_TERMS = Object.freeze({
   card: "بطاقة",
   telegram: "تيليجرام",
   recordedGrades: "درجات مسجلة",
-  programType: "نوع البرنامج",
+  programType: "نظام الدراسة",
   dismissed: "مفصول",
   formerlyDismissed: "مفصول سابقاً",
   savedOpportunities: "فرص محفوظة",

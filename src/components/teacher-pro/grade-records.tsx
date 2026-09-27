@@ -1134,7 +1134,7 @@ export function GradeRecordsView() {
             </div>
             <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="grade-records-course" className="text-xs">
-                الدورة
+                اسم الدورة
               </Label>
               <Select
                 value={filterCourseId || "all"}
@@ -1182,7 +1182,7 @@ export function GradeRecordsView() {
             </div>
             <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="grade-records-program" className="text-xs">
-                نوع الدورة
+                نظام الاشتراك
               </Label>
               <Select
                 value={filterCourseProgram || "all"}
@@ -1207,7 +1207,7 @@ export function GradeRecordsView() {
             {filterCourseProgram === "كورسات" && (
               <div className="tp-filter-field tp-filter-primary">
                 <Label htmlFor="grade-records-term" className="text-xs">
-                  الكورس
+                  الكورس المطلوب
                 </Label>
                 <Select
                   value={filterCourseTerm || "all"}
@@ -1232,7 +1232,7 @@ export function GradeRecordsView() {
             )}
             <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="grade-records-study-type" className="text-xs">
-                نوع البرنامج
+                نظام الدراسة
               </Label>
               <Select
                 value={filterStudyType || "all"}

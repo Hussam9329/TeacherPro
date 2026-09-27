@@ -429,7 +429,7 @@ export function ChaptersView() {
   ) => {
     event.preventDefault();
     if (!courseId || !chapterId) {
-      toast.error("يرجى اختيار الدورة والفصل");
+      toast.error("يرجى اختيار اسم الدورة والفصل");
       return;
     }
     if (selectedChapterAlreadyLinked) {
@@ -1278,7 +1278,7 @@ export function ChaptersView() {
               className="tp-chapters__form-body tp-validation-form"
             >
               <div className="space-y-2">
-                <Label htmlFor="attach-course">الدورة</Label>
+                <Label htmlFor="attach-course">اسم الدورة</Label>
                 <Select
                   value={courseId}
                   onValueChange={(value) => {
@@ -1288,7 +1288,7 @@ export function ChaptersView() {
                   disabled={isAttachingChapter || loading}
                 >
                   <SelectTrigger id="attach-course">
-                    <SelectValue placeholder="اختر الدورة" />
+                    <SelectValue placeholder="اختر اسم الدورة" />
                   </SelectTrigger>
                   <SelectContent>
                     {(overview?.courseRows || []).map((row) => (
@@ -1309,7 +1309,7 @@ export function ChaptersView() {
                   <SelectTrigger id="attach-chapter">
                     <SelectValue
                       placeholder={
-                        courseId ? "اختر الفصل" : "اختر الدورة أولاً"
+                        courseId ? "اختر الفصل" : "اختر اسم الدورة أولاً"
                       }
                     />
                   </SelectTrigger>

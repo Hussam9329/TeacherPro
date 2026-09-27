@@ -182,7 +182,7 @@ export function StudentRegistryView() {
     hydratedRegistryStorageKey === registryStateStorageKey;
   const skipRegistryStatePersistKey = useRef("");
 
-  // خيارات الفلاتر تُشتق من إعدادات الدورة/نوع الدورة المختارة، وليس من قوائم ثابتة.
+  // خيارات الفلاتر تُشتق من إعدادات الدورة/نظام الاشتراك المختارة، وليس من قوائم ثابتة.
   const availableProgramsForFilter = useMemo(
     () =>
       getAcademicCourseProgramFilterOptions(
@@ -213,11 +213,11 @@ export function StudentRegistryView() {
       !availableProgramsForFilter.includes(filterCourseProgram as any)
     ) {
       setFilterCourseProgram("");
-      clearedFilters.push("نوع الدورة");
+      clearedFilters.push("نظام الاشتراك");
     }
     if (filterCourseProgram !== "كورسات" && filterCourseTerm) {
       setFilterCourseTerm("");
-      clearedFilters.push("الكورس");
+      clearedFilters.push("الكورس المطلوب");
     }
     if (
       filterStudyType &&
@@ -225,7 +225,7 @@ export function StudentRegistryView() {
       !availableStudyTypesForFilter.includes(filterStudyType as any)
     ) {
       setFilterStudyType("");
-      clearedFilters.push("نوع البرنامج");
+      clearedFilters.push("نظام الدراسة");
     }
     if (clearedFilters.length > 0) {
       setPage(1);
@@ -1306,7 +1306,7 @@ export function StudentRegistryView() {
         Boolean(form.courseId),
         editFilteredCourses.length === 0
           ? "لا توجد دورات مسجلة"
-          : "يرجى اختيار الدورة",
+          : "يرجى اختيار اسم الدورة",
       ],
       [Boolean(form.createdAt), "تاريخ إضافة الطالب مطلوب"],
     ];
@@ -1317,7 +1317,7 @@ export function StudentRegistryView() {
     if (editNeedsTransferPolicy && !effectiveCourseTransferPolicy) {
       return editCourseChanged
         ? "نقل الطالب إلى دورة جديدة يحتاج تأكيد بدء ملف جديد وتصفير الإجراءات الحالية"
-        : "عند تغيير نوع البرنامج/الكورس/الموقع داخل نفس الدورة اختر الإبقاء على الملف أو البدء كطالب جديد";
+        : "عند تغيير نظام الدراسة/الكورس المطلوب/الموقع داخل نفس الدورة اختر الإبقاء على الملف أو البدء كطالب جديد";
     }
 
     if (editResetChapterUnresolved) {
@@ -1335,13 +1335,13 @@ export function StudentRegistryView() {
 
     // Course settings-based validation
     if (editAvailablePrograms.length > 1 && !form.courseProgram) {
-      return "يرجى اختيار نوع الدورة (منهج كامل/كورسات)";
+      return "يرجى اختيار نظام الاشتراك (منهج كامل/كورسات)";
     }
     if (editEffectiveCourseProgram === "كورسات" && !form.courseTerm) {
-      return "يرجى اختيار الكورس";
+      return "يرجى اختيار الكورس المطلوب";
     }
     if (editAvailableStudyTypes.length > 0 && !form.studyType) {
-      return "يرجى اختيار نوع البرنامج";
+      return "يرجى اختيار نظام الدراسة";
     }
     if (editLocationScopes.length > 0 && !form.locationScope) {
       return "يرجى اختيار الموقع";
@@ -1925,7 +1925,7 @@ export function StudentRegistryView() {
             </div>
             <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="registry-course" className="text-xs">
-                الدورة
+                اسم الدورة
               </Label>
               <Select
                 name="courseId"
@@ -1973,7 +1973,7 @@ export function StudentRegistryView() {
             </div>
             <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="registry-program" className="text-xs">
-                نوع الدورة
+                نظام الاشتراك
               </Label>
               <Select
                 name="courseProgram"
@@ -1999,7 +1999,7 @@ export function StudentRegistryView() {
             {filterCourseProgram === "كورسات" && (
               <div className="tp-filter-field tp-filter-primary">
                 <Label htmlFor="registry-term" className="text-xs">
-                  الكورس
+                  الكورس المطلوب
                 </Label>
                 <Select
                   name="courseTerm"
@@ -2025,7 +2025,7 @@ export function StudentRegistryView() {
             )}
             <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="registry-study-type" className="text-xs">
-                نوع البرنامج
+                نظام الدراسة
               </Label>
               <Select
                 name="studyType"
@@ -2775,12 +2775,12 @@ export function StudentRegistryView() {
                   <div className="mb-4 flex items-center gap-2">
                     <GraduationCap className="size-5 text-primary" />
                     <div>
-                      <h3 className="font-black">الدورة ونوع البرنامج</h3>
+                      <h3 className="font-black">الدورة ونظام الدراسة</h3>
                     </div>
                   </div>
                   <div className="tp-registry-editor__fields">
                     <div className="space-y-2 tp-registry-editor__wide">
-                      <Label htmlFor="edit-courseId">اختر الدورة</Label>
+                      <Label htmlFor="edit-courseId">اسم الدورة</Label>
                       <Select
                         name="courseId"
                         value={editDialog.form.courseId}
@@ -2810,7 +2810,7 @@ export function StudentRegistryView() {
                             placeholder={
                               editFilteredCourses.length === 0
                                 ? "لا توجد دورات مسجلة"
-                                : "اختر الدورة"
+                                : "اختر اسم الدورة"
                             }
                           />
                         </SelectTrigger>
@@ -2897,7 +2897,7 @@ export function StudentRegistryView() {
                                   الإبقاء على الملف كما هو حرفياً
                                 </span>
                                 <span className="mt-1 block text-xs leading-6 text-muted-foreground">
-                                  تتغير خيارات نوع البرنامج/الكورس/الموقع فقط.
+                                  تتغير خيارات نظام الدراسة/الكورس المطلوب/الموقع فقط.
                                   لا يعاد احتساب الرصيد، ولا تُقيّد الفرص بسقف
                                   جديد، ولا تتغير الدرجات أو الخصومات أو الحالة
                                   الأكاديمية.
@@ -2946,7 +2946,7 @@ export function StudentRegistryView() {
                     {editDialog.form.courseId &&
                       editAvailablePrograms.length > 1 && (
                         <div className="space-y-2">
-                          <Label htmlFor="edit-courseProgram">نوع الدورة</Label>
+                          <Label htmlFor="edit-courseProgram">نظام الاشتراك</Label>
                           <Select
                             name="courseProgram"
                             value={editDialog.form.courseProgram}
@@ -2970,7 +2970,7 @@ export function StudentRegistryView() {
                               id="edit-courseProgram"
                               className="h-11 rounded-xl"
                             >
-                              <SelectValue placeholder="اختر نوع الدورة..." />
+                              <SelectValue placeholder="اختر نظام الاشتراك..." />
                             </SelectTrigger>
                             <SelectContent>
                               {editAvailablePrograms.map((p) => (
@@ -2985,7 +2985,7 @@ export function StudentRegistryView() {
 
                     {editEffectiveCourseProgram === "كورسات" && (
                       <div className="space-y-2">
-                        <Label htmlFor="edit-courseTerm">الكورس</Label>
+                        <Label htmlFor="edit-courseTerm">الكورس المطلوب</Label>
                         <Select
                           name="courseTerm"
                           value={editDialog.form.courseTerm}
@@ -2995,7 +2995,7 @@ export function StudentRegistryView() {
                             id="edit-courseTerm"
                             className="h-11 rounded-xl"
                           >
-                            <SelectValue placeholder="اختر الكورس..." />
+                            <SelectValue placeholder="اختر الكورس المطلوب..." />
                           </SelectTrigger>
                           <SelectContent>
                             {COURSE_TERMS.map((t) => (
@@ -3011,7 +3011,7 @@ export function StudentRegistryView() {
                     {editDialog.form.courseId &&
                       editAvailableStudyTypes.length > 0 && (
                         <div className="space-y-2">
-                          <Label htmlFor="edit-studyType">نوع البرنامج</Label>
+                          <Label htmlFor="edit-studyType">نظام الدراسة</Label>
                           <Select
                             name="studyType"
                             value={editDialog.form.studyType}
@@ -3032,7 +3032,7 @@ export function StudentRegistryView() {
                               id="edit-studyType"
                               className="h-11 rounded-xl"
                             >
-                              <SelectValue placeholder="اختر نوع البرنامج..." />
+                              <SelectValue placeholder="اختر نظام الدراسة..." />
                             </SelectTrigger>
                             <SelectContent>
                               {editAvailableStudyTypes.map((t) => (
@@ -3115,7 +3115,7 @@ export function StudentRegistryView() {
                       </div>
                     ) : (
                       <div className="rounded-2xl border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground tp-registry-editor__wide">
-                        اختر الدورة ونوع البرنامج لعرض خيارات الموقع.
+                        اختر اسم الدورة ونظام الدراسة لعرض خيارات الموقع.
                       </div>
                     )}
 
