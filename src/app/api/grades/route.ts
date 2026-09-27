@@ -1,4 +1,5 @@
 import { annotateGradeSettlementEffects } from "@/lib/grade-settlement-server";
+import { annotateGradeRecordedImpacts } from "@/lib/grade-recorded-impact-server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -597,6 +598,7 @@ export async function GET(req: NextRequest) {
     const page = parsePositiveInt(searchParams.get("page"), 1, 1_000_000);
     const pageSize = parsePositiveInt(searchParams.get("pageSize"), 100, 500);
     const statusFilter = normalizeGradeStatusFilter(searchParams);
+    const includeRecordedImpact = searchParams.get("includeRecordedImpact") === "1";
 
     if (searchParams.get("groupBy") === "student") {
       return await listGradesGroupedByStudent(searchParams, page, pageSize, statusFilter);
@@ -625,6 +627,7 @@ export async function GET(req: NextRequest) {
         (page - 1) * pageSize,
         page * pageSize,
       );
+      if (includeRecordedImpact) await annotateGradeRecordedImpacts(grades);
 
       return NextResponse.json({
         grades,
@@ -657,6 +660,7 @@ export async function GET(req: NextRequest) {
     const grades = await withStudentGracePeriods(rawGrades);
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
     await annotateGradeSettlementEffects(grades);
+    if (includeRecordedImpact) await annotateGradeRecordedImpacts(grades);
 
     return NextResponse.json({
       grades,

@@ -187,8 +187,13 @@ must(
     page.includes("students.edit") &&
     page.includes("canReactivate") &&
     page.includes("useActionLock") &&
-    page.includes("تم تعهد الطالب") &&
-    page.includes("سيزول الفصل الحالي ويصبح الطالب نشطاً برصيد فرصتين"),
+    page.includes("إرجاع بعد تعهّد") &&
+    page.includes("إرجاع برصيد تختاره") &&
+    page.includes("يصبح رصيده فرصتين") &&
+    page.includes("الحالة الحالية") &&
+    page.includes("الحالة بعد الإرجاع") &&
+    page.includes("رصيد العودة النهائي") &&
+    page.includes("Boolean(restorationValidation)"),
   "إدارة المفصولين هي واجهة تعهد المفصول وتستخدم status-action مع قفل وصلاحية وSnapshot",
   "يجب أن يكون زر تعهد المفصول داخل إدارة المفصولين فقط وبآلية خادمية محمية.",
 );

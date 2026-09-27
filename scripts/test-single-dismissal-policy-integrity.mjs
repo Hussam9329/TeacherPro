@@ -73,10 +73,11 @@ check(
 
 check(
   management.includes('"مفصول سابقاً"') &&
-    management.includes('useState<"all" | "current" | "former">("all")') &&
+    management.includes('useState<"all" | "current" | "former">("current")') &&
+    management.includes('<SelectItem value="former">المفصولون سابقاً</SelectItem>') &&
     filters.includes('scope === "former"') &&
     filters.includes('scope === "all"'),
-  "إدارة المفصولين تعرض المفصول الحالي والمفصول سابقاً كوسم تاريخي فقط",
+  "إدارة المفصولين تبدأ بالمفصولين حالياً وتتيح عرض المفصولين سابقاً بشكل منفصل",
 );
 
 check(

@@ -592,6 +592,8 @@ export interface StudentListResponse {
 }
 
 export interface GradeListQuery {
+  /** Read-only recorded opportunity effects for the returned grade page. */
+  includeRecordedImpact?: boolean;
   examId?: string;
   studentId?: string;
   status?: string;
@@ -1625,6 +1627,7 @@ export const gradeApi = {
     options: ApiGetOptions = {},
   ): Promise<GradeListResponse | null> => {
     const queryString = buildQueryString({
+      includeRecordedImpact: query.includeRecordedImpact ? 1 : undefined,
       examId: query.examId,
       studentId: query.studentId,
       status: query.status,

@@ -46,7 +46,6 @@ import { formatAppDate } from "@/lib/format";
 import { toLatinDigits } from "@/lib/format";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import {
-  formatGradeScore,
   getExamEntryAvailability,
   normalizeScore,
 } from "@/lib/exam-utils";
@@ -59,6 +58,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  ChevronDown,
+  SlidersHorizontal,
+  X,
   Loader2,
   PenLine,
   RotateCcw,
@@ -73,6 +75,7 @@ import {
   getAcademicCourseProgramFilterOptions,
   getAcademicStudyTypeFilterOptions,
 } from "@/lib/filter-sequence";
+import { gradeRecordResultPresentation } from "@/lib/grade-records-presentation";
 import { STUDENT_FILTER_COURSE_TERMS } from "@/lib/student-list-filters";
 import {
   gradeStatusFilterLabels,
@@ -87,7 +90,11 @@ import "./tp-modal.css";
 import "./grade-records.css";
 
 type GradeStatus = "درجة" | "غائب" | "غش" | "مجاز";
-type HydratedGrade = Grade & { student?: Student; exam?: unknown };
+type HydratedGrade = Grade & {
+  student?: Student;
+  exam?: unknown;
+  recordedOpportunityImpact?: { text: string; tone: string };
+};
 type StudentGradesTab = "all" | "numeric" | "absent";
 
 type GradeExportRow = {
@@ -110,24 +117,12 @@ function gradeRecordStatusText(status: string | null | undefined): string {
   return status === LEGACY_GRACE_PLACEHOLDER_STATUS ? "" : String(status || "");
 }
 
-function gradeRecordScoreText(grade: Grade, exam: Parameters<typeof formatGradeScore>[1]): string {
-  return grade.status === LEGACY_GRACE_PLACEHOLDER_STATUS ? "—" : formatGradeScore(grade, exam, "—");
-}
-
 function serverStatusForGradeFilter(
   filter: GradeStatusFilter,
 ): GradeStatus | undefined {
   if (filter === "absent") return "غائب";
   if (filter === "cheating") return "غش";
   return undefined;
-}
-
-/** Badge variant for a classification result. */
-function classificationVariant(type: string | undefined) {
-  if (type === "ok") return "success" as const;
-  if (type === "danger") return "destructive" as const;
-  if (type === "warn") return "warning" as const;
-  return "outline" as const;
 }
 
 function examDateKey(exam: unknown): number {
@@ -154,105 +149,6 @@ function bannerVisibleInCard(notes: string | null | undefined): boolean {
   const banner = resolveGradeNoteBanner(raw);
   if (banner && HIDDEN_BANNER_KEYS.has(banner.key)) return false;
   return true;
-}
-
-/**
- * الشارات النتيجية أُزيلت — لون حبة النتيجة يلخّص الحالة.
- * تبقى فقط الشارات التي تضيف معلومة غير ظاهرة من اللون.
- */
-const VISIBLE_RESULT_BADGES = new Set(["فصل", "غير مسجل", "غير محتسب", "بدون خصم"]);
-
-type ScorePillTone =
-  | "pass"
-  | "fail-light"
-  | "fail-dark"
-  | "excused"
-  | "sky"
-  | "grace"
-  | "absent"
-  | "cheating"
-  | "neutral";
-
-/**
- * قواعد النتيجة الرقمية نفسها في classification — احتياط يضمن ألا تبقى
- * أي درجة رقمية بلا لون أبداً (طلب صاحب النظام: ممنوع درجات بيضاء):
- * درجة على امتحان معطل («غير محتسب»)، أو مُسوّاة بمسار لا يمر بbaseText،
- * أو أي نص تصنيف غير نتيجي مستقبلاً — تلون وفق درجتها وحدود الامتحان.
- */
-function numericResultTone(
-  grade: Grade,
-  exam: Parameters<typeof formatGradeScore>[1],
-): ScorePillTone {
-  const e = exam as
-    | {
-        type?: string | null;
-        passMark?: number | null;
-        discountMark?: number | null;
-        noDiscount?: boolean | null;
-        dismissalGrade?: number | null;
-      }
-    | null
-    | undefined;
-  if (!e) return "neutral";
-  const score = Number(grade.score) || 0;
-  const passMark = Number(e.passMark || 0);
-  if (e.noDiscount) return score >= passMark ? "pass" : "fail-light";
-  if (e.type === "فاينل") {
-    if (
-      score === 0 ||
-      (e.dismissalGrade !== null &&
-        e.dismissalGrade !== undefined &&
-        score <= Number(e.dismissalGrade))
-    )
-      return "fail-dark";
-    return score >= passMark ? "pass" : "fail-light";
-  }
-  const discountMark = Number(e.discountMark || 0);
-  if (score >= passMark) return "pass";
-  if (score > discountMark && score < passMark) return "fail-light";
-  return "fail-dark";
-}
-
-/**
- * حبة النتيجة: نص ولون واحد لكل حالة — بدون تكرار (طلب صاحب النظام):
- * ناجح أخضر · راسب/بدون خصم أحمر فاتح · مخصوم/فصل أحمر طوخ ·
- * مجاز أصفر · قبل التسجيل سمائي · فترة السماح بنفسجي.
- *
- * إصلاح: أي صف حالته «مجاز» يبقى أصفر حتى لو سقط تصنيفه بفرع التسوية
- * التاريخية («بلا أثر» لامتحانات الفصول السابقة) — كان يعرض أبيض.
- *
- * إصلاح: صف مُسوّى رصيدياً («بلا أثر») يعرض درجته بلون نتيجته الأكاديمية
- * الفعلية (baseText) — سابقاً كان يسقط محايداً فتسرق قاعدة CSS القديمة
- * للأصفار الرقمية لونه الأخضر (13/50 مخصوم تظهر خضراء).
- */
-function scorePillPresentation(
-  grade: Grade,
-  exam: Parameters<typeof gradeRecordScoreText>[1],
-  cls: { text: string; kind: string; baseText?: string },
-): { text: string; tone: ScorePillTone } {
-  const status = String(grade.status || "");
-  if (cls.text === "مجاز" || status === "مجاز")
-    return { text: "مجاز", tone: "excused" };
-  if (cls.kind === "grace") {
-    return status === "درجة"
-      ? { text: gradeRecordScoreText(grade, exam), tone: "grace" }
-      : { text: "فترة سماح", tone: "grace" };
-  }
-  if (status === "قبل تسجيل الطالب" || cls.kind === "before-registration")
-    return { text: "قبل التسجيل", tone: "sky" };
-  if (status === "درجة") {
-    const text = gradeRecordScoreText(grade, exam);
-    const result = cls.baseText || cls.text;
-    if (result === "مخصوم" || result === "فصل") return { text, tone: "fail-dark" };
-    if (result === "راسب" || result === "بدون خصم") return { text, tone: "fail-light" };
-    if (result === "ناجح") return { text, tone: "pass" };
-    // أي نص تصنيف غير نتيجي (بلا أثر/غير محتسب/غير مسجل…): الدرجة نفسها
-    // تُلون وفق حدود الامتحان — لا أبيض للدرجات الرقمية نهائياً.
-    return { text, tone: numericResultTone(grade, exam) };
-  }
-  if (status === "غائب") return { text: "غائب", tone: "absent" };
-  if (status === "غش") return { text: "غش", tone: "cheating" };
-  return { text: gradeRecordStatusText(status) || "—", tone: "neutral" };
 }
 
 const STUDENT_GRADES_TABS: Array<{ value: StudentGradesTab; label: string; tone?: "success" | "danger" }> = [
@@ -319,11 +215,6 @@ function GradeStudentCard({
   const student = summary.student as unknown as Student;
   const dismissed = student.status === "مفصول";
   const latest = summary.latestGrade;
-  const latestResult = latest
-    ? latest.status === "درجة"
-      ? `${latest.score ?? "—"} / ${latest.exam?.fullMark ?? "—"}`
-      : gradeRecordStatusText(latest.status) || "—"
-    : "";
   return (
     <li className="tp-grade-student" data-dismissed={dismissed || undefined}>
       <div className="tp-grade-student__head">
@@ -368,8 +259,7 @@ function GradeStudentCard({
         <p className="tp-grade-student__latest">
           <span className="text-muted-foreground">آخر امتحان:</span>{" "}
           <b>{latest.exam.name}</b>
-          <span className="text-muted-foreground"> · {formatAppDate(latest.exam.date)} · </span>
-          <b dir={latest.status === "درجة" ? "ltr" : undefined} className="tabular-nums">{latestResult}</b>
+          <span className="text-muted-foreground"> · {formatAppDate(latest.exam.date)}</span>
         </p>
       )}
 
@@ -380,7 +270,7 @@ function GradeStudentCard({
         aria-describedby={`grade-student-${student.id}`}
       >
         <ClipboardList className="size-4" aria-hidden="true" />
-        عرض درجات الطالب
+        عرض الامتحانات والدرجات
       </Button>
     </li>
   );
@@ -407,6 +297,7 @@ export function GradeRecordsView() {
   const [filterCourseProgram, setFilterCourseProgram] = useState("");
   const [filterCourseTerm, setFilterCourseTerm] = useState("");
   const [filterStudyType, setFilterStudyType] = useState("");
+  const [additionalFiltersOpen, setAdditionalFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [studentList, setStudentList] = useState<GradeStudentListResponse | null>(null);
@@ -418,7 +309,7 @@ export function GradeRecordsView() {
   const syncKey = useTeacherProSyncKey(["grades", "students", "exams", "opportunities", "dashboard"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
 
-  // «عرض درجات الطالب»: every grade of one student, newest exam first.
+  // «عرض الامتحانات والدرجات»: every grade of one student, newest exam first.
   const [openSummary, setOpenSummary] = useState<GradeStudentSummary | null>(null);
   const [studentGrades, setStudentGrades] = useState<HydratedGrade[] | null>(null);
   const [studentGradesLoading, setStudentGradesLoading] = useState(false);
@@ -452,6 +343,24 @@ export function GradeRecordsView() {
       filterCourseTerm ||
       filterStudyType,
   );
+
+  const additionalFilterChips = [
+    ...(filterCourseProgram ? [{
+      key: "program",
+      text: `نظام الاشتراك: ${filterCourseProgram}`,
+      clear: () => { setFilterCourseProgram(""); setFilterCourseTerm(""); },
+    }] : []),
+    ...(filterCourseProgram === "كورسات" && filterCourseTerm ? [{
+      key: "term",
+      text: `الكورس المطلوب: ${filterCourseTerm}`,
+      clear: () => setFilterCourseTerm(""),
+    }] : []),
+    ...(filterStudyType ? [{
+      key: "study-type",
+      text: `نظام الدراسة: ${filterStudyType}`,
+      clear: () => setFilterStudyType(""),
+    }] : []),
+  ];
 
   const resetFilters = () => {
     setSearch("");
@@ -565,7 +474,7 @@ export function GradeRecordsView() {
     if (!silent) setStudentGradesError(null);
     gradeApi
       .list(
-        { studentId: openStudentId, page: 1, pageSize: 500 },
+        { studentId: openStudentId, page: 1, pageSize: 500, includeRecordedImpact: true },
         { signal: controller.signal, quietAbort: true },
       )
       .then((result) => {
@@ -618,7 +527,7 @@ export function GradeRecordsView() {
     setStudentGrades((current) =>
       current
         ? current.map((grade) =>
-            grade.id === gradeId ? { ...grade, ...patch } : grade,
+            grade.id === gradeId ? { ...grade, ...patch, recordedOpportunityImpact: undefined } : grade,
           )
         : current,
     );
@@ -1115,8 +1024,8 @@ export function GradeRecordsView() {
           </div>
         </CardHeader>
         <CardContent className="tp-filter-content">
-          <div className="tp-filter-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            <div className="tp-filter-field tp-filter-search xl:col-span-2">
+          <div className="tp-filter-grid tp-grade-records__primary-filters">
+            <div className="tp-filter-field tp-filter-search">
               <Label htmlFor="grade-records-search" className="text-xs">
                 بحث الطالب
               </Label>
@@ -1180,80 +1089,6 @@ export function GradeRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="tp-filter-field tp-filter-primary">
-              <Label htmlFor="grade-records-program" className="text-xs">
-                نظام الاشتراك
-              </Label>
-              <Select
-                value={filterCourseProgram || "all"}
-                onValueChange={(v) => {
-                  setFilterCourseProgram(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="grade-records-program">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  {availableProgramsForFilter.map((program) => (
-                    <SelectItem key={program} value={program}>
-                      {program}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {filterCourseProgram === "كورسات" && (
-              <div className="tp-filter-field tp-filter-primary">
-                <Label htmlFor="grade-records-term" className="text-xs">
-                  الكورس المطلوب
-                </Label>
-                <Select
-                  value={filterCourseTerm || "all"}
-                  onValueChange={(v) => {
-                    setFilterCourseTerm(v === "all" ? "" : v);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger id="grade-records-term">
-                    <SelectValue placeholder="الكل" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">الكل</SelectItem>
-                    {STUDENT_FILTER_COURSE_TERMS.map((term) => (
-                      <SelectItem key={term} value={term}>
-                        {term}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="tp-filter-field tp-filter-primary">
-              <Label htmlFor="grade-records-study-type" className="text-xs">
-                نظام الدراسة
-              </Label>
-              <Select
-                value={filterStudyType || "all"}
-                onValueChange={(v) => {
-                  setFilterStudyType(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="grade-records-study-type">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  {availableStudyTypesForFilter.map((studyType) => (
-                    <SelectItem key={studyType} value={studyType}>
-                      {studyType}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="grade-records-status" className="text-xs">
                 حالة الدرجة
@@ -1273,6 +1108,111 @@ export function GradeRecordsView() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+          <div className="tp-grade-records__additional">
+            <Button
+              type="button"
+              variant="ghost"
+              className="tp-grade-records__additional-trigger"
+              aria-expanded={additionalFiltersOpen}
+              aria-controls="grade-records-additional-filters"
+              onClick={() => setAdditionalFiltersOpen((open) => !open)}
+            >
+              <SlidersHorizontal className="size-4" aria-hidden="true" />
+              فلاتر إضافية
+              {additionalFilterChips.length > 0 && <Badge variant="secondary">{additionalFilterChips.length}</Badge>}
+              <ChevronDown className="size-4" aria-hidden="true" />
+            </Button>
+            {additionalFilterChips.length > 0 && (
+              <ul className="tp-grade-records__filter-chips" aria-label="الفلاتر الإضافية المستخدمة">
+                {additionalFilterChips.map((chip) => (
+                  <li key={chip.key}>
+                    <button type="button" onClick={chip.clear} aria-label={`إزالة فلتر ${chip.text}`}>
+                      <span>{chip.text}</span><X className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div id="grade-records-additional-filters" hidden={!additionalFiltersOpen}>
+              <div className="tp-filter-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="tp-filter-field tp-filter-primary">
+                  <Label htmlFor="grade-records-program" className="text-xs">
+                    نظام الاشتراك
+                  </Label>
+                  <Select
+                    value={filterCourseProgram || "all"}
+                    onValueChange={(v) => {
+                      setFilterCourseProgram(v === "all" ? "" : v);
+                      if (v !== "كورسات") setFilterCourseTerm("");
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger id="grade-records-program">
+                      <SelectValue placeholder="الكل" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">الكل</SelectItem>
+                      {availableProgramsForFilter.map((program) => (
+                        <SelectItem key={program} value={program}>
+                          {program}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {filterCourseProgram === "كورسات" && (
+                  <div className="tp-filter-field tp-filter-primary">
+                    <Label htmlFor="grade-records-term" className="text-xs">
+                      الكورس المطلوب
+                    </Label>
+                    <Select
+                      value={filterCourseTerm || "all"}
+                      onValueChange={(v) => {
+                        setFilterCourseTerm(v === "all" ? "" : v);
+                        setPage(1);
+                      }}
+                    >
+                      <SelectTrigger id="grade-records-term">
+                        <SelectValue placeholder="الكل" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">الكل</SelectItem>
+                        {STUDENT_FILTER_COURSE_TERMS.map((term) => (
+                          <SelectItem key={term} value={term}>
+                            {term}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="tp-filter-field tp-filter-primary">
+                  <Label htmlFor="grade-records-study-type" className="text-xs">
+                    نظام الدراسة
+                  </Label>
+                  <Select
+                    value={filterStudyType || "all"}
+                    onValueChange={(v) => {
+                      setFilterStudyType(v === "all" ? "" : v);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger id="grade-records-study-type">
+                      <SelectValue placeholder="الكل" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">الكل</SelectItem>
+                      {availableStudyTypesForFilter.map((studyType) => (
+                        <SelectItem key={studyType} value={studyType}>
+                          {studyType}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -1489,7 +1429,7 @@ export function GradeRecordsView() {
           <div className="tp-modal__hero">
             <span className="tp-modal__hero-icon" aria-hidden="true"><ClipboardList /></span>
             <DialogHeader className="tp-modal__heading">
-              <DialogTitle>درجات الطالب</DialogTitle>
+              <DialogTitle>امتحانات الطالب ودرجاته</DialogTitle>
               {openStudent && (
                 <p className="tp-modal__subtitle">
                   {openStudent.name} · <bdi>{openStudent.code}</bdi>
@@ -1544,9 +1484,7 @@ export function GradeRecordsView() {
                   {visibleStudentGrades.map((grade) => {
                     const exam = examById.get(grade.examId);
                     if (!exam) return null;
-                    const student = studentById.get(grade.studentId) || openStudent;
-                    const cls = classification(grade, exam, student);
-                    const pill = scorePillPresentation(grade, exam, cls);
+                    const result = gradeRecordResultPresentation(grade, exam);
                     const availability = getExamEntryAvailability(exam);
                     const kind =
                       grade.status === "درجة"
@@ -1557,7 +1495,7 @@ export function GradeRecordsView() {
                             ? "cheating"
                             : "other";
                     return (
-                      <li key={grade.id} className="tp-grade-dialog__row" data-kind={kind}>
+                      <li key={grade.id} className="tp-grade-dialog__row" data-kind={kind} data-result-tone={result.tone}>
                         <div className="tp-grade-dialog__main">
                           <p className="tp-grade-dialog__exam">{exam.name}</p>
                           <p className="tp-modal__muted">
@@ -1565,17 +1503,22 @@ export function GradeRecordsView() {
                           </p>
                         </div>
                         <div className="tp-grade-dialog__result">
-                          <span
-                            className="tp-grade-dialog__score"
-                            data-kind={kind}
-                            data-tone={pill.tone}
-                            dir={kind === "numeric" ? "ltr" : undefined}
-                          >
-                            {pill.text}
-                          </span>
-                          {cls.text && VISIBLE_RESULT_BADGES.has(cls.text) && (
-                            <Badge variant={classificationVariant(cls.type)}>{cls.text}</Badge>
-                          )}
+                          <p className="tp-grade-dialog__field-label">النتيجة</p>
+                          <div className="tp-grade-dialog__result-value">
+                            <span
+                              className="tp-grade-dialog__score"
+                              data-kind={kind}
+                              data-tone={result.tone}
+                              dir={result.numeric ? "ltr" : undefined}
+                            >
+                              {result.scoreText}
+                            </span>
+                            {result.label && <span className="tp-grade-dialog__outcome">{result.label}</span>}
+                          </div>
+                        </div>
+                        <div className="tp-grade-dialog__impact" data-tone={grade.recordedOpportunityImpact?.tone}>
+                          <p className="tp-grade-dialog__field-label">الأثر على الفرص</p>
+                          <p className="tp-grade-dialog__impact-text">{grade.recordedOpportunityImpact?.text || "تعذر تحديد الأثر المسجّل حالياً"}</p>
                         </div>
                         {(bannerVisibleInCard(grade.notes) || !availability.available) && (
                           <div className="tp-grade-dialog__notes">

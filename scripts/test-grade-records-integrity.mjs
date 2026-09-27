@@ -131,7 +131,7 @@ must(
 );
 
 must(
-  page.includes("عرض درجات الطالب") &&
+  page.includes("عرض الامتحانات والدرجات") &&
     page.includes('label: "كل الدرجات"') &&
     page.includes('label: "الدرجة الرقمية"') &&
     page.includes('label: "الغياب"') &&

@@ -121,34 +121,28 @@
 }
 
 .tp-grade-student__counts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
-  gap: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
   margin: 0;
 }
 
 .tp-grade-student__counts > div {
-  display: grid;
-  justify-items: center;
-  gap: 0.1rem;
-  padding: 0.5rem 0.4rem;
-  border: 1px solid var(--tone-line, var(--border));
-  border-radius: 0.8rem;
-  background: var(--tone-tint, var(--muted));
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
 }
 
 .tp-grade-student__counts dt {
   color: var(--muted-foreground);
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-size: 0.75rem;
 }
 
 .tp-grade-student__counts dd {
   margin: 0;
   color: var(--tone-ink, var(--foreground));
-  font-size: 1.35rem;
-  font-weight: 900;
-  line-height: 1.3;
+  font-size: 0.9rem;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
@@ -185,7 +179,7 @@
 .tp-grade-dialog__row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: "main" "result" "notes" "actions";
+  grid-template-areas: "main" "result" "impact" "notes" "actions";
   gap: 0.55rem 1rem;
   padding: 0.8rem 0.95rem;
   border: 1px solid var(--tp-border);
@@ -194,13 +188,22 @@
   background: var(--tp-surface);
 }
 
-.tp-grade-dialog__row[data-kind="numeric"] { border-inline-start-color: var(--status-success-vivid); }
+.tp-grade-dialog__row[data-result-tone="pass"] { border-inline-start-color: var(--status-success-vivid); }
+.tp-grade-dialog__row[data-result-tone="fail-light"] { border-inline-start-color: var(--status-danger-vivid); }
 .tp-grade-dialog__row[data-kind="absent"] { border-inline-start-color: var(--status-danger-vivid); }
 .tp-grade-dialog__row[data-kind="cheating"] { border-inline-start-color: var(--status-warning-vivid); }
 
 .tp-grade-dialog__main { grid-area: main; display: grid; gap: 0.1rem; min-inline-size: 0; }
 .tp-grade-dialog__exam { margin: 0; color: var(--tp-text); font-size: 0.95rem; font-weight: 750; }
-.tp-grade-dialog__result { grid-area: result; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; }
+.tp-grade-dialog__result { grid-area: result; display: grid; align-content: start; gap: 0.35rem; }
+.tp-grade-dialog__result-value { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.tp-grade-dialog__field-label { margin: 0; color: var(--tp-text-muted); font-size: 0.72rem; font-weight: 700; }
+.tp-grade-dialog__outcome { color: var(--tp-text); font-size: 0.8rem; }
+.tp-grade-dialog__impact { grid-area: impact; display: grid; align-content: start; gap: 0.35rem; }
+.tp-grade-dialog__impact-text { margin: 0; color: var(--tp-text); font-size: 0.8rem; line-height: 1.7; overflow-wrap: anywhere; }
+.tp-grade-dialog__impact[data-tone="deducted"] .tp-grade-dialog__impact-text,
+.tp-grade-dialog__impact[data-tone="dismissed"] .tp-grade-dialog__impact-text { color: var(--status-danger-fg); }
+.tp-grade-dialog__impact[data-tone="excused"] .tp-grade-dialog__impact-text { color: var(--status-info-fg); }
 .tp-grade-dialog__notes { grid-area: notes; display: grid; gap: 0.4rem; min-inline-size: 0; }
 .tp-grade-dialog__actions { grid-area: actions; display: flex; flex-wrap: wrap; gap: 0.4rem; }
 
@@ -217,20 +220,11 @@
   white-space: nowrap;
 }
 
-/* لون الحبة يُدار حصرياً بـ data-tone — قواعد data-kind القديمة للحبة
-   أزيلت (كانت تجعل كل درجة رقمية خضراء افتراضياً فتتسرب لأي حالة
-   تسقط خارج النظام الست، مثل صف «بلا أثر» المسوّى رصيدياً 13/50).
-   حدود الصف نفسه (border-inline-start) بقيت على data-kind. */
-
-/* لون الحبة يلخّص الحالة — طلب صاحب النظام:
-   ناجح أخضر · راسب/بدون خصم أحمر فاتح · مخصوم/فصل أحمر طوخ ·
-   مجاز أصفر · قبل التسجيل سمائي · فترة السماح بنفسجي */
+/* Result color describes the academic outcome; recorded penalties have their own field. */
 .tp-grade-dialog__score[data-tone="pass"] { border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success-fg); }
 .tp-grade-dialog__score[data-tone="fail-light"] { border-color: var(--status-danger-border); background: var(--status-danger-bg); color: var(--status-danger-fg); }
-.tp-grade-dialog__score[data-tone="fail-dark"] { border-color: transparent; background: var(--status-danger-solid); color: var(--status-danger-on); }
 .tp-grade-dialog__score[data-tone="excused"] { border-color: var(--status-warning-border); background: var(--status-warning-bg); color: var(--status-warning-fg); }
 .tp-grade-dialog__score[data-tone="sky"] { border-color: var(--status-info-border); background: var(--status-info-bg); color: var(--status-info-fg); }
-.tp-grade-dialog__score[data-tone="grace"] { border-color: var(--status-grace-border); background: var(--status-grace-bg); color: var(--status-grace-fg); }
 
 /* غائب أحمر صلب وغش أصفر صلب — نفس العرض السابق (كان عبر data-kind) */
 .tp-grade-dialog__score[data-tone="absent"] { border-color: transparent; background: var(--status-danger-solid); color: var(--status-danger-on); }
@@ -241,8 +235,30 @@
 
 @container (min-width: 40rem) {
   .tp-grade-dialog__row {
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    grid-template-areas: "main result actions" "notes notes notes";
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "main main" "result impact" "notes notes" "actions actions";
     align-items: center;
   }
+}
+
+/* Keep the four everyday filters visible; active advanced choices never hide. */
+.tp-grade-records__primary-filters { grid-template-columns: minmax(0, 1fr); }
+.tp-grade-records__additional { display: grid; gap: 0.65rem; margin-block-start: 0.75rem; }
+.tp-grade-records__additional-trigger { justify-self: start; }
+.tp-grade-records__additional-trigger[aria-expanded="true"] > svg:last-child { transform: rotate(180deg); }
+.tp-grade-records__filter-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; padding: 0; margin: 0; list-style: none; }
+.tp-grade-records__filter-chips li { min-inline-size: 0; max-inline-size: 100%; }
+.tp-grade-records__filter-chips button {
+  display: flex; align-items: center; gap: 0.5rem; max-inline-size: 100%; min-block-size: 2.5rem;
+  padding: 0.4rem 0.65rem; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--accent); color: var(--foreground); font-size: 0.75rem; text-align: start; cursor: pointer;
+}
+.tp-grade-records__filter-chips button > svg { flex-shrink: 0; }
+.tp-grade-records__filter-chips button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.tp-grade-student__open { block-size: auto; min-block-size: 2.75rem; white-space: normal; }
+@media (min-width: 640px) {
+  .tp-grade-records__primary-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1280px) {
+  .tp-grade-records__primary-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
