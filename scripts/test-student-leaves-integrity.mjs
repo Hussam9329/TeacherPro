@@ -23,6 +23,8 @@ function must(condition, okMessage, failMessage) {
 const followUp = read("src/components/teacher-pro/follow-up.tsx");
 const route = read("src/app/api/student-leaves/route.ts");
 const api = read("src/lib/api.ts");
+const preview = read("src/lib/student-leave-preview.ts");
+const contextRoute = read("src/app/api/student-leaves/context/route.ts");
 const pkg = JSON.parse(read("package.json"));
 
 must(
@@ -56,7 +58,8 @@ must(
 );
 
 must(
-  followUp.includes("selectedStudentLeaves.find((leave) => {") &&
+  followUp.includes("leaves: selectedStudentLeaves") &&
+    followUp.includes("buildStudentLeavePreview") &&
     followUp.includes('studentId: leaveStudentId') &&
     followUp.includes("توجد إجازة فترة سابقة لهذا الطالب") &&
     followUp.includes("هذا الطالب لديه إجازة سابقة على هذا الامتحان بالفعل"),
@@ -102,12 +105,22 @@ must(
 );
 
 must(
-  followUp.includes("const existingFrom = dayKey(leave.dateFrom || leave.date)") &&
-    followUp.includes("const existingTo = dayKey(leave.dateTo || leave.dateFrom || leave.date)") &&
-    followUp.includes("return existingFrom <= to && existingTo >= from") &&
+  preview.includes("leave.dateFrom || leave.date") &&
+    preview.includes("leave.dateTo || leave.dateFrom || leave.date") &&
+    preview.includes("existingRange.from <= range.to") &&
+    preview.includes("existingRange.to >= range.from") &&
     followUp.includes("تتداخل مع النطاق المحدد"),
   "الواجهة تكشف أي تداخل فعلي بين فترات الإجازة بنفس قاعدة السيرفر",
   "فحص الواجهة يجب أن يمنع التداخل الجزئي لا التطابق الكامل فقط.",
+);
+
+must(
+  followUp.includes("/api/student-leaves/context?studentId=") &&
+    followUp.includes("payload.student?.id !== leaveStudentId") &&
+    followUp.includes("!leavePreviewReady ||") &&
+    contextRoute.includes('requirePermission(req, "follow-up.view")') &&
+    contextRoute.includes('"Cache-Control": "private, no-store"'),
+  "معاينة الإجازة تحمل امتحانات الطالب كاملة وتنتظرها قبل الحفظ بصلاحية الإجازات",
 );
 
 must(

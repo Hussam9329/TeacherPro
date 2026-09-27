@@ -40,15 +40,12 @@ import { StudentProfileDialog } from "./student-profile-dialog";
 import { CallPhoneQr } from "./call-phone-qr";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import { CountScopeSummary } from "./ui-kit";
-import {
-  formatGradeScore,
-  splitSelection,
-  studentMatchesExamMainSites,
-} from "@/lib/exam-utils";
+import { formatGradeScore } from "@/lib/exam-utils";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { formatOpportunityBalance, getOpportunityLimit } from "@/lib/opportunity-balance";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
+import { buildStudentLeavePreview, type StudentLeavePreviewExam } from "@/lib/student-leave-preview";
 import { CALL_STUDENT_NOTE_CATEGORY } from "@/lib/call-notes-filter";
 import {
   isStudentExamCall,
@@ -322,12 +319,19 @@ function contactStatusClasses(status: ContactStatus): string {
   return "border-muted bg-muted/40 text-muted-foreground";
 }
 
+function leaveExamCountText(count: number): string {
+  if (count === 1) return "امتحاناً واحداً";
+  if (count === 2) return "امتحانين";
+  if (count <= 10) return `${count} امتحانات`;
+  return `${count} امتحاناً`;
+}
+
 function dayKey(value: string | null | undefined): string {
   return String(value || "").slice(0, 10);
 }
 
 function FollowUpViewBase({ view }: { view: FollowView }) {
-  const syncKey = useTeacherProSyncKey(["follow-up", "students", "grades", "opportunities", "dashboard"]);
+  const syncKey = useTeacherProSyncKey(["follow-up", "students", "grades", "exams", "opportunities", "dashboard"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const {
     courses,
@@ -429,6 +433,14 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [selectedLeaveRows, setSelectedLeaveRows] = useState<StudentLeave[]>([]);
   const [selectedLeavesLoading, setSelectedLeavesLoading] = useState(false);
   const [selectedLeavesError, setSelectedLeavesError] = useState("");
+  const [leaveContext, setLeaveContext] = useState<{
+    student: Student;
+    exams: StudentLeavePreviewExam[];
+  } | null>(null);
+  const [leaveContextLoading, setLeaveContextLoading] = useState(false);
+  const [leaveContextError, setLeaveContextError] = useState("");
+  const leaveContextReady = Boolean(leaveStudentId && leaveContext?.student.id === leaveStudentId);
+  const leaveContextAbortRef = useRef<AbortController | null>(null);
   const leaveOperationRef = useRef(false);
   const leaveMutationVersionRef = useRef(0);
   const leaveListAbortRef = useRef<AbortController | null>(null);
@@ -502,6 +514,39 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       }
     }
     void loadSelectedStudentLeaves();
+    return () => controller.abort();
+  }, [view, leaveStudentId, syncKey, leaveRefreshKey]);
+
+  // Read the complete current exam scope under the leaves permission, including
+  // exams unavailable to the general bootstrap cache. Never preview a stale student.
+  useEffect(() => {
+    if (view !== "leaves" || !leaveStudentId) {
+      setLeaveContext(null); setLeaveContextLoading(false); setLeaveContextError("");
+      return;
+    }
+    if (leaveOperationRef.current) return;
+    const controller = new AbortController();
+    leaveContextAbortRef.current = controller;
+    const version = leaveMutationVersionRef.current;
+    setLeaveContextLoading(true); setLeaveContextError("");
+    void fetch(`/api/student-leaves/context?studentId=${encodeURIComponent(leaveStudentId)}`, {
+      credentials: "same-origin", signal: controller.signal,
+    }).then(async response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      if (controller.signal.aborted || version !== leaveMutationVersionRef.current) return;
+      if (payload.student?.id !== leaveStudentId || !Array.isArray(payload.exams)) {
+        throw new Error("Invalid leave context");
+      }
+      setLeaveContext(payload);
+    }).catch(() => {
+      if (!controller.signal.aborted && version === leaveMutationVersionRef.current) {
+        setLeaveContext(null);
+        setLeaveContextError("تعذر تحميل امتحانات الطالب. أعد المحاولة قبل حفظ الإجازة.");
+      }
+    }).finally(() => {
+      if (!controller.signal.aborted && version === leaveMutationVersionRef.current) setLeaveContextLoading(false);
+    });
     return () => controller.abort();
   }, [view, leaveStudentId, syncKey, leaveRefreshKey]);
 
@@ -826,6 +871,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   }, [leavePickerStudents, globalSearch]);
 
   const selectedLeaveStudent =
+    (leaveContextReady ? leaveContext?.student : null) ||
     (leaveStudentSnapshot?.id === leaveStudentId ? leaveStudentSnapshot : null) ||
     leavePickerStudents.find((student) => student.id === leaveStudentId) ||
     students.find((student) => student.id === leaveStudentId);
@@ -835,18 +881,18 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       : "";
   const leaveExamOptions = useMemo(
     () =>
-      selectedLeaveStudent
-        ? exams.filter((exam) => exam.courseIds.includes(selectedLeaveStudent.courseId))
-        : exams,
-    [exams, selectedLeaveStudent],
+      selectedLeaveStudent && leaveContextReady
+        ? (leaveContext?.exams || []).filter((exam) => exam.courseIds.includes(selectedLeaveStudent.courseId))
+        : [],
+    [leaveContext, leaveContextReady, selectedLeaveStudent],
   );
 
   useEffect(() => {
-    if (!leaveExamId || !selectedLeaveStudent) return;
+    if (!leaveExamId || !selectedLeaveStudent || !leaveContextReady || leaveContextLoading) return;
     if (!leaveExamOptions.some((exam) => exam.id === leaveExamId)) {
       setLeaveExamId("");
     }
-  }, [leaveExamId, leaveExamOptions, selectedLeaveStudent]);
+  }, [leaveExamId, leaveExamOptions, selectedLeaveStudent, leaveContextReady, leaveContextLoading]);
 
   // إجازات الطالب المحدد كما هي في بيانات النظام. عرضها داخل النموذج يجعل
   // المستخدم يرى فوراً ما لديه قبل الحفظ، بدل أن يفاجأ برسالة تعارض غامضة.
@@ -864,46 +910,37 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     [selectedLeaveRows, leaveStudentId],
   );
 
-  const studentHasExistingExamLeave = useMemo(
-    () =>
-      selectedStudentLeaves.some(
-        (leave) => (leave.leaveType || "exam") === "exam",
-      ),
-    [selectedStudentLeaves],
-  );
-
-  const studentHasExistingPeriodLeave = useMemo(
-    () =>
-      selectedStudentLeaves.some(
-        (leave) => (leave.leaveType || "exam") === "period",
-      ),
-    [selectedStudentLeaves],
-  );
-
-  // معاينة عدد الامتحانات التي ستغطيها إجازة الفترة قبل الحفظ، بنفس منطق
-  // النظام (دورة الطالب + موقعه) حتى لا يكتشف المستخدم التغطية بعد الحفظ.
-  const periodPreviewExamCount = useMemo(() => {
-    if (leaveMode !== "period" || !selectedLeaveStudent) return null;
-    const from = leaveDateFrom <= leaveDateTo ? leaveDateFrom : leaveDateTo;
-    const to = leaveDateFrom <= leaveDateTo ? leaveDateTo : leaveDateFrom;
-    if (!from || !to) return null;
-    return exams.filter(
-      (exam) =>
-        exam.courseIds.includes(selectedLeaveStudent.courseId) &&
-        dayKey(exam.date) >= from &&
-        dayKey(exam.date) <= to &&
-        studentMatchesExamMainSites(
-          selectedLeaveStudent,
-          splitSelection(exam.mainSite),
-        ),
-    ).length;
-  }, [
-    leaveMode,
-    leaveDateFrom,
-    leaveDateTo,
-    exams,
-    selectedLeaveStudent,
-  ]);
+  const leavePreview = useMemo(() => buildStudentLeavePreview({
+    mode: leaveMode,
+    student: selectedLeaveStudent || null,
+    exams: leaveExamOptions,
+    leaves: selectedStudentLeaves,
+    examId: leaveExamId,
+    dateFrom: leaveDateFrom,
+    dateTo: leaveDateTo,
+    editingLeaveId,
+  }), [leaveMode, selectedLeaveStudent, leaveExamOptions, selectedStudentLeaves,
+    leaveExamId, leaveDateFrom, leaveDateTo, editingLeaveId]);
+  const leavePreviewReady = leaveContextReady && !leaveContextLoading && !leaveContextError;
+  const leaveBlockingConflict = leavePreview.conflicts.find(conflict => conflict.blocking);
+  const leaveConflictIds = new Set(leavePreview.conflicts.map(conflict => conflict.leaveId));
+  const leaveHasConflicts = leavePreviewReady && !selectedLeavesLoading && !selectedLeavesError && leaveConflictIds.size > 0;
+  const periodPreviewExamCount = leaveMode === "period" && leavePreviewReady && leavePreview.hasPeriodDates
+    ? leavePreview.periodExams.length : null;
+  const leaveDateRangeText = `من ${formatAppDate(leavePreview.from)} إلى ${formatAppDate(leavePreview.to)}`;
+  const leaveSummary = !selectedLeaveStudent
+    ? "اختر الطالب لتحديد نطاق الإجازة."
+    : !leavePreviewReady
+      ? leaveContextError || "جاري تحميل امتحانات الطالب…"
+      : leaveMode === "exam"
+        ? leavePreview.selectedExam
+          ? `إجازة لامتحان «${leavePreview.selectedExam.name}» بتاريخ ${formatAppDate(leavePreview.selectedExam.date)} فقط.`
+          : "اختر الامتحان لعرض ملخص الإجازة."
+        : !leavePreview.hasPeriodDates
+          ? "حدد تاريخ البداية والنهاية لعرض ملخص الإجازة."
+          : periodPreviewExamCount === 0
+            ? `إجازة فترة ${leaveDateRangeText} — لا توجد امتحانات مشمولة حالياً.`
+            : `إجازة تشمل ${leaveExamCountText(periodPreviewExamCount || 0)} ${leaveDateRangeText}.`;
   const selectedProfileStudent =
     callRowsFromDb.find((row) => row.student.id === profileStudentId)?.student ||
     (selectedLeaveStudent?.id === profileStudentId ? selectedLeaveStudent : null) ||
@@ -1005,6 +1042,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     if (leave.student) {
       const student = leave.student as Student;
       setLeaveStudentSnapshot(student);
+      setLeaveContext(current => current?.student.id === student.id ? { ...current, student } : current);
       setLeavePickerStudents(current => current.map(item => item.id === student.id ? { ...item, ...student } : item));
       mergeStudentsCache([student]);
     }
@@ -1057,6 +1095,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
   const saveLeave = async () => {
     if (leaveOperationRef.current) return;
+    if (!leavePreviewReady) {
+      toast.error(leaveContextError || "انتظر تحميل امتحانات الطالب قبل الحفظ.");
+      return;
+    }
     if (selectedLeavesError || selectedLeavesLoading) {
       toast.error("انتظر تحميل إجازات الطالب قبل الحفظ.");
       return;
@@ -1088,33 +1130,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
     const from = leaveDateFrom <= leaveDateTo ? leaveDateFrom : leaveDateTo;
     const to = leaveDateFrom <= leaveDateTo ? leaveDateTo : leaveDateFrom;
-    // عند التعديل نستثني الإجازة قيد التعديل نفسها من فحص التعارض.
-    const duplicateLeave = selectedStudentLeaves.find((leave) => {
-      if (leave.studentId !== leaveStudentId) return false;
-      if (leave.id === editingLeaveId) return false;
-      if (leaveMode === "exam")
-        return (
-          (leave.leaveType || "exam") === "exam" && leave.examId === leaveExamId
-        );
-      if ((leave.leaveType || "exam") !== "period") return false;
-      const existingFrom = dayKey(leave.dateFrom || leave.date);
-      const existingTo = dayKey(leave.dateTo || leave.dateFrom || leave.date);
-      return existingFrom <= to && existingTo >= from;
-    });
-    if (duplicateLeave) {
-      if (leaveMode === "exam") {
-        toast.error(
-          "هذا الطالب لديه إجازة سابقة على هذا الامتحان بالفعل. راجعها في «إجازات الطالب المحدد» أو في قائمة الإجازات أدناه، واحذفها أو عدّلها بدل تكرارها.",
-        );
-      } else {
-        const existingFrom = dayKey(duplicateLeave.dateFrom || duplicateLeave.date);
-        const existingTo = dayKey(
-          duplicateLeave.dateTo || duplicateLeave.dateFrom || duplicateLeave.date,
-        );
-        toast.error(
-          `توجد إجازة فترة سابقة لهذا الطالب (${existingFrom} إلى ${existingTo}) تتداخل مع النطاق المحدد. راجعها في «إجازات الطالب المحدد» أو في قائمة الإجازات أدناه.`,
-        );
-      }
+    // Same blocking rules as before; mixed exam/period coverage is a visible warning.
+    if (leaveBlockingConflict) {
+      toast.error(leaveBlockingConflict.kind === "duplicate-exam"
+        ? "هذا الطالب لديه إجازة سابقة على هذا الامتحان بالفعل. راجع «إجازات الطالب السابقة» وعدّلها بدل تكرارها."
+        : "توجد إجازة فترة سابقة لهذا الطالب تتداخل مع النطاق المحدد. راجع «إجازات الطالب السابقة» قبل الحفظ.");
       return;
     }
 
@@ -1133,7 +1153,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
     leaveOperationRef.current = true;
     leaveMutationVersionRef.current += 1;
-    leaveListAbortRef.current?.abort(); selectedLeavesAbortRef.current?.abort();
+    leaveListAbortRef.current?.abort(); selectedLeavesAbortRef.current?.abort(); leaveContextAbortRef.current?.abort();
     setLeaveSaving(true);
     try {
     const result = editingLeaveId
@@ -1535,7 +1555,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
     leaveOperationRef.current = true;
     leaveMutationVersionRef.current += 1;
-    leaveListAbortRef.current?.abort(); selectedLeavesAbortRef.current?.abort();
+    leaveListAbortRef.current?.abort(); selectedLeavesAbortRef.current?.abort(); leaveContextAbortRef.current?.abort();
     setLeaveDeletingIds((current) => ({ ...current, [leave.id]: true }));
     try {
     const result = await studentLeaveApi.remove(leave.id);
@@ -1556,6 +1576,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       const updated = { ...original, ...patch } as Student;
       mergeStudentsCache([updated]);
       setLeaveStudentSnapshot(current => leaveStudentId === updated.id || current?.id === updated.id ? updated : current);
+      setLeaveContext(current => current?.student.id === updated.id ? { ...current, student: updated } : current);
       setLeavePickerStudents(current => current.map(item => item.id === updated.id ? updated : item));
     }
     emitTeacherProDataChanged({
@@ -1602,7 +1623,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const renderLeaveList = () => (
     <Card>
       <CardHeader>
-        <CardTitle>الإجازات السابقة</CardTitle>
+        <CardTitle>سجل الإجازات</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid gap-3 md:grid-cols-4">
@@ -1611,11 +1632,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <b className="text-2xl">{leaveStats.total}</b>
           </div>
           <div className="rounded-2xl border bg-muted/30 p-3">
-            <p className="text-xs text-muted-foreground">حسب الامتحان</p>
+            <p className="text-xs text-muted-foreground">إجازة لامتحان محدد</p>
             <b className="text-2xl">{leaveStats.exam}</b>
           </div>
           <div className="rounded-2xl border bg-muted/30 p-3">
-            <p className="text-xs text-muted-foreground">فترة زمنية</p>
+            <p className="text-xs text-muted-foreground">إجازة لفترة</p>
             <b className="text-2xl">{leaveStats.period}</b>
           </div>
           <div className="rounded-2xl border bg-muted/30 p-3">
@@ -1670,8 +1691,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">كل الإجازات</SelectItem>
-                <SelectItem value="exam">حسب الامتحان</SelectItem>
-                <SelectItem value="period">فترة زمنية</SelectItem>
+                <SelectItem value="exam">إجازة لامتحان محدد</SelectItem>
+                <SelectItem value="period">إجازة لفترة</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -2369,7 +2390,31 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     </Button>
                   </div>
                 )}
+                <fieldset className="grid min-w-0 gap-2">
+                  <legend className="mb-2 text-sm font-bold">نوع الإجازة</legend>
+                  {([
+                    ["exam", "إجازة لامتحان محدد"],
+                    ["period", "إجازة لفترة"],
+                  ] as const).map(([mode, label]) => (
+                    <label key={mode} className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold focus-within:ring-2 focus-within:ring-ring ${leaveMode === mode ? "border-primary bg-primary/5 text-primary" : "bg-background"}`}>
+                      <input
+                        type="radio"
+                        name="leave-mode"
+                        value={mode}
+                        checked={leaveMode === mode}
+                        onChange={() => setLeaveMode(mode)}
+                        className="size-4 shrink-0 accent-primary"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </fieldset>
                 {renderStudentPicker()}
+                {leaveStudentId && (leaveContextLoading || (!leaveContextReady && !leaveContextError)) && <p className="text-xs text-muted-foreground" role="status">جاري تحميل امتحانات الطالب…</p>}
+                {leaveContextError && <div role="alert" className="space-y-2 text-sm text-danger">
+                  <p>{leaveContextError}</p>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setLeaveRefreshKey(current => current + 1)}>إعادة المحاولة</Button>
+                </div>}
                 {selectedLeavesLoading && <p className="text-xs text-muted-foreground">جاري مراجعة إجازات الطالب…</p>}
                 {selectedLeavesError && <div role="alert" className="space-y-2 text-sm text-danger">
                   <p>{selectedLeavesError}</p>
@@ -2378,87 +2423,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 {selectedLeaveStudent?.status === "مفصول" && <p className="rounded-xl bg-muted/50 p-3 text-xs">
                   يمكن اعتماد إجازة لامتحان سابق. يُلغى الفصل إذا زال سببه بعد احتساب الإجازة، دون منحه فرص تعهد.
                 </p>}
-                {selectedLeaveStudent && selectedStudentLeaves.length > 0 && (
-                  <div className="space-y-2 rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3">
-                    <p className="text-xs font-bold text-warning">
-                      إجازات الطالب (
-                      {selectedStudentLeaves.length}):
-                    </p>
-                    <ul className="space-y-1.5">
-                      {selectedStudentLeaves.map((leave) => {
-                        const isExistingPeriod =
-                          (leave.leaveType || "exam") === "period";
-                        const existingExam =
-                          exams.find((item) => item.id === leave.examId) ||
-                          (leave.exam && typeof leave.exam === "object"
-                            ? (leave.exam as Exam)
-                            : null);
-                        return (
-                          <li
-                            key={leave.id}
-                            className="flex flex-wrap items-center gap-1.5 rounded-xl bg-card/80 px-2.5 py-1.5 text-[11px]"
-                          >
-                            <Badge
-                              variant={isExistingPeriod ? "secondary" : "outline"}
-                            >
-                              {isExistingPeriod ? "فترة" : "امتحان"}
-                            </Badge>
-                            <span className="min-w-0 flex-1 break-words">
-                              {isExistingPeriod
-                                ? `${formatAppDate(leave.dateFrom || leave.date)} → ${formatAppDate(leave.dateTo || leave.dateFrom || leave.date)} — ${leave.reason}`
-                                : `${existingExam?.name || "امتحان محذوف"} (${formatAppDate(leave.date)}) — ${leave.reason}`}
-                            </span>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 px-2 text-[11px]"
-                              disabled={Boolean(leaveDeletingIds[leave.id]) || leaveSaving}
-                              onClick={() => startEditLeave(leave)}
-                            >
-                              تعديل
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 px-2 text-[11px] text-danger"
-                              disabled={Boolean(leaveDeletingIds[leave.id]) || leaveSaving}
-                              onClick={() => void deleteLeaveServerFirst(leave)}
-                            >
-                              {leaveDeletingIds[leave.id] ? "..." : "حذف"}
-                            </Button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    <p className="text-[11px] text-warning">
-                      لا يمكن تسجيل إجازة جديدة تتقاطع مع أي إجازة أعلاه؛
-                      عدّلها أو احذفها أولاً.
-                    </p>
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <Label>نوع الإجازة</Label>
-                  <Select
-                    value={leaveMode}
-                    onValueChange={(value) => setLeaveMode(value as LeaveMode)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="exam">حسب الامتحان</SelectItem>
-                      <SelectItem value="period">فترة زمنية</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 {leaveMode === "exam" ? (
                   <>
                     <div className="space-y-2">
-                      <Label>الامتحان</Label>
-                      <Select value={leaveExamId} onValueChange={setLeaveExamId}>
-                        <SelectTrigger>
+                      <Label htmlFor="leave-exam">الامتحان وتاريخه</Label>
+                      <Select value={leaveExamId} onValueChange={setLeaveExamId} disabled={!leavePreviewReady}>
+                        <SelectTrigger id="leave-exam" aria-describedby="leave-exam-help">
                           <SelectValue placeholder="اختر الامتحان" />
                         </SelectTrigger>
                         <SelectContent>
@@ -2469,7 +2439,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                           ))}
                         </SelectContent>
                       </Select>
-                      {selectedLeaveStudent && leaveExamOptions.length === 0 && (
+                      <p id="leave-exam-help" className="text-xs leading-6 text-muted-foreground">
+                        هذه الإجازة تخص الامتحان المحدد فقط، ولا تشمل امتحانات أخرى في نفس اليوم.
+                      </p>
+                      {selectedLeaveStudent && leavePreviewReady && leaveExamOptions.length === 0 && (
                         <p className="text-xs text-danger">
                           لا توجد امتحانات تابعة لدورة هذا الطالب حالياً، لذلك
                           لا يمكن تسجيل إجازة امتحان له.
@@ -2477,33 +2450,46 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                       )}
                     </div>
                     <div className="space-y-2">
-                      <Label>تاريخ الإجازة</Label>
-                      <DateInput value={leaveDate} onChange={setLeaveDate} />
+                      <Label htmlFor="leave-documentation-date">تاريخ توثيق الإجازة</Label>
+                      <DateInput id="leave-documentation-date" value={leaveDate} onChange={setLeaveDate} aria-describedby="leave-documentation-help" />
+                      <p id="leave-documentation-help" className="text-xs leading-6 text-muted-foreground">
+                        تاريخ إداري لتوثيق الإجازة فقط؛ لا يغيّر تاريخ الامتحان أو الامتحانات المشمولة.
+                      </p>
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="space-y-2">
-                        <Label>من</Label>
+                        <Label htmlFor="leave-from">من تاريخ</Label>
                         <DateInput
+                          id="leave-from"
                           value={leaveDateFrom}
                           onChange={setLeaveDateFrom}
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>إلى</Label>
-                        <DateInput value={leaveDateTo} onChange={setLeaveDateTo} />
+                        <Label htmlFor="leave-to">إلى تاريخ</Label>
+                        <DateInput id="leave-to" value={leaveDateTo} onChange={setLeaveDateTo} />
                       </div>
                     </div>
                     {selectedLeaveStudent && periodPreviewExamCount !== null && (
-                      <p
-                        className={`rounded-xl px-3 py-2 text-xs ${periodPreviewExamCount > 0 ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}
-                      >
-                        {periodPreviewExamCount > 0
-                          ? `هذه الفترة ستغطي ${periodPreviewExamCount} امتحاناً تابعاً لدورة/موقع هذا الطالب وسيُستثنى منها جميعاً من المحاسبة.`
-                          : "تنبيه: لا يوجد أي امتحان تابع لدورة/موقع هذا الطالب داخل هذه الفترة، لذلك لن تتأثر أي درجة بهذه الإجازة."}
-                      </p>
+                      <div className="space-y-2 rounded-xl border bg-muted/20 p-3 text-xs" aria-live="polite">
+                        <p className="font-bold">الامتحانات المشمولة: {periodPreviewExamCount}</p>
+                        <p className="leading-6 text-muted-foreground">حسب امتحانات دورة الطالب وموقعه الحالية، ويشمل تاريخ البداية والنهاية.</p>
+                        {periodPreviewExamCount > 0 && (
+                          <details key={`${leaveStudentId}:${leaveDateFrom}:${leaveDateTo}`}>
+                            <summary className="cursor-pointer py-1 font-bold text-primary">عرض أسماء الامتحانات وتواريخها</summary>
+                            <ul className="mt-2 max-h-60 space-y-2 overflow-y-auto">
+                              {leavePreview.periodExams.map(exam => (
+                                <li key={exam.id} className="rounded-lg bg-card p-2 leading-6 [overflow-wrap:anywhere]">
+                                  {exam.name} — {formatAppDate(exam.date)}{exam.active === false ? " (معطّل حالياً)" : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
+                      </div>
                     )}
                   </>
                 )}
@@ -2550,8 +2536,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 {selectedLeaveStudent && (
                   <p className="rounded-xl bg-muted/50 p-2 text-xs text-muted-foreground">
                     نظام الدراسة: <b>{selectedLeaveStudent.studyType || "—"}</b>
-                    {studentHasExistingExamLeave && " — لديه إجازة امتحان سابقة"}
-                    {studentHasExistingPeriodLeave && " — لديه إجازة فترة سابقة"}
                   </p>
                 )}
                 {selectedLeaveStudentBlockedReason && (
@@ -2562,11 +2546,97 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     {selectedLeaveStudentBlockedReason}
                   </p>
                 )}
+                <div className="space-y-2 rounded-xl border bg-muted/20 p-3 text-sm leading-7 [overflow-wrap:anywhere]" aria-live="polite" aria-atomic="true">
+                  <p className="text-xs font-bold text-muted-foreground">ملخص قبل الحفظ</p>
+                  <p className="font-bold">{leaveSummary}</p>
+                </div>
+                {leaveMode === "period" && leavePreview.hasPeriodDates && leaveDateFrom > leaveDateTo && (
+                  <p role="alert" className="rounded-xl border border-warning-line bg-warning-soft p-3 text-xs leading-6 text-warning">
+                    تاريخ البداية بعد تاريخ النهاية. سيعتمد النظام الفترة {leaveDateRangeText} كما يظهر في الملخص.
+                  </p>
+                )}
+                {periodPreviewExamCount === 0 && (
+                  <p role="alert" className="rounded-xl border border-warning-line bg-warning-soft p-3 text-sm leading-6 text-warning">
+                    النطاق المحدد لا يشمل أي امتحان حالياً. راجع الفترة وموقع الطالب.
+                    {editingLeaveId && " عند التعديل قد تُسترجع درجات الامتحانات التي خرجت من نطاق الإجازة."}
+                  </p>
+                )}
+                {leaveHasConflicts && (
+                  <div role="alert" className="rounded-xl border border-warning-line bg-warning-soft p-3 text-sm leading-6 text-warning">
+                    {leaveBlockingConflict
+                      ? leaveBlockingConflict.kind === "duplicate-exam"
+                        ? "توجد إجازة سابقة لهذا الامتحان. عدّل الإجازة السابقة بدل تسجيلها مرة ثانية."
+                        : "الفترة تتداخل مع إجازة فترة سابقة. عدّل الإجازة السابقة أو غيّر التواريخ قبل الحفظ."
+                      : "يوجد امتحان مشمول بإجازة سابقة ضمن الاختيار الحالي. راجع الإجازات المتداخلة أدناه قبل إضافة الإجازة."}
+                  </div>
+                )}
+                {selectedLeaveStudent && selectedStudentLeaves.length > 0 && (
+                  <details
+                    key={`${leaveStudentId}:${editingLeaveId}:${leaveHasConflicts ? [...leaveConflictIds].join(",") : "none"}`}
+                    open={leaveHasConflicts || undefined}
+                    className={`space-y-2 rounded-xl border p-3 ${leaveHasConflicts ? "border-warning-line bg-warning-soft" : "bg-muted/20"}`}
+                  >
+                    <summary className="cursor-pointer py-1 text-sm font-bold">
+                      إجازات الطالب السابقة ({selectedStudentLeaves.length})
+                    </summary>
+                    <ul className="space-y-1.5">
+                      {selectedStudentLeaves.map((leave) => {
+                        const isExistingPeriod =
+                          (leave.leaveType || "exam") === "period";
+                        const existingExam =
+                          leaveExamOptions.find((item) => item.id === leave.examId) ||
+                          (leave.exam && typeof leave.exam === "object"
+                            ? (leave.exam as Exam)
+                            : null);
+                        return (
+                          <li
+                            key={leave.id}
+                            className={`flex flex-wrap items-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs ${leaveHasConflicts && leaveConflictIds.has(leave.id) ? "border-warning-line bg-warning-soft" : "border-transparent bg-card/80"}`}
+                          >
+                            <Badge
+                              variant={isExistingPeriod ? "secondary" : "outline"}
+                            >
+                              {isExistingPeriod ? "فترة" : "امتحان"}
+                            </Badge>
+                            <span className="min-w-0 flex-1 break-words">
+                              {isExistingPeriod
+                                ? `${formatAppDate(leave.dateFrom || leave.date)} → ${formatAppDate(leave.dateTo || leave.dateFrom || leave.date)} — ${leave.reason}`
+                                : `${existingExam?.name || "امتحان محذوف"} — ${existingExam?.date ? formatAppDate(existingExam.date) : "تاريخ الامتحان غير متوفر"} — ${leave.reason}`}
+                            </span>
+                            {leaveHasConflicts && leaveConflictIds.has(leave.id) && <Badge variant="outline">تداخل مع الاختيار الحالي</Badge>}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-[11px]"
+                              disabled={Boolean(leaveDeletingIds[leave.id]) || leaveSaving}
+                              onClick={() => startEditLeave(leave)}
+                            >
+                              تعديل
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-[11px] text-danger"
+                              disabled={Boolean(leaveDeletingIds[leave.id]) || leaveSaving}
+                              onClick={() => void deleteLeaveServerFirst(leave)}
+                            >
+                              {leaveDeletingIds[leave.id] ? "..." : "حذف"}
+                            </Button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </details>
+                )}
                 <Button
                   className="w-full"
                   onClick={() => void saveLeave()}
                   disabled={
                     leaveSaving ||
+                    !leavePreviewReady ||
+                    Boolean(leaveBlockingConflict) ||
                     selectedLeavesLoading ||
                     Boolean(selectedLeavesError) ||
                     !selectedLeaveStudent ||
