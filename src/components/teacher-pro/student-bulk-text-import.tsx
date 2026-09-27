@@ -242,13 +242,6 @@ function normalizeSubSite(
   return normalizeIraqiProvinceName(source || rawMain);
 }
 
-function parseInteger(value: string, fallback = 0): number {
-  const digits = toLatinDigits(value || "").replace(/[^\d-]/g, "");
-  if (!digits) return fallback;
-  const numeric = Number(digits);
-  return Number.isFinite(numeric) ? Math.max(0, Math.trunc(numeric)) : fallback;
-}
-
 function hasLegacyGraceColumn(cells: string[]): boolean {
   return (
     cells.length === EXPECTED_COLUMNS + 1 ||
@@ -476,15 +469,12 @@ export function StudentBulkTextImportView() {
       const errors: string[] = [];
       const warnings: string[] = [];
       const rowNumber = index + 1;
+      // عمود «فترة السماح» القديم يُتجاهل بصمت — فترة السماح تُدار حصرياً
+      // من «إدارة فترة السماح» ولا نُزعج المستخدم بتنبيه عنه.
       const legacyGraceColumn = hasLegacyGraceColumn(pastedCells);
       const cells = legacyGraceColumn
         ? pastedCells.filter((_, cellIndex) => cellIndex !== LEGACY_GRACE_COLUMN_INDEX)
         : pastedCells;
-      if (legacyGraceColumn) {
-        warnings.push(
-          "تم تجاهل عمود «فترة السماح»؛ فترة السماح تُضاف من «إدارة فترة السماح».",
-        );
-      }
 
       if (cells.length !== EXPECTED_COLUMNS) {
         errors.push(`عدد الأعمدة ${cells.length}، المطلوب ${EXPECTED_COLUMNS}`);
@@ -502,7 +492,7 @@ export function StudentBulkTextImportView() {
         locationScopeRaw,
         subSiteRaw,
         statusRaw,
-        opportunitiesRaw,
+        _opportunitiesRaw,
         phoneRaw,
         parentPhoneRaw,
         telegramRaw,
@@ -530,7 +520,6 @@ export function StudentBulkTextImportView() {
       const phone = normalizePhone(phoneRaw);
       const parentPhone = normalizePhone(parentPhoneRaw);
       const telegram = sanitizeTelegramInput(telegramRaw);
-      const inputOpportunities = parseInteger(opportunitiesRaw, 0);
       const opportunities = courseRow?.activeChapter
         ? Math.max(
             0,
@@ -584,11 +573,6 @@ export function StudentBulkTextImportView() {
       } else if (courseRow?.activeChapter && opportunities <= 0) {
         warnings.push(
           `الفصل النشط "${courseRow.activeChapter.name || "—"}" فرصه 0؛ الطالب سيبدأ بدون فرص.`,
-        );
-      }
-      if (courseRow?.activeChapter && inputOpportunities !== opportunities) {
-        warnings.push(
-          `تم تجاهل عمود الفرص (${inputOpportunities}) واعتماد فرص الفصل النشط: ${opportunities}.`,
         );
       }
 

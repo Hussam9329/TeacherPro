@@ -133,11 +133,11 @@ assert(
 );
 assert(
   bulkView.includes("courseRow?.activeChapter") &&
-    bulkView.includes("تم تجاهل عمود الفرص") &&
+    !bulkView.includes("تم تجاهل عمود الفرص") &&
     !bulkView.includes(
       "const opportunities = parseInteger(opportunitiesRaw, 0);",
     ),
-  "المعاينة توضّح أن فرص البداية من الفصل النشط وليس من عمود النص",
+  "المعاينة تعتمد فرص الفصل النشط بصمت — عمود النص لا يُعتد به ولا يُنبَّه عنه",
 );
 assert(
   bulkView.includes("فرص البداية") &&
