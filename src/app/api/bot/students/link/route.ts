@@ -135,6 +135,11 @@ async function performLink(
       OR: [
         { telegramKey: normalizedTelegramId },
         ...(normalizedUsername ? [{ telegramKey: normalizedUsername }] : []),
+        // اليوزر المستعاد (username) يحمل يوزرات الإضافة الجماعية — احمِه
+        // من الربط المزدوج مثلما كانت telegramKey تحمي اليوزرات القديمة.
+        ...(normalizedUsername
+          ? [{ username: { equals: normalizedUsername, mode: "insensitive" as const } }]
+          : []),
         { telegram: { equals: sanitizeTelegramInput(telegramUserId), mode: "insensitive" } },
         ...(telegramUsername
           ? [{ telegram: { equals: telegramUsername, mode: "insensitive" as const } }]

@@ -68,6 +68,9 @@ function buildStudentWhere(body: Record<string, unknown>): Prisma.StudentWhereIn
         return [
           { telegram: { equals: sanitized, mode: "insensitive" as const } },
           { telegramKey: { equals: normalized, mode: "insensitive" as const } },
+          // الطلاب المستوردون جماعياً يحملون اليوزر في «المستعاد» (username)
+          // والحقل الفريد فارغ — المطابحة تشمل username لضمان حل الطالب.
+          { username: { equals: normalized, mode: "insensitive" as const } },
         ];
       }),
     };
@@ -117,12 +120,16 @@ export async function POST(req: NextRequest) {
     const requestedTelegramId = readTelegramId(body);
     const requestedUsername = readTelegramUsername(body);
     const linkedTelegram = normalizeTelegramIdentifier(student.telegram);
+    const linkedUsername = normalizeTelegramIdentifier(student.username);
+    const requestedValues = [
+      requestedTelegramId,
+      requestedUsername,
+    ]
+      .map((item) => normalizeTelegramIdentifier(item))
+      .filter(Boolean);
     const telegramMatched = Boolean(
-      linkedTelegram &&
-        [requestedTelegramId, requestedUsername]
-          .map((item) => normalizeTelegramIdentifier(item))
-          .filter(Boolean)
-          .includes(linkedTelegram),
+      (linkedTelegram && requestedValues.includes(linkedTelegram)) ||
+        (linkedUsername && requestedValues.includes(linkedUsername)),
     );
 
     const matchType = student.id === textValue(body.studentId ?? body.student_id, 120)

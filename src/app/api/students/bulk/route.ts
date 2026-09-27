@@ -12,6 +12,7 @@ import {
 import {
   getStudentDuplicateMessage,
   getStudentUniqueKeys,
+  normalizeTelegramIdentifier,
   sanitizeTelegramInput,
 } from "@/lib/student-utils";
 import { getRequiredTextError } from "@/lib/validation";
@@ -220,6 +221,8 @@ export async function POST(req: NextRequest) {
     phone: string;
     parentPhone: string;
     telegram: string;
+    telegramNumeric: boolean;
+    telegramDedupeKey: string;
     opportunities: number;
     resolvedSubSite: string;
     rowNo: number;
@@ -239,7 +242,12 @@ export async function POST(req: NextRequest) {
     const gender = asText(row.gender);
     const phone = normalizeBulkPhone(row.phone);
     const parentPhone = normalizeBulkPhone(row.parentPhone);
+    // الإضافة الجماعية تخزّن معرف التيليجرام في «المستعاد» (username) وليس في
+    // الحقل الفريد: القيم الحرفية يوزرات ← username، والقيم الرقمية معرفات
+    // ← telegram الأصلي. telegramKey يبقى فارغاً حتى يربط البوت الحساب الفعلي.
     const telegram = sanitizeTelegramInput(asText(row.telegram));
+    const telegramNumeric = /^\d+$/.test(telegram);
+    const telegramDedupeKey = normalizeTelegramIdentifier(telegram);
     const courseId = asText(row.courseId);
     const course = courseById.get(courseId);
     const courseProgram = asText(row.courseProgram);
@@ -342,7 +350,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const uniqueKeys = getStudentUniqueKeys({ name, phone, telegram });
+    // المفتاح الفريد يُحسب بدون تيليجرام — فحص التكرار يتم على اليوزر المستعاد.
+    const uniqueKeys = getStudentUniqueKeys({ name, phone, telegram: "" });
     if (uniqueKeys.nameKey) {
       const previous = seenNames.get(uniqueKeys.nameKey);
       if (previous)
@@ -365,8 +374,8 @@ export async function POST(req: NextRequest) {
         );
       seenPhones.set(uniqueKeys.phoneKey, rowNo);
     }
-    if (uniqueKeys.telegramKey) {
-      const previous = seenTelegrams.get(uniqueKeys.telegramKey);
+    if (telegramDedupeKey) {
+      const previous = seenTelegrams.get(telegramDedupeKey);
       if (previous)
         return NextResponse.json(
           {
@@ -374,7 +383,7 @@ export async function POST(req: NextRequest) {
           },
           { status: 400 },
         );
-      seenTelegrams.set(uniqueKeys.telegramKey, rowNo);
+      seenTelegrams.set(telegramDedupeKey, rowNo);
     }
 
     const resolvedSubSite = course
@@ -386,6 +395,8 @@ export async function POST(req: NextRequest) {
       phone,
       parentPhone,
       telegram,
+      telegramNumeric,
+      telegramDedupeKey,
       opportunities,
       resolvedSubSite,
       rowNo,
@@ -403,18 +414,16 @@ export async function POST(req: NextRequest) {
   const phoneKeys = uniqueValues(
     normalizedRows.map((row) => row.uniqueKeys.phoneKey),
   );
-  const telegramKeys = uniqueValues(
-    normalizedRows.map((row) => row.uniqueKeys.telegramKey),
-  );
+  // اليوزرات المستعادة غير فريدة — تطابقها مع طلاب موجودين يصير تحذيراً لا رفضاً.
+  const handleValues = uniqueValues(normalizedRows.map((row) => row.telegram));
   const parentPhones = previewOnly
     ? uniqueValues(normalizedRows.map((row) => row.parentPhone))
     : [];
   const duplicateConditions = [
     ...(nameKeys.length ? [{ nameKey: { in: nameKeys } }] : []),
     ...(phoneKeys.length ? [{ phoneKey: { in: phoneKeys } }] : []),
-    ...(telegramKeys.length ? [{ telegramKey: { in: telegramKeys } }] : []),
   ];
-  const [duplicateSource, parentPhoneSource] = await Promise.all([
+  const [duplicateSource, parentPhoneSource, handleSource] = await Promise.all([
     duplicateConditions.length
       ? db.student.findMany({
           where: { OR: duplicateConditions },
@@ -428,22 +437,53 @@ export async function POST(req: NextRequest) {
           distinct: ["parentPhone"],
         })
       : Promise.resolve([]),
+    previewOnly && handleValues.length
+      ? db.student.findMany({
+          where: {
+            OR: [
+              { username: { in: handleValues, mode: "insensitive" } },
+              { telegram: { in: handleValues, mode: "insensitive" } },
+            ],
+          },
+          select: { id: true, name: true, username: true, telegram: true },
+        })
+      : Promise.resolve([]),
   ]);
   const databasePreviewRows = normalizedRows.map((row) => {
+    // التيليجرام لم يعد مفتاحاً فريداً هنا، فلا يُمرر لرسالة الرفض —
+    // التطابق على اليوزر يظهر كتحذير مستقل تحت.
     const duplicateMessage = getStudentDuplicateMessage(duplicateSource, {
       name: asText(row.payload.name),
       phone: row.phone,
-      telegram: row.telegram,
+      telegram: "",
     });
     const parentPhoneMatch = parentPhoneSource.find(
       (student) => normalizeBulkPhone(student.parentPhone) === row.parentPhone,
     );
+    const handleMatch = row.telegramDedupeKey
+      ? handleSource.find(
+          (student) =>
+            normalizeTelegramIdentifier(student.username) ===
+              row.telegramDedupeKey ||
+            normalizeTelegramIdentifier(student.telegram) ===
+              row.telegramDedupeKey,
+        )
+      : undefined;
     return {
       rowNumber: row.rowNo,
       duplicateMessage,
-      warnings: parentPhoneMatch
-        ? [`رقم ولي الأمر موجود مسبقاً عند: ${parentPhoneMatch.name}`]
-        : [],
+      warnings: [
+        ...(parentPhoneMatch
+          ? [`رقم ولي الأمر موجود مسبقاً عند: ${parentPhoneMatch.name}`]
+          : []),
+        ...(handleMatch
+          ? [
+              row.telegramNumeric
+                ? `معرف التيليجرام موجود مسبقاً عند: ${handleMatch.name}`
+                : `يوزر التيليجرام (المستعاد) موجود مسبقاً عند: ${handleMatch.name}`,
+            ]
+          : []),
+      ],
     };
   });
 
@@ -515,6 +555,7 @@ export async function POST(req: NextRequest) {
             phone,
             parentPhone,
             telegram,
+            telegramNumeric,
             rowNo,
             uniqueKeys,
           },
@@ -595,7 +636,8 @@ export async function POST(req: NextRequest) {
               gender: asText(payload.gender),
               phone: sanitizePhoneInput(phone),
               parentPhone: sanitizePhoneInput(parentPhone),
-              telegram,
+              telegram: telegramNumeric ? telegram : null,
+              username: telegram && !telegramNumeric ? telegram : null,
               courseProgram: courseProgram || null,
               courseTerm: courseTerm || null,
               studyType: studyType || null,
