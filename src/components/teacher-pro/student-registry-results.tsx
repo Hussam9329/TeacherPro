@@ -124,12 +124,8 @@ function registryHealthBadges(student: Student) {
     });
   }
 
-  if (!normalizeTelegramIdentifier(student.telegram || "")) {
-    badges.push({
-      label: "بلا تيليجرام",
-      className: "border-muted-foreground/30 bg-muted/60 text-muted-foreground",
-    });
-  }
+  // شارة «بلا تيليجرام» أُلغيت من كرت الطالب — الفلتر (بلا تيليجرام)
+  // في مشاكل السجل يبقى متاحاً للبحث عن هؤلاء الطلاب.
 
   return badges;
 }
