@@ -34,7 +34,6 @@ import {
   BarChart3,
   Target,
   PhoneCall,
-  CalendarCheck,
   Shield,
   ShieldAlert,
   ScrollText,
@@ -97,7 +96,6 @@ const menuItems: {
   { id: "grade-records", title: "سجل الدرجات", icon: BarChart3 },
   { id: "opportunities", title: "إدارة الفرص", icon: Target },
   { id: "follow-up-calls", title: "المكالمات", icon: PhoneCall },
-  { id: "follow-up-leaves", title: "الإجازات", icon: CalendarCheck },
   { id: "accounts", title: "إدارة الحسابات", icon: Shield },
   { id: "logs", title: "السجلات", icon: ScrollText },
 ];
@@ -110,7 +108,7 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
     title: "الامتحانات والدرجات",
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
   },
-  { title: "المتابعة", itemIds: ["follow-up-calls", "follow-up-leaves"] },
+  { title: "المتابعة", itemIds: ["follow-up-calls"] },
   { title: "الإدارة", itemIds: ["accounts", "logs"] },
 ];
 
@@ -126,7 +124,6 @@ const sectionsWithPageSearch = new Set<SectionId>([
   "grade-records",
   "opportunities",
   "follow-up-calls",
-  "follow-up-leaves",
   "logs",
 ]);
 const sectionIds = new Set<SectionId>(menuItems.map((item) => item.id));
@@ -319,7 +316,8 @@ function readSectionFromLocation(): SectionId | null {
   const value = querySection || hashSection;
   // Backward compatibility: redirect old section IDs
   if (value === 'whatsapp') return 'follow-up-calls' as SectionId;
-  if (value === 'follow-up') return 'follow-up-leaves' as SectionId;
+  // تبويبة الإجازات صارت نافذة «إدارة الإجازات» في لوحة النظام.
+  if (value === 'follow-up' || value === 'follow-up-leaves') return 'follow-up-leaves' as SectionId;
   if (value === 'follow-up-pledges') return 'dismissed-management' as SectionId;
   // التبويب القديم أزيل، لكن الروابط المحفوظة يجب أن تصل إلى بديله الرسمي.
   if (value === 'dismissed-students') return 'dismissed-management' as SectionId;
@@ -343,7 +341,8 @@ import { GradeEntryView } from "./grade-entry";
 import { ExamRecordsView } from "./exam-records";
 import { GradeRecordsView } from "./grade-records";
 import { OpportunitiesView } from "./opportunities";
-import { FollowUpCallsView, FollowUpLeavesView, FollowUpView } from "./follow-up";
+import { FollowUpCallsView } from "./follow-up";
+import { LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog";
 import { AccountsView } from "./accounts";
 import { LogsView } from "./logs";
 import { LoadingState } from "./ui-kit";
@@ -361,9 +360,10 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   "exam-records": ExamRecordsView,
   "grade-records": GradeRecordsView,
   opportunities: OpportunitiesView,
-  "follow-up": FollowUpView,
+  // Legacy hidden sections: old links open «إدارة الإجازات» on the dashboard.
+  "follow-up": DashboardView,
   "follow-up-calls": FollowUpCallsView,
-  "follow-up-leaves": FollowUpLeavesView,
+  "follow-up-leaves": DashboardView,
   accounts: AccountsView,
   logs: LogsView,
   // Keep the legacy key type-safe while rendering the safe destination only.
@@ -1034,8 +1034,17 @@ export function TeacherProLayout() {
     [visibleMenuItems, currentSection],
   );
   useEffect(() => {
-    if (currentSection === "follow-up") {
-      setSection("follow-up-leaves");
+    if (currentSection === "follow-up" || currentSection === "follow-up-leaves") {
+      // An old leaves link opens the «إدارة الإجازات» window on the dashboard.
+      if (readSectionFromLocation() === "follow-up-leaves") {
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set("section", "dashboard");
+        nextUrl.searchParams.set("dialog", LEAVES_DIALOG_QUERY);
+        nextUrl.hash = "";
+        window.history.replaceState({}, "", nextUrl.toString());
+        window.dispatchEvent(new Event(LEAVES_DIALOG_OPEN_EVENT));
+      }
+      setSection("dashboard");
       return;
     }
     if (currentSection === "admin-log-reset") {

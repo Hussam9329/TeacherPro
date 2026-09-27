@@ -1691,7 +1691,10 @@ function toPersistedUiSnapshot(
     state.currentSection === "dismissed-students" ||
     state.currentSection === "follow-up-pledges"
       ? "dismissed-management"
-      : state.currentSection;
+      : // The leaves tab became the «إدارة الإجازات» window on the dashboard.
+        state.currentSection === "follow-up-leaves" || state.currentSection === "follow-up"
+        ? "dashboard"
+        : state.currentSection;
   const currentSection =
     typeof persistedSection === "string" &&
     Object.prototype.hasOwnProperty.call(

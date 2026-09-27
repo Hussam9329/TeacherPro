@@ -28,7 +28,8 @@ import { useLatestRequest } from "@/hooks/use-latest-request";
 import { CallNotesManagementDialog } from "./call-notes-management-dialog";
 import { CodeClosuresDialog } from "./code-closures-dialog";
 import { GracePeriodsDialog } from "./grace-periods-dialog";
-// One look for the three management windows opened from here.
+import { LeavesDialog, LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog";
+// One look for the management windows opened from here.
 import "./tp-modal.css";
 
 type DashboardStats = {
@@ -48,7 +49,6 @@ const dashboardShortcuts = [
   { section: "grade-records", title: "سجل الدرجات", icon: ChartColumn, tone: "info" },
   { section: "exam-new", title: "إضافة امتحان", icon: FilePlus2, tone: "success" },
   { section: "follow-up-calls", title: "المكالمات", icon: PhoneCall, tone: "success" },
-  { section: "follow-up-leaves", title: "الإجازات", icon: CalendarCheck, tone: "warning" },
 ] as const;
 
 function formatStatsTime(value?: string) {
@@ -98,6 +98,28 @@ export function DashboardView({
     actor.permissions?.includes("students.edit")
   ));
   const [gracePeriodsOpen, setGracePeriodsOpen] = useState(false);
+  // «إدارة الإجازات» replaced the old leaves tab; its old links open this window.
+  const canViewLeaves = canAccess("follow-up-leaves");
+  const canManageLeaves = Boolean(actor && (
+    actor.username?.trim().toLowerCase() === "admin" ||
+    actor.roleId === "role_admin" ||
+    actor.permissions?.includes("follow-up.leaves.manage") ||
+    actor.permissions?.includes("follow-up.manage")
+  ));
+  const [leavesOpen, setLeavesOpen] = useState(false);
+  useEffect(() => {
+    if (!canViewLeaves) return;
+    const openFromLink = () => {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("dialog") !== LEAVES_DIALOG_QUERY) return;
+      url.searchParams.delete("dialog");
+      window.history.replaceState({}, "", url.toString());
+      setLeavesOpen(true);
+    };
+    openFromLink();
+    window.addEventListener(LEAVES_DIALOG_OPEN_EVENT, openFromLink);
+    return () => window.removeEventListener(LEAVES_DIALOG_OPEN_EVENT, openFromLink);
+  }, [canViewLeaves]);
   const syncKey = useTeacherProSyncKey(["dashboard", "students", "grades", "opportunities", "exams"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const beginStatsRequest = useLatestRequest();
@@ -260,7 +282,7 @@ export function DashboardView({
         ))}
       </div>
 
-      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canViewGracePeriods) && (
+      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canViewGracePeriods || canViewLeaves) && (
         <nav aria-label="اختصارات لوحة التحكم" className="tp-dashboard__navigation">
           <h3 className="text-sm font-bold">الوصول السريع</h3>
           <div className="tp-dashboard__shortcuts">
@@ -320,6 +342,20 @@ export function DashboardView({
                 <span className="tp-dashboard__shortcut-label">إدارة فترة السماح</span>
               </button>
             )}
+            {canViewLeaves && (
+              <button
+                type="button"
+                onClick={() => setLeavesOpen(true)}
+                aria-haspopup="dialog"
+                data-tone="warning"
+                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
+              >
+                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                  <CalendarCheck />
+                </span>
+                <span className="tp-dashboard__shortcut-label">إدارة الإجازات</span>
+              </button>
+            )}
           </div>
         </nav>
       )}
@@ -336,6 +372,14 @@ export function DashboardView({
           open={gracePeriodsOpen}
           onOpenChange={setGracePeriodsOpen}
           canManage={canManageGracePeriods}
+        />
+      )}
+      {canViewLeaves && (
+        <LeavesDialog
+          key={`leaves-${actor?.id || ""}`}
+          open={leavesOpen}
+          onOpenChange={setLeavesOpen}
+          canManage={canManageLeaves}
         />
       )}
       {canViewCodeClosures && (

@@ -23,6 +23,8 @@ const dismissedListRoute = read(
   "src/app/api/dismissed-management/list/route.ts",
 );
 const followUp = read("src/components/teacher-pro/follow-up.tsx");
+const leavesWindow = read("src/components/teacher-pro/leaves-dialog.tsx");
+const leavesListRoute = read("src/app/api/student-leaves/students/route.ts");
 const profile = read("src/components/teacher-pro/student-profile-dialog.tsx");
 const bulkImport = read("src/components/teacher-pro/student-bulk-text-import.tsx");
 
@@ -108,7 +110,7 @@ check(
   "المحرك يواصل احترام التسويات التاريخية القديمة بينما مسار الاسترجاع التاريخي نفسه متقاعد ولا يغيّر حالة مفصول",
 );
 check(
-  [opportunitiesView, registry, followUp, profile, bulkImport].every(
+  [opportunitiesView, registry, followUp, leavesWindow, profile, bulkImport].every(
     (source) => source.includes("formatOpportunityBalance"),
   ),
   "كل صفحات العرض الرئيسية تستخدم نفس منسق الرصيد والسقف",
@@ -117,7 +119,7 @@ check(
     opportunitiesView.includes("opportunityMode: true") &&
     registry.includes("opportunityMode: true") &&
     dismissedListRoute.includes("attachStudentOpportunitySnapshots") &&
-    followUp.includes("opportunityMode: true") &&
+    leavesListRoute.includes("attachStudentOpportunitySnapshots") &&
     candidates.includes("attachStudentOpportunitySnapshots"),
   "كل القوائم التي تعرض الفرص تطلب Snapshot الخادمي صراحة",
 );

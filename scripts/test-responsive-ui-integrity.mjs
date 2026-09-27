@@ -47,7 +47,6 @@ const layout = read("src/components/teacher-pro/layout.tsx");
 const courses = read("src/components/teacher-pro/courses.tsx");
 const profileDialog = read("src/components/teacher-pro/student-profile-dialog.tsx");
 const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
-const followUp = read("src/components/teacher-pro/follow-up.tsx");
 const smartNotes = read("src/components/teacher-pro/grade-smart-notes-panel.tsx");
 const packageJson = JSON.parse(read("package.json"));
 
@@ -218,7 +217,8 @@ const profileControlCss = profileCss.match(/\.tp-student-profile__control\s*\{([
 includesAll(profileControlCss, ["min-height: 2.75rem", "max-width: 100%", "touch-action: manipulation"], "Student profile control ergonomics");
 const profileStatCss = profileCss.match(/\.tp-student-profile__stat\s*\{([^}]*)\}/)?.[1] || "";
 includesAll(profileStatCss, ["min-width: 0", "min-height: 5.5rem", "touch-action: manipulation"], "Student profile card ergonomics");
-includesAll(followUp, ["flex min-h-11 w-full min-w-0 touch-manipulation"], "Follow-up student picker");
+const leavesCss = read("src/components/teacher-pro/leaves-dialog.css");
+includesAll(leavesCss, ["min-height: 2.5rem", "touch-action: manipulation", ".tp-leaves__student-actions > * { flex: 1 1 auto; }"], "Leaves window touch targets");
 includesAll(smartNotes, ["min-h-11 min-w-0 touch-manipulation"], "Smart-note category controls");
 
 // Responsive safeguards are part of the normal regression suite.

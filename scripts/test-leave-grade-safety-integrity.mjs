@@ -9,7 +9,7 @@ const gradeRecords = read("src/components/teacher-pro/grade-records.tsx");
 const gradeRoute = read("src/app/api/grades/route.ts");
 const writeback = read("src/lib/academic-grade-writeback-server.ts");
 const leaveRoute = read("src/app/api/student-leaves/route.ts");
-const followUp = read("src/components/teacher-pro/follow-up.tsx");
+const leavesWindow = read("src/components/teacher-pro/leaves-dialog.tsx");
 const offlineOutbox = read("src/lib/grade-entry-offline-outbox.ts");
 const shared = read("src/lib/grade-leave-safety.ts");
 const pkg = JSON.parse(read("package.json"));
@@ -88,19 +88,21 @@ must(
 );
 
 must(
-  followUp.includes("skippedGradeRestores?.absentBeforeRegistration") &&
-    !followUp.includes("absentWithinGrace") &&
-    followUp.includes("تم تجاهل") &&
-    followUp.includes("تم حذف الإجازة وإعادة احتساب الطالب."),
+  leavesWindow.includes("skippedGradeRestores?.absentBeforeRegistration") &&
+    !leavesWindow.includes("absentWithinGrace") &&
+    leavesWindow.includes("تم تجاهل") &&
+    leavesWindow.includes("تم حذف الإجازة وإعادة احتساب الطالب."),
   "واجهة الإجازات تعرض نتيجة الحذف والاسترجاع والتجاهل بوضوح",
   "يجب أن تعرض الواجهة للمستخدم ما استُرجع وما تم تجاهله ولماذا.",
 );
 
 must(
-  followUp.includes('selectedLeaveStudent?.status === "مؤرشف"') &&
-    followUp.includes('selectedLeaveStudent?.status === "مفصول"') &&
-    followUp.includes("Boolean(selectedLeaveStudentBlockedReason)") &&
-    followUp.includes("role=\"alert\"") &&
+  leavesWindow.includes('const studentStatus = selectedLeaveStudent?.status || student?.status || "";') &&
+    leavesWindow.includes('studentStatus === "مؤرشف" ? "لا يمكن تسجيل إجازة لهذا الطالب لأنه مؤرشف."') &&
+    leavesWindow.includes('const wasDismissed = studentStatus === "مفصول";') &&
+    leavesWindow.includes("يُلغى الفصل إذا زال سببه") &&
+    leavesWindow.includes("Boolean(selectedLeaveStudentBlockedReason)") &&
+    leavesWindow.includes("role=\"alert\"") &&
     !leaveRoute.includes('throw new Error("لا يمكن تسجيل إجازة لطالب مفصول') &&
     leaveRoute.includes('leaveReview: { studentId:'),
   "المؤرشف يبقى محمياً والمفصول يمكنه أخذ إجازة مع مراجعة سبب الفصل",
