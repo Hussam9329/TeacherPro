@@ -258,5 +258,9 @@
   "20260925120000_grace_period_table": {
     "kind": "expand",
     "checksum": "ba7244f36417222150767269e370643122b40b506b03a4e4f13ca5072c281c8b"
+  },
+  "20260928120000_clear_auto_leave_notes": {
+    "kind": "audited-data-reconciliation",
+    "checksum": "cb0d3890f513aae0649b9dae94c24a4e94ebd35a12ab75718ba12b3b9b898f65"
   }
 }

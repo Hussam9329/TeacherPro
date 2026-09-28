@@ -25,8 +25,12 @@ const reconciliationMigrationName =
   "20260820140000_schema_authority_reconciliation";
 const requiredRuntimeMigrationName =
   "20260828034500_single_dismissal_policy";
+// The newest schema migration gates runtime readiness. A reviewed data-only
+// reconciliation adds no table or column, so it does not move that gate.
+const migrationPolicyKinds = JSON.parse(read("prisma/deployment-migration-policy.json"));
 const requiredDatabaseMigrationName = fs.readdirSync(path.join(root, "prisma/migrations"))
   .filter(name => fs.existsSync(path.join(root, "prisma/migrations", name, "migration.sql")))
+  .filter(name => migrationPolicyKinds[name]?.kind !== "audited-data-reconciliation")
   .sort().at(-1);
 const telegramWindowMigrationName = "20260913120000_add_exam_telegram_submission_window";
 const graceTerminationMigrationName =

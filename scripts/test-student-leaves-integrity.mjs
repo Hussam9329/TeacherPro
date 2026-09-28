@@ -306,6 +306,19 @@ must(
   "يجب أن يشمل الفحص الشامل اختبار الإجازات.",
 );
 
+const clearAutoNotes = read("prisma/migrations/20260928120000_clear_auto_leave_notes/migration.sql");
+const clearAutoNotesStatements = clearAutoNotes.replace(/--[^\n]*/g, "");
+must(
+  /UPDATE "StudentLeave"\s+SET "notes" = ''\s+WHERE btrim\("notes", E' \\t\\r\\n'\) IN \(/.test(clearAutoNotesStatements) &&
+    clearAutoNotesStatements.includes("'تم إنشاء هذا السجل تلقائياً من تسوية تاريخية للدرجات المحوّلة من غائب إلى مجاز.'") &&
+    clearAutoNotesStatements.includes("'تم إنشاء هذا السجل تلقائياً من تسوية تاريخية.'") &&
+    (clearAutoNotesStatements.match(/;/g) || []).length === 1 &&
+    !/\b(?:DELETE|INSERT|DROP|TRUNCATE|ALTER)\b/i.test(clearAutoNotesStatements) &&
+    JSON.parse(read("prisma/deployment-migration-policy.json"))["20260928120000_clear_auto_leave_notes"]?.kind === "audited-data-reconciliation",
+  "ملاحظة «تم إنشاء هذا السجل تلقائياً من تسوية تاريخية…» تُمسح وحدها؛ الإجازة وسببها وأي ملاحظة كتبها شخص تبقى",
+  "ترحيل مسح الملاحظات التلقائية يجب أن يمسح النصين التلقائيين فقط دون حذف أو تغيير أي شيء آخر.",
+);
+
 if (failed) {
   console.error("\nفشل اختبار سلامة صفحة الإجازات. راجع الرسائل أعلاه.");
   process.exit(1);
