@@ -1,14 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertCircle,
+  ArrowLeft,
   ArrowRight,
+  CalendarCheck,
   CalendarClock,
   CalendarDays,
   CalendarPlus,
+  CalendarX2,
   CheckCircle2,
+  ChevronLeft,
+  Hourglass,
   Loader2,
+  Lock,
+  MessageCircle,
   PencilLine,
   Search,
   Send,
@@ -98,10 +105,6 @@ function studentLock(status: string | null | undefined): StudentLock | null {
   return STUDENT_LOCKS[String(status || "")] || null;
 }
 
-function LockTag({ lock }: { lock: StudentLock }) {
-  return <span className="tp-modal__lock" data-lock={lock.kind} title={lock.hint}>{lock.tag}</span>;
-}
-
 /** Signal tone of each light: ongoing = green, ends today = amber, ended = red. */
 const LIGHT_TONE: Record<GraceLight, "success" | "warning" | "danger"> = {
   green: "success",
@@ -129,40 +132,95 @@ function GraceLightDot({ light }: { light: GraceLight | null }) {
   );
 }
 
-type StudentIdentityProps = {
+type CardState = { tone: "success" | "warning" | "danger" | "none"; icon: ReactNode; label: string };
+
+/** The state pill of a period: مستمرة / تنتهي اليوم / منتهية. */
+function periodState(light: GraceLight): CardState {
+  if (light === "yellow") return { tone: "warning", icon: <Hourglass aria-hidden="true" />, label: "تنتهي اليوم" };
+  if (light === "red") return { tone: "danger", icon: <CalendarX2 aria-hidden="true" />, label: "منتهية" };
+  return { tone: "success", icon: <CalendarCheck aria-hidden="true" />, label: "مستمرة" };
+}
+
+type GraceCardHeadProps = {
+  name: string;
+  light: GraceLight | null;
+  lock: StudentLock | null;
+  state?: CardState | null;
+  children?: ReactNode;
+};
+
+/** The card's first line: light, name, then the lock and state pills. */
+function GraceCardHead({ name, light, lock, state = null, children }: GraceCardHeadProps) {
+  return (
+    <header className="tp-grace-card__head">
+      <span className="tp-grace-card__who">
+        <GraceLightDot light={light} />
+        <b className="tp-grace-card__name">{name}</b>
+      </span>
+      {lock && (
+        <span className="tp-grace-card__pill" data-tone={lock.kind === "dismissed" ? "danger" : "none"} title={lock.hint}>
+          <Lock aria-hidden="true" />{lock.tag}
+        </span>
+      )}
+      {state && <span className="tp-grace-card__pill" data-tone={state.tone}>{state.icon}{state.label}</span>}
+      {children}
+    </header>
+  );
+}
+
+type StudentFactsProps = {
   name: string;
   telegram: string;
   username: string;
   createdAt: string;
-  light: GraceLight | null;
-  lock?: StudentLock | null;
 };
 
-/** The student card shows only: name, Telegram (opens the app) and registration date. */
-function StudentIdentity({ name, telegram, username, createdAt, light, lock = null }: StudentIdentityProps) {
+/** The student facts shown on every card: Telegram (opens the app) and registration date. */
+function StudentFacts({ name, telegram, username, createdAt }: StudentFactsProps) {
   const handle = describeTelegramHandle({ telegram, username });
   return (
-    <div className="tp-modal__identity">
-      <strong className="tp-modal__name">
-        <GraceLightDot light={light} />
-        <span className="tp-modal__name-text">{name}</span>
-        {lock && <LockTag lock={lock} />}
-      </strong>
-      <div className="tp-modal__meta">
+    <div className="tp-grace-card__facts">
+      <div className="tp-grace-card__fact">
+        <span className="tp-grace-card__fact-label"><MessageCircle aria-hidden="true" />التواصل</span>
         {handle.href ? (
-          <a className="tp-modal__tg" href={handle.href} dir="ltr" aria-label={`فتح محادثة تيليجرام مع ${name}`}>
+          <a className="tp-grace-card__tg" href={handle.href} dir="ltr" aria-label={`فتح محادثة تيليجرام مع ${name}`}>
             <Send aria-hidden="true" />@{handle.value}
           </a>
         ) : (
-          <span className="tp-modal__tg" data-plain="true" dir={handle.value ? "ltr" : undefined}>
+          <span className="tp-grace-card__tg" data-plain="true" dir={handle.value ? "ltr" : undefined}>
             <Send aria-hidden="true" />{handle.value || "بدون تيليجرام"}
           </span>
         )}
-        <span className="tp-modal__meta-item">
-          <CalendarDays aria-hidden="true" />تاريخ التسجيل <b dir="ltr">{registrationDateLabel(createdAt)}</b>
-        </span>
+      </div>
+      <div className="tp-grace-card__fact">
+        <span className="tp-grace-card__fact-label"><CalendarDays aria-hidden="true" />تاريخ التسجيل</span>
+        <b className="tp-grace-card__date" dir="ltr">{registrationDateLabel(createdAt)}</b>
       </div>
     </div>
+  );
+}
+
+/** «من … ← إلى …», each date on its own. */
+function PeriodDates({ period }: { period: Pick<GracePeriodRecord, "startDate" | "endDate"> }) {
+  return (
+    <span className="tp-grace-dates">
+      <span className="tp-grace-dates__one"><small>من</small><b dir="ltr">{formatGraceDate(period.startDate)}</b></span>
+      <ArrowLeft className="tp-grace-dates__arrow" aria-hidden="true" />
+      <span className="tp-grace-dates__one"><small>إلى</small><b dir="ltr">{formatGraceDate(period.endDate)}</b></span>
+    </span>
+  );
+}
+
+/** The open tile of a list card; the whole card is the button, this is its sign. */
+function OpenTile({ lock, canManage }: { lock: StudentLock | null; canManage: boolean }) {
+  return (
+    <span className="tp-grace-card__open" aria-hidden="true">
+      <span className="tp-grace-card__open-icon">{lock ? <Lock /> : <ChevronLeft />}</span>
+      <span className="tp-grace-card__open-text">{lock ? "مقفل" : "فترات الطالب"}</span>
+      <span className="tp-grace-card__open-hint">
+        {lock ? (lock.kind === "dismissed" ? "يجب أن يوقع تعهداً" : "لا يمكن التعديل") : canManage ? "عرض وإضافة وتعديل" : "عرض الفترات"}
+      </span>
+    </span>
   );
 }
 
@@ -416,6 +474,37 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
     return student.graceState === "past" ? "red" : null;
   }
 
+  function searchResultState(student: GraceStudentSearchResult, light: GraceLight | null): CardState {
+    if (light === "yellow") return periodState("yellow");
+    if (light === "green" && student.graceEndDate) {
+      return { tone: "success", icon: <CalendarCheck aria-hidden="true" />, label: `ضمن فترة سماح حتى ${formatGraceDate(student.graceEndDate)}` };
+    }
+    if (light === "red") return { tone: "danger", icon: <CalendarX2 aria-hidden="true" />, label: "فترات سماح منتهية" };
+    return { tone: "none", icon: <CalendarClock aria-hidden="true" />, label: "بدون فترة سماح" };
+  }
+
+  /** A period as a toned panel: dates, length and what is left, with its actions. */
+  function renderPeriodPanel(
+    period: Pick<GracePeriodRecord, "startDate" | "endDate">,
+    options: { eyebrow: string; tone: "success" | "warning" | "danger" | "none"; remaining?: string; actions?: ReactNode; note?: ReactNode; cancelled?: boolean },
+  ) {
+    return (
+      <div className="tp-grace-period" data-tone={options.tone} data-cancelled={options.cancelled || undefined}>
+        <span className="tp-grace-period__icon" aria-hidden="true"><CalendarClock /></span>
+        <div className="tp-grace-period__when">
+          <span className="tp-grace-period__eyebrow">{options.eyebrow}</span>
+          <PeriodDates period={period} />
+        </div>
+        <div className="tp-grace-period__length">
+          <b>{formatGraceDays(gracePeriodDays(period))}</b>
+          {options.remaining && <span>{options.remaining}</span>}
+        </div>
+        {options.actions}
+        {options.note}
+      </div>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="tp-modal tp-grace" dir="rtl">
@@ -450,12 +539,12 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                 {results.length > 0 && (
                   <div className="tp-modal__section">
                     <h3 className="tp-modal__eyebrow">الطلاب</h3>
-                    <ul className="tp-modal__cards">
+                    <ul className="tp-grace-cards">
                       {results.map((student) => {
                         const light = searchResultLight(student);
                         const lock = studentLock(student.status);
                         return (
-                          <li key={student.id} className="tp-modal__card" data-tone={lightTone(light)} data-locked={lock?.kind || "none"}>
+                          <li key={student.id} className="tp-grace-card" data-compact="true" data-tone={lightTone(light)} data-locked={lock?.kind || "none"}>
                             <button
                               type="button"
                               className="tp-modal__card-open"
@@ -465,14 +554,18 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                               aria-label={lock ? `${student.name}: ${lock.hint}` : `فتح فترات السماح للطالب ${student.name}`}
                               title={lock?.hint}
                             />
-                            <StudentIdentity
-                              name={student.name}
-                              telegram={student.telegram}
-                              username={student.username}
-                              createdAt={student.createdAt}
-                              light={light}
-                              lock={lock}
-                            />
+                            <GraceCardHead name={student.name} light={light} lock={lock} state={searchResultState(student, light)} />
+                            <div className="tp-grace-card__body">
+                              <div className="tp-grace-card__main">
+                                <StudentFacts
+                                  name={student.name}
+                                  telegram={student.telegram}
+                                  username={student.username}
+                                  createdAt={student.createdAt}
+                                />
+                              </div>
+                              <OpenTile lock={lock} canManage={canManage} />
+                            </div>
                           </li>
                         );
                       })}
@@ -521,12 +614,12 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                   </p>
                 )}
                 {list && list.periods.length > 0 && (
-                  <ul className="tp-modal__cards" aria-busy={listLoading}>
+                  <ul className="tp-grace-cards" aria-busy={listLoading}>
                     {list.periods.map((period) => {
                       const light = gracePeriodLight(period, list.today);
                       const lock = studentLock(period.studentStatus);
                       return (
-                        <li key={period.id} className="tp-modal__card" data-tone={lightTone(light)} data-locked={lock?.kind || "none"}>
+                        <li key={period.id} className="tp-grace-card" data-tone={lightTone(light)} data-locked={lock?.kind || "none"}>
                           <button
                             type="button"
                             className="tp-modal__card-open"
@@ -536,20 +629,22 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                             aria-label={lock ? `${period.studentName}: ${lock.hint}` : `فتح فترات السماح للطالب ${period.studentName}`}
                             title={lock?.hint}
                           />
-                          <StudentIdentity
-                            name={period.studentName}
-                            telegram={period.studentTelegram}
-                            username={period.studentUsername}
-                            createdAt={period.studentCreatedAt}
-                            light={light}
-                            lock={lock}
-                          />
-                          <div className="tp-modal__card-foot">
-                            <span className="tp-grace__range-cell" dir="ltr">{formatGracePeriod(period)}</span>
-                            <span className="tp-modal__muted">{formatGraceDays(gracePeriodDays(period))}</span>
-                            <span className="tp-modal__chip" data-tone={LIGHT_TONE[light]}>
-                              {light === "red" ? "منتهية" : describeGraceRemaining(period, list.today)}
-                            </span>
+                          <GraceCardHead name={period.studentName} light={light} lock={lock} state={periodState(light)} />
+                          <div className="tp-grace-card__body">
+                            <div className="tp-grace-card__main">
+                              {renderPeriodPanel(period, {
+                                eyebrow: "فترة السماح",
+                                tone: LIGHT_TONE[light],
+                                remaining: light === "green" ? describeGraceRemaining(period, list.today) : "",
+                              })}
+                              <StudentFacts
+                                name={period.studentName}
+                                telegram={period.studentTelegram}
+                                username={period.studentUsername}
+                                createdAt={period.studentCreatedAt}
+                              />
+                            </div>
+                            <OpenTile lock={lock} canManage={canManage} />
                           </div>
                         </li>
                       );
@@ -565,25 +660,25 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
 
           {data && (
             <>
-              <section className="tp-grace__student" data-tone={lightTone(studentLight)} data-locked={lock?.kind || "none"} aria-label="الطالب">
-                <StudentIdentity
+              <section className="tp-grace-card tp-grace__student" data-tone={lightTone(studentLight)} data-locked={lock?.kind || "none"} aria-label="الطالب">
+                <GraceCardHead name={data.student.name} light={studentLight} lock={lock}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="tp-grace__back"
+                    onClick={() => { setData(null); setEditor(null); setPreview(null); }}
+                    disabled={busy}
+                  >
+                    <ArrowRight className="size-4" aria-hidden="true" />رجوع للقائمة
+                  </Button>
+                </GraceCardHead>
+                <StudentFacts
                   name={data.student.name}
                   telegram={data.student.telegram}
                   username={data.student.username}
                   createdAt={data.student.createdAt}
-                  light={studentLight}
-                  lock={lock}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="tp-grace__back"
-                  onClick={() => { setData(null); setEditor(null); setPreview(null); }}
-                  disabled={busy}
-                >
-                  <ArrowRight className="size-4" aria-hidden="true" />رجوع للقائمة
-                </Button>
               </section>
 
               {lock && <p role="note" className="tp-modal__note" data-tone={lock.kind === "dismissed" ? "danger" : undefined}>{lock.hint}.</p>}
@@ -591,19 +686,12 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
               <section className="tp-modal__section" aria-labelledby="tp-grace-current">
                 <h3 id="tp-grace-current" className="tp-modal__title">الفترة الحالية</h3>
                 {currentPeriod ? (
-                  <div className="tp-grace__current" data-tone={currentLight === "yellow" ? "warning" : "success"}>
-                    <div className="tp-grace__current-main">
-                      <span className="tp-grace__badge">
-                        <GraceLightDot light={currentLight} />
-                        {currentLight === "yellow" ? "تنتهي اليوم" : "فترة مستمرة"}
-                      </span>
-                      <p className="tp-grace__range" dir="ltr">{formatGracePeriod(currentPeriod)}</p>
-                      <p className="tp-modal__muted">
-                        {formatGraceDays(gracePeriodDays(currentPeriod))} · {describeGraceRemaining(currentPeriod, today)}
-                      </p>
-                    </div>
-                    {renderPeriodActions(currentPeriod)}
-                  </div>
+                  renderPeriodPanel(currentPeriod, {
+                    eyebrow: currentLight === "yellow" ? "تنتهي اليوم" : "فترة مستمرة",
+                    tone: currentLight === "yellow" ? "warning" : "success",
+                    remaining: currentLight === "yellow" ? "" : describeGraceRemaining(currentPeriod, today),
+                    actions: renderPeriodActions(currentPeriod),
+                  })
                 ) : (
                   <div className="tp-grace__empty">
                     <p>لا توجد فترة سماح حالية</p>
@@ -804,20 +892,22 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                       const light = gracePeriodLight(period, today);
                       const tone = cancelled ? "none" : LIGHT_TONE[light];
                       return (
-                        <li key={period.id} className="tp-grace__history-row" data-cancelled={cancelled}>
-                          <span className="tp-modal__light" data-tone={tone} aria-hidden="true" />
-                          <div className="tp-grace__history-main">
-                            <span dir="ltr" className="tp-grace__range-cell">{formatGracePeriod(period)}</span>
-                            <span className="tp-modal__muted">{formatGraceDays(gracePeriodDays(period))}</span>
-                          </div>
-                          <span className="tp-grace__history-state" data-tone={tone}>
-                            {cancelled
-                              ? `ملغاة${period.cancelledByName ? ` — ${period.cancelledByName}` : ""} · ${formatBaghdadDateTime(period.cancelledAt)}${period.cancelReason ? ` · ${period.cancelReason}` : ""}`
+                        <li key={period.id} className="tp-grace__history-item">
+                          {renderPeriodPanel(period, {
+                            eyebrow: cancelled
+                              ? "فترة ملغاة"
                               : light === "red"
                                 ? period.source === "legacy" ? "منتهية (من النظام القديم)" : "منتهية"
-                                : describeGraceRemaining(period, today)}
-                          </span>
-                          {renderPeriodActions(period)}
+                                : describeGraceRemaining(period, today),
+                            tone,
+                            cancelled,
+                            actions: renderPeriodActions(period),
+                            note: cancelled ? (
+                              <p className="tp-grace-period__note">
+                                {`ملغاة${period.cancelledByName ? ` — ${period.cancelledByName}` : ""} · ${formatBaghdadDateTime(period.cancelledAt)}${period.cancelReason ? ` · ${period.cancelReason}` : ""}`}
+                              </p>
+                            ) : null,
+                          })}
                         </li>
                       );
                     })}
