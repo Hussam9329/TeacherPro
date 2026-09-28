@@ -18,7 +18,7 @@ import {
   type StudentDeleteImpactResponse,
 } from "@/lib/api";
 import { baghdadDateKey } from "@/lib/baghdad-time";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
@@ -90,7 +90,8 @@ import {
   UserX,
   X,
 } from "lucide-react";
-import { CountScopeSummary, EmptyState } from "./ui-kit";
+import { EmptyState } from "./ui-kit";
+import { ListToolbar } from "./list-toolbar";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import {
   StudentRegistryResults,
@@ -385,6 +386,9 @@ export function StudentRegistryView() {
   const [otherStudentsTotal, setOtherStudentsTotal] = useState<number | null>(
     null,
   );
+  const [statusChipCounts, setStatusChipCounts] = useState<{
+    total: number; active: number; dismissed: number; archived: number;
+  } | null>(null);
   const [noActiveChapterStudentsTotal, setNoActiveChapterStudentsTotal] =
     useState<number | null>(null);
   const [studentStatsLoading, setStudentStatsLoading] = useState(true);
@@ -727,6 +731,12 @@ export function StudentRegistryView() {
         setNoActiveChapterStudentsTotal(
           Number(result.filtered.noActiveChapter || 0),
         );
+        setStatusChipCounts(result.statusCounts ? {
+          total: Number(result.statusCounts.total || 0),
+          active: Number(result.statusCounts.active || 0),
+          dismissed: Number(result.statusCounts.dismissed || 0),
+          archived: Number(result.statusCounts.archived || 0),
+        } : null);
       })
       .catch(() => {
         if (requestIsStale()) return;
@@ -1871,59 +1881,72 @@ export function StudentRegistryView() {
   }
 
   return (
-    <div className="tp-management-page tp-student-registry space-y-4">
-      <Card className="tp-filter-card tp-management-filters">
-        <CardHeader>
-          <div className="tp-registry-heading">
-            <CardTitle className="text-base">فلاتر الطلاب</CardTitle>
-            <div className="tp-registry-actions">
-              {canAddStudents && (
-                <Button onClick={() => setSection("student-register")}>
-                  <UserPlus className="size-4" aria-hidden="true" />
-                  إضافة طالب
-                </Button>
-              )}
-              <ExportDialog
-                title="تصدير سجل الطلاب"
-                fileName="students"
-                rows={studentExportRows}
-                fetchRows={fetchStudentExportRows}
-                totalRowCount={filteredTotalCount}
-                disabled={registryResultsPending || registryServerUnavailable}
-                columns={studentExportColumns}
-                triggerLabel="تصدير"
-                description="تقرير سجل الطلاب حسب الفلاتر الحالية"
-              />
-              <Button
-                variant="outline"
-                onClick={resetFilters}
-                disabled={!hasActiveRegistryFilters}
-              >
-                <RotateCcw className="size-4" aria-hidden="true" />
-                تصفير الفلاتر
+    <div className="tp-management-page tp-student-registry tp-list">
+      <ListToolbar
+        label="البحث والتصفية في سجل الطلاب"
+        search={
+          <Input
+            id="registry-search"
+            name="search"
+            data-teacherpro-search="true"
+            autoComplete="off"
+            aria-label="بحث في سجل الطلاب"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="ابحث بالاسم أو الكود أو التيليجرام أو الهاتف"
+          />
+        }
+        actions={
+          <>
+            {canAddStudents && (
+              <Button onClick={() => setSection("student-register")}>
+                <UserPlus className="size-4" aria-hidden="true" />
+                إضافة طالب
               </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="tp-filter-content pt-2">
-          <div className="tp-filter-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            <div className="tp-filter-field tp-filter-search">
-              <Label htmlFor="registry-search" className="text-xs">
-                بحث
-              </Label>
-              <Input
-                id="registry-search"
-                name="search"
-                data-teacherpro-search="true"
-                autoComplete="off"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="اسم / كود / تيليجرام / يوزر تيليجرام / هاتف"
-              />
-            </div>
+            )}
+            <ExportDialog
+              title="تصدير سجل الطلاب"
+              fileName="students"
+              rows={studentExportRows}
+              fetchRows={fetchStudentExportRows}
+              totalRowCount={filteredTotalCount}
+              disabled={registryResultsPending || registryServerUnavailable}
+              columns={studentExportColumns}
+              triggerLabel="تصدير"
+              description="تقرير سجل الطلاب حسب الفلاتر الحالية"
+            />
+            {hasActiveRegistryFilters && (
+              <Button variant="ghost" onClick={resetFilters}>
+                <RotateCcw className="size-4" aria-hidden="true" />
+                تصفير الكل
+              </Button>
+            )}
+          </>
+        }
+        chips={[
+          { key: "", label: "الكل", hint: `كل طلاب النظام: ${studentsSystemTotal ?? "—"}`, count: registryStatsPending || studentStatsError ? null : (statusChipCounts?.total ?? null) },
+          { key: "نشط", label: "نشط", tone: "success", hint: `كل النشطين بالنظام: ${activeStudentsTotal ?? "—"}`, count: registryStatsPending || studentStatsError ? null : (statusChipCounts?.active ?? null) },
+          { key: "مفصول", label: "مفصول", tone: "danger", hint: `كل المفصولين بالنظام: ${dismissedStudentsTotal ?? "—"}`, count: registryStatsPending || studentStatsError ? null : (statusChipCounts?.dismissed ?? null) },
+          { key: ARCHIVED_STUDENT_STATUS, label: "مؤرشف", tone: "muted", hint: `عرض المؤرشفين · كلهم بالنظام: ${archivedStudentsTotal ?? "—"}`, count: registryStatsPending || studentStatsError ? null : (statusChipCounts?.archived ?? null) },
+        ]}
+        chipsLabel="حالة الطالب"
+        activeChip={filterStatus}
+        onChipChange={(value) => {
+          if (value === ARCHIVED_STUDENT_STATUS) setFilterStatus(ARCHIVED_STUDENT_STATUS);
+          else setFilterStatus(value);
+          setPage(1);
+        }}
+        activeFilterCount={
+          Number(Boolean(filterCourseId)) + Number(Boolean(filterCourseProgram)) +
+          Number(Boolean(filterStudyType)) + Number(Boolean(filterLocation)) +
+          Number(Boolean(filterGender)) + Number(Boolean(filterRegistryIssue))
+        }
+        onClearFilters={resetFilters}
+        filters={
+          <>
             <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="registry-course" className="text-xs">
                 اسم الدورة
@@ -1946,29 +1969,6 @@ export function StudentRegistryView() {
                       {course.name}
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="tp-filter-field tp-filter-secondary">
-              <Label htmlFor="registry-status" className="text-xs">
-                الحالة
-              </Label>
-              <Select
-                name="status"
-                value={filterStatus || "all"}
-                onValueChange={(v) => {
-                  setFilterStatus(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="registry-status">
-                  <SelectValue placeholder="كل الحالات" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل الحالات</SelectItem>
-                  <SelectItem value="نشط">نشط</SelectItem>
-                  <SelectItem value="مفصول">مفصول</SelectItem>
-                  <SelectItem value="مؤرشف">مؤرشف</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -2125,146 +2125,135 @@ export function StudentRegistryView() {
                 </SelectContent>
               </Select>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-      <div className="tp-management-workspace">
-        <section
-          className="tp-management-main-flow"
-          aria-label="نتائج سجل الطلاب"
-        >
-          {!registryStatsPending &&
-            !studentStatsError &&
-            (otherStudentsTotal ?? 0) > 0 && (
-              <Card
-                role="alert"
-                className="border-warning-line bg-warning-soft"
-                data-count-scope="system"
+            <div className="tp-filter-field tp-filter-meta">
+              <Label htmlFor="registry-view" className="text-xs">
+                طريقة العرض
+              </Label>
+              <Select
+                value={viewMode}
+                onValueChange={(v) => setViewMode(v as RegistryViewMode)}
               >
-                <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-                  <div className="flex items-center gap-3">
-                    <AlertTriangle
-                      aria-hidden="true"
-                      className="size-5 shrink-0 text-warning"
-                    />
-                    <div>
-                      <p className="font-bold text-warning">
-                        حالات طلاب غير معروفة: {otherStudentsTotal}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        توجد حالات خارج نشط ومفصول ومؤرشف.
-                      </p>
-                    </div>
-                  </div>
-                  <Button
+                <SelectTrigger id="registry-view">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cards">البطاقات</SelectItem>
+                  <SelectItem value="table">الجدول</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="tp-filter-field tp-filter-meta">
+              <Label htmlFor="registry-pageSize" className="text-xs">
+                حجم الصفحة
+              </Label>
+              <Select
+                name="pageSize"
+                value={String(pageSize)}
+                onValueChange={(v) => {
+                  setPageSize(Number(v));
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="registry-pageSize" className="tabular-nums">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        }
+        summary={
+          registryResultsPending ? (
+            "جاري التحميل…"
+          ) : (
+            <>
+              المعروض <b>{paged.length}</b> من <b>{filteredTotalCount}</b>
+              {registryServerUnavailable ? " (نسخة محلية)" : ""}
+              {!registryStatsPending && !studentStatsError && (noActiveChapterStudentsTotal ?? 0) > 0 ? (
+                <>
+                  {" · "}
+                  <button
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={resetFilters}
+                    className="font-bold text-warning underline-offset-4 hover:underline"
+                    onClick={() => {
+                      setFilterRegistryIssue("no-active-chapter");
+                      setPage(1);
+                    }}
                   >
-                    <Eye aria-hidden="true" className="size-4" />
-                    عرض كل الحالات
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
+                    {noActiveChapterStudentsTotal} بدون فصل نشط
+                  </button>
+                </>
+              ) : null}
+            </>
+          )
+        }
+      />
 
-          {studentStatsError && !registryStatsPending && (
-            <div
-              role="alert"
-              aria-live="assertive"
-              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm font-medium text-danger"
-            >
-              <span>{studentStatsError}</span>
+      {!registryStatsPending &&
+        !studentStatsError &&
+        (otherStudentsTotal ?? 0) > 0 && (
+          <Card
+            role="alert"
+            className="border-warning-line bg-warning-soft"
+            data-count-scope="system"
+          >
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <div className="flex items-center gap-3">
+                <AlertTriangle
+                  aria-hidden="true"
+                  className="size-5 shrink-0 text-warning"
+                />
+                <div>
+                  <p className="font-bold text-warning">
+                    حالات طلاب غير معروفة: {otherStudentsTotal}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    توجد حالات خارج نشط ومفصول ومؤرشف.
+                  </p>
+                </div>
+              </div>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setStudentStatsRefreshKey((value) => value + 1)}
+                onClick={resetFilters}
               >
-                <RotateCcw aria-hidden="true" className="size-4" />
-                إعادة المحاولة
+                <Eye aria-hidden="true" className="size-4" />
+                عرض كل الحالات
               </Button>
-            </div>
-          )}
+            </CardContent>
+          </Card>
+        )}
 
-          <Card className="tp-management-results-card">
-            <CardHeader>
-              <div className="tp-registry-heading">
-                <CardTitle className="text-base">سجل الطلاب</CardTitle>
-                <div className="tp-registry-view-choice">
-                  <div className="tp-filter-field tp-filter-meta">
-                    <Label htmlFor="registry-view" className="text-xs">
-                      طريقة العرض
-                    </Label>
-                    <Select
-                      value={viewMode}
-                      onValueChange={(v) => setViewMode(v as RegistryViewMode)}
-                    >
-                      <SelectTrigger id="registry-view">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cards">البطاقات</SelectItem>
-                        <SelectItem value="table">الجدول</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-              <CountScopeSummary
-                className="mb-2"
-                subject="الطلاب"
-                systemTotal={registryStatsPending ? "…" : (studentsSystemTotal ?? "—")}
-                filteredTotal={
-                  registryResultsPending
-                    ? "…"
-                    : `${filteredTotalCount}${registryServerUnavailable ? " (محلياً)" : ""}`
-                }
-                pageCount={paged.length}
-              />
-              <div
-                ref={registryResultsRef}
-                className="tp-registry-results-toolbar"
-                aria-live="polite"
-                aria-busy={registryResultsPending}
-              >
-                <p
-                  className="tp-management-count-summary text-xs text-muted-foreground"
-                  data-count-scope="filtered"
-                >
-                  {registryResultsPending
-                    ? "…"
-                    : `${filteredTotalCount} طالب${registryServerUnavailable ? " محلياً" : ""} · المعروض ${paged.length}`}
-                </p>
-                <div className="tp-registry-page-size">
-                  <Label htmlFor="registry-pageSize" className="text-xs">
-                    حجم الصفحة:
-                  </Label>
-                  <Select
-                    name="pageSize"
-                    value={String(pageSize)}
-                    onValueChange={(v) => {
-                      setPageSize(Number(v));
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger
-                      id="registry-pageSize"
-                      className="h-10 w-auto min-w-24 rounded-xl tabular-nums"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                      <SelectItem value="100">100</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
+      {studentStatsError && !registryStatsPending && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm font-medium text-danger"
+        >
+          <span>{studentStatsError}</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setStudentStatsRefreshKey((value) => value + 1)}
+          >
+            <RotateCcw aria-hidden="true" className="size-4" />
+            إعادة المحاولة
+          </Button>
+        </div>
+      )}
+
+      <div
+        ref={registryResultsRef}
+        className="space-y-3"
+        aria-live="polite"
+        aria-busy={registryResultsPending}
+      >
               {registryResultsPending && (
                 <div
                   role="status"
@@ -2389,140 +2378,6 @@ export function StudentRegistryView() {
                   </Button>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </section>
-        <aside
-          className="tp-management-stats-rail"
-          aria-label="إحصائيات الطلاب"
-        >
-          <div className="space-y-2">
-            <h3 className="text-sm font-black">الإحصائيات</h3>
-            <div
-              className="grid"
-              role="group"
-              aria-label="أعداد الطلاب حسب الحالة"
-              tabIndex={0}
-              aria-busy={registryStatsPending}
-            >
-              <Card data-count-scope="system">
-                <CardContent className="p-4 text-center">
-                  <div className="tp-registry-stat-value">
-                    <span className="text-2xl font-bold text-primary">
-                      {registryStatsPending
-                        ? "…"
-                        : studentStatsError
-                          ? "—"
-                          : (studentsSystemTotal ?? "—")}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      الطلاب
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card data-count-scope="system">
-                <CardContent className="p-4 text-center">
-                  <Button
-                    variant="ghost"
-                    className="tp-registry-stat-choice"
-                    aria-label="عرض النشطين"
-                    onClick={() => {
-                      resetFilters();
-                      setFilterStatus("نشط");
-                      setPage(1);
-                    }}
-                  >
-                    <span className="text-2xl font-bold text-success">
-                      {registryStatsPending
-                        ? "…"
-                        : studentStatsError
-                          ? "—"
-                          : (activeStudentsTotal ?? "—")}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      النشطون
-                    </span>
-                  </Button>
-                </CardContent>
-              </Card>
-              <Card data-count-scope="system">
-                <CardContent className="p-4 text-center">
-                  <Button
-                    variant="ghost"
-                    className="tp-registry-stat-choice"
-                    aria-label="عرض المفصولين"
-                    onClick={() => {
-                      resetFilters();
-                      setFilterStatus("مفصول");
-                      setPage(1);
-                    }}
-                  >
-                    <span className="text-2xl font-bold text-danger">
-                      {registryStatsPending
-                        ? "…"
-                        : studentStatsError
-                          ? "—"
-                          : (dismissedStudentsTotal ?? "—")}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      المفصولون
-                    </span>
-                  </Button>
-                </CardContent>
-              </Card>
-              <Card data-count-scope="system">
-                <CardContent className="p-4 text-center">
-                  <Button
-                    variant="ghost"
-                    className="tp-registry-stat-choice"
-                    aria-label="عرض المؤرشفين"
-                    onClick={() => {
-                      resetFilters();
-                      setFilterStatus(ARCHIVED_STUDENT_STATUS);
-                      setPage(1);
-                    }}
-                  >
-                    <span className="text-2xl font-bold text-muted-foreground">
-                      {registryStatsPending
-                        ? "…"
-                        : studentStatsError
-                          ? "—"
-                          : (archivedStudentsTotal ?? "—")}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      المؤرشفون
-                    </span>
-                  </Button>
-                </CardContent>
-              </Card>
-              <Card data-count-scope="filtered">
-                <CardContent className="p-4 text-center">
-                  <Button
-                    variant="ghost"
-                    className="tp-registry-stat-choice"
-                    aria-label="عرض الطلاب بدون فصل نشط"
-                    onClick={() => {
-                      setFilterRegistryIssue("no-active-chapter");
-                      setPage(1);
-                    }}
-                  >
-                    <span className="text-2xl font-bold text-warning">
-                      {registryStatsPending
-                        ? "…"
-                        : studentStatsError
-                          ? "—"
-                          : (noActiveChapterStudentsTotal ?? "—")}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      بدون فصل نشط · ضمن النتائج
-                    </span>
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </aside>
       </div>
 
       <Dialog

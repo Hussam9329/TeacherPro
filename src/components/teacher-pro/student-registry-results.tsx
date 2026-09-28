@@ -3,16 +3,17 @@
 import React from "react";
 import {
   Archive,
-  ChevronDown,
   Eye,
+  MessageCircle,
   Pencil,
+  Phone,
   RotateCcw,
+  Send,
   UserX,
 } from "lucide-react";
 import type { Student } from "@/lib/teacher-store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { formatAppDate, sanitizePhoneInput } from "@/lib/format";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
@@ -23,6 +24,7 @@ import {
   formatStudentCurrentGrace,
 } from "./student-registry-helpers";
 import { displayReasonText } from "@/lib/reason-display";
+import { RowActionsMenu, type RowAction } from "./row-actions-menu";
 import "./student-registry-results.css";
 
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
@@ -335,19 +337,62 @@ type StudentActionsProps = {
   onArchive: (student: Student) => void;
 };
 
-function StudentActions({
+function studentMoreActions({
   student,
   canEdit,
   canArchive,
   serverUnavailable,
   statusActionSaving,
   deleting,
-  onFile,
   onEdit,
   onDismiss,
   onRestore,
   onArchive,
-}: StudentActionsProps) {
+}: StudentActionsProps): RowAction[] {
+  const actions: RowAction[] = [];
+  if (canEdit) {
+    actions.push({
+      key: "edit",
+      label: "تعديل",
+      icon: <Pencil aria-hidden="true" />,
+      disabled: serverUnavailable,
+      onSelect: () => onEdit(student),
+    });
+  }
+  if (canEdit && student.status === ARCHIVED_STUDENT_STATUS) {
+    actions.push({
+      key: "restore",
+      label: "استعادة من الأرشيف",
+      icon: <RotateCcw aria-hidden="true" />,
+      disabled: serverUnavailable || statusActionSaving,
+      onSelect: () => onRestore(student),
+    });
+  }
+  if (canEdit && student.status === "نشط") {
+    actions.push({
+      key: "dismiss",
+      label: "فصل…",
+      icon: <UserX aria-hidden="true" />,
+      danger: true,
+      disabled: serverUnavailable || statusActionSaving,
+      onSelect: () => onDismiss(student),
+    });
+  }
+  if (canArchive && student.status !== ARCHIVED_STUDENT_STATUS) {
+    actions.push({
+      key: "archive",
+      label: "أرشفة…",
+      icon: <Archive aria-hidden="true" />,
+      danger: true,
+      disabled: serverUnavailable || deleting,
+      onSelect: () => onArchive(student),
+    });
+  }
+  return actions;
+}
+
+function StudentActions(props: StudentActionsProps) {
+  const { student, onFile } = props;
   return (
     <>
       <Button
@@ -359,54 +404,7 @@ function StudentActions({
         <Eye aria-hidden="true" className="size-4" />
         ملف الطالب
       </Button>
-      {canEdit && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="tp-registry-action"
-          disabled={serverUnavailable}
-          onClick={() => onEdit(student)}
-        >
-          <Pencil aria-hidden="true" className="size-4" />
-          تعديل
-        </Button>
-      )}
-      {canEdit && student.status === "نشط" ? (
-        <Button
-          variant="destructive"
-          size="sm"
-          className="tp-registry-action"
-          disabled={serverUnavailable || statusActionSaving}
-          onClick={() => onDismiss(student)}
-        >
-          <UserX aria-hidden="true" className="size-4" />
-          فصل
-        </Button>
-      ) : null}
-      {canEdit && student.status === ARCHIVED_STUDENT_STATUS ? (
-        <Button
-          variant="outline"
-          size="sm"
-          className="tp-registry-action border-success-line text-success"
-          disabled={serverUnavailable || statusActionSaving}
-          onClick={() => onRestore(student)}
-        >
-          <RotateCcw aria-hidden="true" className="size-4" />
-          استعادة من الأرشيف
-        </Button>
-      ) : null}
-      {canArchive && student.status !== ARCHIVED_STUDENT_STATUS && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="tp-registry-action border-destructive/40 text-danger hover:bg-destructive/10"
-          disabled={serverUnavailable || deleting}
-          onClick={() => onArchive(student)}
-        >
-          <Archive aria-hidden="true" className="size-4" />
-          أرشفة
-        </Button>
-      )}
+      <RowActionsMenu label={`إجراءات أخرى لـ${student.name}`} actions={studentMoreActions(props)} />
     </>
   );
 }
@@ -431,7 +429,7 @@ export function StudentRegistryResults({
 }: StudentRegistryResultsProps) {
   if (viewMode === "cards") {
     return (
-      <div className="tp-registry-results tp-registry-results__cards">
+      <div className="tp-registry-results tp-rcards" data-columns="2">
         {students.map((student) => (
           <StudentRegistryRow
             key={student.id}
@@ -589,6 +587,10 @@ export function StudentRegistryResults({
   );
 }
 
+function statusTone(status: Student["status"]): "success" | "danger" | "muted" {
+  return status === "نشط" ? "success" : status === "مفصول" ? "danger" : "muted";
+}
+
 function StudentRegistryRow({
   student,
   activeIssue,
@@ -603,135 +605,135 @@ function StudentRegistryRow({
   telegramLink: (telegram: string) => string;
 }) {
   const currentGrace = currentStudentGracePeriod(student);
+  const row = student as RegistryStudentHealth;
+  const tone = statusTone(student.status);
+  const dismissed = student.status === "مفصول";
+  const balance = Math.max(0, Number(student.opportunities ?? 0));
+  const limit = Number(row.opportunityLimit ?? row.activeChapter?.opportunities ?? NaN);
+  const dots = Number.isFinite(limit) ? Math.min(Math.max(limit, balance), 6) : 0;
+  const balanceTone = dismissed ? "danger" : balance <= 0 ? "warning" : Number.isFinite(limit) && balance < limit ? "warning" : "success";
+  // Only filled facts; nothing shows «—».
+  const facts = [
+    student.school,
+    student.courseProgram ? formatRegistryCourseProgram(student) : "",
+    student.studyType,
+    formatRegistryLocation(student) !== "—" ? formatRegistryLocation(student) : "",
+    student.gender,
+    student.createdAt ? `مسجّل ${formatAppDate(student.createdAt, "")}` : "",
+  ].filter(Boolean);
+  const missingContacts = [
+    !sanitizePhoneInput(student.phone || "") ? "رقم الطالب" : "",
+    !sanitizePhoneInput(student.parentPhone || "") ? "رقم ولي الأمر" : "",
+  ].filter(Boolean);
+  const telegramHandle = student.username || (student.telegram && !/^\d+$/.test(student.telegram) ? student.telegram : "");
+  const healthBadges = registryHealthBadges(student).filter((badge) => badge.label !== "ناقص بيانات تواصل" && badge.label !== "فرص كاملة");
+  const moreActions = studentMoreActions({ student, ...actionProps });
   return (
-    <Card
-      className="tp-registry-row"
-      role="article"
+    <article
+      className="tp-rcard"
       aria-labelledby={`registry-student-${student.id}`}
-      data-dismissed={student.status === "مفصول" || undefined}
+      data-tone={dismissed ? "danger" : undefined}
+      data-muted={student.status === ARCHIVED_STUDENT_STATUS ? "true" : undefined}
+      data-dismissed={dismissed || undefined}
     >
-      <CardContent className="tp-registry-row__body">
-        <div className="tp-registry-row__header">
-          <div className="tp-registry-row__identity">
-            <h3 id={`registry-student-${student.id}`}>{student.name}</h3>
-            <p className="text-xs text-muted-foreground">
-              <bdi>{student.code}</bdi> — {student.school || "بدون مدرسة"}
-            </p>
-          </div>
-          <div className="tp-registry-row__status">
-            <StudentStatusBadge status={student.status} />
-          </div>
-        </div>
-        <dl className="tp-registry-row__fields">
-          <RegistryField
-            label="اسم الدورة"
-            value={courseName(student.courseId) || "—"}
-          />
-          <RegistryField
-            label="نظام الاشتراك"
-            value={formatRegistryCourseProgram(student)}
-          />
-          <RegistryField
-            label="نظام الدراسة"
-            value={student.studyType || "—"}
-          />
-          <RegistryField
-            label="الموقع"
-            value={formatRegistryLocation(student)}
-          />
-          <RegistryField
-            label="الفرص"
-            value={formatOpportunityBalance(student, { separator: " / " })}
-          />
-          {currentGrace && (
-            <RegistryField
-              label="فترة السماح"
-              value={
+      <div className="tp-rcard__head">
+        <span className="tp-rcard__light" data-tone={tone} aria-hidden="true" />
+        <h3 id={`registry-student-${student.id}`} className="tp-rcard__name">{student.name}</h3>
+        <span className="tp-rcard__sep" aria-hidden="true" />
+        <bdi className="tp-rcard__code">{student.code}</bdi>
+        <span className="tp-rcard__sub">
+          {courseName(student.courseId) || "بدون دورة"}
+          {row.activeChapter?.name ? ` · ${row.activeChapter.name}` : ""}
+        </span>
+        <span className="tp-rcard__head-end">
+          <span className="tp-rcard__pill" data-tone={tone} data-solid={dismissed ? "true" : undefined}>
+            {student.status}
+          </span>
+          {healthBadges.map((badge) => (
+            <span
+              key={badge.label}
+              className="tp-rcard__pill"
+              data-tone={badge.className.includes("danger") ? "danger" : "warning"}
+            >
+              {badge.label}
+            </span>
+          ))}
+        </span>
+      </div>
+
+      <div className="tp-rcard__body" data-tile="true">
+        <div className="tp-rcard__main">
+          <div className="tp-rcard__panel" data-tone={balanceTone}>
+            <span className="tp-rcard__eyebrow">الفرص</span>
+            <span className="tp-rcard__title">
+              {dots > 0 ? (
+                <>
+                  <span className="tp-meter" data-tone={balanceTone} aria-hidden="true">
+                    {Array.from({ length: dots }, (_, index) => (
+                      <i key={index} data-off={index >= balance ? "true" : undefined} />
+                    ))}
+                  </span>{" "}
+                </>
+              ) : null}
+              {formatOpportunityBalance(student, { separator: " من " })}
+            </span>
+            {dismissed ? (
+              <span className="tp-rcard__line">
+                {displayReasonText(student.dismissalReason) || "سبب الفصل غير مدخل"}
+                {student.dismissalNotes ? ` · ملاحظات: ${student.dismissalNotes}` : ""}
+              </span>
+            ) : null}
+            {currentGrace ? (
+              <span className="tp-rcard__line">
                 <GraceLightPill endDate={currentGrace.endDate}>
-                  {`حتى ${formatGraceDate(currentGrace.endDate)}`}
+                  {`فترة سماح حتى ${formatGraceDate(currentGrace.endDate)}`}
                 </GraceLightPill>
-              }
-            />
-          )}
-        </dl>
-        <StudentHealthIndicators student={student} activeIssue={activeIssue} />
-        <StudentDismissalDetails student={student} />
-        <details className="tp-registry-row__details">
-          <summary>
-            بيانات التواصل والتسجيل
-            <ChevronDown aria-hidden="true" className="size-4" />
-          </summary>
-          <dl className="tp-registry-row__fields tp-registry-row__contact-fields">
-            <RegistryField
-              label="رقم الطالب"
-              value={
-                <ContactLink href={whatsappLink(student.phone)}>
-                  {student.phone}
-                </ContactLink>
-              }
-            />
-            <RegistryField
-              label="ولي الأمر"
-              value={
-                <ContactLink href={whatsappLink(student.parentPhone)}>
-                  {student.parentPhone}
-                </ContactLink>
-              }
-            />
-            <RegistryField
-              label="يوزر تيليجرام"
-              value={
-                student.username ? (
-                  <ContactLink href={telegramLink(student.username)}>
-                    {student.username}
-                  </ContactLink>
-                ) : (
-                  "—"
-                )
-              }
-            />
-            <RegistryField
-              label="معرف تيليجرام"
-              value={
-                student.telegram ? (
-                  /^\d+$/.test(student.telegram) ? (
-                    <span dir="ltr">{student.telegram}</span>
-                  ) : (
-                    <ContactLink href={telegramLink(student.telegram)}>
-                      {student.telegram}
-                    </ContactLink>
-                  )
-                ) : (
-                  "—"
-                )
-              }
-            />
-            <RegistryField label="الجنس" value={student.gender || "—"} />
-            <RegistryField
-              label="تاريخ الإضافة"
-              value={formatAppDate(student.createdAt, student.createdAt || "—")}
-            />
-          </dl>
-        </details>
-        <div className="tp-registry-row-actions tp-registry-row__actions">
-          <StudentActions student={student} {...actionProps} />
+              </span>
+            ) : null}
+          </div>
+          {facts.length ? <p className="tp-rcard__line">{facts.join(" · ")}</p> : null}
+          {activeIssue ? (
+            <p className="tp-rcard__line">سبب الظهور: {registryIssueFilterLabels[activeIssue]}</p>
+          ) : null}
         </div>
-      </CardContent>
-    </Card>
+        <button type="button" className="tp-rcard__tile" onClick={() => actionProps.onFile(student)}>
+          <span className="tp-rcard__tile-icon" aria-hidden="true">
+            <Eye />
+          </span>
+          <span className="tp-rcard__tile-text">ملف الطالب</span>
+          <span className="tp-rcard__tile-hint">الدرجات والفرص والمكالمات</span>
+        </button>
+      </div>
+
+      <div className="tp-rcard__foot">
+        {sanitizePhoneInput(student.phone || "") ? (
+          <a className="tp-rcard__contact" href={whatsappLink(student.phone)} target="_blank" rel="noopener noreferrer">
+            <Phone aria-hidden="true" />
+            <span dir="ltr" className="tabular-nums">{student.phone}</span>
+          </a>
+        ) : null}
+        {sanitizePhoneInput(student.parentPhone || "") ? (
+          <a className="tp-rcard__contact" href={whatsappLink(student.parentPhone)} target="_blank" rel="noopener noreferrer">
+            <MessageCircle aria-hidden="true" />
+            ولي الأمر <span dir="ltr" className="tabular-nums">{student.parentPhone}</span>
+          </a>
+        ) : null}
+        {telegramHandle ? (
+          <a className="tp-rcard__contact" href={telegramLink(telegramHandle)} target="_blank" rel="noopener noreferrer" dir="ltr">
+            <Send aria-hidden="true" />
+            {telegramHandle.startsWith("@") ? telegramHandle : `@${telegramHandle}`}
+          </a>
+        ) : null}
+        {missingContacts.length ? (
+          <span className="tp-rcard__pill" data-tone="warning">ناقص {missingContacts.join(" و")}</span>
+        ) : null}
+        {moreActions.length ? (
+          <span className="tp-rcard__foot-end">
+            <RowActionsMenu label={`إجراءات أخرى لـ${student.name}`} actions={moreActions} />
+          </span>
+        ) : null}
+      </div>
+    </article>
   );
 }
 
-function RegistryField({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="tp-registry-field">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-xs font-medium">{value}</dd>
-    </div>
-  );
-}

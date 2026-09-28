@@ -88,12 +88,15 @@ export async function GET(req: NextRequest) {
     if (selectedIssueWhere) filters.push(selectedIssueWhere);
 
     const filteredWhere = combineStudentWhere(...filters);
+    // Every filter but the status: what each status button would show.
+    const statusFreeWhere = combineStudentWhere(...(status ? filters.slice(1) : filters));
 
     const [
       systemStatusRows,
       filteredStatusRows,
       systemNoActiveChapter,
       filteredNoActiveChapter,
+      statusFreeRows,
     ] = await Promise.all([
       db.student.groupBy({
         by: ["status"],
@@ -113,6 +116,11 @@ export async function GET(req: NextRequest) {
           studentRegistryNoActiveChapterWhere(),
         ),
       }),
+      db.student.groupBy({
+        by: ["status"],
+        where: statusFreeWhere,
+        _count: { _all: true },
+      }),
     ]);
 
     const system = buildStatusCounts(systemStatusRows, systemNoActiveChapter);
@@ -124,6 +132,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       system,
       filtered,
+      statusCounts: buildStatusCounts(statusFreeRows, 0),
       // Keep the original filtered fields while clients migrate to the
       // explicit system/filtered scopes above.
       systemTotal: system.total,

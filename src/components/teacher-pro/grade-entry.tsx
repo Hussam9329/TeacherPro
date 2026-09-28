@@ -91,6 +91,7 @@ import {
 import {
   GRACE_PERIOD_EXCUSE_LABEL,
   describeExamGraceExclusion,
+  formatGraceDate,
 } from "@/lib/grace-periods";
 import { applyOpportunityPenalty } from "@/lib/opportunity-balance";
 import { countAllManualGradesForExam } from "@/lib/grade-entry-stats";
@@ -1074,6 +1075,50 @@ export function GradeEntryView() {
     filterStudyType,
     filterLocation,
     filterStatus,
+  ]);
+
+  // «X من Y مسجّلة»: the sheet's roster (exam courses, active chapter, sites
+  // and the course filters) whatever the search or status filter; a student
+  // on leave for this exam counts as settled.
+  const sheetProgress = useMemo(() => {
+    if (!selectedExam) return { done: 0, total: 0 };
+    const selectedMainSites = splitSelection(selectedExam.mainSite);
+    let done = 0;
+    let total = 0;
+    for (const student of entryStudentsSource) {
+      if (student.status === "مؤرشف") continue;
+      if (!selectedExam.courseIds.includes(student.courseId)) continue;
+      if (filterCourseId && student.courseId !== filterCourseId) continue;
+      if (!activeChapterCourseIds.has(student.courseId)) continue;
+      if (!studentMatchesExamMainSites(student, selectedMainSites)) continue;
+      if (
+        !studentMatchesListFilters(student, {
+          courseProgram: filterCourseProgram,
+          courseTerm: filterCourseTerm,
+          studyType: filterStudyType,
+          location: filterLocation,
+        })
+      )
+        continue;
+      total += 1;
+      if (
+        leaveByStudentId.has(student.id) ||
+        isGradeEntered(gradeByStudentId.get(student.id), selectedExam)
+      )
+        done += 1;
+    }
+    return { done, total };
+  }, [
+    selectedExam,
+    entryStudentsSource,
+    gradeByStudentId,
+    leaveByStudentId,
+    activeChapterCourseIds,
+    filterCourseId,
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
+    filterLocation,
   ]);
 
   const entryTotalPages = Math.max(
@@ -2387,6 +2432,71 @@ export function GradeEntryView() {
             </div>
           </div>
 
+          {selectedExam && (
+            <div className="tp-exam-bar" data-grade-exam-bar="true">
+              <span className="tp-exam-bar__fact">
+                <Badge>{selectedExam.type}</Badge>
+                {formatAppDate(selectedExam.date)}
+              </span>
+              <span className="tp-exam-bar__fact">
+                الدرجة الكاملة <strong>{selectedExam.fullMark}</strong>
+              </span>
+              <span className="tp-exam-bar__fact">
+                النجاح <strong>{selectedExam.passMark}</strong>
+              </span>
+              {selectedExam.noDiscount ? (
+                <span
+                  className="tp-exam-bar__fact"
+                  title="لا خصم فرص على الدرجة أو الغياب"
+                >
+                  بدون خصم
+                </span>
+              ) : selectedExam.type !== "فاينل" ? (
+                <span className="tp-exam-bar__fact">
+                  الخصم تحت <strong>{selectedExam.discountMark}</strong>
+                  <span aria-hidden="true">·</span>
+                  فرص الخصم <strong>{selectedExam.opportunitiesPenalty}</strong>
+                </span>
+              ) : (
+                <span className="tp-exam-bar__fact">
+                  درجة الفصل <strong>{selectedExam.dismissalGrade ?? "لا يوجد"}</strong>
+                </span>
+              )}
+              <span
+                className="tp-exam-bar__progress"
+                role="status"
+                aria-live="polite"
+                data-sheet-progress="true"
+                data-complete={
+                  sheetProgress.total > 0 &&
+                  sheetProgress.done >= sheetProgress.total
+                    ? "true"
+                    : undefined
+                }
+              >
+                <span className="tp-exam-bar__meter" aria-hidden="true">
+                  <span
+                    style={{
+                      inlineSize: `${
+                        sheetProgress.total
+                          ? Math.round((sheetProgress.done / sheetProgress.total) * 100)
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </span>
+                {entrySheetLoading ? (
+                  "جاري التحميل…"
+                ) : (
+                  <span>
+                    <strong>{sheetProgress.done}</strong> من{" "}
+                    <strong>{sheetProgress.total}</strong> مسجّلة
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
+
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleQuickScan}>
               بحث / مسح QR
@@ -2424,25 +2534,6 @@ export function GradeEntryView() {
                 ? "جاري الإلغاء..."
                 : `إلغاء حالة غائب (${absentGradesForSelectedExam.length})`}
             </Button>
-            {selectedExam && (
-              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                <Badge>{selectedExam.type}</Badge>
-                <span>الدرجة الكاملة: {selectedExam.fullMark}</span>
-                <span>النجاح: {selectedExam.passMark}</span>
-                {selectedExam.noDiscount ? (
-                  <span>بدون خصم: لا خصم فرص على الدرجة أو الغياب</span>
-                ) : selectedExam.type !== "فاينل" ? (
-                  <>
-                    <span>الخصم: {selectedExam.discountMark}</span>
-                    <span>فرص الخصم: {selectedExam.opportunitiesPenalty}</span>
-                  </>
-                ) : (
-                  <span>
-                    درجة الفصل: {selectedExam.dismissalGrade ?? "لا يوجد"}
-                  </span>
-                )}
-              </div>
-            )}
           </div>
 
           {missingChapterCourses.length > 0 && (
@@ -2455,17 +2546,24 @@ export function GradeEntryView() {
         </CardContent>
       </Card>
 
-      {selectedExam && (
-        <GradeSmartNotesPanel
-          key={selectedExam.id}
-          notes={gradeSmartNotes}
-          totalCount={gradeSmartNotesTotal}
-          categoryCounts={gradeSmartNoteCategoryCounts}
-          loading={gradeSmartNotesLoading}
-          error={gradeSmartNotesError}
-          onRetry={() => setGradeSmartNotesRefreshKey((key) => key + 1)}
-        />
-      )}
+      {/* The smart board only when it holds something to review; otherwise
+          one quiet line so the entry sheet comes first. */}
+      {selectedExam &&
+        (gradeSmartNotesTotal > 0 || gradeSmartNotesError ? (
+          <GradeSmartNotesPanel
+            key={selectedExam.id}
+            notes={gradeSmartNotes}
+            totalCount={gradeSmartNotesTotal}
+            categoryCounts={gradeSmartNoteCategoryCounts}
+            loading={gradeSmartNotesLoading}
+            error={gradeSmartNotesError}
+            onRetry={() => setGradeSmartNotesRefreshKey((key) => key + 1)}
+          />
+        ) : !gradeSmartNotesLoading ? (
+          <p className="tp-grade-smart-empty" data-grade-smart-empty="true">
+            ماكو درجات تحتاج مراجعة لهذا الامتحان.
+          </p>
+        ) : null)}
 
       {!selectedExam && (
         <Card>
@@ -2599,15 +2697,17 @@ export function GradeEntryView() {
               </div>
             )}
             {examStudents.length > 0 && (
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" data-count-scope="filtered">
-                    المطابقون للفلاتر: {examStudents.length}
-                  </Badge>
-                  <Badge variant="secondary" data-count-scope="page">
-                    المعروض في الصفحة: {visibleExamStudents.length}
-                  </Badge>
-                </div>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+                <p data-count-scope="page">
+                  المعروض{" "}
+                  <strong className="tabular-nums text-foreground">
+                    {visibleExamStudents.length}
+                  </strong>{" "}
+                  من{" "}
+                  <strong className="tabular-nums text-foreground">
+                    {examStudents.length}
+                  </strong>
+                </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <Label htmlFor="grade-entry-page-size" className="text-xs">
                     حجم الصفحة
@@ -2748,8 +2848,13 @@ export function GradeEntryView() {
                             </Badge>
                           )}
                           {gracePeriod && (
-                            <Badge variant="warning" className="text-[10px]">
-                              {GRACE_PERIOD_EXCUSE_LABEL}
+                            <Badge
+                              variant="warning"
+                              className="text-[10px]"
+                              title={`${describeExamGraceExclusion(gracePeriod)}.`}
+                            >
+                              {GRACE_PERIOD_EXCUSE_LABEL} لغاية{" "}
+                              {formatGraceDate(gracePeriod.endDate)} · خارج المحاسبة
                             </Badge>
                           )}
                           {student.status === "مفصول" && (
@@ -2814,7 +2919,7 @@ export function GradeEntryView() {
                             </p>
                           )}
                         {examBeforeRegistration && (
-                          <p className="mt-1 rounded-lg border border-info-line border-s-4 border-s-info-vivid bg-info-soft px-2 py-1 text-[11px] font-medium text-info">
+                          <p className="mt-1 text-[11px] text-info">
                             هذا الامتحان يسبق تسجيل الطالب؛ عند إدخال درجة
                             تُقدَّم نهاية تسجيله إلى تاريخ الامتحان وتُحتسب
                             رسمياً في سجله. الغياب والغش غير متاحين هنا.
@@ -2825,11 +2930,6 @@ export function GradeEntryView() {
                             الطالب مجاز لهذا الامتحان — إدخال درجة ينهي
                             الإجازة وتُحتسب الدرجة في سجله
                             {leave.reason ? `: ${leave.reason}` : ""}
-                          </p>
-                        )}
-                        {gracePeriod && (
-                          <p className="mt-1 text-[11px] text-info">
-                            {describeExamGraceExclusion(gracePeriod)}.
                           </p>
                         )}
                       </div>

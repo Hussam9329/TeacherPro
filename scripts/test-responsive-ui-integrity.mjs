@@ -167,7 +167,7 @@ const profileCss = globals.slice(globals.indexOf("/* Student profile layout cont
 includesAll(profileCss, ["env(safe-area-inset-top)", "env(safe-area-inset-bottom)"], "Student profile safe areas");
 pass(/\.tp-student-profile__nav\s*\{[^}]*position:\s*static/.test(profileCss), "Student profile: statistics must scroll with the content");
 pass(!/overflow-x:\s*auto|position:\s*sticky/.test(profileCss), "Student profile: statistics must not form a sticky or horizontal strip");
-includesAll(profileCss, [2, 3, 4, 6].map((count) => `repeat(${count}, minmax(0, 1fr))`), "Student profile responsive grid");
+includesAll(profileCss, [2, 3, 4, 8].map((count) => `repeat(${count}, minmax(0, 1fr))`), "Student profile responsive grid");
 includesAll(gradeEntry, ["100dvw", "safe-area-inset-top", "max-w-sm", "flex-wrap"], "Grade-entry notice");
 includesAll(gradeEntry, [
   "lg:grid-cols-[minmax(14rem,1fr)_minmax(18rem,1fr)]",
@@ -218,7 +218,7 @@ includesAll(profileDialog, ["min-h-11 max-w-full touch-manipulation", "tp-studen
 const profileControlCss = profileCss.match(/\.tp-student-profile__control\s*\{([^}]*)\}/)?.[1] || "";
 includesAll(profileControlCss, ["min-height: 2.75rem", "max-width: 100%", "touch-action: manipulation"], "Student profile control ergonomics");
 const profileStatCss = profileCss.match(/\.tp-student-profile__stat\s*\{([^}]*)\}/)?.[1] || "";
-includesAll(profileStatCss, ["min-width: 0", "min-height: 5.5rem", "touch-action: manipulation"], "Student profile card ergonomics");
+includesAll(profileStatCss, ["min-width: 0", "min-height: 2.75rem", "touch-action: manipulation"], "Student profile tab ergonomics");
 const leavesCss = read("src/components/teacher-pro/leaves-dialog.css");
 includesAll(leavesCss, ["min-height: 2.5rem", "touch-action: manipulation", ".tp-leaves__student-actions > * { flex: 1 1 auto; }"], "Leaves window touch targets");
 includesAll(smartNotes, ["min-h-11 min-w-0 touch-manipulation"], "Smart-note category controls");

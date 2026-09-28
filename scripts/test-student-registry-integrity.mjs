@@ -50,7 +50,8 @@ check(
 );
 check(
   'كل الحالات تعني جميع الطلاب فعلياً بما فيهم المؤرشفون',
-  registry.includes('<SelectItem value="all">كل الحالات</SelectItem>') &&
+  // «الكل» is the first status button (status "") and includes the archived.
+  registry.includes('{ key: "", label: "الكل"') &&
     registry.includes('includeArchived: true') &&
     registry.includes('params.set("includeArchived", "1")') &&
     registryFiltersHelper.includes('if (status) and.push({ status });') &&

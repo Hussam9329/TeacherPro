@@ -964,6 +964,73 @@ export function StudentProfileDialog({
         return true;
       });
 
+  const followUpTotal = [callsCount, leavesCount, notesCount].every((value) => typeof value === "number")
+    ? Number(callsCount) + Number(leavesCount) + Number(notesCount)
+    : "…";
+  const statValue = (key: StudentProfileCardKey) => allCards.find((card) => card.key === key)?.value ?? "—";
+  const visibleCardKeys = new Set(cards.map((card) => card.key));
+  // A few tabs, each with its count; the finer filters live inside the tab.
+  type ProfileTabItem = { tab: StudentFileTab; label: string; value?: string | number; card?: StudentProfileCardKey };
+  const allProfileTabs: ProfileTabItem[] = [
+    { tab: "details", label: "نظرة عامة" },
+    { tab: "grades", label: "الدرجات", value: statValue("grades"), card: "grades" },
+    { tab: "exams", label: "الامتحانات", value: statValue("exams"), card: "exams" },
+    { tab: "opportunities", label: "الفرص", value: statValue("opportunities"), card: "opportunities" },
+    { tab: "followup", label: "المتابعة", value: followUpTotal, card: "calls" },
+    { tab: "actions", label: "الفصل والإرجاع", value: statValue("status-actions"), card: "status-actions" },
+    { tab: "archives", label: "الملفات السابقة", value: statValue("archives"), card: "archives" },
+    { tab: "timeline", label: "السجل الزمني", value: statValue("timeline"), card: "timeline" },
+  ];
+  const profileTabs = allProfileTabs.filter((item) => !item.card || visibleCardKeys.has(item.card));
+  // Chips inside a tab: the finer views the old statistic cards used to open.
+  const openCardTarget = (key: StudentProfileCardKey) => {
+    const target = getStudentProfileCardTarget(key);
+    setTab(target.tab);
+    setGradeViewFilter(target.gradeFilter);
+    setProfileAnchor(target.followupFilter === "all" ? null : target.followupFilter);
+    setProfileNavigationVersion((value) => value + 1);
+  };
+  const gradeChips: Array<{ key: StudentProfileCardKey; label: string; filter: string }> = [
+    { key: "grades", label: "الكل", filter: "all" },
+    { key: "absences", label: "الغيابات المؤثرة", filter: "absent" },
+    { key: "grace-grades", label: "فترة السماح", filter: "grace" },
+    { key: "no-discount-grades", label: "بدون خصم", filter: "no-discount" },
+  ];
+  const followUpChips: Array<{ key: StudentProfileCardKey; label: string; anchor: StudentProfileAnchor }> = [
+    { key: "calls", label: "المكالمات", anchor: "calls" },
+    { key: "leaves", label: "الإجازات", anchor: "leaves" },
+    { key: "notes", label: "الملاحظات", anchor: "notes" },
+  ];
+  const openProfileTab = (next: StudentFileTab) => {
+    setTab(next);
+    setGradeViewFilter("all");
+    setProfileAnchor(null);
+    setProfileNavigationVersion((value) => value + 1);
+  };
+  const profileContacts = [
+    profileStudent.phone ? { key: "phone", label: "رقم الطالب", value: profileStudent.phone, href: whatsappLink(profileStudent.phone) } : null,
+    profileStudent.parentPhone ? { key: "parent", label: "ولي الأمر", value: profileStudent.parentPhone, href: whatsappLink(profileStudent.parentPhone) } : null,
+    profileStudent.username ? { key: "username", label: "تيليجرام", value: profileStudent.username, href: telegramLink(profileStudent.username) } : null,
+    profileStudent.telegram && profileStudent.telegram !== profileStudent.username
+      ? { key: "telegram", label: "معرف تيليجرام", value: profileStudent.telegram, href: /^\d+$/.test(profileStudent.telegram) ? "" : telegramLink(profileStudent.telegram) }
+      : null,
+  ].filter(Boolean) as Array<{ key: string; label: string; value: string; href: string }>;
+  const missingProfileFacts = [
+    !profileStudent.phone ? "رقم الطالب" : "",
+    !profileStudent.parentPhone ? "رقم ولي الأمر" : "",
+    !profileStudent.username && !profileStudent.telegram ? "التيليجرام" : "",
+    formatStudentLocation(profileStudent) === "—" ? "الموقع" : "",
+  ].filter(Boolean);
+  const profileFacts = [
+    { label: "الجنس", value: profileStudent.gender },
+    { label: "نظام الاشتراك", value: profileStudent.courseProgram },
+    { label: "الكورس المطلوب", value: profileStudent.courseTerm },
+    { label: "نظام الدراسة", value: profileStudent.studyType },
+    { label: "الموقع", value: formatStudentLocation(profileStudent) === "—" ? "" : formatStudentLocation(profileStudent) },
+    { label: "الفصل النشط", value: activeChapterText },
+    { label: "تاريخ الإضافة", value: formatAppDate(profileStudent.createdAt, "") },
+  ].filter((fact) => fact.value && fact.value !== "—");
+
   const showOverview = () => {
     setTab("details");
     setGradeViewFilter("all");
@@ -1021,56 +1088,54 @@ export function StudentProfileDialog({
           <div className="tp-student-profile__body space-y-4 sm:space-y-5">
             <div className="tp-student-profile__metadata" aria-label="معلومات الطالب المختصرة">
               <span>{courseName(profileStudent.courseId)}</span>
-              <span>{profileStudent.school || "بدون مدرسة"}</span>
-              <span>تاريخ الإضافة: {formatAppDate(profileStudent.createdAt, profileStudent.createdAt || "-")}</span>
-              <span className="font-bold text-primary">فرص: {opportunityText}</span>
+              {profileStudent.school ? <span>{profileStudent.school}</span> : null}
+              <span>مسجّل {formatAppDate(profileStudent.createdAt, profileStudent.createdAt || "-")}</span>
             </div>
 
-            <section className="tp-student-profile__summary" aria-labelledby="student-profile-summary-title">
-              <div className="tp-student-profile__section-heading">
-                <div className="min-w-0">
-                  <h3 id="student-profile-summary-title" className="font-black">إحصائيات الطالب</h3>
-                </div>
+            {/* Status now: the one thing to know first. The dismissal comes only
+                from the database profile, never from a stale local copy. */}
+            <div
+              className="tp-student-profile__now rounded-2xl border p-4 text-sm sm:rounded-3xl"
+              data-tone={hasAuthoritativeProfile && profileStudent.status === "مفصول" ? "danger" : profileStudent.status === "نشط" ? "success" : "muted"}
+              data-dismissed={hasAuthoritativeProfile && profileStudent.status === "مفصول" ? "true" : undefined}
+            >
+              <p className="text-xs font-black text-muted-foreground">الوضع هسه</p>
+              {hasAuthoritativeProfile && profileStudent.status === "مفصول" ? (
+                <>
+                  <p className="mt-1 break-words text-base font-black text-danger">
+                    مفصول — {displayReasonText(profileStudent.dismissalReason) || "سبب الفصل غير مدخل"}
+                  </p>
+                  {profileStudent.dismissalNotes && <p className="mt-1 break-words text-muted-foreground">ملاحظة: {profileStudent.dismissalNotes}</p>}
+                </>
+              ) : (
+                <p className="mt-1 text-base font-black">{profileStudent.status}</p>
+              )}
+              <p className="mt-1 font-bold">الفرص: <span dir="ltr">{opportunityText}</span></p>
+              {currentGraceText && <p className="mt-1 text-xs leading-6 text-muted-foreground">{currentGraceText}</p>}
+              {hasAuthoritativeProfile && profileStudent.status === "مفصول" && profileTabs.some((item) => item.tab === "actions") ? (
+                <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => openProfileTab("actions")}>
+                  سجل الفصل والإرجاع
+                </Button>
+              ) : null}
+            </div>
+
+            <nav className="tp-student-profile__nav" aria-label="أقسام ملف الطالب">
+              {profileTabs.map((item) => (
                 <button
+                  key={item.tab}
                   type="button"
-                  onClick={showOverview}
-                  aria-pressed={tab === "details"}
+                  onClick={() => (item.tab === "details" ? showOverview() : openProfileTab(item.tab))}
+                  aria-pressed={tab === item.tab}
                   aria-controls="student-profile-panel"
-                  className="tp-student-profile__control border-primary/20 bg-primary/5 font-bold text-primary hover:bg-primary/10"
+                  className={`tp-student-profile__stat ${
+                    tab === item.tab ? "border-primary/50 bg-primary/10 text-primary" : "border-border bg-card hover:border-primary/35 hover:bg-primary/5"
+                  }`}
                 >
-                  المعلومات العامة
+                  <span className="tp-student-profile__stat-label">{item.label}</span>
+                  {item.value !== undefined ? <span dir="ltr" className="tp-student-profile__stat-value">{item.value}</span> : null}
                 </button>
-              </div>
-              <div className="tp-student-profile__nav" aria-label="أقسام ملف الطالب">
-                {cards.map((item) => {
-                  const target = getStudentProfileCardTarget(item.key);
-                  const targetAnchor = target.followupFilter === "all" ? null : target.followupFilter;
-                  const isActive = tab === target.tab &&
-                    (target.tab !== "grades" || gradeViewFilter === target.gradeFilter) &&
-                    (target.tab !== "followup" || profileAnchor === targetAnchor);
-                  return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      onClick={() => {
-                        setTab(target.tab);
-                        setGradeViewFilter(target.gradeFilter);
-                        setProfileAnchor(targetAnchor);
-                        setProfileNavigationVersion((value) => value + 1);
-                      }}
-                      aria-pressed={isActive}
-                      aria-controls="student-profile-panel"
-                      className={`tp-student-profile__stat ${
-                        isActive ? "border-primary/50 bg-primary/10 text-primary" : "border-border bg-card hover:border-primary/35 hover:bg-primary/5"
-                      }`}
-                    >
-                      <span className="tp-student-profile__stat-label">{item.label}</span>
-                      <span dir="ltr" className="tp-student-profile__stat-value">{item.value}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
+              ))}
+            </nav>
 
             <ProfileLoadNotice
               loading={(statsPending || profileLogPending) && !profileError}
@@ -1080,69 +1145,49 @@ export function StudentProfileDialog({
             />
 
             <div ref={profilePanelRef} id="student-profile-panel" className="tp-student-profile__panel" role="region" aria-live="polite">
-              <div className="tp-student-profile__panel-actions">
-                <button
-                  type="button"
-                  onClick={() => contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })}
-                  className="tp-student-profile__control border-border bg-card font-bold text-muted-foreground hover:bg-muted"
-                >
-                  العودة للإحصائيات
-                </button>
-                {tab !== "details" && (
-                  <button type="button" onClick={showOverview} className="tp-student-profile__control border-primary/20 bg-primary/5 font-bold text-primary hover:bg-primary/10">
-                    المعلومات العامة
-                  </button>
-                )}
-              </div>
             {tab === "details" && (
               <div className="space-y-4">
-                <div className="grid gap-2 sm:grid-cols-2 sm:gap-3 xl:grid-cols-4">
-                  <InfoBox label="رقم الطالب" value={<ContactLink href={whatsappLink(profileStudent.phone)}>{profileStudent.phone}</ContactLink>} />
-                  <InfoBox label="رقم ولي الأمر" value={<ContactLink href={whatsappLink(profileStudent.parentPhone)}>{profileStudent.parentPhone}</ContactLink>} />
-                  <InfoBox label="يوزر تيليجرام" value={profileStudent.username ? <ContactLink href={telegramLink(profileStudent.username)}>{profileStudent.username}</ContactLink> : "—"} />
-                  <InfoBox label="معرف تيليجرام" value={profileStudent.telegram ? (/^\d+$/.test(profileStudent.telegram) ? <span dir="ltr">{profileStudent.telegram}</span> : <ContactLink href={telegramLink(profileStudent.telegram)}>{profileStudent.telegram}</ContactLink>) : "—"} />
-                  <InfoBox label="نظام الدراسة" value={profileStudent.studyType || "—"} />
+                <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
+                  <h4 className="mb-3 text-base font-black">التواصل</h4>
+                  {profileContacts.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {profileContacts.map((contact) => (
+                        <span key={contact.key} className="inline-flex min-h-10 max-w-full items-center gap-2 rounded-xl border bg-muted/40 px-3 py-1.5 text-sm">
+                          <span className="text-xs font-bold text-muted-foreground">{contact.label}</span>
+                          <ContactLink href={contact.href}>{contact.value}</ContactLink>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {missingProfileFacts.length ? (
+                    <p className="mt-3 rounded-xl border border-warning-line bg-warning-soft px-3 py-2 text-xs font-bold text-warning">
+                      ناقص: {missingProfileFacts.join("، ")}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
                   <div className="min-w-0 rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                    <h4 className="mb-3 text-base font-black sm:mb-4 sm:text-lg">المعلومات العامة</h4>
-                    <div className="grid gap-2 text-sm sm:grid-cols-2 sm:gap-3">
-                      <InfoBox label="الجنس" value={profileStudent.gender} />
-                      <InfoBox label="نظام الاشتراك" value={profileStudent.courseProgram || "—"} />
-                      <InfoBox label="الكورس المطلوب" value={profileStudent.courseTerm || "—"} />
-                      <InfoBox label="الموقع الكامل" value={formatStudentLocation(profileStudent)} />
-                      <InfoBox label="الفصل النشط" value={activeChapterText} />
-                      <InfoBox label="تاريخ إضافة الطالب" value={formatAppDate(profileStudent.createdAt, profileStudent.createdAt || "—")} />
-                    </div>
+                    <h4 className="mb-3 text-base font-black">البيانات</h4>
+                    <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+                      {profileFacts.map((fact) => (
+                        <div key={fact.label} className="flex min-w-0 flex-wrap gap-x-2">
+                          <dt className="text-muted-foreground">{fact.label}:</dt>
+                          <dd className="min-w-0 break-words font-bold">{fact.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
                   </div>
 
                   <div className="min-w-0 rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                    <h4 className="mb-3 text-base font-black sm:mb-4 sm:text-lg">ملخص الأداء</h4>
-                    <div className="grid grid-cols-2 gap-2 text-center sm:gap-3">
-                      <div className="rounded-2xl bg-success-soft p-3"><p className="text-xl font-black text-success sm:text-2xl">{successCount}</p><p className="text-[11px] text-muted-foreground sm:text-xs">ناجح</p></div>
-                      <div className="rounded-2xl bg-danger-soft p-3"><p className="text-xl font-black text-danger sm:text-2xl">{failedCount}</p><p className="text-[11px] text-muted-foreground sm:text-xs">راسب غير مخصوم</p></div>
-                      <div className="rounded-2xl bg-warning-soft p-3"><p className="text-xl font-black text-warning sm:text-2xl">{absentCount}</p><p className="text-[11px] text-muted-foreground sm:text-xs">غياب</p></div>
-                      <div className="rounded-2xl bg-primary/10 p-3"><p className="text-xl font-black text-primary sm:text-2xl">{opportunityText}</p><p className="text-[11px] text-muted-foreground sm:text-xs">فرص</p></div>
+                    <h4 className="mb-3 text-base font-black">الأداء</h4>
+                    <div className="flex flex-wrap gap-2 text-sm">
+                      <span className="rounded-full bg-success-soft px-3 py-1 font-bold text-success">ناجح {successCount}</span>
+                      <span className="rounded-full bg-danger-soft px-3 py-1 font-bold text-danger">راسب غير مخصوم {failedCount}</span>
+                      <span className="rounded-full bg-warning-soft px-3 py-1 font-bold text-warning">غياب {absentCount}</span>
                     </div>
-                    {currentGraceText && (
-                      <div className="mt-4 rounded-2xl border p-3 text-xs leading-6 text-muted-foreground">
-                        {currentGraceText}
-                      </div>
-                    )}
                   </div>
                 </div>
-
-                {/* بيانات الفصل: مصدرها الوحيد بيانات النظام. لا نعرض هذه البطاقة
-                    إلا بعد تحميل ملف الطالب من بيانات النظام، حتى لا نعرض حالة فصل
-                    مخفية من الكاش المحلي. */}
-                {hasAuthoritativeProfile && profileStudent.status === "مفصول" && (
-                  <div className="rounded-2xl p-4 text-sm sm:rounded-3xl" data-dismissed="true">
-                    <p className="font-black text-danger">بيانات الفصل</p>
-                    <p className="mt-2 break-words">مفصول - {displayReasonText(profileStudent.dismissalReason) || "—"}</p>
-                    {profileStudent.dismissalNotes && <p className="mt-1 break-words text-muted-foreground">{profileStudent.dismissalNotes}</p>}
-                  </div>
-                )}
 
                 {/* Current chapter deductions only; complete historical
                     movements remain available in the opportunities tab. */}
@@ -1203,6 +1248,20 @@ export function StudentProfileDialog({
 
             {tab === "grades" && (
               <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
+                <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="عرض الدرجات">
+                  {gradeChips.map((chip) => (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      aria-pressed={gradeViewFilter === chip.filter}
+                      onClick={() => openCardTarget(chip.key)}
+                      className="tp-student-profile__control rounded-full border-border bg-card font-bold aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-primary"
+                    >
+                      {chip.label}
+                      <span dir="ltr" className="rounded-full bg-muted px-2 text-xs tabular-nums">{statValue(chip.key)}</span>
+                    </button>
+                  ))}
+                </div>
                 <h4 className="mb-4 text-base font-black sm:text-lg">{gradeViewFilter === "absent" ? "غيابات الطالب المؤثرة" : gradeViewFilter === "grace" ? "درجات ضمن فترة السماح" : gradeViewFilter === "no-discount" ? "درجات بدون خصم" : "درجات الطالب"}</h4>
                 <div className="space-y-2">
                   {filteredGradeRows.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText={gradeViewFilter === "all" ? gradesEmptyMessage : "لا توجد درجات مطابقة لهذا التصنيف"} /> : filteredGradeRows.map(({ grade, withinGrace, withoutDiscount, deductionLog, historicalDeduction }) => {
@@ -1278,6 +1337,20 @@ export function StudentProfileDialog({
 
             {tab === "followup" && (
               <div className="grid gap-4 xl:grid-cols-2">
+                <div className="flex flex-wrap gap-2 xl:col-span-2" role="group" aria-label="أقسام المتابعة">
+                  {followUpChips.map((chip) => (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      aria-pressed={profileAnchor === chip.anchor}
+                      onClick={() => openCardTarget(chip.key)}
+                      className="tp-student-profile__control rounded-full border-border bg-card font-bold aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-primary"
+                    >
+                      {chip.label}
+                      <span dir="ltr" className="rounded-full bg-muted px-2 text-xs tabular-nums">{statValue(chip.key)}</span>
+                    </button>
+                  ))}
+                </div>
                 <div ref={(node) => { sectionRefs.current.calls = node; }} className="scroll-mt-4 rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
                   <h4 className="mb-4 text-base font-black sm:text-lg">مكالمات الطالب</h4>
                   <div className="max-h-80 space-y-2 overflow-y-auto pr-1">

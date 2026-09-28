@@ -624,6 +624,8 @@ export interface StudentStatusCounts {
 export interface StudentStatsResponse extends StudentStatusCounts {
   system: StudentStatusCounts;
   filtered: StudentStatusCounts;
+  /** Every filter but the status: what each status button would show. */
+  statusCounts?: StudentStatusCounts;
   systemTotal: number;
   source: "database";
 }
