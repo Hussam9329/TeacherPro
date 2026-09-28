@@ -39,9 +39,12 @@ must(
     !gradeEntry.includes("manualNumericGradeCount") &&
     gradeEntry.includes('data-manual-grade-count="true"') &&
     gradeEntry.includes("الأوراق المدخلة يدوياً") &&
-    gradeEntryStats.includes("purelyAutomaticStatuses") &&
-    gradeEntryStats.includes("numericStudentIds") &&
-    gradeEntryStats.includes("pendingStudentIds"),
+    // Each student counts once across saved grades and typed scores parked
+    // as smart notes; the chips add up to the total.
+    gradeEntryStats.includes("const counted = new Set<string>()") &&
+    gradeEntryStats.includes("scoredNotes") &&
+    gradeEntry.includes("gradeSmartNoteScoredStudents") &&
+    !gradeEntry.includes("allManualGradesCount.total + gradeSmartNotesTotal"),
   "عداد الإدخال اليدوي يعرض الرقمية والمعلقة وما قبل التسجيل ويستبعد الحالات التلقائية",
   "يجب أن يعتمد العداد الموحد الحالي دون إبقاء العداد الرقمي القديم الميت.",
 );

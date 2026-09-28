@@ -68,8 +68,8 @@ test("does not double-count student with both numeric and pre-registration grade
   const result = countAllManualGradesForExam(rows, "exam-a");
   
   assert.equal(result.numeric, 1, "الطالب يحتسب مرة واحدة كرقمي");
-  assert.equal(result.preRegistration, 1, "الطالب يحتسب مرة واحدة كقبل تسجيل");
-  assert.equal(result.total, 2, "الإجمالي يجب أن يكون 2 (لأنهما حالتان مختلفتان)");
+  assert.equal(result.preRegistration, 0, "ونفس الطالب ما ينحسب مرة ثانية قبل التسجيل");
+  assert.equal(result.total, 1, "ورقة الطالب الواحد تنحسب مرة وحدة");
 });
 
 test("BIO-648 case: pre-registration grade should be counted", () => {
@@ -152,4 +152,38 @@ test("explicit pending-review status (درجة معلّقة) is still counted as
   
   assert.equal(result.pending, 1, "درجة معلّقة الصريحة تبقى محتسبة");
   assert.equal(result.total, 1);
+});
+
+test("typed scores parked as smart notes count once per student and never twice", () => {
+  const rows = [
+    { studentId: "graded", examId: "exam-n", status: "درجة", score: 70 },
+    { studentId: "absent-then-dismissed", examId: "exam-n", status: "غائب", score: null },
+    { studentId: "pre-reg-grade", examId: "exam-n", status: "قبل تسجيل الطالب", score: 40 },
+  ];
+  const notes = [
+    // A note later applied to a grade is the same student: counted as numeric only.
+    { studentId: "graded", category: "DISMISSED_PENDING" },
+    { studentId: "absent-then-dismissed", category: "DISMISSED_PENDING" },
+    { studentId: "on-leave", category: "LEAVE_PENDING" },
+    { studentId: "pre-reg-grade", category: "BEFORE_REGISTRATION_PENDING" },
+    { studentId: "pre-reg-note", category: "BEFORE_REGISTRATION_PENDING" },
+    { studentId: "archive", category: "GRACE_SCORED" },
+    { studentId: "unknown", category: "SOMETHING_ELSE" },
+  ];
+  const result = countAllManualGradesForExam(rows, "exam-n", notes);
+  assert.deepEqual(result, {
+    numeric: 1, preRegistration: 2, pending: 0, dismissed: 1, leave: 1, graceArchive: 1, total: 6,
+  });
+  const buckets = result.numeric + result.preRegistration + result.pending + result.dismissed + result.leave + result.graceArchive;
+  assert.equal(buckets, result.total, "the chips always add up to the total");
+});
+
+test("absence, cheating and leave without a score are not typed sheets", () => {
+  const rows = [
+    { studentId: "a", examId: "exam-z", status: "غائب", score: null },
+    { studentId: "b", examId: "exam-z", status: "غش", score: null },
+    { studentId: "c", examId: "exam-z", status: "مجاز", score: null },
+    { studentId: "d", examId: "exam-z", status: "درجة", score: null },
+  ];
+  assert.equal(countAllManualGradesForExam(rows, "exam-z", []).total, 0);
 });

@@ -1231,6 +1231,8 @@ export interface GradeSmartNotesResponse {
   totalPages: number;
   statusCounts: Partial<Record<GradeSmartNoteStatus, number>>;
   categoryCounts: Partial<Record<GradeSmartNoteCategory, number>>;
+  /** With an exam filter: each typed score that was not rejected. */
+  scoredStudents?: Array<{ studentId: string; category: GradeSmartNoteCategory }>;
 }
 
 interface PaginatedApiEnvelope extends Record<string, unknown> {

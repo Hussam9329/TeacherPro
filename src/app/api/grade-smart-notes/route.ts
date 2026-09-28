@@ -127,6 +127,15 @@ export async function GET(req: NextRequest) {
       }),
     ]);
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    // Every typed score still standing for this exam (a rejected one was
+    // discarded), so the manual-sheets counter can count each student once
+    // whatever page of notes is loaded.
+    const scoredStudents = examId
+      ? await db.gradeSmartNote.findMany({
+          where: { examId, score: { not: null }, status: { not: "REJECTED" } },
+          select: { studentId: true, category: true },
+        })
+      : [];
 
     return NextResponse.json({
       notes: notes.map(serializeSmartNote),
@@ -137,6 +146,7 @@ export async function GET(req: NextRequest) {
       hasMore: page < totalPages,
       statusCounts: countRecord(statusRows, "status"),
       categoryCounts: countRecord(categoryRows, "category"),
+      scoredStudents,
       categories: GRADE_SMART_NOTE_CATEGORIES,
       statuses: GRADE_SMART_NOTE_STATUSES,
     });

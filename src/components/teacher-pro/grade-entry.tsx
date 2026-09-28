@@ -283,6 +283,8 @@ export function GradeEntryView() {
     GradeSmartNoteRecord[]
   >([]);
   const [gradeSmartNotesTotal, setGradeSmartNotesTotal] = useState(0);
+  const [gradeSmartNoteScoredStudents, setGradeSmartNoteScoredStudents] =
+    useState<Array<{ studentId: string; category: GradeSmartNoteCategory }>>([]);
   const [gradeSmartNoteCategoryCounts, setGradeSmartNoteCategoryCounts] =
     useState<Partial<Record<GradeSmartNoteCategory, number>>>({});
   const [gradeSmartNotesLoading, setGradeSmartNotesLoading] = useState(false);
@@ -586,8 +588,8 @@ export function GradeEntryView() {
   }, [entrySheetGrades, grades, selectedExamId]);
 
   const allManualGradesCount = useMemo(
-    () => countAllManualGradesForExam(entryGradesSource, selectedExamId),
-    [entryGradesSource, selectedExamId],
+    () => countAllManualGradesForExam(entryGradesSource, selectedExamId, gradeSmartNoteScoredStudents),
+    [entryGradesSource, selectedExamId, gradeSmartNoteScoredStudents],
   );
 
   const entryLeavesSource = useMemo(
@@ -617,6 +619,7 @@ export function GradeEntryView() {
       setGradeSmartNotes([]);
       setGradeSmartNotesTotal(0);
       setGradeSmartNoteCategoryCounts({});
+      setGradeSmartNoteScoredStudents([]);
       setGradeSmartNotesError(null);
       setGradeSmartNotesLoading(false);
       return;
@@ -641,6 +644,7 @@ export function GradeEntryView() {
         setGradeSmartNotes(result.notes || []);
         setGradeSmartNotesTotal(Number(result.totalCount || 0));
         setGradeSmartNoteCategoryCounts(result.categoryCounts || {});
+        setGradeSmartNoteScoredStudents(result.scoredStudents || []);
       })
       .catch(() => {
         if (!controller.signal.aborted) {
@@ -2499,9 +2503,9 @@ export function GradeEntryView() {
                   aria-label={`إجمالي الأوراق المدخلة يدوياً: ${
                     entrySheetLoading || entrySheetError
                       ? "غير متاح الآن"
-                      : allManualGradesCount.total + gradeSmartNotesTotal
+                      : allManualGradesCount.total
                   }`}
-                  title="يُحتسب جميع السجلات اليدوية: الرقمية + قبل التسجيل + المعلقة للمراجعة + المفصولين + المجازين + درجات السماح القديمة (أرشيف). لا تُحتسب الحالات التلقائية (غياب تلقائي فقط) ولا سجلات «درجة» بدون رقم"
+                  title="كل طالب انكتبت له درجة رقمية بهذا الامتحان، مرة وحدة: المحتسبة، وقبل التسجيل، والمعلّقة للمراجعة (مفصولين، مجازين، سماح قديم). ما تنحسب: الغياب والغش والإجازة بدون درجة، والدرجات المرفوضة."
                 >
                   <div className="min-w-0 flex-1">
                     <p className="flex min-w-0 items-center gap-1.5 text-xs font-black leading-5 text-success">
@@ -2535,30 +2539,30 @@ export function GradeEntryView() {
                         </span>
                       )}
                       {/* Smart Notes من السجل المنظّم */}
-                      {(gradeSmartNoteCategoryCounts?.DISMISSED_PENDING || 0) > 0 && (
+                      {allManualGradesCount.dismissed > 0 && (
                         <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-danger-line bg-danger-soft px-2 py-1 text-[10px] leading-none">
                           <span className="size-1.5 shrink-0 rounded-full bg-danger-vivid" aria-hidden="true" />
                           <span>مفصولين</span>
                           <strong className="font-black tabular-nums text-danger">
-                            {gradeSmartNoteCategoryCounts.DISMISSED_PENDING}
+                            {allManualGradesCount.dismissed}
                           </strong>
                         </span>
                       )}
-                      {(gradeSmartNoteCategoryCounts?.LEAVE_PENDING || 0) > 0 && (
+                      {allManualGradesCount.leave > 0 && (
                         <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] leading-none">
                           <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
                           <span>مجازين</span>
                           <strong className="font-black tabular-nums text-primary">
-                            {gradeSmartNoteCategoryCounts.LEAVE_PENDING}
+                            {allManualGradesCount.leave}
                           </strong>
                         </span>
                       )}
-                      {(gradeSmartNoteCategoryCounts?.GRACE_SCORED || 0) > 0 && (
+                      {allManualGradesCount.graceArchive > 0 && (
                         <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-info-line bg-info-soft px-2 py-1 text-[10px] leading-none">
                           <span className="size-1.5 shrink-0 rounded-full bg-info-vivid" aria-hidden="true" />
                           <span>سماح قديم (أرشيف)</span>
                           <strong className="font-black tabular-nums text-info">
-                            {gradeSmartNoteCategoryCounts.GRACE_SCORED}
+                            {allManualGradesCount.graceArchive}
                           </strong>
                         </span>
                       )}
@@ -2571,7 +2575,7 @@ export function GradeEntryView() {
                     >
                       {entrySheetLoading || entrySheetError
                         ? "—"
-                        : allManualGradesCount.total + gradeSmartNotesTotal}
+                        : allManualGradesCount.total}
                     </span>
                   </div>
                 </div>
