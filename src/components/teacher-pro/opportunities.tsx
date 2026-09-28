@@ -946,6 +946,14 @@ export function OpportunitiesView() {
           setPage(1);
         }}
         activeFilterCount={Number(Boolean(filterCourseId)) + Number(Boolean(filterOpportunityCount))}
+        activeFilters={[
+          ...(filterCourseId
+            ? [{ key: "course", label: `الدورة: ${courses.find((course) => course.id === filterCourseId)?.name || "—"}`, onClear: () => { setFilterCourseId(""); setPage(1); } }]
+            : []),
+          ...(filterOpportunityCount
+            ? [{ key: "count", label: `عدد الفرص: ${filterOpportunityCount}`, onClear: () => { setFilterOpportunityCount(""); setPage(1); } }]
+            : []),
+        ]}
         onClearFilters={() => {
           setFilterCourseId("");
           setFilterOpportunityCount("");

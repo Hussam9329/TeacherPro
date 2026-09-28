@@ -57,7 +57,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  X,
   Loader2,
   PenLine,
   RotateCcw,
@@ -1067,6 +1066,14 @@ export function GradeRecordsView() {
         activeChip={filterStatus}
         onChipChange={(value) => applyStatusFilter(value as GradeStatusFilter)}
         activeFilterCount={panelFilterCount}
+        activeFilters={panelFilterChips.map((chip) => ({
+          key: chip.key,
+          label: chip.text,
+          onClear: () => {
+            chip.clear();
+            setPage(1);
+          },
+        }))}
         onClearFilters={clearPanelFilters}
         filters={
           <>
@@ -1253,18 +1260,6 @@ export function GradeRecordsView() {
           </span>
         }
       />
-
-      {panelFilterChips.length > 0 && (
-        <ul className="tp-grade-records__filter-chips" aria-label="الفلاتر الشغالة">
-          {panelFilterChips.map((chip) => (
-            <li key={chip.key}>
-              <button type="button" onClick={chip.clear} aria-label={`إزالة فلتر ${chip.text}`}>
-                <span>{chip.text}</span><X className="size-3.5" aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
 
       <section className="tp-grade-records__results" aria-label="نتائج سجل الدرجات">
         {studentListError && (

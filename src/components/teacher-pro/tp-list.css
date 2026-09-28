@@ -84,6 +84,31 @@
 }
 .tp-list-chip[aria-pressed="true"] .tp-list-chip__count { background: var(--tone-solid); color: var(--tone-on); }
 
+/* Filters that are on: one tap removes each. */
+.tp-list-active { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; padding: 0; list-style: none; min-inline-size: 0; }
+.tp-list-active li { min-inline-size: 0; max-inline-size: 100%; }
+.tp-list-active__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-inline-size: 100%;
+  min-block-size: 2.25rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px dashed var(--tp-border-strong);
+  border-radius: 999px;
+  background: var(--tp-primary-tint);
+  color: var(--tp-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.tp-list-active__chip:hover { border-style: solid; border-color: var(--tp-primary); }
+.tp-list-active__chip:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
+.tp-list-active__chip svg { inline-size: 0.85rem; block-size: 0.85rem; flex-shrink: 0; color: var(--tp-text-muted); }
+
 .tp-list-summary { margin: 0; color: var(--tp-text-muted); font-size: 0.84rem; font-weight: 650; font-variant-numeric: tabular-nums; }
 .tp-list-summary b { color: var(--tp-text); }
 

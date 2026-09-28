@@ -292,6 +292,11 @@ export function LogsView() {
           setPage(1);
         }}
         activeFilterCount={Number(Boolean(filterUser))}
+        activeFilters={
+          filterUser
+            ? [{ key: "user", label: `المستخدم: ${filterUser}`, onClear: () => { setFilterUser(""); setPage(1); } }]
+            : []
+        }
         onClearFilters={resetFilters}
         filters={
           <>

@@ -45,6 +45,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
+import {
+  peekDismissedStudentFocus,
+  subscribeDismissedStudentFocus,
+} from "@/lib/dismissed-focus";
 import { ListToolbar } from "./list-toolbar";
 import { toLatinDigits } from "@/lib/format";
 import {
@@ -384,12 +388,22 @@ function downloadOpportunityHtml(
 export function DismissedManagementView() {
   const { courses, courseName, mergeStudentsCache, currentUser } = useTeacherStore();
   const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "dismissed", "follow-up"]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => peekDismissedStudentFocus() ?? "");
   const debouncedSearch = useDebouncedValue(search, 180);
   const [courseId, setCourseId] = useState("");
   const [historyScope, setHistoryScope] = useState<"all" | "current" | "former">("current");
   const [notesFilter, setNotesFilter] = useState<NotesFilter>("all");
   const [page, setPage] = useState(1);
+  // «إرجاع الطالب» from a profile opened while this page is already showing.
+  useEffect(
+    () =>
+      subscribeDismissedStudentFocus((query) => {
+        setSearch(query);
+        setHistoryScope("current");
+        setPage(1);
+      }),
+    [],
+  );
   const [students, setStudents] = useState<ManagedDismissalStudent[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -908,6 +922,14 @@ export function DismissedManagementView() {
           setPage(1);
         }}
         activeFilterCount={Number(Boolean(courseId)) + Number(notesFilter !== "all")}
+        activeFilters={[
+          ...(courseId
+            ? [{ key: "course", label: `الدورة: ${courses.find((course) => course.id === courseId)?.name || "—"}`, onClear: () => { setCourseId(""); setPage(1); } }]
+            : []),
+          ...(notesFilter !== "all"
+            ? [{ key: "notes", label: notesFilter === "with-notes" ? "عندهم ملاحظات" : "بدون ملاحظات", onClear: () => { setNotesFilter("all"); setPage(1); } }]
+            : []),
+        ]}
         onClearFilters={() => {
           setCourseId("");
           setNotesFilter("all");

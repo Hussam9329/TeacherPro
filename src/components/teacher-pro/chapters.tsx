@@ -1091,6 +1091,11 @@ export function ChaptersView() {
         activeChip={courseFilter}
         onChipChange={(value) => setCourseFilter(value as CourseFilter)}
         activeFilterCount={Number(chapterFilter !== "all")}
+        activeFilters={
+          chapterFilter !== "all"
+            ? [{ key: "chapter", label: `الفصول: ${chapterFilterLabels[chapterFilter]}`, onClear: () => setChapterFilter("all") }]
+            : []
+        }
         onClearFilters={() => setChapterFilter("all")}
         filters={
           <div className="space-y-1.5">

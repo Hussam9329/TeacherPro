@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState, type ReactNode } from "react";
-import { SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,6 +21,13 @@ export type ListChip = {
   count?: number | null;
   tone?: ListChipTone;
   hint?: string;
+};
+
+/** A filter that is on, shown as a small button that removes it. */
+export type ActiveFilter = {
+  key: string;
+  label: string;
+  onClear: () => void;
 };
 
 function usePhoneLayout(): boolean {
@@ -54,6 +61,7 @@ export function ListToolbar({
   onClearFilters,
   summary,
   filtersTitle = "تصفية",
+  activeFilters,
 }: {
   label: string;
   search?: ReactNode;
@@ -67,6 +75,7 @@ export function ListToolbar({
   onClearFilters?: () => void;
   summary?: ReactNode;
   filtersTitle?: string;
+  activeFilters?: ActiveFilter[];
 }) {
   const [open, setOpen] = useState(false);
   const phone = usePhoneLayout();
@@ -117,6 +126,24 @@ export function ListToolbar({
             </button>
           ))}
         </div>
+      ) : null}
+
+      {activeFilters && activeFilters.length > 0 ? (
+        <ul className="tp-list-active" aria-label="الفلاتر الشغالة">
+          {activeFilters.map((filter) => (
+            <li key={filter.key}>
+              <button
+                type="button"
+                className="tp-list-active__chip"
+                onClick={filter.onClear}
+                aria-label={`إزالة فلتر ${filter.label}`}
+              >
+                <span>{filter.label}</span>
+                <X aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
       ) : null}
 
       {filters && !phone && open ? (

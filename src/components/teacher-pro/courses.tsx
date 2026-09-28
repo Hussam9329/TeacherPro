@@ -879,6 +879,11 @@ export function CoursesView() {
         activeChip={statusFilter}
         onChipChange={(value) => setStatusFilter(value as CourseStatusFilter)}
         activeFilterCount={Number(deleteFilter !== "all")}
+        activeFilters={
+          deleteFilter !== "all"
+            ? [{ key: "delete", label: courseDeleteFilterLabels[deleteFilter], onClear: () => setDeleteFilter("all") }]
+            : []
+        }
         onClearFilters={() => setDeleteFilter("all")}
         filters={
           <div className="space-y-1.5">

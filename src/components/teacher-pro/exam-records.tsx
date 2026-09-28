@@ -1091,6 +1091,14 @@ export function ExamRecordsView() {
         activeChip={filterStatus}
         onChipChange={(value) => setFilterStatus(value as ExamStatusLabel | "")}
         activeFilterCount={Number(Boolean(filterCourseId)) + Number(Boolean(filterType))}
+        activeFilters={[
+          ...(filterCourseId
+            ? [{ key: "course", label: `الدورة: ${courses.find((course) => course.id === filterCourseId)?.name || "—"}`, onClear: () => setFilterCourseId("") }]
+            : []),
+          ...(filterType
+            ? [{ key: "type", label: `النوع: ${filterType}`, onClear: () => setFilterType("") }]
+            : []),
+        ]}
         onClearFilters={() => {
           setFilterCourseId("");
           setFilterType("");

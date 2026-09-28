@@ -13,7 +13,10 @@ import {
   type StudentCall,
   type StudentLeave,
   type StudentNote,
+  useTeacherStore,
 } from "@/lib/teacher-store";
+import { requestDismissedStudentFocus } from "@/lib/dismissed-focus";
+import { baghdadDateKey } from "@/lib/baghdad-time";
 import { Badge } from "@/components/ui/badge";
 import { formatAppDate } from "@/lib/format";
 import { formatGradeScore } from "@/lib/exam-utils";
@@ -386,6 +389,8 @@ export function StudentProfileDialog({
   telegramLink,
 }: StudentProfileDialogProps) {
   const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "opportunity-logs", "follow-up", "logs"]);
+  const setSection = useTeacherStore((state) => state.setSection);
+  const canAccessSection = useTeacherStore((state) => state.canAccess);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const [tab, setTab] = useState<StudentFileTab>("details");
   const [gradeViewFilter, setGradeViewFilter] = useState<StudentProfileGradeFilter>("all");
@@ -982,6 +987,27 @@ export function StudentProfileDialog({
     { tab: "timeline", label: "السجل الزمني", value: statValue("timeline"), card: "timeline" },
   ];
   const profileTabs = allProfileTabs.filter((item) => !item.card || visibleCardKeys.has(item.card));
+  // «الوضع هسه»: since when the student is dismissed and what this chapter took.
+  const isDismissedNow = hasAuthoritativeProfile && profileStudent.status === "مفصول";
+  const latestDismissalDate = allStudentNotes
+    .filter((note) => note.dismissalKey || note.dismissalDate)
+    .map((note) => note.dismissalDate || note.date)
+    .filter(Boolean)
+    .sort()
+    .pop();
+  const currentChapterDeducted = studentOpportunities
+    .filter((log) => {
+      const action = String(log.action || "");
+      return (action === "خصم" || action === "خصم تلقائي" || action === "خصم يدوي") &&
+        isCurrentChapterOpportunityLog(log, profileStudent, log.examId ? profileExamById.get(log.examId) : undefined);
+    })
+    .reduce((sum, log) => sum + Math.abs(Number(log.amount) || 0), 0);
+  const canReturnStudent = isDismissedNow && canAccessSection("dismissed-management");
+  const openReturnStudent = () => {
+    requestDismissedStudentFocus(profileStudent.code || profileStudent.name);
+    onOpenChange(false);
+    setSection("dismissed-management");
+  };
   // Chips inside a tab: the finer views the old statistic cards used to open.
   const openCardTarget = (key: StudentProfileCardKey) => {
     const target = getStudentProfileCardTarget(key);
@@ -1103,19 +1129,34 @@ export function StudentProfileDialog({
               {hasAuthoritativeProfile && profileStudent.status === "مفصول" ? (
                 <>
                   <p className="mt-1 break-words text-base font-black text-danger">
-                    مفصول — {displayReasonText(profileStudent.dismissalReason) || "سبب الفصل غير مدخل"}
+                    مفصول{latestDismissalDate ? ` منذ ${formatAppDate(baghdadDateKey(latestDismissalDate))}` : ""} —{" "}
+                    {displayReasonText(profileStudent.dismissalReason) || "سبب الفصل غير مدخل"}
                   </p>
                   {profileStudent.dismissalNotes && <p className="mt-1 break-words text-muted-foreground">ملاحظة: {profileStudent.dismissalNotes}</p>}
                 </>
               ) : (
                 <p className="mt-1 text-base font-black">{profileStudent.status}</p>
               )}
-              <p className="mt-1 font-bold">الفرص: <span dir="ltr">{opportunityText}</span></p>
+              <p className="mt-1 font-bold">
+                الفرص: <span dir="ltr">{opportunityText}</span>
+                {currentChapterDeducted > 0 ? (
+                  <span className="font-medium text-muted-foreground"> · انخصمت {currentChapterDeducted} بهذا الفصل</span>
+                ) : null}
+              </p>
               {currentGraceText && <p className="mt-1 text-xs leading-6 text-muted-foreground">{currentGraceText}</p>}
-              {hasAuthoritativeProfile && profileStudent.status === "مفصول" && profileTabs.some((item) => item.tab === "actions") ? (
-                <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => openProfileTab("actions")}>
-                  سجل الفصل والإرجاع
-                </Button>
+              {isDismissedNow && (canReturnStudent || profileTabs.some((item) => item.tab === "actions")) ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {canReturnStudent ? (
+                    <Button type="button" size="sm" onClick={openReturnStudent}>
+                      إرجاع الطالب…
+                    </Button>
+                  ) : null}
+                  {profileTabs.some((item) => item.tab === "actions") ? (
+                    <Button type="button" variant="outline" size="sm" onClick={() => openProfileTab("actions")}>
+                      سجل الفصل والإرجاع
+                    </Button>
+                  ) : null}
+                </div>
               ) : null}
             </div>
 

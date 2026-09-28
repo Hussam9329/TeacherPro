@@ -1944,6 +1944,29 @@ export function StudentRegistryView() {
           Number(Boolean(filterStudyType)) + Number(Boolean(filterLocation)) +
           Number(Boolean(filterGender)) + Number(Boolean(filterRegistryIssue))
         }
+        activeFilters={[
+          ...(filterCourseId
+            ? [{ key: "course", label: `الدورة: ${courses.find((course) => course.id === filterCourseId)?.name || "—"}`, onClear: () => { setFilterCourseId(""); setPage(1); } }]
+            : []),
+          ...(filterCourseProgram
+            ? [{ key: "program", label: `الاشتراك: ${filterCourseProgram}`, onClear: () => { setFilterCourseProgram(""); setFilterCourseTerm(""); setPage(1); } }]
+            : []),
+          ...(filterCourseProgram === "كورسات" && filterCourseTerm
+            ? [{ key: "term", label: `الكورس: ${filterCourseTerm}`, onClear: () => { setFilterCourseTerm(""); setPage(1); } }]
+            : []),
+          ...(filterStudyType
+            ? [{ key: "study", label: `الدراسة: ${filterStudyType}`, onClear: () => { setFilterStudyType(""); setPage(1); } }]
+            : []),
+          ...(filterLocation
+            ? [{ key: "location", label: `الموقع: ${filterLocation}`, onClear: () => { setFilterLocation(""); setPage(1); } }]
+            : []),
+          ...(filterGender
+            ? [{ key: "gender", label: `الجنس: ${filterGender}`, onClear: () => { setFilterGender(""); setPage(1); } }]
+            : []),
+          ...(filterRegistryIssue
+            ? [{ key: "issue", label: registryIssueFilterLabels[filterRegistryIssue], onClear: () => { setFilterRegistryIssue(""); setPage(1); } }]
+            : []),
+        ]}
         onClearFilters={resetFilters}
         filters={
           <>
