@@ -18,6 +18,8 @@ import {
   Trash2,
 } from "lucide-react";
 import "./chapters.css";
+import { ListToolbar } from "./list-toolbar";
+import { RowActionsMenu } from "./row-actions-menu";
 import {
   chapterApi,
   courseChapterApi,
@@ -28,7 +30,7 @@ import {
 } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { emitTeacherProActionStatus } from "@/lib/teacherpro-language";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -185,6 +187,12 @@ function statCard(
       </CardContent>
     </Card>
   );
+}
+
+/** Said once at the top of the page and as a badge, not again per card. */
+const NO_ACTIVE_CHAPTER_WARNING = "لا يوجد فصل نشط لهذه الدورة";
+function courseReviewWarnings(row: { warnings: string[] }) {
+  return row.warnings.filter((warning) => warning !== NO_ACTIVE_CHAPTER_WARNING);
 }
 
 function renderBlockers(blockers: string[]) {
@@ -363,11 +371,33 @@ export function ChaptersView() {
         return false;
       if (courseFilter === "multiple-active" && row.counts.activeLinks <= 1)
         return false;
-      if (courseFilter === "needs-repair" && !row.health.needsRepair)
+      if (courseFilter === "needs-repair" && courseReviewWarnings(row).length === 0)
         return false;
       return true;
     });
   }, [overview, searchText, courseFilter]);
+
+  // Each course-status button counts what it would show with the search.
+  const courseChipCounts = useMemo(() => {
+    const query = normalizeSearch(searchText);
+    const counts = { all: 0, hasActive: 0, noActive: 0, multiple: 0, review: 0 };
+    for (const row of overview?.courseRows || []) {
+      const haystack = normalizeSearch(
+        [
+          row.course.name,
+          row.activeLink?.chapter.name || "",
+          ...row.links.map((link) => link.chapter.name),
+        ].join(" "),
+      );
+      if (query && !haystack.includes(query)) continue;
+      counts.all += 1;
+      if (row.counts.activeLinks === 0) counts.noActive += 1;
+      else counts.hasActive += 1;
+      if (row.counts.activeLinks > 1) counts.multiple += 1;
+      if (courseReviewWarnings(row).length > 0) counts.review += 1;
+    }
+    return counts;
+  }, [overview, searchText]);
 
   const filteredChapters = useMemo(() => {
     const query = normalizeSearch(searchText);
@@ -798,12 +828,17 @@ export function ChaptersView() {
             {row.course.active ? "نشطة للتسجيل" : "موقوفة عن التسجيل"}
           </Badge>
           {row.counts.activeLinks === 0 ? (
-            <Badge variant="destructive">بلا فصل نشط</Badge>
+            <Badge
+              variant="outline"
+              className="border-warning-line bg-warning-soft text-warning"
+            >
+              بلا فصل نشط
+            </Badge>
           ) : null}
           {row.counts.activeLinks > 1 ? (
             <Badge variant="destructive">تعارض: أكثر من فصل نشط</Badge>
           ) : null}
-          {row.health.needsRepair ? (
+          {courseReviewWarnings(row).length > 0 ? (
             <Badge
               variant="outline"
               className="border-warning-line bg-warning-soft text-warning"
@@ -829,9 +864,9 @@ export function ChaptersView() {
           <dd className="text-danger">{row.counts.dismissedStudents}</dd>
         </div>
       </dl>
-      {row.warnings.length ? (
+      {courseReviewWarnings(row).length ? (
         <div className="rounded-xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 text-xs leading-6 text-warning">
-          {row.warnings.map((warning) => (
+          {courseReviewWarnings(row).map((warning) => (
             <p key={warning}>{warning}</p>
           ))}
         </div>
@@ -955,17 +990,19 @@ export function ChaptersView() {
             <Pencil className="size-4" aria-hidden="true" />
             تعديل
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-danger"
-            aria-label={`حذف ${row.chapter.name}`}
-            onClick={() => setDeleteChapterDialog({ open: true, row })}
-            disabled={!row.deleteSafety.canDelete}
-          >
-            <Trash2 className="size-4" aria-hidden="true" />
-            حذف
-          </Button>
+          <RowActionsMenu
+            label={`إجراءات ${row.chapter.name}`}
+            actions={[
+              {
+                key: "delete",
+                label: row.deleteSafety.canDelete ? "حذف الفصل…" : "حذف الفصل (محمي)",
+                icon: <Trash2 className="size-4" aria-hidden="true" />,
+                danger: true,
+                disabled: !row.deleteSafety.canDelete,
+                onSelect: () => setDeleteChapterDialog({ open: true, row }),
+              },
+            ]}
+          />
         </div>
       </div>
       {row.deleteSafety.blockers.length > 0 ? (
@@ -982,243 +1019,185 @@ export function ChaptersView() {
   const zeroZeroReviewCount = overview?.stats.studentsZeroZeroWithActive ?? "—";
 
   return (
-    <div className="tp-management-page tp-chapters-page space-y-4">
-      <Card className="tp-filter-card tp-management-filters">
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle className="text-base">فلاتر الفصول والدورات</CardTitle>
-            <div className="tp-chapters__actions">
-              <Button
-                onClick={(event) => {
-                  operationTriggerRef.current = event.currentTarget;
-                  setOperationDialog("create");
-                  setOperationDialogOpen(true);
-                }}
-              >
-                <Plus className="size-4" aria-hidden="true" />
-                إضافة فصل
-              </Button>
-              <Button
-                variant="outline"
-                onClick={(event) => {
-                  operationTriggerRef.current = event.currentTarget;
-                  setOperationDialog("attach");
-                  setOperationDialogOpen(true);
-                }}
-                disabled={loading}
-              >
-                <Link2 className="size-4" aria-hidden="true" />
-                ربط فصل بدورة
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="tp-filter-content pt-2">
-          <div className="tp-filter-grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
-            <div className="tp-filter-field tp-filter-search">
-              <Label htmlFor="chapter-search">البحث</Label>
-              <Input
-                id="chapter-search"
-                value={searchText}
-                onChange={(event) => setSearchText(event.target.value)}
-                placeholder="اسم الدورة أو الفصل"
+    <div className="tp-management-page tp-chapters-page tp-list">
+      <ListToolbar
+        label="البحث والتصفية في الفصول والدورات"
+        search={
+          <Input
+            id="chapter-search"
+            aria-label="بحث في الفصول والدورات"
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            placeholder="اسم الدورة أو الفصل"
+            autoComplete="off"
+          />
+        }
+        actions={
+          <>
+            <Button
+              onClick={(event) => {
+                operationTriggerRef.current = event.currentTarget;
+                setOperationDialog("create");
+                setOperationDialogOpen(true);
+              }}
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              إضافة فصل
+            </Button>
+            <Button
+              variant="outline"
+              onClick={(event) => {
+                operationTriggerRef.current = event.currentTarget;
+                setOperationDialog("attach");
+                setOperationDialogOpen(true);
+              }}
+              disabled={loading}
+            >
+              <Link2 className="size-4" aria-hidden="true" />
+              ربط فصل بدورة
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="تحديث"
+              title={refreshing ? "جارٍ التحديث..." : "تحديث"}
+              onClick={() => void loadOverview()}
+              disabled={loading || refreshing}
+            >
+              <RefreshCw
+                className={`size-4 ${refreshing ? "motion-safe:animate-spin" : ""}`}
+                aria-hidden="true"
               />
-            </div>
-            <div className="tp-filter-field tp-filter-primary">
-              <Label htmlFor="chapter-course-filter">حالة الدورات</Label>
-              <Select
-                value={courseFilter}
-                onValueChange={(value) =>
-                  setCourseFilter(value as CourseFilter)
-                }
-              >
-                <SelectTrigger id="chapter-course-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(courseFilterLabels) as CourseFilter[]).map(
-                    (key) => (
-                      <SelectItem key={key} value={key}>
-                        {courseFilterLabels[key]}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="tp-filter-field tp-filter-secondary">
-              <Label htmlFor="chapter-status-filter">حالة الفصول</Label>
-              <Select
-                value={chapterFilter}
-                onValueChange={(value) =>
-                  setChapterFilter(value as ChapterFilter)
-                }
-              >
-                <SelectTrigger id="chapter-status-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(chapterFilterLabels) as ChapterFilter[]).map(
-                    (key) => (
-                      <SelectItem key={key} value={key}>
-                        {chapterFilterLabels[key]}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="tp-filter-actions">
-              <Button variant="outline" onClick={resetFilters}>
+            </Button>
+            {searchText || courseFilter !== "all" || chapterFilter !== "all" ? (
+              <Button variant="ghost" onClick={resetFilters}>
                 تصفير الفلاتر
               </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      <div className="tp-management-workspace">
-        <section
-          className="tp-management-main-flow"
-          aria-label="الفصول والدورات"
-        >
-          <Card className="tp-management-results-card">
-            <CardHeader>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <BookOpen
-                    className="size-4 text-primary"
-                    aria-hidden="true"
-                  />
-                  مكتبة الفصول
-                </CardTitle>
-                <span
-                  className="tp-management-count-summary text-xs text-muted-foreground"
-                  data-count-scope="filtered"
-                  aria-live="polite"
-                >
-                  {overview
-                    ? `${filteredChapters.length} من ${overview.stats.chapters} فصل`
-                    : "—"}
-                </span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {loading ? (
-                renderLoadingSkeleton()
-              ) : filteredChapters.length === 0 ? (
-                <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-                  لا توجد فصول مطابقة للفلاتر.
-                </p>
-              ) : (
-                filteredChapters.map(renderChapterRow)
-              )}
-            </CardContent>
-          </Card>
-          <Card className="tp-management-results-card">
-            <CardHeader>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <CardTitle className="text-base">
-                  حالة الدورات والفصول
-                </CardTitle>
-                <span
-                  className="tp-management-count-summary text-xs text-muted-foreground"
-                  data-count-scope="filtered"
-                  aria-live="polite"
-                >
-                  {overview
-                    ? `${filteredCourses.length} من ${overview.stats.courses} دورة`
-                    : "—"}
-                </span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {loading ? (
-                renderLoadingSkeleton()
-              ) : filteredCourses.length === 0 ? (
-                <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-                  لا توجد دورات مطابقة للفلاتر.
-                </p>
-              ) : (
-                filteredCourses.map(renderCourseRow)
-              )}
-            </CardContent>
-          </Card>
-          <details className="tp-chapters__maintenance">
-            <summary className="tp-chapters__disclosure">
-              <span>انتقال الدورة الصيفية ودورة الإعفاء إلى الفصل الثاني</span>
-              <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
-            </summary>
-            <div className="space-y-3 pt-3">
-              <p className="text-xs leading-6 text-muted-foreground">
-                يوقف الفصل النشط السابق، ويفعّل «الفصل الثاني - الانسجة» بثلاث
-                فرص، ويضبط رصيد الطلاب النشطين في الدورتين إلى 3/3. يبقى
-                المفصولون والمؤرشفون بحالاتهم وأرصدتهم. إذا لم يكن الفصل موجوداً
-                فسينشئه التنفيذ بثلاث فرص. لا تشمل العملية «الدورة الصيفية
-                الثانية».
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={openSecondChapterTransitionDialog}
-                disabled={isApplyingSecondChapterTransition}
-              >
-                معاينة انتقال الدورتين
-              </Button>
-            </div>
-          </details>
-        </section>
-        <aside
-          className="tp-management-stats-rail"
-          aria-label="إحصائيات الفصول والدورات"
-        >
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-black">الإحصائيات</h3>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void loadOverview()}
-                disabled={loading || refreshing}
-              >
-                <RefreshCw
-                  className={`size-4 ${refreshing ? "motion-safe:animate-spin" : ""}`}
-                  aria-hidden="true"
-                />
-                {refreshing ? "جارٍ التحديث..." : "تحديث"}
-              </Button>
-            </div>
-            <div
-              className="grid"
-              role="group"
-              aria-label="إحصائيات الفصول والدورات"
-              tabIndex={0}
+            ) : null}
+          </>
+        }
+        chips={[
+          { key: "all", label: "كل الدورات", count: overview ? courseChipCounts.all : null },
+          { key: "has-active", label: courseFilterLabels["has-active"], tone: "success", count: overview ? courseChipCounts.hasActive : null },
+          { key: "no-active", label: courseFilterLabels["no-active"], tone: "warning", count: overview ? courseChipCounts.noActive : null },
+          ...(courseChipCounts.multiple || courseFilter === "multiple-active"
+            ? [{ key: "multiple-active", label: courseFilterLabels["multiple-active"], tone: "danger" as const, count: courseChipCounts.multiple }]
+            : []),
+          ...(courseChipCounts.review || courseFilter === "needs-repair"
+            ? [{ key: "needs-repair", label: courseFilterLabels["needs-repair"], tone: "info" as const, count: courseChipCounts.review }]
+            : []),
+        ]}
+        chipsLabel="حالة الدورات"
+        activeChip={courseFilter}
+        onChipChange={(value) => setCourseFilter(value as CourseFilter)}
+        activeFilterCount={Number(chapterFilter !== "all")}
+        onClearFilters={() => setChapterFilter("all")}
+        filters={
+          <div className="space-y-1.5">
+            <Label htmlFor="chapter-status-filter" className="text-xs font-bold">حالة الفصول</Label>
+            <Select
+              value={chapterFilter}
+              onValueChange={(value) =>
+                setChapterFilter(value as ChapterFilter)
+              }
             >
-              {statCard("الدورات", overview?.stats.courses ?? "—")}
-              {statCard(
-                "الفصول",
-                overview?.stats.chapters ?? "—",
-                undefined,
-                "text-success",
-              )}
-              {statCard(
-                "بلا فصل نشط",
-                overview?.stats.coursesWithoutActiveChapter ?? "—",
-                undefined,
-                "text-warning",
-              )}
-              {statCard(
-                "تعارض نشط",
-                overview?.stats.coursesWithMultipleActiveChapters ?? "—",
-                undefined,
-                "text-danger",
-              )}
-              {statCard("طلاب 0/0", zeroZeroReviewCount)}
-            </div>
-            <p className="sr-only">مؤشر طلاب 0/0 للمراجعة فقط.</p>
+              <SelectTrigger id="chapter-status-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(chapterFilterLabels) as ChapterFilter[]).map(
+                  (key) => (
+                    <SelectItem key={key} value={key}>
+                      {chapterFilterLabels[key]}
+                    </SelectItem>
+                  ),
+                )}
+              </SelectContent>
+            </Select>
           </div>
-        </aside>
-      </div>
+        }
+        summary={
+          overview ? (
+            <span data-count-scope="filtered">
+              <b>{filteredChapters.length}</b> من {overview.stats.chapters} فصل ·{" "}
+              <b>{filteredCourses.length}</b> من {overview.stats.courses} دورة
+              {Number(zeroZeroReviewCount) > 0 ? (
+                <span title="مؤشر للمراجعة فقط"> · طلاب 0/0: {zeroZeroReviewCount}</span>
+              ) : null}
+            </span>
+          ) : (
+            "…"
+          )
+        }
+      />
+
+      {overview && overview.stats.coursesWithoutActiveChapter > 0 && courseFilter !== "no-active" ? (
+        <div className="tp-chapters__banner" role="status">
+          <p>
+            <b>{overview.stats.coursesWithoutActiveChapter} من {overview.stats.courses}</b> دورات بلا فصل نشط:
+            ما تنضاف إلها امتحانات، والطالب الجديد بيها يبدأ بدون فرص.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => setCourseFilter("no-active")}>
+            عرض هذي الدورات
+          </Button>
+        </div>
+      ) : null}
+
+      <section className="tp-chapters__section" aria-labelledby="chapters-library-title">
+        <h3 id="chapters-library-title" className="tp-chapters__section-title">
+          <BookOpen className="size-4 text-primary" aria-hidden="true" />
+          مكتبة الفصول
+        </h3>
+        {loading ? (
+          renderLoadingSkeleton()
+        ) : filteredChapters.length === 0 ? (
+          <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+            لا توجد فصول مطابقة للفلاتر.
+          </p>
+        ) : (
+          <div className="tp-chapters__list">{filteredChapters.map(renderChapterRow)}</div>
+        )}
+      </section>
+
+      <section className="tp-chapters__section" aria-labelledby="chapters-courses-title">
+        <h3 id="chapters-courses-title" className="tp-chapters__section-title">
+          حالة الدورات والفصول
+        </h3>
+        {loading ? (
+          renderLoadingSkeleton()
+        ) : filteredCourses.length === 0 ? (
+          <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+            لا توجد دورات مطابقة للفلاتر.
+          </p>
+        ) : (
+          <div className="tp-chapters__list">{filteredCourses.map(renderCourseRow)}</div>
+        )}
+      </section>
+
+      <details className="tp-chapters__maintenance">
+        <summary className="tp-chapters__disclosure">
+          <span>انتقال الدورة الصيفية ودورة الإعفاء إلى الفصل الثاني</span>
+          <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
+        </summary>
+        <div className="space-y-3 pt-3">
+          <p className="text-xs leading-6 text-muted-foreground">
+            يوقف الفصل النشط السابق، ويفعّل «الفصل الثاني - الانسجة» بثلاث
+            فرص، ويضبط رصيد الطلاب النشطين في الدورتين إلى 3/3. يبقى
+            المفصولون والمؤرشفون بحالاتهم وأرصدتهم. إذا لم يكن الفصل موجوداً
+            فسينشئه التنفيذ بثلاث فرص. لا تشمل العملية «الدورة الصيفية
+            الثانية».
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={openSecondChapterTransitionDialog}
+            disabled={isApplyingSecondChapterTransition}
+          >
+            معاينة انتقال الدورتين
+          </Button>
+        </div>
+      </details>
 
       <Dialog
         open={operationDialogOpen}

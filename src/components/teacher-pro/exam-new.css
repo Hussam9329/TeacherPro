@@ -228,26 +228,109 @@
   color: var(--muted-foreground);
 }
 
-.tp-exam-new__course-blocker {
-  margin: 0;
-  font-size: 0.75rem;
-  line-height: 1.7;
-  color: var(--destructive);
-}
-
 .tp-exam-new__course[data-selected="true"],
 .tp-exam-new__site[data-selected="true"] {
   border-color: color-mix(in srgb, var(--primary) 50%, var(--border));
   background: color-mix(in srgb, var(--primary) 7%, var(--card));
 }
 
-.tp-exam-new__course[data-disabled="true"] {
-  cursor: not-allowed;
-  background: color-mix(in srgb, var(--muted) 45%, var(--card));
+/* Courses that cannot take an exam fold into one quiet line under the pickable ones. */
+.tp-exam-new__course-note {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  color: var(--muted-foreground);
 }
 
-.tp-exam-new__course[data-disabled="true"] .tp-exam-new__course-copy {
-  opacity: 0.65;
+.tp-exam-new__unavailable {
+  min-inline-size: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--card);
+  color: var(--muted-foreground);
+}
+
+.tp-exam-new__unavailable > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-block-size: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.7;
+  list-style: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: color 150ms ease;
+}
+
+.tp-exam-new__unavailable > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tp-exam-new__unavailable > summary > svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: none;
+}
+
+.tp-exam-new__unavailable[open] > summary > svg {
+  transform: rotate(180deg);
+}
+
+.tp-exam-new__unavailable > summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 0.75rem;
+}
+
+.tp-exam-new__unavailable-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 1rem;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0.25rem 0.75rem 0.5rem;
+  border-block-start: 1px solid var(--border);
+  list-style: none;
+}
+
+.tp-exam-new__unavailable-list > li {
+  min-inline-size: 0;
+}
+
+.tp-exam-new__unavailable-course {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.625rem;
+  min-inline-size: 0;
+  min-block-size: 2.5rem;
+  padding-block: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.7;
+  cursor: not-allowed;
+}
+
+.tp-exam-new__unavailable-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.5rem;
+  min-inline-size: 0;
+}
+
+.tp-exam-new__unavailable-copy > strong {
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.tp-exam-new__unavailable-copy > span {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
 }
 
 .tp-exam-new__course:focus-within,
@@ -486,7 +569,8 @@
 }
 
 @container exam-fields (min-width: 42rem) {
-  .tp-exam-new__courses {
+  .tp-exam-new__courses,
+  .tp-exam-new__unavailable-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -515,16 +599,21 @@
 }
 
 @media (hover: hover) {
-  .tp-exam-new__course:not([data-disabled="true"]):hover,
+  .tp-exam-new__course:hover,
   .tp-exam-new__site:hover {
     border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
     background: color-mix(in srgb, var(--primary) 7%, var(--card));
+  }
+
+  .tp-exam-new__unavailable > summary:hover {
+    color: var(--foreground);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .tp-exam-new__course,
-  .tp-exam-new__site {
+  .tp-exam-new__site,
+  .tp-exam-new__unavailable > summary {
     transition: none;
   }
 }

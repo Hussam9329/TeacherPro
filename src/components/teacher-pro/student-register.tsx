@@ -402,6 +402,16 @@ export function StudentRegisterView() {
       ].join(" — ")
     : "اختر اسم الدورة لإظهار ملخص الاشتراك.";
 
+  // One line for the sticky save bar: who is being added and what they get.
+  const saveBarSummary = selectedCourse
+    ? [
+        "طالب جديد",
+        selectedCourse.name,
+        form.gender,
+        `${selectedCourseOpportunityPreview} فرص`,
+      ].join(" · ")
+    : subscriptionSummary;
+
   const duplicatePhoneStudent = useMemo(() => {
     const phoneKey = normalizePhoneForDuplicate(form.phone);
     if (!phoneKey) return null;
@@ -664,6 +674,25 @@ export function StudentRegisterView() {
     },
   );
 
+  // The save bar keeps the selected course's chapter warning beside the
+  // button; otherwise it confirms that the draft is kept on this device.
+  const saveBarNote = selectedCourseHasChapterConflict
+    ? {
+        tone: "danger" as const,
+        text: "التسجيل موقوف: الدورة فيها أكثر من فصل نشط.",
+      }
+    : selectedCourseHasNoActiveChapter
+      ? {
+          tone: "warning" as const,
+          text: "تنبيه قبل الحفظ: الدورة بلا فصل نشط، الطالب سيُسجل بدون فرص.",
+        }
+      : hasDraftData
+        ? {
+            tone: "draft" as const,
+            text: "المسودة محفوظة على هذا الجهاز",
+          }
+        : null;
+
   return (
     <div className="tp-management-page tp-register-page space-y-4">
       <Card className="tp-management-action-card tp-register__intro">
@@ -695,768 +724,733 @@ export function StudentRegisterView() {
           </ol>
         </CardContent>
       </Card>
-      <div className="tp-management-workspace">
-        <section
-          className="tp-management-main-flow"
-          aria-label="نموذج تسجيل الطالب"
+      <section
+        className="tp-management-main-flow"
+        aria-label="نموذج تسجيل الطالب"
+      >
+        {contextLoading ? (
+          <LoadingState title="جاري تحميل بيانات التسجيل..." />
+        ) : contextError ? (
+          <EmptyState
+            icon={WifiOff}
+            title="تعذر تحميل بيانات التسجيل"
+            description={contextError}
+            action={
+              <Button
+                type="button"
+                onClick={() => void loadRegisterContext()}
+              >
+                <RefreshCcw className="size-4" />
+                إعادة المحاولة
+              </Button>
+            }
+          />
+        ) : null}
+        <form
+          onSubmit={handleSubmit}
+          autoComplete="off"
+          className="tp-register__form tp-validation-form"
         >
-          {contextLoading ? (
-            <LoadingState title="جاري تحميل بيانات التسجيل..." />
-          ) : contextError ? (
-            <EmptyState
-              icon={WifiOff}
-              title="تعذر تحميل بيانات التسجيل"
-              description={contextError}
-              action={
-                <Button
-                  type="button"
-                  onClick={() => void loadRegisterContext()}
-                >
-                  <RefreshCcw className="size-4" />
-                  إعادة المحاولة
-                </Button>
-              }
-            />
-          ) : null}
-          <form
-            onSubmit={handleSubmit}
-            autoComplete="off"
-            className="tp-register__form tp-validation-form"
-          >
-            <Card className="tp-register__section tp-management-results-card">
-              <SectionTitle icon={User} title="بيانات الطالب" />
-              <CardContent className="tp-register__section-content">
-                <div className="tp-register__fields">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-name"
-                      className="text-xs font-bold text-foreground"
-                    >
-                      اسم الطالب <RequiredMark />
-                    </Label>
-                    <div className="relative">
-                      <FieldIcon icon={User} />
-                      <Input
-                        id="reg-name"
-                        name="name"
-                        autoComplete="off"
-                        value={form.name}
-                        onChange={(e) => updateForm("name", e.target.value)}
-                        required
-                        pattern={TEXT_ONLY_PATTERN}
-                        title="يجب إدخال نص فقط بدون أرقام أو رموز غير مسموحة"
-                        onInvalid={(event) =>
-                          event.currentTarget.setCustomValidity(
-                            event.currentTarget.validity.valueMissing
-                              ? "هذا الحقل مطلوب"
-                              : "يجب إدخال نص فقط",
-                          )
-                        }
-                        onInput={(event) =>
-                          event.currentTarget.setCustomValidity("")
-                        }
-                        placeholder="الاسم الرباعي واللقب"
-                        className={fieldBaseClass}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-school"
-                      className="text-xs font-bold text-foreground"
-                    >
-                      اسم المدرسة <RequiredMark />
-                    </Label>
-                    <div className="relative">
-                      <FieldIcon icon={School} />
-                      <Input
-                        id="reg-school"
-                        name="school"
-                        autoComplete="off"
-                        value={form.school}
-                        onChange={(e) => updateForm("school", e.target.value)}
-                        required
-                        placeholder="اسم المدرسة"
-                        className={fieldBaseClass}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-gender-male"
-                      className="text-xs font-bold text-foreground"
-                    >
-                      الجنس <RequiredMark />
-                    </Label>
-                    {/* radios labelled by their own wrapping labels */}
-                    <div className="tp-register__gender-options">
-                      <label className="tp-register__choice">
-                        <input
-                          type="radio"
-                          id="reg-gender-male"
-                          name="gender"
-                          value="ذكر"
-                          checked={form.gender === "ذكر"}
-                          onChange={() => updateForm("gender", "ذكر")}
-                          required
-                          className="h-5 w-5 accent-primary"
-                        />
-                        <span className="mr-2 font-medium text-foreground">
-                          ذكر
-                        </span>
-                      </label>
-                      <label className="tp-register__choice">
-                        <input
-                          type="radio"
-                          id="reg-gender-female"
-                          name="gender"
-                          value="أنثى"
-                          checked={form.gender === "أنثى"}
-                          onChange={() => updateForm("gender", "أنثى")}
-                          required
-                          className="h-5 w-5 accent-primary"
-                        />
-                        <span className="mr-2 font-medium text-foreground">
-                          أنثى
-                        </span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-createdAt"
-                      className="text-xs font-bold text-foreground"
-                    >
-                      تاريخ تسجيل الطالب <RequiredMark />
-                    </Label>
-                    <DateInput
-                      id="reg-createdAt"
-                      name="createdAt"
-                      value={form.createdAt}
-                      onChange={(value) => updateForm("createdAt", value)}
+          <Card className="tp-register__section tp-management-results-card">
+            <SectionTitle icon={User} title="بيانات الطالب" />
+            <CardContent className="tp-register__section-content">
+              <div className="tp-register__fields">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="reg-name"
+                    className="text-xs font-bold text-foreground"
+                  >
+                    اسم الطالب <RequiredMark />
+                  </Label>
+                  <div className="relative">
+                    <FieldIcon icon={User} />
+                    <Input
+                      id="reg-name"
+                      name="name"
+                      autoComplete="off"
+                      value={form.name}
+                      onChange={(e) => updateForm("name", e.target.value)}
                       required
+                      pattern={TEXT_ONLY_PATTERN}
+                      title="يجب إدخال نص فقط بدون أرقام أو رموز غير مسموحة"
+                      onInvalid={(event) =>
+                        event.currentTarget.setCustomValidity(
+                          event.currentTarget.validity.valueMissing
+                            ? "هذا الحقل مطلوب"
+                            : "يجب إدخال نص فقط",
+                        )
+                      }
+                      onInput={(event) =>
+                        event.currentTarget.setCustomValidity("")
+                      }
+                      placeholder="الاسم الرباعي واللقب"
                       className={fieldBaseClass}
                     />
-                    <p className="text-xs leading-5 text-muted-foreground">
-                      فترة السماح تُضاف من شاشة «إدارة فترة السماح».
-                    </p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
 
-            <Card className="tp-register__section tp-management-results-card">
-              <SectionTitle icon={BookOpen} title="الاشتراك" />
-              <CardContent className="tp-register__section-content">
-                <div className="tp-register__fields">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="reg-school"
+                    className="text-xs font-bold text-foreground"
+                  >
+                    اسم المدرسة <RequiredMark />
+                  </Label>
+                  <div className="relative">
+                    <FieldIcon icon={School} />
+                    <Input
+                      id="reg-school"
+                      name="school"
+                      autoComplete="off"
+                      value={form.school}
+                      onChange={(e) => updateForm("school", e.target.value)}
+                      required
+                      placeholder="اسم المدرسة"
+                      className={fieldBaseClass}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="reg-gender-male"
+                    className="text-xs font-bold text-foreground"
+                  >
+                    الجنس <RequiredMark />
+                  </Label>
+                  {/* radios labelled by their own wrapping labels */}
+                  <div className="tp-register__gender-options">
+                    <label className="tp-register__choice">
+                      <input
+                        type="radio"
+                        id="reg-gender-male"
+                        name="gender"
+                        value="ذكر"
+                        checked={form.gender === "ذكر"}
+                        onChange={() => updateForm("gender", "ذكر")}
+                        required
+                        className="h-5 w-5 accent-primary"
+                      />
+                      <span className="mr-2 font-medium text-foreground">
+                        ذكر
+                      </span>
+                    </label>
+                    <label className="tp-register__choice">
+                      <input
+                        type="radio"
+                        id="reg-gender-female"
+                        name="gender"
+                        value="أنثى"
+                        checked={form.gender === "أنثى"}
+                        onChange={() => updateForm("gender", "أنثى")}
+                        required
+                        className="h-5 w-5 accent-primary"
+                      />
+                      <span className="mr-2 font-medium text-foreground">
+                        أنثى
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="reg-createdAt"
+                    className="text-xs font-bold text-foreground"
+                  >
+                    تاريخ تسجيل الطالب <RequiredMark />
+                  </Label>
+                  <DateInput
+                    id="reg-createdAt"
+                    name="createdAt"
+                    value={form.createdAt}
+                    onChange={(value) => updateForm("createdAt", value)}
+                    required
+                    className={fieldBaseClass}
+                  />
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    فترة السماح تُضاف من شاشة «إدارة فترة السماح».
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="tp-register__section tp-management-results-card">
+            <SectionTitle icon={BookOpen} title="الاشتراك" />
+            <CardContent className="tp-register__section-content">
+              <div className="tp-register__fields">
+                <div className="tp-register__course-fields">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reg-courseId"
+                      className="text-xs font-bold text-foreground"
+                    >
+                      اسم الدورة <RequiredMark />
+                    </Label>
+                    <Select
+                      name="courseId"
+                      value={form.courseId}
+                      onValueChange={handleCourseChange}
+                      disabled={
+                        contextLoading ||
+                        !registerContext ||
+                        filteredCourses.length === 0
+                      }
+                    >
+                      <SelectTrigger
+                        id="reg-courseId"
+                        className={selectTriggerClass}
+                        aria-required="true"
+                      >
+                        <SelectValue
+                          placeholder={
+                            filteredCourses.length === 0
+                              ? "لا توجد دورات مسجلة"
+                              : "اختر اسم الدورة..."
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredCourses.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">
+                            لا توجد دورات مسجلة
+                          </div>
+                        ) : (
+                          filteredCourseRows.map((row) => {
+                            const c = normalizeRegisterContextCourse(row);
+                            return (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.name}
+                                {row.activeChapterCount > 1
+                                  ? " — تعارض فصل"
+                                  : row.activeChapter
+                                    ? ` — ${row.activeChapter.opportunities} فرص`
+                                    : " — بلا فصل نشط"}
+                              </SelectItem>
+                            );
+                          })
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* ── Course Program ── */}
+                {form.courseId && courseAvailablePrograms.length > 1 && (
                   <div className="tp-register__course-fields">
                     <div className="space-y-2">
                       <Label
-                        htmlFor="reg-courseId"
+                        htmlFor="reg-courseProgram"
                         className="text-xs font-bold text-foreground"
                       >
-                        اسم الدورة <RequiredMark />
+                        نظام الاشتراك <RequiredMark />
                       </Label>
                       <Select
-                        name="courseId"
-                        value={form.courseId}
-                        onValueChange={handleCourseChange}
-                        disabled={
-                          contextLoading ||
-                          !registerContext ||
-                          filteredCourses.length === 0
+                        name="courseProgram"
+                        value={form.courseProgram}
+                        onValueChange={(v) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            courseProgram: v,
+                            courseTerm: v === "كورسات" ? prev.courseTerm : "",
+                            studyType: "",
+                            locationScope: "",
+                            baghdadMode: "",
+                            subSite: "",
+                          }))
                         }
                       >
                         <SelectTrigger
-                          id="reg-courseId"
+                          id="reg-courseProgram"
                           className={selectTriggerClass}
                           aria-required="true"
                         >
-                          <SelectValue
-                            placeholder={
-                              filteredCourses.length === 0
-                                ? "لا توجد دورات مسجلة"
-                                : "اختر اسم الدورة..."
-                            }
-                          />
+                          <SelectValue placeholder="اختر نظام الاشتراك..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {filteredCourses.length === 0 ? (
-                            <div className="px-3 py-2 text-sm text-muted-foreground">
-                              لا توجد دورات مسجلة
-                            </div>
-                          ) : (
-                            filteredCourseRows.map((row) => {
-                              const c = normalizeRegisterContextCourse(row);
-                              return (
-                                <SelectItem key={c.id} value={c.id}>
-                                  {c.name}
-                                  {row.activeChapter
-                                    ? ` — ${row.activeChapter.opportunities} فرص`
-                                    : " — بلا فصل نشط"}
-                                </SelectItem>
-                              );
-                            })
-                          )}
+                          {courseAvailablePrograms.map((p) => (
+                            <SelectItem key={p} value={p}>
+                              {p}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
+                )}
 
-                  {/* ── Course Program ── */}
-                  {form.courseId && courseAvailablePrograms.length > 1 && (
-                    <div className="tp-register__course-fields">
-                      <div className="space-y-2">
-                        <Label
-                          htmlFor="reg-courseProgram"
-                          className="text-xs font-bold text-foreground"
+                {/* ── Course Term (only if كورسات) ── */}
+                {effectiveCourseProgram === "كورسات" && (
+                  <div className="tp-register__course-fields">
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="reg-courseTerm"
+                        className="text-xs font-bold text-foreground"
+                      >
+                        الكورس المطلوب <RequiredMark />
+                      </Label>
+                      <Select
+                        name="courseTerm"
+                        value={form.courseTerm}
+                        onValueChange={(v) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            courseTerm: v,
+                            studyType: "",
+                            locationScope: "",
+                            baghdadMode: "",
+                            subSite: "",
+                          }))
+                        }
+                      >
+                        <SelectTrigger
+                          id="reg-courseTerm"
+                          className={selectTriggerClass}
+                          aria-required="true"
                         >
-                          نظام الاشتراك <RequiredMark />
-                        </Label>
-                        <Select
-                          name="courseProgram"
-                          value={form.courseProgram}
-                          onValueChange={(v) =>
+                          <SelectValue placeholder="اختر الكورس المطلوب..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {COURSE_TERMS.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Study Type ── */}
+                {form.courseId && courseAvailableStudyTypes.length > 0 && (
+                  <div className="tp-register__course-fields">
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="reg-studyType"
+                        className="text-xs font-bold text-foreground"
+                      >
+                        نظام الدراسة <RequiredMark />
+                      </Label>
+                      <Select
+                        name="studyType"
+                        value={form.studyType}
+                        onValueChange={(v) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            studyType: v,
+                            locationScope: "",
+                            baghdadMode: "",
+                            subSite: "",
+                          }))
+                        }
+                      >
+                        <SelectTrigger
+                          id="reg-studyType"
+                          className={selectTriggerClass}
+                          aria-required="true"
+                        >
+                          <SelectValue placeholder="اختر نظام الدراسة..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {courseAvailableStudyTypes.map((st) => (
+                            <SelectItem key={st} value={st}>
+                              {st}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Location Scope ── */}
+                {form.studyType && courseLocationScopes.length > 0 && (
+                  <div className="tp-register__course-fields">
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="reg-locationScope"
+                        className="text-xs font-bold text-foreground"
+                      >
+                        الموقع <RequiredMark />
+                      </Label>
+                      <Select
+                        name="locationScope"
+                        value={isOutOfCountry ? "" : form.locationScope}
+                        onValueChange={(v) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            locationScope: v,
+                            subSite: "",
+                          }))
+                        }
+                      >
+                        <SelectTrigger
+                          id="reg-locationScope"
+                          className={selectTriggerClass}
+                          aria-required="true"
+                        >
+                          <SelectValue placeholder="اختر الموقع..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {courseLocationScopes.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <label className="tp-register__choice tp-register__outside-choice">
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-primary"
+                          checked={isOutOfCountry}
+                          onChange={(event) =>
                             setForm((prev) => ({
                               ...prev,
-                              courseProgram: v,
-                              courseTerm: v === "كورسات" ? prev.courseTerm : "",
-                              studyType: "",
-                              locationScope: "",
+                              locationScope: event.target.checked
+                                ? OUT_OF_COUNTRY_LOCATION_SCOPE
+                                : "",
                               baghdadMode: "",
                               subSite: "",
                             }))
                           }
-                        >
-                          <SelectTrigger
-                            id="reg-courseProgram"
-                            className={selectTriggerClass}
-                            aria-required="true"
-                          >
-                            <SelectValue placeholder="اختر نظام الاشتراك..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {courseAvailablePrograms.map((p) => (
-                              <SelectItem key={p} value={p}>
-                                {p}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                        />
+                        الطالب خارج القطر
+                      </label>
                     </div>
-                  )}
 
-                  {/* ── Course Term (only if كورسات) ── */}
-                  {effectiveCourseProgram === "كورسات" && (
-                    <div className="tp-register__course-fields">
+                    {/* ── Out of Country ── */}
+                    {isOutOfCountry && (
                       <div className="space-y-2">
                         <Label
-                          htmlFor="reg-courseTerm"
+                          htmlFor="reg-outOfCountrySite"
                           className="text-xs font-bold text-foreground"
                         >
-                          الكورس المطلوب <RequiredMark />
+                          الدولة <RequiredMark />
                         </Label>
-                        <Select
-                          name="courseTerm"
-                          value={form.courseTerm}
-                          onValueChange={(v) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              courseTerm: v,
-                              studyType: "",
-                              locationScope: "",
-                              baghdadMode: "",
-                              subSite: "",
-                            }))
+                        <Input
+                          id="reg-outOfCountrySite"
+                          name="subSite"
+                          autoComplete="off"
+                          value={form.subSite}
+                          onChange={(e) =>
+                            updateForm("subSite", e.target.value)
                           }
-                        >
-                          <SelectTrigger
-                            id="reg-courseTerm"
-                            className={selectTriggerClass}
-                            aria-required="true"
-                          >
-                            <SelectValue placeholder="اختر الكورس المطلوب..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {COURSE_TERMS.map((t) => (
-                              <SelectItem key={t} value={t}>
-                                {t}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          placeholder="مثلاً: تركيا"
+                          required
+                          className={fieldBaseClass}
+                        />
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* ── Study Type ── */}
-                  {form.courseId && courseAvailableStudyTypes.length > 0 && (
-                    <div className="tp-register__course-fields">
+                    {/* ── Sub-Site ── */}
+                    {!isOutOfCountry && subSiteOptions.length > 0 && (
                       <div className="space-y-2">
                         <Label
-                          htmlFor="reg-studyType"
+                          htmlFor="reg-subSite"
                           className="text-xs font-bold text-foreground"
                         >
-                          نظام الدراسة <RequiredMark />
+                          الموقع الفرعي <RequiredMark />
                         </Label>
                         <Select
-                          name="studyType"
-                          value={form.studyType}
-                          onValueChange={(v) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              studyType: v,
-                              locationScope: "",
-                              baghdadMode: "",
-                              subSite: "",
-                            }))
-                          }
+                          name="subSite"
+                          value={form.subSite}
+                          onValueChange={(v) => updateForm("subSite", v)}
                         >
                           <SelectTrigger
-                            id="reg-studyType"
+                            id="reg-subSite"
                             className={selectTriggerClass}
                             aria-required="true"
                           >
-                            <SelectValue placeholder="اختر نظام الدراسة..." />
+                            <SelectValue placeholder="اختر الموقع الفرعي..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {courseAvailableStudyTypes.map((st) => (
-                              <SelectItem key={st} value={st}>
-                                {st}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Location Scope ── */}
-                  {form.studyType && courseLocationScopes.length > 0 && (
-                    <div className="tp-register__course-fields">
-                      <div className="space-y-2">
-                        <Label
-                          htmlFor="reg-locationScope"
-                          className="text-xs font-bold text-foreground"
-                        >
-                          الموقع <RequiredMark />
-                        </Label>
-                        <Select
-                          name="locationScope"
-                          value={isOutOfCountry ? "" : form.locationScope}
-                          onValueChange={(v) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              locationScope: v,
-                              subSite: "",
-                            }))
-                          }
-                        >
-                          <SelectTrigger
-                            id="reg-locationScope"
-                            className={selectTriggerClass}
-                            aria-required="true"
-                          >
-                            <SelectValue placeholder="اختر الموقع..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {courseLocationScopes.map((s) => (
+                            {subSiteOptions.map((s) => (
                               <SelectItem key={s} value={s}>
                                 {s}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                        <label className="tp-register__choice tp-register__outside-choice">
-                          <input
-                            type="checkbox"
-                            className="size-4 accent-primary"
-                            checked={isOutOfCountry}
-                            onChange={(event) =>
-                              setForm((prev) => ({
-                                ...prev,
-                                locationScope: event.target.checked
-                                  ? OUT_OF_COUNTRY_LOCATION_SCOPE
-                                  : "",
-                                baghdadMode: "",
-                                subSite: "",
-                              }))
-                            }
-                          />
-                          الطالب خارج القطر
-                        </label>
                       </div>
-
-                      {/* ── Out of Country ── */}
-                      {isOutOfCountry && (
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="reg-outOfCountrySite"
-                            className="text-xs font-bold text-foreground"
-                          >
-                            الدولة <RequiredMark />
-                          </Label>
-                          <Input
-                            id="reg-outOfCountrySite"
-                            name="subSite"
-                            autoComplete="off"
-                            value={form.subSite}
-                            onChange={(e) =>
-                              updateForm("subSite", e.target.value)
-                            }
-                            placeholder="مثلاً: تركيا"
-                            required
-                            className={fieldBaseClass}
-                          />
-                        </div>
-                      )}
-
-                      {/* ── Sub-Site ── */}
-                      {!isOutOfCountry && subSiteOptions.length > 0 && (
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="reg-subSite"
-                            className="text-xs font-bold text-foreground"
-                          >
-                            الموقع الفرعي <RequiredMark />
-                          </Label>
-                          <Select
-                            name="subSite"
-                            value={form.subSite}
-                            onValueChange={(v) => updateForm("subSite", v)}
-                          >
-                            <SelectTrigger
-                              id="reg-subSite"
-                              className={selectTriggerClass}
-                              aria-required="true"
-                            >
-                              <SelectValue placeholder="اختر الموقع الفرعي..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {subSiteOptions.map((s) => (
-                                <SelectItem key={s} value={s}>
-                                  {s}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                {form.courseId && selectedCourseRow && (
-                  <div
-                    className={`tp-register__course-status ${
-                      selectedCourseHasChapterConflict
-                        ? "border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft text-danger"
-                        : selectedCourseHasNoActiveChapter
-                          ? "border-warning-line bg-warning-soft text-warning"
-                          : "border-primary/20 bg-primary/5 text-foreground"
-                    }`}
-                  >
-                    <div className="flex min-w-0 items-start gap-2">
-                      {selectedCourseHasChapterConflict ||
-                      selectedCourseHasNoActiveChapter ? (
-                        <AlertCircle
-                          className="mt-0.5 size-4 shrink-0"
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <ShieldCheck
-                          className="mt-0.5 size-4 shrink-0 text-primary"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <div className="min-w-0 space-y-1">
-                        <p className="font-bold">
-                          {selectedCourseHasChapterConflict
-                            ? "التسجيل موقوف: أكثر من فصل نشط"
-                            : selectedCourseHasNoActiveChapter
-                              ? "هذه الدورة لا تحتوي على فصل نشط"
-                              : selectedCourseActiveChapter?.name}
-                        </p>
-                        {selectedCourseHasChapterConflict ? (
-                          <p>أصلح تعارض الفصول قبل تسجيل الطالب.</p>
-                        ) : selectedCourseHasNoActiveChapter ? (
-                          <p>
-                            يمكن التسجيل، لكن الطالب سيبدأ بفرص 0 إلى أن يتم
-                            تفعيل فصل للدورة.
-                          </p>
-                        ) : null}
-                        {selectedCourseRow.warnings.length > 0 && (
-                          <ul className="space-y-1">
-                            {selectedCourseRow.warnings.map((warning) => (
-                              <li key={warning}>{warning}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    </div>
-                    <dl className="tp-register__course-metrics">
-                      <div>
-                        <dt>الطلاب</dt>
-                        <dd>{selectedCourseRow.counts.total}</dd>
-                      </div>
-                      <div>
-                        <dt>النشطون</dt>
-                        <dd>{selectedCourseRow.counts.active}</dd>
-                      </div>
-                      <div>
-                        <dt>فرص البداية</dt>
-                        <dd className="text-primary">
-                          {selectedCourseOpportunityPreview}
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
-                )}
-                {/* ── عموم بغداد auto-resolved info ── */}
-                {form.locationScope === "بغداد" &&
-                  courseBaghdadMode === "عموم بغداد" && (
-                    <div className="mt-3 flex items-center gap-2 text-xs font-bold text-primary">
-                      <MapPin className="h-3.5 w-3.5" />
-                      الموقع: عموم بغداد
-                    </div>
-                  )}
-              </CardContent>
-            </Card>
-
-            <Card className="tp-register__section tp-management-results-card">
-              <SectionTitle icon={PhoneCall} title="التواصل" />
-              <CardContent className="tp-register__section-content">
-                <div className="tp-register__fields">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-telegram"
-                      className="text-xs font-bold text-foreground"
-                    >
-                      معرف التيليجرام
-                    </Label>
-                    <div className="relative">
-                      <FieldIcon icon={Send} />
-                      <Input
-                        id="reg-telegram"
-                        name="telegram"
-                        autoComplete="off"
-                        value={form.telegram}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            telegram: sanitizeTelegramInput(e.target.value),
-                          }))
-                        }
-                        placeholder="username بدون @"
-                        dir="ltr"
-                        className={`${fieldBaseClass} text-left font-tabular`}
-                      />
-                    </div>
-                    {duplicateTelegramStudent && (
-                      <p className="tp-field-feedback tp-field-feedback-warning">
-                        قد يكون معرف التيليجرام مرتبطاً بالطالب{" "}
-                        {duplicateTelegramStudent.name}. راجع المعرف قبل الحفظ.
-                      </p>
                     )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-username"
-                      className="text-xs font-bold text-foreground"
-                    >
-                      يوزر التيليجرام (المستعاد)
-                    </Label>
-                    <div className="relative">
-                      <FieldIcon icon={Send} />
-                      <Input
-                        id="reg-username"
-                        name="username"
-                        autoComplete="off"
-                        value={form.username}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            username: sanitizeTelegramInput(e.target.value),
-                          }))
-                        }
-                        placeholder="يوزر إضافي بدون @ (اختياري)"
-                        dir="ltr"
-                        className={`${fieldBaseClass} text-left font-tabular`}
-                      />
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      إن تُرك فارغاً يُعتمد نفس معرف التيليجرام تلقائياً.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-phone"
-                      className="text-xs font-bold text-foreground"
-                    >
-                      رقم هاتف الطالب <RequiredMark />
-                    </Label>
-                    <div className="relative">
-                      <FieldIcon icon={Smartphone} />
-                      <Input
-                        id="reg-phone"
-                        name="phone"
-                        autoComplete="off"
-                        value={form.phone}
-                        onChange={(e) =>
-                          updatePhoneForm("phone", e.target.value)
-                        }
-                        required
-                        placeholder="07xxxxxxxxx"
-                        inputMode="numeric"
-                        maxLength={11}
-                        pattern="07[0-9]{9}"
-                        dir="ltr"
-                        className={`${fieldBaseClass} text-left font-tabular`}
-                      />
-                    </div>
-                    {duplicatePhoneStudent && (
-                      <p className="tp-field-feedback tp-field-feedback-warning">
-                        قد يكون رقم الهاتف مرتبطاً بالطالب{" "}
-                        {duplicatePhoneStudent.name}. راجع الرقم قبل الحفظ.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-parentPhone"
-                      className="text-xs font-bold text-foreground"
-                    >
-                      رقم هاتف ولي الأمر <RequiredMark />
-                    </Label>
-                    <div className="relative">
-                      <FieldIcon icon={PhoneCall} />
-                      <Input
-                        id="reg-parentPhone"
-                        name="parentPhone"
-                        autoComplete="off"
-                        value={form.parentPhone}
-                        onChange={(e) =>
-                          updatePhoneForm("parentPhone", e.target.value)
-                        }
-                        required
-                        placeholder="07xxxxxxxxx"
-                        inputMode="numeric"
-                        maxLength={11}
-                        pattern="07[0-9]{9}"
-                        dir="ltr"
-                        className={`${fieldBaseClass} text-left font-tabular`}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="tp-register__actions">
-              <div className="min-w-0 space-y-2">
-                <div aria-live="polite" aria-atomic="true">
-                  <p className="text-xs font-bold text-muted-foreground">
-                    ملخص الاشتراك
-                  </p>
-                  <p className="text-sm font-bold leading-7" dir="rtl">
-                    {subscriptionSummary}
-                  </p>
-                </div>
-                {hasDraftData && (
-                  <p className="text-xs text-muted-foreground" role="status">
-                    المسودة محفوظة على هذا الجهاز
-                  </p>
-                )}
-                {(selectedCourseHasChapterConflict ||
-                  selectedCourseHasNoActiveChapter) && (
-                  <div className="flex items-start gap-2 text-sm font-bold leading-6 text-danger">
-                    <AlertCircle
-                      className={`mt-0.5 h-4 w-4 shrink-0 ${selectedCourseHasChapterConflict || selectedCourseHasNoActiveChapter ? "text-danger" : "text-primary"}`}
-                    />
-                    <span>
-                      {selectedCourseHasChapterConflict
-                        ? "التسجيل موقوف لهذه الدورة لأن فيها أكثر من فصل نشط."
-                        : "تنبيه قبل الحفظ: هذه الدورة لا تحتوي على فصل نشط، الطالب سيُسجل بدون فرص."}
-                    </span>
                   </div>
                 )}
               </div>
-              <Button
-                type="submit"
-                disabled={
-                  isSubmitting ||
-                  contextLoading ||
-                  !registerContext ||
-                  selectedCourseCannotRegister
-                }
-                className="tp-register__submit"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Save className="size-4" />
+              {form.courseId && selectedCourseRow && (
+                <div
+                  className={`tp-register__course-status ${
+                    selectedCourseHasChapterConflict
+                      ? "border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft text-danger"
+                      : selectedCourseHasNoActiveChapter
+                        ? "border-warning-line bg-warning-soft text-warning"
+                        : "border-primary/20 bg-primary/5 text-foreground"
+                  }`}
+                >
+                  <div className="flex min-w-0 items-start gap-2">
+                    {selectedCourseHasChapterConflict ||
+                    selectedCourseHasNoActiveChapter ? (
+                      <AlertCircle
+                        className="mt-0.5 size-4 shrink-0"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <ShieldCheck
+                        className="mt-0.5 size-4 shrink-0 text-primary"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <div className="min-w-0 space-y-1">
+                      <p className="font-bold">
+                        {selectedCourseHasChapterConflict
+                          ? "التسجيل موقوف: أكثر من فصل نشط"
+                          : selectedCourseHasNoActiveChapter
+                            ? "هذه الدورة لا تحتوي على فصل نشط"
+                            : selectedCourseActiveChapter?.name}
+                      </p>
+                      {selectedCourseHasChapterConflict ? (
+                        <p>أصلح تعارض الفصول قبل تسجيل الطالب.</p>
+                      ) : selectedCourseHasNoActiveChapter ? (
+                        <p>
+                          يمكن التسجيل، لكن الطالب سيبدأ بفرص 0 إلى أن يتم
+                          تفعيل فصل للدورة.
+                        </p>
+                      ) : null}
+                      {selectedCourseRow.warnings.length > 0 && (
+                        <ul className="space-y-1">
+                          {selectedCourseRow.warnings.map((warning) => (
+                            <li key={warning}>{warning}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                  <dl className="tp-register__course-metrics">
+                    <div>
+                      <dt>الطلاب</dt>
+                      <dd>{selectedCourseRow.counts.total}</dd>
+                    </div>
+                    <div>
+                      <dt>النشطون</dt>
+                      <dd>{selectedCourseRow.counts.active}</dd>
+                    </div>
+                    <div>
+                      <dt>فرص البداية</dt>
+                      <dd className="text-primary">
+                        {selectedCourseOpportunityPreview}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              )}
+              {/* ── عموم بغداد auto-resolved info ── */}
+              {form.locationScope === "بغداد" &&
+                courseBaghdadMode === "عموم بغداد" && (
+                  <div className="mt-3 flex items-center gap-2 text-xs font-bold text-primary">
+                    <MapPin className="h-3.5 w-3.5" />
+                    الموقع: عموم بغداد
+                  </div>
                 )}
-                {isSubmitting ? "جارٍ الحفظ..." : "حفظ بيانات الطالب"}
-              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="tp-register__section tp-management-results-card">
+            <SectionTitle icon={PhoneCall} title="التواصل" />
+            <CardContent className="tp-register__section-content">
+              <div className="tp-register__fields">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="reg-telegram"
+                    className="text-xs font-bold text-foreground"
+                  >
+                    معرف التيليجرام
+                  </Label>
+                  <div className="relative">
+                    <FieldIcon icon={Send} />
+                    <Input
+                      id="reg-telegram"
+                      name="telegram"
+                      autoComplete="off"
+                      value={form.telegram}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          telegram: sanitizeTelegramInput(e.target.value),
+                        }))
+                      }
+                      placeholder="username بدون @"
+                      dir="ltr"
+                      className={`${fieldBaseClass} text-left font-tabular`}
+                    />
+                  </div>
+                  {duplicateTelegramStudent && (
+                    <p className="tp-field-feedback tp-field-feedback-warning">
+                      قد يكون معرف التيليجرام مرتبطاً بالطالب{" "}
+                      {duplicateTelegramStudent.name}. راجع المعرف قبل الحفظ.
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="reg-username"
+                    className="text-xs font-bold text-foreground"
+                  >
+                    يوزر التيليجرام (المستعاد)
+                  </Label>
+                  <div className="relative">
+                    <FieldIcon icon={Send} />
+                    <Input
+                      id="reg-username"
+                      name="username"
+                      autoComplete="off"
+                      value={form.username}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          username: sanitizeTelegramInput(e.target.value),
+                        }))
+                      }
+                      placeholder="يوزر إضافي بدون @ (اختياري)"
+                      dir="ltr"
+                      className={`${fieldBaseClass} text-left font-tabular`}
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    إن تُرك فارغاً يُعتمد نفس معرف التيليجرام تلقائياً.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="reg-phone"
+                    className="text-xs font-bold text-foreground"
+                  >
+                    رقم هاتف الطالب <RequiredMark />
+                  </Label>
+                  <div className="relative">
+                    <FieldIcon icon={Smartphone} />
+                    <Input
+                      id="reg-phone"
+                      name="phone"
+                      autoComplete="off"
+                      value={form.phone}
+                      onChange={(e) =>
+                        updatePhoneForm("phone", e.target.value)
+                      }
+                      required
+                      placeholder="07xxxxxxxxx"
+                      inputMode="numeric"
+                      maxLength={11}
+                      pattern="07[0-9]{9}"
+                      dir="ltr"
+                      className={`${fieldBaseClass} text-left font-tabular`}
+                    />
+                  </div>
+                  {duplicatePhoneStudent && (
+                    <p className="tp-field-feedback tp-field-feedback-warning">
+                      قد يكون رقم الهاتف مرتبطاً بالطالب{" "}
+                      {duplicatePhoneStudent.name}. راجع الرقم قبل الحفظ.
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="reg-parentPhone"
+                    className="text-xs font-bold text-foreground"
+                  >
+                    رقم هاتف ولي الأمر <RequiredMark />
+                  </Label>
+                  <div className="relative">
+                    <FieldIcon icon={PhoneCall} />
+                    <Input
+                      id="reg-parentPhone"
+                      name="parentPhone"
+                      autoComplete="off"
+                      value={form.parentPhone}
+                      onChange={(e) =>
+                        updatePhoneForm("parentPhone", e.target.value)
+                      }
+                      required
+                      placeholder="07xxxxxxxxx"
+                      inputMode="numeric"
+                      maxLength={11}
+                      pattern="07[0-9]{9}"
+                      dir="ltr"
+                      className={`${fieldBaseClass} text-left font-tabular`}
+                    />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="tp-register__savebar">
+            <div className="tp-register__savebar-text">
+              <p
+                id="reg-savebar-summary"
+                className="tp-register__savebar-summary"
+                data-empty={!selectedCourse}
+                title={
+                  selectedCourse
+                    ? `ملخص الاشتراك: ${subscriptionSummary}`
+                    : undefined
+                }
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {saveBarSummary}
+              </p>
+              {saveBarNote && (
+                <p
+                  id="reg-savebar-note"
+                  className={`tp-register__savebar-note ${
+                    saveBarNote.tone === "danger"
+                      ? "text-danger"
+                      : saveBarNote.tone === "warning"
+                        ? "text-warning"
+                        : "text-muted-foreground"
+                  }`}
+                  role="status"
+                >
+                  {saveBarNote.tone !== "draft" && (
+                    <AlertCircle
+                      className="mt-0.5 size-3.5 shrink-0"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span>{saveBarNote.text}</span>
+                </p>
+              )}
             </div>
-          </form>
-        </section>
-        <aside
-          className="tp-management-stats-rail"
-          aria-label="إحصائيات التسجيل"
-        >
-          <div className="space-y-2">
-            <h3 className="text-sm font-black">إحصائيات التسجيل</h3>
-            <div
-              className="grid"
-              role="group"
-              aria-label="إحصائيات الدورات المتاحة للتسجيل"
-              tabIndex={0}
+            <Button
+              type="submit"
+              disabled={
+                isSubmitting ||
+                contextLoading ||
+                !registerContext ||
+                selectedCourseCannotRegister
+              }
+              aria-describedby={
+                saveBarNote
+                  ? "reg-savebar-summary reg-savebar-note"
+                  : "reg-savebar-summary"
+              }
+              className="tp-register__submit"
             >
-              <Card>
-                <CardContent className="p-4 text-center">
-                  <p className="text-2xl font-bold text-foreground">
-                    {registerContext?.stats.active ?? "—"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    الدورات النشطة
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4 text-center">
-                  <p className="text-2xl font-bold text-primary">
-                    {registerContext?.stats.selectable ?? "—"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">جاهزة للتسجيل</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4 text-center">
-                  <p className="text-2xl font-bold text-warning">
-                    {registerContext?.stats.withoutActiveChapter ?? "—"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">بلا فصل نشط</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4 text-center">
-                  <p className="text-2xl font-bold text-danger">
-                    {registerContext?.stats.withChapterConflict ?? "—"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">تعارض فصل</p>
-                </CardContent>
-              </Card>
-            </div>
+              {isSubmitting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Save className="size-4" />
+              )}
+              {isSubmitting ? "جارٍ الحفظ..." : "حفظ الطالب"}
+            </Button>
           </div>
-        </aside>
-      </div>
+        </form>
+      </section>
     </div>
   );
 }

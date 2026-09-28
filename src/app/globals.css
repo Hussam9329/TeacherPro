@@ -2610,9 +2610,84 @@
   }
 }
 
-/* Accounts page contract. */
-.tp-accounts-page__intro {
-  padding-inline: 0.25rem;
+/* Accounts page contract. Users: one line each. */
+.tp-accounts-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--card);
+}
+.tp-account-row {
+  display: grid;
+  grid-template-columns: auto minmax(10rem, 1.4fr) auto minmax(9rem, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  padding: 0.75rem 1rem;
+}
+.tp-account-row + .tp-account-row { border-top: 1px solid var(--border); }
+.tp-account-row[data-active="false"] .tp-account-row__who { opacity: 0.7; }
+.tp-account-row__avatar {
+  display: grid;
+  place-items: center;
+  inline-size: 2.4rem;
+  block-size: 2.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 12%, var(--card));
+  color: var(--primary);
+  font-weight: 900;
+}
+.tp-account-row__who { min-inline-size: 0; }
+.tp-account-row__name { font-weight: 800; overflow-wrap: anywhere; }
+.tp-account-row__sub { font-size: 0.75rem; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.tp-account-row__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--tone-ink);
+  white-space: nowrap;
+}
+.tp-account-row__dot { inline-size: 0.55rem; block-size: 0.55rem; border-radius: 999px; background: var(--tone); }
+.tp-account-row__perms {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+  min-inline-size: 0;
+}
+.tp-account-row__bar {
+  display: block;
+  block-size: 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted-foreground) 20%, transparent);
+  overflow: hidden;
+}
+.tp-account-row__bar > span { display: block; block-size: 100%; border-radius: inherit; background: var(--primary); }
+.tp-account-row__actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; }
+.tp-account-row__lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.tp-account-row__lock svg { inline-size: 0.9rem; block-size: 0.9rem; }
+@media (max-width: 767px) {
+  .tp-account-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "avatar who state" "perms perms perms" "actions actions actions";
+  }
+  .tp-account-row__avatar { grid-area: avatar; }
+  .tp-account-row__who { grid-area: who; }
+  .tp-account-row__state { grid-area: state; }
+  .tp-account-row__perms { grid-area: perms; }
+  .tp-account-row__actions { grid-area: actions; }
 }
 
 .tp-accounts-page [role="tablist"] {
@@ -2623,38 +2698,88 @@
   border-color: color-mix(in srgb, var(--primary) 20%, transparent);
 }
 
-/* Logs page contract. */
-.tp-logs-page__filters {
-  position: relative;
+/* Logs page: one line per record under its day; a click opens the details. */
+.tp-logs-days { display: grid; gap: 1.25rem; min-inline-size: 0; }
+.tp-logs-day { display: grid; gap: 0.5rem; min-inline-size: 0; }
+.tp-logs-day__title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 900;
+  color: var(--muted-foreground);
+}
+.tp-logs-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--card);
   overflow: hidden;
-  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
 }
-
-.tp-logs-page__filters::before {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 0;
-  width: 3px;
-  background: var(--primary);
+.tp-logs-row + .tp-logs-row { border-top: 1px solid var(--border); }
+.tp-logs-row > details > summary,
+.tp-logs-row__plain {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  min-block-size: 3.25rem;
 }
-
-.tp-logs-page .table-wrap {
-  scroll-margin-top: 6rem;
+.tp-logs-row > details > summary { cursor: pointer; list-style: none; }
+.tp-logs-row > details > summary::-webkit-details-marker { display: none; }
+.tp-logs-row > details > summary:hover { background: color-mix(in srgb, var(--muted) 45%, transparent); }
+.tp-logs-row > details > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.tp-logs-row > details[open] > summary { background: color-mix(in srgb, var(--muted) 35%, transparent); }
+.tp-logs-row__icon {
+  display: grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: 0.65rem;
+  background: var(--tone-tint, var(--muted));
+  color: var(--tone-ink, var(--muted-foreground));
+  font-size: 0.85rem;
+  font-weight: 900;
 }
-
-.tp-logs-page .responsive-table tbody tr {
-  scroll-margin-top: 7rem;
-}
-
-.tp-logs-page .responsive-table td:first-child,
-.tp-logs-page .responsive-table th:first-child {
+.tp-logs-row__text { display: grid; gap: 0.1rem; min-inline-size: 0; }
+.tp-logs-row__summary { font-size: 0.875rem; line-height: 1.6; overflow-wrap: anywhere; }
+.tp-logs-row__meta { font-size: 0.72rem; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.tp-logs-row__time {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-
-.tp-logs-page details {
-  border-radius: 0.75rem;
+.tp-logs-row__details {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0 0.9rem 0.8rem;
+  padding-inline-start: calc(0.9rem + 2.75rem);
+}
+.tp-logs-row__tech > summary {
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted-foreground);
+}
+.tp-logs-row__tech > pre {
+  margin-top: 0.4rem;
+  max-block-size: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-radius: 0.6rem;
+  background: var(--background);
+  padding: 0.5rem;
+  text-align: left;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+}
+@media (max-width: 639px) {
+  .tp-logs-row__details { padding-inline-start: 0.9rem; }
 }
 
 /* Shared narrow-screen rhythm for page-specific layouts. */

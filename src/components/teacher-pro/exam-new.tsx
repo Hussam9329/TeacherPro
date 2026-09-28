@@ -336,6 +336,46 @@ function selectedCourseBlockers(
   });
 }
 
+/** Short, calm wording for the server's course blockers (full text stays in validation). */
+function shortCourseBlocker(blocker: string): string {
+  if (blocker.includes("موقوفة")) return "موقوفة";
+  if (blocker.includes("لا يوجد فصل نشط")) return "بلا فصل نشط";
+  if (blocker.includes("فصول نشطة")) return "أكثر من فصل نشط";
+  return blocker;
+}
+
+function courseUnavailableReasons(row: ExamCreateContextRow): string[] {
+  const reasons = Array.from(new Set(row.blockers.map(shortCourseBlocker)));
+  return reasons.length > 0 ? reasons : ["غير متاحة للامتحان"];
+}
+
+function unavailableCoursesCountLabel(count: number): string {
+  if (count === 1) return "دورة واحدة غير متاحة";
+  if (count === 2) return "دورتان غير متاحتين";
+  if (count <= 10) return `${count} دورات غير متاحة`;
+  return `${count} دورة غير متاحة`;
+}
+
+function summarizeUnavailableCourses(rows: ExamCreateContextRow[]) {
+  const rowReasons = rows.map((row) =>
+    courseUnavailableReasons(row).join("، "),
+  );
+  const sharedReason =
+    rowReasons.length > 0 && rowReasons.every((r) => r === rowReasons[0])
+      ? rowReasons[0]
+      : null;
+  const allReasons = Array.from(
+    new Set(rows.flatMap((row) => courseUnavailableReasons(row))),
+  );
+  const countLabel = unavailableCoursesCountLabel(rows.length);
+  return {
+    title: sharedReason ? `${countLabel}: ${sharedReason}` : countLabel,
+    noneAvailable: `لا توجد دورة متاحة للامتحان حالياً؛ ${
+      allReasons.length === 1 ? "السبب" : "الأسباب"
+    }: ${allReasons.join("، ")}.`,
+  };
+}
+
 function selectedSiteActiveStudentCount(
   rows: ExamCreateContextRow[],
   selectedCourseIds: string[],
@@ -419,6 +459,14 @@ export function ExamNewView() {
   const selectableCourses = useMemo(
     () => contextRows.filter((row) => row.canSelectForExam),
     [contextRows],
+  );
+  const unavailableCourses = useMemo(
+    () => contextRows.filter((row) => !row.canSelectForExam),
+    [contextRows],
+  );
+  const unavailableSummary = useMemo(
+    () => summarizeUnavailableCourses(unavailableCourses),
+    [unavailableCourses],
   );
 
   const availableMainSitesFor = (_state: ExamFormState): string[] =>
@@ -514,6 +562,10 @@ export function ExamNewView() {
     const allSelected =
       selectableCourses.length > 0 &&
       selectableCourses.every((row) => state.courseIds.includes(row.id));
+    // A selected course that became unavailable (e.g. after a sync) must stay visible.
+    const hasSelectedUnavailable = unavailableCourses.some((row) =>
+      state.courseIds.includes(row.id),
+    );
     return (
       <div className="tp-exam-new__course-picker">
         {contextLoading ? (
@@ -528,54 +580,90 @@ export function ExamNewView() {
           <div className="tp-exam-new__empty">لا توجد دورات متاحة.</div>
         ) : (
           <>
-            <Label htmlFor={allId} className="tp-exam-new__select-all">
-              <Checkbox
-                id={allId}
-                checked={allSelected}
-                disabled={selectableCourses.length === 0}
-                onCheckedChange={() =>
-                  setState((prev) => ({
-                    ...prev,
-                    courseIds: allSelected
-                      ? []
-                      : selectableCourses.map((row) => row.id),
-                  }))
-                }
-              />
-              تحديد كل الدورات المتاحة
-            </Label>
-            <div className="tp-exam-new__courses">
-              {contextRows.map((row) => (
-                <Label
-                  key={row.id}
-                  htmlFor={`${allId}-${row.id}`}
-                  className="tp-exam-new__course"
-                  data-selected={state.courseIds.includes(row.id)}
-                  data-disabled={!row.canSelectForExam}
-                >
+            {selectableCourses.length > 0 ? (
+              <>
+                <Label htmlFor={allId} className="tp-exam-new__select-all">
                   <Checkbox
-                    id={`${allId}-${row.id}`}
-                    checked={state.courseIds.includes(row.id)}
-                    disabled={!row.canSelectForExam}
+                    id={allId}
+                    checked={allSelected}
+                    disabled={selectableCourses.length === 0}
                     onCheckedChange={() =>
-                      setState((prev) => toggleCourseSelection(prev, row.id))
+                      setState((prev) => ({
+                        ...prev,
+                        courseIds: allSelected
+                          ? []
+                          : selectableCourses.map((row) => row.id),
+                      }))
                     }
                   />
-                  <span className="tp-exam-new__course-copy">
-                    <strong>{String(row.course?.name || row.id)}</strong>
-                    <span className="tp-exam-new__course-meta">
-                      {row.activeChapter?.name || "بلا فصل نشط"} ·{" "}
-                      {row.activeStudents} طالب نشط
-                    </span>
-                    {row.blockers.length > 0 && (
-                      <span className="tp-exam-new__course-blocker">
-                        {row.blockers.join("، ")}
-                      </span>
-                    )}
-                  </span>
+                  تحديد كل الدورات المتاحة
                 </Label>
-              ))}
-            </div>
+                <div className="tp-exam-new__courses">
+                  {selectableCourses.map((row) => (
+                    <Label
+                      key={row.id}
+                      htmlFor={`${allId}-${row.id}`}
+                      className="tp-exam-new__course"
+                      data-selected={state.courseIds.includes(row.id)}
+                    >
+                      <Checkbox
+                        id={`${allId}-${row.id}`}
+                        checked={state.courseIds.includes(row.id)}
+                        onCheckedChange={() =>
+                          setState((prev) =>
+                            toggleCourseSelection(prev, row.id),
+                          )
+                        }
+                      />
+                      <span className="tp-exam-new__course-copy">
+                        <strong>{String(row.course?.name || row.id)}</strong>
+                        <span className="tp-exam-new__course-meta">
+                          {row.activeChapter?.name || "بلا فصل نشط"} ·{" "}
+                          {row.activeStudents} طالب نشط
+                        </span>
+                      </span>
+                    </Label>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="tp-exam-new__course-note">
+                {unavailableSummary.noneAvailable}
+              </p>
+            )}
+            {unavailableCourses.length > 0 && (
+              <details
+                className="tp-exam-new__unavailable"
+                open={hasSelectedUnavailable || undefined}
+              >
+                <summary>
+                  <span>{unavailableSummary.title}</span>
+                  <ChevronDown aria-hidden="true" />
+                </summary>
+                <ul className="tp-exam-new__unavailable-list">
+                  {unavailableCourses.map((row) => (
+                    <li key={row.id}>
+                      <Label
+                        htmlFor={`${allId}-${row.id}`}
+                        className="tp-exam-new__unavailable-course"
+                      >
+                        <Checkbox
+                          id={`${allId}-${row.id}`}
+                          checked={state.courseIds.includes(row.id)}
+                          disabled
+                        />
+                        <span className="tp-exam-new__unavailable-copy">
+                          <strong>{String(row.course?.name || row.id)}</strong>
+                          <span>
+                            {courseUnavailableReasons(row).join("، ")}
+                          </span>
+                        </span>
+                      </Label>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </>
         )}
       </div>

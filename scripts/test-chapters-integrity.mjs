@@ -177,7 +177,7 @@ assert(
   "صفحة الفصول تملك بحث وفلاتر مفهومة للدورات والفصول",
 );
 assert(
-  chaptersView.includes('statCard("طلاب 0/0"') &&
+  chaptersView.includes("طلاب 0/0") &&
     chaptersView.includes("للمراجعة فقط") &&
     !chaptersView.includes("/api/students/fix-zero-opportunities") &&
     !chaptersView.includes("repairDialog") &&

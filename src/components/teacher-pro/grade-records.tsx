@@ -10,7 +10,6 @@ import {
   type GradeStudentListResponse,
   type GradeStudentSummary,
 } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -58,8 +57,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  ChevronDown,
-  SlidersHorizontal,
   X,
   Loader2,
   PenLine,
@@ -69,7 +66,7 @@ import {
 
 import { GradeNoteBanner } from "@/components/teacher-pro/grade-note-banner";
 import { editableGradeNote, resolveGradeNoteBanner, visibleGradeNote, withInternalGradeNotePrefix } from "@/lib/grade-note-banners";
-import { CountScopeSummary } from "./ui-kit";
+import { ListToolbar } from "./list-toolbar";
 import {
   examMatchesAcademicFilters,
   getAcademicCourseProgramFilterOptions,
@@ -90,6 +87,9 @@ import "./tp-modal.css";
 import "./grade-records.css";
 
 type GradeStatus = "درجة" | "غائب" | "غش" | "مجاز";
+
+/** Statuses with their own button; the rest stay in the «تصفية» panel. */
+const QUICK_STATUS_CHIPS = new Set<GradeStatusFilter>(["all", "has-grade", "absent", "cheating"]);
 type HydratedGrade = Grade & {
   student?: Student;
   exam?: unknown;
@@ -298,7 +298,6 @@ export function GradeRecordsView() {
   const [filterCourseProgram, setFilterCourseProgram] = useState("");
   const [filterCourseTerm, setFilterCourseTerm] = useState("");
   const [filterStudyType, setFilterStudyType] = useState("");
-  const [additionalFiltersOpen, setAdditionalFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [studentList, setStudentList] = useState<GradeStudentListResponse | null>(null);
@@ -346,6 +345,16 @@ export function GradeRecordsView() {
   );
 
   const additionalFilterChips = [
+    ...(filterCourseId ? [{
+      key: "course",
+      text: `الدورة: ${courses.find((course) => course.id === filterCourseId)?.name || "—"}`,
+      clear: () => setFilterCourseId(""),
+    }] : []),
+    ...(filterExamId ? [{
+      key: "exam",
+      text: `الامتحان: ${exams.find((exam) => exam.id === filterExamId)?.name || "—"}`,
+      clear: () => setFilterExamId(""),
+    }] : []),
     ...(filterCourseProgram ? [{
       key: "program",
       text: `نظام الاشتراك: ${filterCourseProgram}`,
@@ -362,6 +371,17 @@ export function GradeRecordsView() {
       clear: () => setFilterStudyType(""),
     }] : []),
   ];
+
+  const panelFilterChips = additionalFilterChips;
+  const panelFilterCount = additionalFilterChips.length;
+  const clearPanelFilters = () => {
+    setFilterCourseId("");
+    setFilterExamId("");
+    setFilterCourseProgram("");
+    setFilterCourseTerm("");
+    setFilterStudyType("");
+    setPage(1);
+  };
 
   const resetFilters = () => {
     setSearch("");
@@ -715,7 +735,7 @@ export function GradeRecordsView() {
 
   const statValue = (value: number | undefined) =>
     value === undefined ? "…" : formatEnglishNumber(value);
-  const listTotals = studentList?.totals;
+  const statusCounts = studentList?.statusCounts;
   const summaries = studentList?.students ?? [];
   const filteredTotalCount = studentList?.totalCount ?? 0;
   const totalPages = Math.max(1, studentList?.totalPages ?? 1);
@@ -993,57 +1013,65 @@ export function GradeRecordsView() {
   };
 
   return (
-    <div className="tp-management-page tp-grade-records-page space-y-4">
-      <Card className="tp-filter-card tp-management-filters">
-        <CardHeader>
-          <div className="tp-grade-records__heading">
-            <CardTitle className="text-base">فلاتر سجل الدرجات</CardTitle>
-            <div className="tp-grade-records__actions">
-              <Button type="button" onClick={() => setSection("grade-entry")}>
-                <PenLine className="size-4" aria-hidden="true" />
-                فتح تسجيل الدرجات
-              </Button>
-              <ExportDialog
-                title="تصدير سجل الدرجات"
-                fileName="grades"
-                rows={[] as GradeExportRow[]}
-                fetchRows={fetchGradeExportRows}
-                columns={gradeExportColumns}
-                triggerLabel="تصدير"
-                description="تقرير كامل حسب الفلاتر الحالية، ويشمل طلاب الدورة الذين لم يمتحنوا والإجراء المتوقع بحقهم"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={resetFilters}
-                disabled={!hasActiveFilters}
-              >
+    <div className="tp-management-page tp-grade-records-page tp-list">
+      <ListToolbar
+        label="البحث والتصفية في سجل الدرجات"
+        search={
+          <Input
+            id="grade-records-search"
+            name="search"
+            data-teacherpro-search="true"
+            autoComplete="off"
+            aria-label="بحث الطالب"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="ابحث بالاسم أو الكود أو التيليجرام أو الامتحان"
+          />
+        }
+        actions={
+          <>
+            <Button type="button" onClick={() => setSection("grade-entry")}>
+              <PenLine className="size-4" aria-hidden="true" />
+              فتح تسجيل الدرجات
+            </Button>
+            <ExportDialog
+              title="تصدير سجل الدرجات"
+              fileName="grades"
+              rows={[] as GradeExportRow[]}
+              fetchRows={fetchGradeExportRows}
+              columns={gradeExportColumns}
+              triggerLabel="تصدير"
+              description="تقرير كامل حسب الفلاتر الحالية، ويشمل طلاب الدورة الذين لم يمتحنوا والإجراء المتوقع بحقهم"
+            />
+            {hasActiveFilters ? (
+              <Button type="button" variant="ghost" onClick={resetFilters}>
                 <RotateCcw className="size-4" aria-hidden="true" />
-                تصفير الفلاتر
+                تصفير الكل
               </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="tp-filter-content">
-          <div className="tp-filter-grid tp-grade-records__primary-filters">
-            <div className="tp-filter-field tp-filter-search">
-              <Label htmlFor="grade-records-search" className="text-xs">
-                بحث الطالب
-              </Label>
-              <Input
-                id="grade-records-search"
-                name="search"
-                data-teacherpro-search="true"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="اسم / كود / تيليجرام / يوزر / امتحان"
-              />
-            </div>
-            <div className="tp-filter-field tp-filter-primary">
-              <Label htmlFor="grade-records-course" className="text-xs">
+            ) : null}
+          </>
+        }
+        chips={[
+          { key: "all", label: "الكل", count: statusCounts?.all ?? null },
+          { key: "has-grade", label: "عندهم درجات", tone: "success", count: statusCounts?.hasGrade ?? null },
+          { key: "absent", label: "غيابات", tone: "danger", count: statusCounts?.absent ?? null },
+          { key: "cheating", label: "غش", tone: "warning", count: statusCounts?.cheating ?? null },
+          ...(QUICK_STATUS_CHIPS.has(filterStatus)
+            ? []
+            : [{ key: filterStatus, label: gradeStatusFilterLabels[filterStatus], tone: "info" as const }]),
+        ]}
+        chipsLabel="حالة الدرجة"
+        activeChip={filterStatus}
+        onChipChange={(value) => applyStatusFilter(value as GradeStatusFilter)}
+        activeFilterCount={panelFilterCount}
+        onClearFilters={clearPanelFilters}
+        filters={
+          <>
+            <div className="space-y-1.5">
+              <Label htmlFor="grade-records-course" className="text-xs font-bold">
                 اسم الدورة
               </Label>
               <Select
@@ -1066,8 +1094,8 @@ export function GradeRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="tp-filter-field tp-filter-primary">
-              <Label htmlFor="grade-records-exam" className="text-xs">
+            <div className="space-y-1.5">
+              <Label htmlFor="grade-records-exam" className="text-xs font-bold">
                 الامتحان
               </Label>
               <Select
@@ -1090,8 +1118,8 @@ export function GradeRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="tp-filter-field tp-filter-secondary">
-              <Label htmlFor="grade-records-status" className="text-xs">
+            <div className="space-y-1.5">
+              <Label htmlFor="grade-records-status" className="text-xs font-bold">
                 حالة الدرجة
               </Label>
               <Select
@@ -1110,315 +1138,204 @@ export function GradeRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-          </div>
-          <div className="tp-grade-records__additional">
+            <div className="space-y-1.5">
+              <Label htmlFor="grade-records-program" className="text-xs font-bold">
+                نظام الاشتراك
+              </Label>
+              <Select
+                value={filterCourseProgram || "all"}
+                onValueChange={(v) => {
+                  setFilterCourseProgram(v === "all" ? "" : v);
+                  if (v !== "كورسات") setFilterCourseTerm("");
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="grade-records-program">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {availableProgramsForFilter.map((program) => (
+                    <SelectItem key={program} value={program}>
+                      {program}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {filterCourseProgram === "كورسات" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="grade-records-term" className="text-xs font-bold">
+                  الكورس المطلوب
+                </Label>
+                <Select
+                  value={filterCourseTerm || "all"}
+                  onValueChange={(v) => {
+                    setFilterCourseTerm(v === "all" ? "" : v);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger id="grade-records-term">
+                    <SelectValue placeholder="الكل" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">الكل</SelectItem>
+                    {STUDENT_FILTER_COURSE_TERMS.map((term) => (
+                      <SelectItem key={term} value={term}>
+                        {term}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="grade-records-study-type" className="text-xs font-bold">
+                نظام الدراسة
+              </Label>
+              <Select
+                value={filterStudyType || "all"}
+                onValueChange={(v) => {
+                  setFilterStudyType(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="grade-records-study-type">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {availableStudyTypesForFilter.map((studyType) => (
+                    <SelectItem key={studyType} value={studyType}>
+                      {studyType}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="grade-records-pageSize" className="text-xs font-bold">
+                حجم الصفحة
+              </Label>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(v) => {
+                  setPageSize(Number(v));
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="grade-records-pageSize" className="tabular-nums">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        }
+        summary={
+          <span data-count-scope="filtered" aria-busy={studentListLoading}>
+            {studentList ? (
+              <>
+                المعروض <b>{summaries.length}</b> من <b>{formatEnglishNumber(filteredTotalCount)}</b> طالب
+              </>
+            ) : (
+              "…"
+            )}
+            {systemGradeCoverageStats && Number(systemGradeCoverageStats.withoutGrade) > 0 ? (
+              <> · {statValue(systemGradeCoverageStats.withoutGrade)} طالب بلا درجات بعد</>
+            ) : null}
+            {" · "}الأحدث أولاً
+          </span>
+        }
+      />
+
+      {panelFilterChips.length > 0 && (
+        <ul className="tp-grade-records__filter-chips" aria-label="الفلاتر الشغالة">
+          {panelFilterChips.map((chip) => (
+            <li key={chip.key}>
+              <button type="button" onClick={chip.clear} aria-label={`إزالة فلتر ${chip.text}`}>
+                <span>{chip.text}</span><X className="size-3.5" aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <section className="tp-grade-records__results" aria-label="نتائج سجل الدرجات">
+        {studentListError && (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm font-medium text-danger"
+          >
+            <span>{studentListError}</span>
             <Button
               type="button"
-              variant="ghost"
-              className="tp-grade-records__additional-trigger"
-              aria-expanded={additionalFiltersOpen}
-              aria-controls="grade-records-additional-filters"
-              onClick={() => setAdditionalFiltersOpen((open) => !open)}
+              variant="outline"
+              size="sm"
+              onClick={() => setServerRefreshKey((key) => key + 1)}
             >
-              <SlidersHorizontal className="size-4" aria-hidden="true" />
-              فلاتر إضافية
-              {additionalFilterChips.length > 0 && <Badge variant="secondary">{additionalFilterChips.length}</Badge>}
-              <ChevronDown className="size-4" aria-hidden="true" />
+              <RotateCcw className="size-4" aria-hidden="true" />
+              إعادة المحاولة
             </Button>
-            {additionalFilterChips.length > 0 && (
-              <ul className="tp-grade-records__filter-chips" aria-label="الفلاتر الإضافية المستخدمة">
-                {additionalFilterChips.map((chip) => (
-                  <li key={chip.key}>
-                    <button type="button" onClick={chip.clear} aria-label={`إزالة فلتر ${chip.text}`}>
-                      <span>{chip.text}</span><X className="size-3.5" aria-hidden="true" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div id="grade-records-additional-filters" hidden={!additionalFiltersOpen}>
-              <div className="tp-filter-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="tp-filter-field tp-filter-primary">
-                  <Label htmlFor="grade-records-program" className="text-xs">
-                    نظام الاشتراك
-                  </Label>
-                  <Select
-                    value={filterCourseProgram || "all"}
-                    onValueChange={(v) => {
-                      setFilterCourseProgram(v === "all" ? "" : v);
-                      if (v !== "كورسات") setFilterCourseTerm("");
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger id="grade-records-program">
-                      <SelectValue placeholder="الكل" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">الكل</SelectItem>
-                      {availableProgramsForFilter.map((program) => (
-                        <SelectItem key={program} value={program}>
-                          {program}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {filterCourseProgram === "كورسات" && (
-                  <div className="tp-filter-field tp-filter-primary">
-                    <Label htmlFor="grade-records-term" className="text-xs">
-                      الكورس المطلوب
-                    </Label>
-                    <Select
-                      value={filterCourseTerm || "all"}
-                      onValueChange={(v) => {
-                        setFilterCourseTerm(v === "all" ? "" : v);
-                        setPage(1);
-                      }}
-                    >
-                      <SelectTrigger id="grade-records-term">
-                        <SelectValue placeholder="الكل" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">الكل</SelectItem>
-                        {STUDENT_FILTER_COURSE_TERMS.map((term) => (
-                          <SelectItem key={term} value={term}>
-                            {term}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <div className="tp-filter-field tp-filter-primary">
-                  <Label htmlFor="grade-records-study-type" className="text-xs">
-                    نظام الدراسة
-                  </Label>
-                  <Select
-                    value={filterStudyType || "all"}
-                    onValueChange={(v) => {
-                      setFilterStudyType(v === "all" ? "" : v);
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger id="grade-records-study-type">
-                      <SelectValue placeholder="الكل" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">الكل</SelectItem>
-                      {availableStudyTypesForFilter.map((studyType) => (
-                        <SelectItem key={studyType} value={studyType}>
-                          {studyType}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
           </div>
-        </CardContent>
-      </Card>
-
-      <div className="tp-management-workspace">
-        <section className="tp-management-main-flow" aria-label="نتائج سجل الدرجات">
-          {studentListError && (
-            <div
-              role="alert"
-              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm font-medium text-danger"
-            >
-              <span>{studentListError}</span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setServerRefreshKey((key) => key + 1)}
-              >
-                <RotateCcw className="size-4" aria-hidden="true" />
-                إعادة المحاولة
-              </Button>
-            </div>
-          )}
-
-          <Card className="tp-management-results-card">
-            <CardHeader>
-              <div className="tp-grade-records__heading">
-                <div>
-                  <CardTitle className="text-base">سجل الدرجات</CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    كل طالب يظهر مرة واحدة · الأحدث أولاً
-                  </p>
-                </div>
-              </div>
-              <CountScopeSummary
-                className="mb-2"
-                subject="الطلاب"
-                systemTotal={statValue(systemGradeCoverageStats?.total)}
-                filteredTotal={studentList ? formatEnglishNumber(filteredTotalCount) : "…"}
-                pageCount={summaries.length}
+        )}
+        {studentListLoading && !studentList && (
+          <p role="status" className="tp-grade-records__status">
+            <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            جاري تحميل سجل الدرجات...
+          </p>
+        )}
+        {studentList && summaries.length === 0 && !studentListLoading && (
+          <p className="tp-grade-records__empty">
+            {hasActiveFilters
+              ? "لا يوجد طلاب بدرجات تطابق الفلاتر الحالية."
+              : "لا توجد درجات مسجلة بعد."}
+          </p>
+        )}
+        {summaries.length > 0 && (
+          <ul className="tp-grade-students" aria-busy={studentListLoading}>
+            {summaries.map((summary) => (
+              <GradeStudentCard
+                key={String(summary.student.id)}
+                summary={summary}
+                courseName={courseNameById.get(String(summary.student.courseId || "")) || ""}
+                onOpen={() => openStudentGrades(summary)}
               />
-              <div className="tp-grade-records__toolbar" aria-live="polite" aria-busy={studentListLoading}>
-                <p className="tp-management-count-summary text-xs text-muted-foreground" data-count-scope="filtered">
-                  {studentList
-                    ? `${formatEnglishNumber(filteredTotalCount)} طالب · المعروض ${summaries.length}`
-                    : "…"}
-                </p>
-                <div className="tp-grade-records__page-size">
-                  <Label htmlFor="grade-records-pageSize" className="text-xs">
-                    حجم الصفحة:
-                  </Label>
-                  <Select
-                    value={String(pageSize)}
-                    onValueChange={(v) => {
-                      setPageSize(Number(v));
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger id="grade-records-pageSize" className="h-10 w-auto min-w-24 rounded-xl tabular-nums">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="25">25</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                      <SelectItem value="100">100</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {studentListLoading && !studentList && (
-                <p role="status" className="tp-grade-records__status">
-                  <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                  جاري تحميل سجل الدرجات...
-                </p>
-              )}
-              {studentList && summaries.length === 0 && !studentListLoading && (
-                <p className="tp-grade-records__empty">
-                  {hasActiveFilters
-                    ? "لا يوجد طلاب بدرجات تطابق الفلاتر الحالية."
-                    : "لا توجد درجات مسجلة بعد."}
-                </p>
-              )}
-              {summaries.length > 0 && (
-                <ul className="tp-grade-students" aria-busy={studentListLoading}>
-                  {summaries.map((summary) => (
-                    <GradeStudentCard
-                      key={String(summary.student.id)}
-                      summary={summary}
-                      courseName={courseNameById.get(String(summary.student.courseId || "")) || ""}
-                      onOpen={() => openStudentGrades(summary)}
-                    />
-                  ))}
-                </ul>
-              )}
+            ))}
+          </ul>
+        )}
 
-              {totalPages > 1 && (
-                <nav className="tp-grade-records__pagination" aria-label="صفحات سجل الدرجات">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => setPage((prev) => prev - 1)}
-                  >
-                    <ChevronRight className="size-4" aria-hidden="true" />
-                    السابق
-                  </Button>
-                  <span className="text-sm text-muted-foreground tabular-nums">
-                    صفحة {page} من {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((prev) => prev + 1)}
-                  >
-                    التالي
-                    <ChevronLeft className="size-4" aria-hidden="true" />
-                  </Button>
-                </nav>
-              )}
-            </CardContent>
-          </Card>
-        </section>
-
-        <aside className="tp-management-stats-rail" aria-label="إحصائيات سجل الدرجات">
-          <div className="space-y-2">
-            <h3 className="text-sm font-black">الإحصائيات</h3>
-            <div className="grid" role="group" aria-label="أعداد سجل الدرجات" tabIndex={0}>
-              <Card data-count-scope="system">
-                <CardContent className="p-4 text-center">
-                  <div className="tp-grade-records__stat">
-                    <span className="text-2xl font-bold text-primary">{statValue(systemGradeCoverageStats?.total)}</span>
-                    <span className="text-xs text-muted-foreground">الطلاب</span>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card data-count-scope="system">
-                <CardContent className="p-4 text-center">
-                  <div className="tp-grade-records__stat">
-                    <span className="text-2xl font-bold text-success">{statValue(systemGradeCoverageStats?.withGrade)}</span>
-                    <span className="text-xs text-muted-foreground">لديهم درجات</span>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card data-count-scope="system">
-                <CardContent className="p-4 text-center">
-                  <div className="tp-grade-records__stat">
-                    <span className="text-2xl font-bold text-warning">{statValue(systemGradeCoverageStats?.withoutGrade)}</span>
-                    <span className="text-xs text-muted-foreground">بلا درجات</span>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card data-count-scope="filtered">
-                <CardContent className="p-4 text-center">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="tp-grade-records__stat"
-                    aria-label="عرض الطلاب الذين لديهم درجة"
-                    aria-pressed={filterStatus === "has-grade"}
-                    onClick={() => applyStatusFilter(filterStatus === "has-grade" ? "all" : "has-grade")}
-                  >
-                    <span className="text-2xl font-bold text-success">{statValue(listTotals?.numeric)}</span>
-                    <span className="text-xs text-muted-foreground">درجات رقمية · ضمن النتائج</span>
-                  </Button>
-                </CardContent>
-              </Card>
-              <Card data-count-scope="filtered">
-                <CardContent className="p-4 text-center">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="tp-grade-records__stat"
-                    aria-label="عرض الطلاب الغائبين"
-                    aria-pressed={filterStatus === "absent"}
-                    onClick={() => applyStatusFilter(filterStatus === "absent" ? "all" : "absent")}
-                  >
-                    <span className="text-2xl font-bold text-danger">{statValue(listTotals?.absent)}</span>
-                    <span className="text-xs text-muted-foreground">غيابات · ضمن النتائج</span>
-                  </Button>
-                </CardContent>
-              </Card>
-              <Card data-count-scope="filtered">
-                <CardContent className="p-4 text-center">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="tp-grade-records__stat"
-                    aria-label="عرض طلاب الغش"
-                    aria-pressed={filterStatus === "cheating"}
-                    onClick={() => applyStatusFilter(filterStatus === "cheating" ? "all" : "cheating")}
-                  >
-                    <span className="text-2xl font-bold text-warning">{statValue(listTotals?.cheating)}</span>
-                    <span className="text-xs text-muted-foreground">حالات غش · ضمن النتائج</span>
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </aside>
-      </div>
+        {totalPages > 1 && (
+          <nav className="tp-grade-records__pagination" aria-label="صفحات سجل الدرجات">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((prev) => prev - 1)}
+            >
+              <ChevronRight className="size-4" aria-hidden="true" />
+              السابق
+            </Button>
+            <span className="text-sm text-muted-foreground tabular-nums">
+              صفحة {page} من {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage((prev) => prev + 1)}
+            >
+              التالي
+              <ChevronLeft className="size-4" aria-hidden="true" />
+            </Button>
+          </nav>
+        )}
+      </section>
 
       <Dialog
         open={Boolean(openSummary)}

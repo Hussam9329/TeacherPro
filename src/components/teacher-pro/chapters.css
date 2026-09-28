@@ -227,3 +227,34 @@ details[open] > .tp-chapters__disclosure > svg {
     transition: none;
   }
 }
+
+/* Page flow: toolbar, one «بلا فصل نشط» line, then the two lists. */
+.tp-chapters__section { display: grid; gap: 0.6rem; min-inline-size: 0; }
+.tp-chapters__section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 900;
+}
+.tp-chapters__list { display: grid; gap: 0.5rem; min-inline-size: 0; }
+@media (min-width: 1280px) {
+  .tp-chapters__list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+}
+.tp-chapters__banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--status-warning-border);
+  border-inline-start: 4px solid var(--status-warning-vivid);
+  border-radius: 0.9rem;
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+.tp-chapters__banner p { margin: 0; min-inline-size: 0; flex: 1 1 18rem; }

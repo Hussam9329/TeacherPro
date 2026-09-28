@@ -320,3 +320,32 @@
   gap: 0.4rem 1.25rem;
   margin: 0;
 }
+
+/* The page's list: full width, cards two by two when there is room. */
+.tp-courses__results { display: grid; gap: 0.75rem; min-inline-size: 0; }
+@media (min-width: 1280px) {
+  .tp-courses__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+}
+
+/* «بلا فصل نشط»: one line at the top instead of a red box on every card. */
+.tp-courses__chapter-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--status-warning-border);
+  border-inline-start: 4px solid var(--status-warning-vivid);
+  border-radius: 0.9rem;
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+.tp-courses__chapter-banner p { margin: 0; min-inline-size: 0; flex: 1 1 18rem; }
+.tp-course-card__no-chapter {
+  border-color: var(--status-warning-border);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
+}

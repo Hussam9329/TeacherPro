@@ -142,9 +142,10 @@ must(
 );
 
 must(
-  page.includes("tp-management-workspace") && page.includes("tp-management-stats-rail"),
-  "سجل الدرجات يستخدم تخطيط الإدارة: النتائج مع شريط الإحصائيات الجانبي",
-  "يجب أن يتبع سجل الدرجات تخطيط سجل الطلاب وإدارة الفرص."
+  page.includes("<ListToolbar") && !page.includes("tp-management-stats-rail") &&
+    page.includes("statusCounts"),
+  "سجل الدرجات: سطر بحث وأزرار حالة بأعدادها بدل عمود الإحصائيات",
+  "يجب أن يتبع سجل الدرجات تخطيط سجل الطلاب وإدارة الفرص: أزرار الحالة تحمل أعدادها."
 );
 
 must(

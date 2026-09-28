@@ -45,6 +45,8 @@ import { examApi, examStatsApi, type ApiResult, type ExamRecordStat } from "@/li
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
 import { visibleGradeNote } from "@/lib/grade-note-banners";
+import { ListToolbar } from "./list-toolbar";
+import { RowActionsMenu } from "./row-actions-menu";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import {
   ExamEditDialog,
@@ -277,14 +279,6 @@ const ExamRecordActions = React.memo(function ExamRecordActions({
         />
       </div>
       <Button
-        variant="outline"
-        size="sm"
-        onClick={() => void onToggleActive(exam)}
-        disabled={mutating}
-      >
-        {mutating ? "جاري..." : exam.active ? "تعطيل الآن" : "تفعيل الآن"}
-      </Button>
-      <Button
         variant="secondary"
         size="sm"
         onClick={() => onEdit(exam.id)}
@@ -292,14 +286,34 @@ const ExamRecordActions = React.memo(function ExamRecordActions({
       >
         تعديل
       </Button>
-      <Button
-        variant="destructive"
-        size="sm"
-        onClick={() => onDelete(exam.id)}
-        disabled={mutating}
-      >
-        حذف
-      </Button>
+      {/* Disabling and deleting change what counts, so they wait in «⋯»,
+          last and in red, each behind a confirmation that says the effect. */}
+      <RowActionsMenu
+        label={`إجراءات ${exam.name}`}
+        actions={[
+          exam.active
+            ? {
+                key: "disable",
+                label: mutating ? "جاري..." : "تعطيل الآن…",
+                danger: true,
+                disabled: mutating,
+                onSelect: () => void onToggleActive(exam),
+              }
+            : {
+                key: "enable",
+                label: mutating ? "جاري..." : "تفعيل الآن",
+                disabled: mutating,
+                onSelect: () => void onToggleActive(exam),
+              },
+          {
+            key: "delete",
+            label: "حذف الامتحان…",
+            danger: true,
+            disabled: mutating,
+            onSelect: () => onDelete(exam.id),
+          },
+        ]}
+      />
     </div>
   );
 });
@@ -517,6 +531,7 @@ export function ExamRecordsView() {
     dependentCount: 0,
   });
   const [editingExamId, setEditingExamId] = useState<string | null>(null);
+  const [disableExamId, setDisableExamId] = useState<string | null>(null);
   const [clockTick, setClockTick] = useState(0);
   const [expandedExamIds, setExpandedExamIds] = useState<Record<string, boolean>>({});
   const [mutatingExamIds, setMutatingExamIds] = useState<Record<string, boolean>>({});
@@ -580,6 +595,33 @@ export function ExamRecordsView() {
     courseName,
     clockTick,
   ]);
+
+  const statusChipCounts = useMemo(() => {
+    const counts = { all: 0, active: 0, scheduled: 0, disabled: 0 };
+    for (const exam of exams) {
+      if (
+        debouncedSearch &&
+        !searchAny(debouncedSearch, [
+          exam.name,
+          exam.date,
+          getExamStatus(exam),
+          exam.mainSite,
+          ...exam.courseIds.map(courseName),
+        ])
+      )
+        continue;
+      if (filterType && exam.type !== filterType) continue;
+      if (filterCourseId && !exam.courseIds.includes(filterCourseId)) continue;
+      counts.all += 1;
+      const status = getExamStatus(exam);
+      if (status === "نشط") counts.active += 1;
+      else if (status === "تفعيل مجدول") counts.scheduled += 1;
+      else if (status === "معطل") counts.disabled += 1;
+    }
+    return counts;
+    // clockTick re-evaluates scheduled activations as time passes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exams, debouncedSearch, filterType, filterCourseId, courseName, clockTick]);
 
   const filteredExamIdsKey = useMemo(
     () => filteredExams.map((exam) => exam.id).join(","),
@@ -916,6 +958,20 @@ export function ExamRecordsView() {
     [refreshExamRecordsAfterMutation, setExamMutating, updateExamWithActivationConfirmation],
   );
 
+  // Enabling goes straight on (the server asks when stored grades would start
+  // to count); disabling first says what stops counting.
+  const requestToggleExamActive = useCallback(
+    (exam: Exam) => {
+      if (exam.active) {
+        setDisableExamId(exam.id);
+        return;
+      }
+      void handleToggleExamActive(exam);
+    },
+    [handleToggleExamActive],
+  );
+  const disableExam = disableExamId ? examById.get(String(disableExamId)) || null : null;
+
   const renderCards = () => (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
       {filteredExams.map((exam) => {
@@ -937,7 +993,7 @@ export function ExamRecordsView() {
             detailsOpen={Boolean(expandedExamIds[exam.id])}
             mutating={isExamMutating(exam.id)}
             onToggleDetails={toggleExamDetails}
-            onToggleActive={handleToggleExamActive}
+            onToggleActive={requestToggleExamActive}
             onEdit={openEditExamDialog}
             onDelete={openDeleteExamDialog}
             buildExamExportRows={buildExamExportRows}
@@ -988,7 +1044,7 @@ export function ExamRecordsView() {
                 detailsOpen={Boolean(expandedExamIds[exam.id])}
                 mutating={isExamMutating(exam.id)}
                 onToggleDetails={toggleExamDetails}
-                onToggleActive={handleToggleExamActive}
+                onToggleActive={requestToggleExamActive}
                 onEdit={openEditExamDialog}
                 onDelete={openDeleteExamDialog}
                 buildExamExportRows={buildExamExportRows}
@@ -1008,12 +1064,41 @@ export function ExamRecordsView() {
   );
 
   return (
-    <div className="tp-exam-records-page space-y-4">
-      <Card className="tp-filter-card">
-        <CardContent className="tp-filter-content">
-          <div className="tp-filter-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6">
-            <div className="tp-filter-field tp-filter-primary">
-              <Label htmlFor="exam-records-course" className="text-xs">
+    <div className="tp-exam-records-page tp-list">
+      <ListToolbar
+        label="البحث والتصفية في سجل الامتحانات"
+        search={
+          <Input
+            id="exam-records-search"
+            name="search"
+            data-teacherpro-search="true"
+            autoComplete="off"
+            aria-label="بحث في الامتحانات"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="اسم الامتحان أو التاريخ أو الدورة"
+          />
+        }
+        chips={[
+          { key: "", label: "الكل", count: statusChipCounts.all },
+          { key: "نشط", label: "نشط", tone: "success", count: statusChipCounts.active },
+          ...(statusChipCounts.scheduled || filterStatus === "تفعيل مجدول"
+            ? [{ key: "تفعيل مجدول", label: "تفعيل مجدول", tone: "info" as const, count: statusChipCounts.scheduled }]
+            : []),
+          { key: "معطل", label: "معطّل", tone: "muted", count: statusChipCounts.disabled },
+        ]}
+        chipsLabel="حالة الامتحان"
+        activeChip={filterStatus}
+        onChipChange={(value) => setFilterStatus(value as ExamStatusLabel | "")}
+        activeFilterCount={Number(Boolean(filterCourseId)) + Number(Boolean(filterType))}
+        onClearFilters={() => {
+          setFilterCourseId("");
+          setFilterType("");
+        }}
+        filters={
+          <>
+            <div className="space-y-1.5">
+              <Label htmlFor="exam-records-course" className="text-xs font-bold">
                 اسم الدورة
               </Label>
               <Select
@@ -1021,10 +1106,10 @@ export function ExamRecordsView() {
                 onValueChange={(v) => setFilterCourseId(v === "all" ? "" : v)}
               >
                 <SelectTrigger id="exam-records-course">
-                  <SelectValue placeholder="الكل" />
+                  <SelectValue placeholder="كل الدورات" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="all">كل الدورات</SelectItem>
                   {courses.map((course) => (
                     <SelectItem key={course.id} value={course.id}>
                       {course.name}
@@ -1033,8 +1118,8 @@ export function ExamRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="tp-filter-field tp-filter-secondary">
-              <Label htmlFor="exam-records-type" className="text-xs">
+            <div className="space-y-1.5">
+              <Label htmlFor="exam-records-type" className="text-xs font-bold">
                 نوع الامتحان
               </Label>
               <Select
@@ -1042,52 +1127,18 @@ export function ExamRecordsView() {
                 onValueChange={(v) => setFilterType(v === "all" ? "" : v)}
               >
                 <SelectTrigger id="exam-records-type">
-                  <SelectValue placeholder="الكل" />
+                  <SelectValue placeholder="كل الأنواع" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="all">كل الأنواع</SelectItem>
                   <SelectItem value="يومي">يومي</SelectItem>
                   <SelectItem value="تراكمي">تراكمي</SelectItem>
                   <SelectItem value="فاينل">فاينل</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className="tp-filter-field tp-filter-secondary">
-              <Label htmlFor="exam-records-status" className="text-xs">
-                حالة الامتحان
-              </Label>
-              <Select
-                value={filterStatus || "all"}
-                onValueChange={(v) =>
-                  setFilterStatus(v === "all" ? "" : (v as ExamStatusLabel))
-                }
-              >
-                <SelectTrigger id="exam-records-status">
-                  <SelectValue placeholder="كل الحالات" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل الحالات</SelectItem>
-                  <SelectItem value="نشط">نشط</SelectItem>
-                  <SelectItem value="تفعيل مجدول">تفعيل مجدول</SelectItem>
-                  <SelectItem value="معطل">معطل</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="tp-filter-field tp-filter-search lg:col-span-2">
-              <Label htmlFor="exam-records-search" className="text-xs">
-                بحث
-              </Label>
-              <Input
-                id="exam-records-search"
-                name="search"
-                data-teacherpro-search="true"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="اسم الامتحان / التاريخ / اسم الدورة / الحالة"
-              />
-            </div>
-            <div className="tp-filter-field tp-filter-meta">
-              <Label htmlFor="exam-records-view" className="text-xs">
+            <div className="space-y-1.5">
+              <Label htmlFor="exam-records-view" className="text-xs font-bold">
                 طريقة العرض
               </Label>
               <Select
@@ -1103,9 +1154,14 @@ export function ExamRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </>
+        }
+        summary={
+          <>
+            المعروض <b>{filteredExams.length}</b> من <b>{exams.length}</b>
+          </>
+        }
+      />
 
       {viewMode === "cards" ? renderCards() : renderTable()}
 
@@ -1120,6 +1176,37 @@ export function ExamRecordsView() {
           onSave={handleEditExam}
         />
       ) : null}
+
+      <AlertDialog
+        open={Boolean(disableExam)}
+        onOpenChange={(open) => {
+          if (!open) setDisableExamId(null);
+        }}
+      >
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>تعطيل «{disableExam?.name}»؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              يختفي من تسجيل الدرجات، ودرجاته المحفوظة
+              {disableExam ? ` (${examStatNumber(disableExam.id, "total") ?? "…"} سجل)` : ""} تبقى بس
+              ما تأثر على الفرص لحد ما ترجع تفعّله.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                const exam = disableExam;
+                setDisableExamId(null);
+                if (exam) void handleToggleExamActive(exam);
+              }}
+            >
+              تعطيل الامتحان
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={deleteDialog.open}
@@ -1139,10 +1226,9 @@ export function ExamRecordsView() {
       >
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+            <AlertDialogTitle>حذف «{deleteDialog.name}»؟</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
-                <p>الامتحان: &quot;{deleteDialog.name}&quot;</p>
                 {deleteDialog.gradeCount === null ? (
                   <p className="rounded-lg border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 font-semibold text-warning">
                     جاري التحقق من السجلات المرتبطة بالامتحان...
@@ -1162,8 +1248,8 @@ export function ExamRecordsView() {
                   </p>
                 ) : (
                   <p>
-                    لا توجد درجات أو سجلات تابعة ظاهرة لهذا الامتحان، ويمكن
-                    حذفه.
+                    ما عليه درجات ولا سجلات تابعة، فينحذف الامتحان نهائياً.
+                    هذا ما يتراجع عنه.
                   </p>
                 )}
               </div>
@@ -1188,7 +1274,7 @@ export function ExamRecordsView() {
                   : Number(deleteDialog.gradeCount) > 0 ||
                       deleteDialog.dependentCount > 0
                     ? "الحذف ممنوع"
-                    : "حذف"}
+                    : "حذف الامتحان"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

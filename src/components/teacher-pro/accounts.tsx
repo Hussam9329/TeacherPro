@@ -22,6 +22,9 @@ import {
   useTeacherProSyncKey,
 } from '@/hooks/use-teacherpro-sync';
 import { baghdadTodayKey } from '@/lib/baghdad-time';
+import { Lock, UserPlus } from 'lucide-react';
+import { RowActionsMenu, type RowAction } from './row-actions-menu';
+import './tp-list.css';
 
 // ─── Permission categories for grouping ──────────────────────────────────────
 
@@ -53,6 +56,8 @@ const PERMISSION_CATEGORIES: string[] = [
   ...PREFERRED_PERMISSION_CATEGORIES.filter(category => ALL_PERMISSION_CATEGORIES.includes(category)),
   ...ALL_PERMISSION_CATEGORIES.filter(category => !PREFERRED_PERMISSION_CATEGORIES.includes(category)),
 ];
+
+const PERMISSION_IDS = new Set(PERMISSION_CATALOG.map(permission => permission.id));
 
 const ACCOUNT_DIALOG_CONTENT_CLASS = 'flex max-h-[calc(100dvh-1rem)] max-w-3xl flex-col overflow-hidden p-0 sm:max-h-[calc(100dvh-2rem)]';
 const ACCOUNT_DIALOG_HEADER_CLASS = 'shrink-0 px-4 pb-3 pt-4 sm:px-6 sm:pt-6';
@@ -543,6 +548,7 @@ function UsersTab() {
   const [editUserDialog, setEditUserDialog] = useState({ open: false, id: '', name: '', password: '' });
   const [deleteUserDialog, setDeleteUserDialog] = useState({ open: false, id: '', userName: '' });
   const [detailsUserId, setDetailsUserId] = useState('');
+  const [userSearch, setUserSearch] = useState('');
   const { locked: isAddingUser, runLocked: runAddUserLocked } = useActionLock();
   const { locked: isSavingUser, runLocked: runSaveUserLocked } = useActionLock();
   const { locked: isSavingPermissions, runLocked: runSavePermissionsLocked } = useActionLock();
@@ -644,81 +650,97 @@ function UsersTab() {
   const detailsMissingRolePermissions = selectedPermissions(detailsRolePermissions.filter(permission => !detailsPermissions.includes(permission)));
 
 
+  const userSearchKey = userSearch.trim().toLowerCase();
+  const shownUsers = userSearchKey
+    ? users.filter(u => `${u.name} ${u.username} ${getRoleName(u.roleId)}`.toLowerCase().includes(userSearchKey))
+    : users;
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-bold">المستخدمين</h3>
+    <div className="tp-list">
+      <div className="tp-list-toolbar__row">
+        <div className="tp-list-toolbar__search">
+          <Input
+            id="accounts-user-search"
+            type="search"
+            autoComplete="off"
+            aria-label="ابحث عن مستخدم"
+            placeholder="ابحث عن مستخدم"
+            value={userSearch}
+            onChange={(event) => setUserSearch(event.target.value)}
+          />
         </div>
         <Button onClick={() => {
           setNewUser({ username: '', name: '', password: generatePasscode(), roleId: 'role_checker', permissions: [] });
           setShowAddDialog(true);
-        }}>إضافة مستخدم</Button>
+        }}>
+          <UserPlus aria-hidden="true" />
+          إضافة مستخدم
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {users.map(user => {
+      {/* One line per user: who, role, state, how much they can do. «تعديل»
+          stays visible; the rest waits in «⋯». The protected admin shows a
+          lock instead of buttons that cannot be pressed. */}
+      <ol className="tp-accounts-list" aria-label="المستخدمون">
+        {shownUsers.map(user => {
           const isAdminUser = user.username.trim().toLowerCase() === 'admin' || user.roleId === 'role_admin';
+          const isProtectedAccount = user.username.trim().toLowerCase() === 'admin';
           const displayedUserPermissions = isAdminUser ? PERMISSION_CATALOG.map(p => p.id) : user.permissions;
+          const permissionCount = displayedUserPermissions.filter(id => PERMISSION_IDS.has(id)).length;
+          const permissionShare = PERMISSION_CATALOG.length ? permissionCount / PERMISSION_CATALOG.length : 0;
+          const menuActions: RowAction[] = [
+            { key: 'details', label: 'تفاصيل الصلاحيات', onSelect: () => setDetailsUserId(user.id) },
+            { key: 'permissions', label: isAdminUser ? 'صلاحيات كاملة' : 'تعديل الصلاحيات', onSelect: () => handleEditPermissions(user.id) },
+          ];
+          if (!isProtectedAccount) {
+            menuActions.push({
+              key: 'toggle',
+              label: user.active ? 'تعطيل الحساب' : 'تفعيل الحساب',
+              onSelect: () => {
+                toggleUser(user.id);
+                toast.success(user.active ? 'تم تعطيل المستخدم' : 'تم تفعيل المستخدم');
+              },
+            });
+          }
+          if (!isAdminUser) {
+            menuActions.push({ key: 'delete', label: 'حذف المستخدم…', danger: true, onSelect: () => openDeleteUserDialog(user.id) });
+          }
           return (
-            <Card key={user.id} className="transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-xl hover:shadow-primary/10">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <p className="font-bold">{user.name}</p>
-                    <p className="text-xs text-muted-foreground">@{user.username}</p>
-                  </div>
-                  <div className="flex gap-1">
-                    <Badge variant={user.roleId === 'role_admin' ? 'default' : 'secondary'}>{getRoleName(user.roleId)}</Badge>
-                    <Badge variant={user.active ? 'default' : 'destructive'}>
-                      {user.active ? 'فعال' : 'معطل'}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div className="mb-3 space-y-3">
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">الصلاحيات الفعلية ({displayedUserPermissions.length})</p>
-                    <PermissionCategoryBadges permissions={displayedUserPermissions} limit={4} />
-                  </div>
-                  <PermissionCompactSummary permissions={displayedUserPermissions} />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => setDetailsUserId(user.id)}>
-                    تفاصيل الصلاحيات
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => handleEditPermissions(user.id)}>
-                    {isAdminUser ? 'صلاحيات كاملة' : 'تعديل الصلاحيات'}
-                  </Button>
-                  <Button variant="secondary" size="sm" className="text-xs" onClick={() => openEditUserDialog(user.id)}>
-                    تعديل
-                  </Button>
-                  <Button
-                    variant={user.active ? 'outline' : 'default'}
-                    size="sm"
-                    className="text-xs"
-                    disabled={user.username.trim().toLowerCase() === 'admin'}
-                    onClick={() => {
-                      if (user.username.trim().toLowerCase() === 'admin') {
-                        toast.info('حساب admin يبقى فعال دائماً');
-                        return;
-                      }
-                      toggleUser(user.id);
-                      toast.success(user.active ? 'تم تعطيل المستخدم' : 'تم تفعيل المستخدم');
-                    }}
-                  >
-                    {user.username.trim().toLowerCase() === 'admin' ? 'فعال دائماً' : user.active ? 'تعطيل' : 'تفعيل'}
-                  </Button>
-                  <Button variant="destructive" size="sm" className="text-xs" disabled={isAdminUser} onClick={() => openDeleteUserDialog(user.id)}>
-                    {isAdminUser ? 'محمي' : 'حذف'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <li key={user.id} className="tp-account-row" data-active={user.active ? 'true' : 'false'}>
+              <span className="tp-account-row__avatar" aria-hidden="true">{user.name.trim().charAt(0) || '؟'}</span>
+              <div className="tp-account-row__who">
+                <p className="tp-account-row__name">{user.name}</p>
+                <p className="tp-account-row__sub">
+                  <span dir="ltr">{user.username}</span> · {getRoleName(user.roleId)}
+                </p>
+              </div>
+              <span className="tp-account-row__state" data-tone={user.active ? 'success' : 'danger'}>
+                <span className="tp-account-row__dot" aria-hidden="true" />
+                {user.active ? 'فعّال' : 'معطّل'}
+              </span>
+              <div className="tp-account-row__perms" title={`${permissionCount} من ${PERMISSION_CATALOG.length} صلاحية`}>
+                <span className="tp-account-row__bar" aria-hidden="true">
+                  <span style={{ inlineSize: `${Math.round(permissionShare * 100)}%` }} />
+                </span>
+                <span>{permissionCount} من {PERMISSION_CATALOG.length} صلاحية</span>
+              </div>
+              <div className="tp-account-row__actions">
+                {isAdminUser ? (
+                  <span className="tp-account-row__lock" title={isProtectedAccount ? 'حساب admin محمي: يبقى فعّال دائماً ولا ينحذف' : 'حساب مدير: لا ينحذف'}>
+                    <Lock aria-hidden="true" />
+                    محمي
+                  </span>
+                ) : null}
+                <Button variant="outline" size="sm" onClick={() => openEditUserDialog(user.id)}>
+                  تعديل
+                </Button>
+                <RowActionsMenu label={`إجراءات ${user.name}`} actions={menuActions} />
+              </div>
+            </li>
           );
         })}
-      </div>
+        {shownUsers.length === 0 ? <li className="empty-state">ماكو مستخدم بهذا البحث.</li> : null}
+      </ol>
 
       {/* User Permissions Details Dialog */}
       <Dialog open={!!detailsUserId} onOpenChange={(open) => { if (!open) setDetailsUserId(''); }}>
@@ -1499,10 +1521,6 @@ function BackupTab() {
 export function AccountsView() {
   return (
     <div className="space-y-6 tp-accounts-page">
-      <div className="tp-accounts-page__intro">
-        <h2 className="text-xl font-bold">إدارة الحسابات</h2>
-      </div>
-
       <Tabs defaultValue="users" dir="rtl">
         <TabsList className="w-full max-w-5xl">
           <TabsTrigger value="users" className="flex-1">المستخدمين</TabsTrigger>

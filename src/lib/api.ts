@@ -1174,6 +1174,8 @@ export interface GradeStudentListResponse {
     absent: number;
     cheating: number;
   };
+  /** Students per quick status, whatever status is picked. */
+  statusCounts?: { all: number; hasGrade: number; absent: number; cheating: number };
   totalCount: number;
   page: number;
   pageSize: number;
@@ -2128,6 +2130,7 @@ export const logApi = {
     return apiGet<
       Pick<ServerData, "logs"> & {
         modules?: string[];
+        moduleCounts?: Array<{ module: string; count: number }>;
         users?: string[];
         totalCount?: number;
         systemTotalCount?: number;

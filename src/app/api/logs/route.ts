@@ -138,12 +138,18 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    const [logs, totalCount, systemTotalCount, modulesRaw, usersRaw] = await Promise.all([
+    // Counts per section for the filter buttons: the same search and user,
+    // whatever section is picked, so each button says what it would show.
+    const moduleFreeWhere: Prisma.AuditLogWhereInput = { ...where };
+    delete moduleFreeWhere.module;
+
+    const [logs, totalCount, systemTotalCount, modulesRaw, usersRaw, moduleGroups] = await Promise.all([
       db.auditLog.findMany({ where, orderBy: { time: 'desc' }, skip, take: limit }),
       db.auditLog.count({ where }),
       db.auditLog.count(),
       db.auditLog.findMany({ distinct: ['module'], select: { module: true }, orderBy: { module: 'asc' } }),
       db.auditLog.findMany({ distinct: ['userName'], select: { userName: true }, orderBy: { userName: 'asc' } }),
+      db.auditLog.groupBy({ by: ['module'], where: moduleFreeWhere, _count: { _all: true } }),
     ]);
 
     // Humanize the CURRENT page only. This keeps the route fast even with tens of
@@ -190,6 +196,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       logs: displayLogs,
       modules: modulesRaw.map((item) => item.module).filter(Boolean),
+      moduleCounts: moduleGroups
+        .filter((group) => group.module)
+        .map((group) => ({ module: group.module, count: group._count._all }))
+        .sort((a, b) => b.count - a.count),
       users: usersRaw.map((item) => item.userName || '').filter(Boolean),
       total: totalCount,
       totalCount,

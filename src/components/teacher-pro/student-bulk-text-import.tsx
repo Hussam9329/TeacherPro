@@ -37,6 +37,7 @@ import {
 import { toast } from "@/lib/user-toast";
 import {
   ClipboardCheck,
+  Copy,
   Eye,
   Loader2,
   PlusCircle,
@@ -258,6 +259,19 @@ function splitRows(rawText: string): string[][] {
     .map((line) => line.split("\t").map((cell) => cell.trim()));
 }
 
+// The always-visible column guide reuses the «وضع المثال» data: its example
+// row is the first sample line that fills every column.
+const SAMPLE_ROWS = splitRows(SAMPLE_TEXT);
+const COLUMN_GUIDE_EXAMPLE_ROW =
+  SAMPLE_ROWS.find(
+    (cells) =>
+      cells.length === COLUMN_NAMES.length && cells.every(Boolean),
+  ) ??
+  SAMPLE_ROWS[0] ??
+  [];
+// Tab-separated so it pastes into a spreadsheet as one row of cells.
+const COLUMN_HEADER_ROW_TEXT = COLUMN_NAMES.join("\t");
+
 function findCourse(courses: Course[], courseName: string) {
   const key = normalizeText(courseName);
   return courses.find((course) => normalizeText(course.name) === key) ?? null;
@@ -440,6 +454,21 @@ export function StudentBulkTextImportView() {
     () => new Map(contextRows.map((row) => [row.id, row])),
     [contextRows],
   );
+
+  const copyColumnHeaders = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("no clipboard");
+      await navigator.clipboard.writeText(COLUMN_HEADER_ROW_TEXT);
+      toast.success("تم نسخ صف العناوين", {
+        description:
+          "الصقه بأول صف في Excel. ولما ترجع تلصق هنا، انسخ صفوف الطلاب بدون صف العناوين.",
+      });
+    } catch {
+      toast.error("النسخ التلقائي غير متاح هنا", {
+        description: "حدد صف العناوين من الجدول وانسخه يدوياً.",
+      });
+    }
+  };
 
   const buildPreview = async () => {
     if (isPreviewing) return;
@@ -944,22 +973,64 @@ export function StudentBulkTextImportView() {
           </div>
         </CardHeader>
         <CardContent className="tp-bulk-import__input">
-          <details className="tp-bulk-import__format">
-            <summary>ترتيب الأعمدة ({EXPECTED_COLUMNS})</summary>
-            <ol>
-              {COLUMN_NAMES.map((name, index) => (
-                <li key={name}>
-                  <span>{index + 1}</span>
-                  {name}
-                </li>
-              ))}
-            </ol>
-            <p>
+          <section
+            className="tp-bulk-import__columns"
+            aria-labelledby="bulk-columns-title"
+          >
+            <div className="tp-bulk-import__columns-header">
+              <h3
+                id="bulk-columns-title"
+                className="tp-bulk-import__columns-title"
+              >
+                الأعمدة بالترتيب ({EXPECTED_COLUMNS})
+              </h3>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={copyColumnHeaders}
+              >
+                <Copy className="size-4" />
+                نسخ صف العناوين
+              </Button>
+            </div>
+            <div
+              className="table-wrap tp-bulk-import__columns-scroll"
+              tabIndex={0}
+              role="region"
+              aria-label="جدول ترتيب الأعمدة؛ يمكن تمريره أفقياً"
+            >
+              <table className="tp-bulk-import__columns-table">
+                <caption className="sr-only">
+                  أسماء الأعمدة بالترتيب، وتحتها صف مثال
+                </caption>
+                <thead>
+                  <tr>
+                    {COLUMN_NAMES.map((name, index) => (
+                      <th key={name} scope="col">
+                        <span className="tp-bulk-import__column-number">
+                          {index + 1}
+                        </span>
+                        {name}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    {COLUMN_NAMES.map((name, index) => (
+                      <td key={name}>{COLUMN_GUIDE_EXAMPLE_ROW[index] ?? ""}</td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="tp-bulk-import__columns-note">
               التسجيل الجماعي لا يعتمد على عمود الفرص المكتوب بالنص؛ فرص البداية
               تُحسب من الفصل النشط للدورة، والدورة الموقوفة أو ذات تعارض الفصول
               تُرفض قبل الإضافة.
             </p>
-          </details>
+          </section>
 
           <label className="sr-only" htmlFor="bulk-student-text">
             نص بيانات الطلاب

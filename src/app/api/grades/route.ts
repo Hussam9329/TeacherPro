@@ -477,6 +477,22 @@ async function listGradesGroupedByStudent(
 ) {
   const baseWhere = await buildGradeWhereWithExamCourseFilter(searchParams);
 
+  // Students per quick status, whatever status is picked, for the filter
+  // buttons (same search, course and exam filters).
+  const countStudents = async (extra?: Prisma.GradeWhereInput) =>
+    (await db.grade.groupBy({ by: ["studentId"], where: extra ? { AND: [baseWhere, extra] } : baseWhere })).length;
+  const statusCountsPromise = Promise.all([
+    countStudents(),
+    countStudents({
+      OR: [
+        { status: "درجة", score: { not: null } },
+        { status: { in: ["غائب", "غش", "مجاز", "قبل تسجيل الطالب"] } },
+      ],
+    }),
+    countStudents({ status: "غائب" }),
+    countStudents({ status: "غش" }),
+  ]).then(([all, hasGrade, absent, cheating]) => ({ all, hasGrade, absent, cheating }));
+
   let matchingStudentIds: string[];
   if (databaseComputedGradeFilters.has(statusFilter)) {
     const allGrades = await withStudentGracePeriods(await db.grade.findMany({
@@ -544,7 +560,7 @@ async function listGradesGroupedByStudent(
   const pageEntries = ordered.slice((page - 1) * pageSize, page * pageSize);
   const pageIds = pageEntries.map(([id]) => id);
 
-  const [students, latestGrades, gracePeriods] = await Promise.all([
+  const [students, latestGrades, gracePeriods, statusCounts] = await Promise.all([
     db.student.findMany({ where: { id: { in: pageIds } } }),
     db.grade.findMany({
       where: {
@@ -561,6 +577,7 @@ async function listGradesGroupedByStudent(
       },
     }),
     loadActiveGracePeriodsByStudent(db, pageIds),
+    statusCountsPromise,
   ]);
   const studentById = new Map(students.map((student) => [student.id, student]));
   const latestByStudent = new Map(latestGrades.map((grade) => [grade.studentId, grade]));
@@ -581,6 +598,7 @@ async function listGradesGroupedByStudent(
         latestGrade: latestByStudent.get(id) || null,
       })),
     totals: { students: totalCount, ...totals },
+    statusCounts,
     totalCount,
     page,
     pageSize,
