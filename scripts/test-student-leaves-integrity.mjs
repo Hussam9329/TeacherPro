@@ -78,8 +78,8 @@ must(
 
 must(
   leaves.includes("describeTelegramHandle") &&
-    leaves.includes("tp-modal__tg") &&
-    leaves.includes('className="tp-modal__code"') &&
+    leaves.includes('className="tp-leave-card__tg"') &&
+    leaves.includes('className="tp-leave-card__code"') &&
     leaves.includes("فتح محادثة تيليجرام مع"),
   "كارت الطالب: الاسم والكود وزر تيليجرام يفتح المحادثة بالتطبيق",
   "كارت الطالب يجب أن يعرض الاسم والكود وزر تيليجرام.",

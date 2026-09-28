@@ -1,5 +1,5 @@
-/* «إدارة الإجازات» — pieces that only this window has. The shell, cards,
-   filters, chips, lights and buttons come from tp-modal.css and its palette. */
+/* «إدارة الإجازات» — pieces that only this window has. The shell, filters,
+   lights and buttons come from tp-modal.css and its palette. */
 
 /* An ended leave is neither good nor bad news: grey, not red. */
 .tp-leaves [data-tone="muted"] {
@@ -16,50 +16,181 @@
 .tp-leaves .tp-modal__error > p { flex: 1 1 12rem; }
 .tp-leaves .tp-modal__error > [data-slot="button"] { margin-inline-start: auto; }
 
-/* Selected student */
-.tp-leaves__student {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem 1rem;
-  padding: 1rem 1.1rem;
-  border: 1px solid var(--tp-border);
-  border-inline-start: 4px solid var(--tp-border-strong);
-  border-radius: 1rem;
-  background: var(--tp-surface);
-}
-.tp-leaves__student[data-tone] {
-  border-inline-start-color: var(--tone);
-  background: linear-gradient(to left, color-mix(in srgb, var(--tone) 10%, var(--tp-surface)), var(--tp-surface) 60%);
-}
-.tp-leaves__student[data-locked="archived"] { border-style: dashed; border-inline-start-style: solid; background: var(--tp-panel); }
-.tp-leaves__student[data-locked="dismissed"] { border-color: var(--status-danger-border); border-inline-start-color: var(--status-danger-vivid); }
-.tp-leaves__student-main { display: grid; flex: 1 1 16rem; gap: 0.5rem; min-width: 0; }
-.tp-leaves__student .tp-modal__name { font-size: 1.15rem; }
-.tp-leaves__student-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+/* Student cards (the list and the selected student), in the calls card's
+   layout: a header line, the toned leaves panel and the contact row, and an
+   open tile beside them (below them on phones). The whole card is the button. */
+.tp-leave-cards { display: grid; gap: 0.85rem; margin: 0; padding: 0; list-style: none; }
 
-/* The student's leaves: a list, never a table (no sideways scrolling on phones). */
-.tp-leaves__list { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
-.tp-leaves__row {
+.tp-leave-card {
+  position: relative;
+  display: grid;
+  gap: 0.8rem;
+  min-inline-size: 0;
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid var(--tp-border);
+  border-radius: 1.25rem;
+  background: var(--tp-surface);
+  box-shadow: 0 14px 34px -28px color-mix(in srgb, var(--tp-deep) 55%, transparent);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.tp-leave-card:has(> .tp-modal__card-open):hover { border-color: var(--tp-border-strong); box-shadow: 0 18px 36px -24px color-mix(in srgb, var(--tp-deep) 60%, transparent); }
+.tp-leave-card[data-locked="archived"] { border-style: dashed; background: var(--tp-panel); }
+.tp-leave-card[data-locked="dismissed"] { border-style: dashed; border-color: var(--status-danger-border); background: linear-gradient(to left, color-mix(in srgb, var(--status-danger-bg) 70%, var(--tp-surface)), var(--tp-surface)); }
+
+.tp-leave-card__head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; min-inline-size: 0; }
+.tp-leave-card__who { display: inline-flex; align-items: center; gap: 0.6rem; min-inline-size: 0; }
+.tp-leave-card__name { color: var(--tp-text); font-size: 1.1rem; font-weight: 850; line-height: 1.5; overflow-wrap: anywhere; }
+.tp-leave-card__sep { align-self: stretch; inline-size: 1px; min-block-size: 1.5rem; background: var(--tp-border); }
+.tp-leave-card__code { color: var(--tp-text); font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.85rem; font-weight: 700; }
+.tp-leave-card__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.28rem 0.8rem;
+  border: 1px solid var(--tone-line);
+  border-radius: 999px;
+  background: var(--tone-tint);
+  color: var(--tone-ink);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.tp-leave-card__pill svg { inline-size: 1rem; block-size: 1rem; }
+.tp-leave-card__head .tp-leaves__student-actions { margin-inline-start: auto; }
+
+.tp-leave-card__body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.8rem; }
+.tp-leave-card__main { display: grid; align-content: start; gap: 0.75rem; min-inline-size: 0; }
+
+/* Student facts: Telegram, and in the student view the course, study type and opportunities */
+.tp-leave-card__facts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.75rem; }
+.tp-leave-card__fact { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.65rem; min-inline-size: 0; }
+.tp-leave-card__fact-label { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--tp-text); font-size: 0.84rem; font-weight: 800; }
+.tp-leave-card__fact-label svg { inline-size: 1.05rem; block-size: 1.05rem; color: var(--tp-text-muted); }
+.tp-leave-card__value { color: var(--tp-text); font-size: 0.92rem; font-weight: 750; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tp-leave-card__tg {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-inline-size: 100%;
+  min-block-size: 2.5rem;
+  padding: 0.3rem 0.95rem;
+  border: 1px solid var(--status-info-border);
+  border-radius: 0.9rem;
+  background: var(--status-info-bg);
+  color: var(--status-info-fg);
+  font-size: 0.88rem;
+  font-weight: 750;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.tp-leave-card__tg svg { flex-shrink: 0; inline-size: 1.05rem; block-size: 1.05rem; }
+a.tp-leave-card__tg:hover { border-color: transparent; background: var(--status-info-solid); color: var(--status-info-on); }
+a.tp-leave-card__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
+.tp-leave-card__tg[data-plain="true"] { z-index: auto; border-color: var(--tp-border); background: transparent; color: var(--tp-text-muted); font-weight: 650; }
+
+/* The open tile: the sign that the card opens the student's leaves */
+.tp-leave-card__open {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "icon text" "icon hint";
+  align-items: center;
+  gap: 0.1rem 0.7rem;
+  padding: 0.75rem 0.95rem;
+  border: 1px solid var(--tp-border);
+  border-radius: 1.1rem;
+  background: var(--tp-panel);
+  color: var(--tp-text);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.tp-leave-card__open-icon {
+  grid-area: icon;
+  display: grid;
+  place-items: center;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  border-radius: 50%;
+  background: var(--tp-primary);
+  color: var(--tp-on-primary);
+}
+.tp-leave-card__open-icon svg { inline-size: 1.25rem; block-size: 1.25rem; }
+.tp-leave-card__open-text { grid-area: text; font-size: 0.92rem; font-weight: 850; }
+.tp-leave-card__open-hint { grid-area: hint; color: var(--tp-text-muted); font-size: 0.72rem; font-weight: 650; }
+.tp-leave-card:has(> .tp-modal__card-open):hover .tp-leave-card__open,
+.tp-leave-card:has(> .tp-modal__card-open:focus-visible) .tp-leave-card__open { border-color: var(--tp-primary); background: var(--tp-primary-tint); }
+
+/* The leaves panel of a list card: toned by the student's light */
+.tp-leave-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem 0.9rem;
+  padding: 0.85rem 1.1rem;
+  border: 1px solid var(--tone-line);
+  border-radius: 1rem;
+  background: linear-gradient(to left, var(--tone-tint), color-mix(in srgb, var(--tone-tint) 35%, var(--tp-surface)));
+}
+.tp-leave-panel__icon, .tp-leave-item__icon {
+  display: grid;
+  place-items: center;
+  inline-size: 2.6rem;
+  block-size: 2.6rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--tone) 16%, var(--tp-surface));
+  color: var(--tone-ink);
+}
+.tp-leave-panel__icon svg, .tp-leave-item__icon svg { inline-size: 1.25rem; block-size: 1.25rem; }
+.tp-leave-panel__main { display: grid; gap: 0.1rem; min-inline-size: 0; }
+.tp-leave-panel__eyebrow, .tp-leave-item__eyebrow { color: var(--tone-ink); font-size: 0.76rem; font-weight: 800; }
+.tp-leave-panel__title { color: var(--tp-text); font-size: 1.1rem; font-weight: 850; }
+.tp-leave-panel__sub { color: var(--tp-text-muted); font-size: 0.78rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tp-leave-panel__counts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.tp-leave-panel__counts li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--tone-line);
+  border-radius: 999px;
+  background: var(--tp-surface);
+  color: var(--tone-ink);
+  font-size: 0.76rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.tp-leave-panel__counts b { color: var(--tp-text); font-variant-numeric: tabular-nums; }
+.tp-leave-panel__dot { inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; background: var(--tone); }
+
+/* The student's leaves: toned panels, newest first (a list, never a table) */
+.tp-leave-items { display: grid; gap: 0.6rem; margin: 0; padding: 0; list-style: none; }
+.tp-leave-item {
   position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: start;
-  gap: 0.35rem 0.75rem;
-  padding: 0.75rem 0.9rem;
-  border: 1px solid var(--tp-border);
-  border-radius: 0.9rem;
-  background: var(--tp-surface);
+  gap: 0.6rem 0.9rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--tone-line);
+  border-radius: 1rem;
+  background: linear-gradient(to left, var(--tone-tint), color-mix(in srgb, var(--tone-tint) 35%, var(--tp-surface)));
 }
-.tp-leaves__row > .tp-modal__light { margin-top: 0.45rem; }
-.tp-leaves__row[data-state="ended"] { background: var(--tp-panel); }
-.tp-leaves__row[data-confirming] { border-color: var(--status-danger-border); }
-.tp-leaves__row-main { display: grid; gap: 0.15rem; min-width: 0; }
-.tp-leaves__row-main p { margin: 0; overflow-wrap: anywhere; }
-.tp-leaves__row-title { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem; color: var(--tp-text); font-weight: 750; }
-.tp-leaves__row-when { color: var(--tp-text); font-size: 0.86rem; font-weight: 650; font-variant-numeric: tabular-nums; }
-.tp-leaves__row-reason { color: var(--tp-text-muted); font-size: 0.82rem; font-weight: 600; }
+.tp-leave-item[data-confirming] { border-color: var(--status-danger-border); }
+.tp-leave-item__main { display: grid; gap: 0.2rem; min-inline-size: 0; }
+.tp-leave-item__main p { margin: 0; overflow-wrap: anywhere; }
+.tp-leave-item__title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.6rem; }
+.tp-leave-item__title b { color: var(--tp-text); font-size: 1.05rem; font-weight: 850; }
+.tp-leave-item__title span { color: var(--tp-text-muted); font-size: 0.84rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tp-leave-item__reason { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.5rem; color: var(--tp-text); font-size: 0.86rem; font-weight: 700; }
+.tp-leave-item__reason > span { color: var(--tp-text-muted); font-size: 0.76rem; font-weight: 700; }
+.tp-leave-item__note { color: var(--tp-text-muted); font-size: 0.8rem; font-weight: 600; }
+.tp-leave-item__side { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.35rem; }
+.tp-leave-dates { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.6rem; }
+.tp-leave-dates__one { display: inline-flex; align-items: baseline; gap: 0.35rem; }
+.tp-leave-dates__one small { color: var(--tp-text-muted); font-size: 0.76rem; font-weight: 700; }
+.tp-leave-dates__one b { color: var(--tp-text); font-size: 1.05rem; font-weight: 850; font-variant-numeric: tabular-nums; }
+.tp-leave-dates__arrow { flex-shrink: 0; inline-size: 1rem; block-size: 1rem; color: var(--tone-ink); }
 
 .tp-leaves__empty {
   display: flex;
@@ -192,6 +323,34 @@
 .tp-leaves__covered > summary { color: var(--tp-text); font-size: 0.82rem; font-weight: 700; cursor: pointer; }
 .tp-leaves__covered ul { display: grid; gap: 0.3rem; max-height: 14rem; margin: 0.4rem 0 0; padding: 0; overflow-y: auto; list-style: none; }
 .tp-leaves__covered li { padding: 0.4rem 0.6rem; border-radius: 0.55rem; background: var(--tp-surface); font-size: 0.82rem; overflow-wrap: anywhere; }
+
+.tp-leaves__student-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+@container (min-width: 44rem) {
+  .tp-leave-card__body { grid-template-columns: minmax(0, 1fr) 11.5rem; }
+  .tp-leave-card__open {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "icon" "text" "hint";
+    justify-items: center;
+    align-content: center;
+    gap: 0.3rem;
+    text-align: center;
+  }
+  .tp-leave-card__open-icon { inline-size: 3rem; block-size: 3rem; }
+  .tp-leave-card__open-icon svg { inline-size: 1.45rem; block-size: 1.45rem; }
+}
+
+@container (max-width: 30rem) {
+  .tp-leave-card { padding: 0.85rem; }
+  .tp-leave-card__sep { display: none; }
+  .tp-leave-panel { grid-template-columns: auto minmax(0, 1fr); padding: 0.8rem 0.9rem; }
+  .tp-leave-panel__counts { grid-column: 1 / -1; justify-content: flex-start; }
+  .tp-leave-item { grid-template-columns: auto minmax(0, 1fr); padding: 0.8rem 0.85rem; }
+  .tp-leave-item__side { grid-column: 1 / -1; justify-content: space-between; }
+  .tp-leave-dates { display: grid; gap: 0.1rem; }
+  .tp-leave-dates__arrow { display: none; }
+  .tp-leave-card__facts { display: grid; gap: 0.55rem; }
+}
 
 @media (max-width: 640px) {
   .tp-leaves__student-actions { width: 100%; }

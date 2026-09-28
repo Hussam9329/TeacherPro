@@ -1,14 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertCircle,
+  ArrowLeft,
   ArrowRight,
+  BookOpen,
   CalendarCheck,
+  CalendarClock,
   CalendarPlus,
+  CalendarRange,
+  ChartColumn,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ClipboardList,
+  GraduationCap,
+  History,
   Loader2,
+  Lock,
+  MessageCircle,
   MoreHorizontal,
   PencilLine,
   Search,
@@ -166,10 +177,17 @@ function leaveScopeText(leave: RecordedLeave): string {
   return `${leave.exam?.name || "امتحان محذوف"} — ${examDate}`;
 }
 
+const STATE_ICON: Record<StudentLeaveState, typeof CalendarCheck> = {
+  active: CalendarCheck,
+  upcoming: CalendarClock,
+  ended: History,
+};
+
 function StateChip({ state }: { state: StudentLeaveState }) {
+  const Icon = STATE_ICON[state];
   return (
-    <span className="tp-modal__chip tp-leaves__state" data-tone={STATE_TONE[state]}>
-      {STUDENT_LEAVE_STATE_LABELS[state]}
+    <span className="tp-leave-card__pill tp-leaves__state" data-tone={STATE_TONE[state]}>
+      <Icon aria-hidden="true" />{STUDENT_LEAVE_STATE_LABELS[state]}
     </span>
   );
 }
@@ -192,37 +210,94 @@ function StateLight({ state }: { state: StudentLeaveState | null }) {
 function StatusTag({ status }: { status: string }) {
   if (status !== "مؤرشف" && status !== "مفصول") return null;
   return (
-    <span className="tp-modal__lock" data-lock={status === "مفصول" ? "dismissed" : "archived"}>
-      {status}
+    <span className="tp-leave-card__pill" data-tone={status === "مفصول" ? "danger" : "muted"}>
+      <Lock aria-hidden="true" />{status}
     </span>
   );
 }
 
-/** Name, code and the Telegram button that opens the chat in the app. */
-function StudentIdentity({ student }: { student: LeaveStudentRow }) {
-  const handle = describeTelegramHandle({ telegram: student.telegram, username: student.username });
+/** The card's first line: light, name, code, then the status and leave-state pills. */
+function LeaveCardHead({ student, children }: { student: LeaveStudentRow; children?: ReactNode }) {
+  const state = student.leaves.state;
+  const StateIcon = state ? STATE_ICON[state] : null;
   return (
-    <div className="tp-modal__identity">
-      <strong className="tp-modal__name">
-        <StateLight state={student.leaves.state} />
-        <span className="tp-modal__name-text">{student.name}</span>
-        <StatusTag status={student.status} />
-      </strong>
-      <div className="tp-modal__meta">
-        <span className="tp-modal__meta-item">
-          الكود <b className="tp-modal__code" dir="ltr">{student.code || "—"}</b>
+    <header className="tp-leave-card__head">
+      <span className="tp-leave-card__who">
+        <StateLight state={state} />
+        <b className="tp-leave-card__name">{student.name}</b>
+      </span>
+      <span className="tp-leave-card__sep" aria-hidden="true" />
+      <b className="tp-leave-card__code" dir="ltr">{student.code || "—"}</b>
+      <StatusTag status={student.status} />
+      {state && StateIcon && (
+        <span className="tp-leave-card__pill" data-tone={STATE_TONE[state]}>
+          <StateIcon aria-hidden="true" />{STUDENT_STATE_TEXT[state]}
         </span>
-        {handle.href ? (
-          <a className="tp-modal__tg" href={handle.href} dir="ltr" aria-label={`فتح محادثة تيليجرام مع ${student.name}`}>
-            <Send aria-hidden="true" />@{handle.value}
-          </a>
-        ) : (
-          <span className="tp-modal__tg" data-plain="true" dir={handle.value ? "ltr" : undefined}>
-            <Send aria-hidden="true" />{handle.value || "بدون تيليجرام"}
-          </span>
-        )}
+      )}
+      {children}
+    </header>
+  );
+}
+
+/** The Telegram button that opens the chat in the app. */
+function TelegramButton({ student }: { student: LeaveStudentRow }) {
+  const handle = describeTelegramHandle({ telegram: student.telegram, username: student.username });
+  return handle.href ? (
+    <a className="tp-leave-card__tg" href={handle.href} dir="ltr" aria-label={`فتح محادثة تيليجرام مع ${student.name}`}>
+      <Send aria-hidden="true" />@{handle.value}
+    </a>
+  ) : (
+    <span className="tp-leave-card__tg" data-plain="true" dir={handle.value ? "ltr" : undefined}>
+      <Send aria-hidden="true" />{handle.value || "بدون تيليجرام"}
+    </span>
+  );
+}
+
+/** A student's leaves at a glance: how many, the newest, and how many of each state. */
+function LeavesSummaryPanel({ summary }: { summary: StudentLeaveSummary }) {
+  const tone = summary.state ? STATE_TONE[summary.state] : "muted";
+  const counts = (["active", "upcoming", "ended"] as const).filter((state) => summary[state] > 0);
+  return (
+    <div className="tp-leave-panel" data-tone={tone}>
+      <span className="tp-leave-panel__icon" aria-hidden="true"><CalendarCheck /></span>
+      <div className="tp-leave-panel__main">
+        <span className="tp-leave-panel__eyebrow">الإجازات</span>
+        <b className="tp-leave-panel__title">{leaveCountText(summary.total)}</b>
+        {summary.latestDay && <span className="tp-leave-panel__sub">أحدث إجازة تبدأ {formatAppDate(summary.latestDay)}</span>}
       </div>
+      {counts.length > 0 && (
+        <ul className="tp-leave-panel__counts" aria-label="عدد الإجازات حسب الحالة">
+          {counts.map((state) => (
+            <li key={state} data-tone={STATE_TONE[state]}>
+              <span className="tp-leave-panel__dot" aria-hidden="true" />
+              {STUDENT_LEAVE_STATE_LABELS[state]} <b>{summary[state]}</b>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
+  );
+}
+
+/** The open tile of a list card; the whole card is the button, this is its sign. */
+function OpenTile({ canManage }: { canManage: boolean }) {
+  return (
+    <span className="tp-leave-card__open" aria-hidden="true">
+      <span className="tp-leave-card__open-icon"><ChevronLeft /></span>
+      <span className="tp-leave-card__open-text">إجازات الطالب</span>
+      <span className="tp-leave-card__open-hint">{canManage ? "عرض وإضافة وتعديل" : "عرض الإجازات"}</span>
+    </span>
+  );
+}
+
+/** «من X ← إلى Y», each day on its own. */
+function LeaveDates({ from, to }: { from: string; to: string }) {
+  return (
+    <span className="tp-leave-dates">
+      <span className="tp-leave-dates__one"><small>من</small><b>{formatAppDate(from)}</b></span>
+      <ArrowLeft className="tp-leave-dates__arrow" aria-hidden="true" />
+      <span className="tp-leave-dates__one"><small>إلى</small><b>{formatAppDate(to)}</b></span>
+    </span>
   );
 }
 
@@ -854,23 +929,27 @@ export function LeavesDialog({ open, onOpenChange, canManage }: Props) {
             </p>
           )}
           {list && list.students.length > 0 && (
-            <ul className="tp-modal__cards" aria-busy={listLoading}>
+            <ul className="tp-leave-cards" aria-busy={listLoading}>
               {list.students.map((row) => (
-                <li key={row.id} className="tp-modal__card tp-leaves__card" data-tone={row.leaves.state ? STATE_TONE[row.leaves.state] : undefined} data-locked={row.status === "مؤرشف" ? "archived" : row.status === "مفصول" ? "dismissed" : "none"}>
+                <li key={row.id} className="tp-leave-card tp-leaves__card" data-tone={row.leaves.state ? STATE_TONE[row.leaves.state] : undefined} data-locked={row.status === "مؤرشف" ? "archived" : row.status === "مفصول" ? "dismissed" : "none"}>
                   <button
                     type="button"
                     className="tp-modal__card-open"
                     onClick={() => openStudent(row)}
                     aria-label={`فتح إجازات الطالب ${row.name}`}
                   />
-                  <StudentIdentity student={row} />
-                  <div className="tp-modal__card-foot">
-                    <span className="tp-modal__muted">{leaveCountText(row.leaves.total)}</span>
-                    {row.leaves.state && (
-                      <span className="tp-modal__chip" data-tone={STATE_TONE[row.leaves.state]}>
-                        {STUDENT_STATE_TEXT[row.leaves.state]}
-                      </span>
-                    )}
+                  <LeaveCardHead student={row} />
+                  <div className="tp-leave-card__body">
+                    <div className="tp-leave-card__main">
+                      <LeavesSummaryPanel summary={row.leaves} />
+                      <div className="tp-leave-card__facts">
+                        <div className="tp-leave-card__fact">
+                          <span className="tp-leave-card__fact-label"><MessageCircle aria-hidden="true" />التواصل</span>
+                          <TelegramButton student={row} />
+                        </div>
+                      </div>
+                    </div>
+                    <OpenTile canManage={canManage} />
                   </div>
                 </li>
               ))}
@@ -891,31 +970,34 @@ export function LeavesDialog({ open, onOpenChange, canManage }: Props) {
     const deleting = deletingId === leave.id;
     const confirming = confirmDeleteId === leave.id;
     return (
-      <li key={leave.id} className="tp-leaves__row" data-state={state} data-confirming={confirming || undefined}>
-        <span className="tp-modal__light" data-tone={STATE_TONE[state]} aria-hidden="true" />
-        <div className="tp-leaves__row-main">
-          <p className="tp-leaves__row-title">
-            <span>{title}</span>
-            <StateChip state={state} />
-          </p>
-          <p className="tp-leaves__row-when">
-            {period
-              ? leaveScopeText(leave)
-              : `بتاريخ ${leave.exam?.date ? formatAppDate(leave.exam.date as string) : "غير متوفر"}`}
-          </p>
-          <p className="tp-leaves__row-reason">السبب: {leave.reason || "—"}</p>
-          {leave.notes ? <p className="tp-modal__muted">ملاحظة: {leave.notes}</p> : null}
+      <li key={leave.id} className="tp-leave-item" data-state={state} data-tone={STATE_TONE[state]} data-confirming={confirming || undefined}>
+        <span className="tp-leave-item__icon" aria-hidden="true">{period ? <CalendarRange /> : <ClipboardList />}</span>
+        <div className="tp-leave-item__main">
+          <span className="tp-leave-item__eyebrow">{period ? "إجازة فترة" : "إجازة امتحان"}</span>
+          {period ? (
+            <LeaveDates from={leave.dateFrom || leave.date} to={leave.dateTo || leave.dateFrom || leave.date} />
+          ) : (
+            <p className="tp-leave-item__title">
+              <b>{title}</b>
+              <span>بتاريخ {leave.exam?.date ? formatAppDate(leave.exam.date as string) : "غير متوفر"}</span>
+            </p>
+          )}
+          <p className="tp-leave-item__reason"><span>السبب</span>{leave.reason || "—"}</p>
+          {leave.notes ? <p className="tp-leave-item__note">ملاحظة: {leave.notes}</p> : null}
         </div>
-        {canManage && (
-          <LeaveActionsMenu
-            label={period ? `إجازة ${leaveScopeText(leave)}` : `إجازة ${title}`}
-            open={menuLeaveId === leave.id}
-            disabled={busy}
-            onToggle={(next) => setMenuLeaveId(next ? leave.id : "")}
-            onEdit={() => startEditLeave(leave)}
-            onDelete={() => { setMenuLeaveId(""); setConfirmDeleteId(leave.id); }}
-          />
-        )}
+        <div className="tp-leave-item__side">
+          <StateChip state={state} />
+          {canManage && (
+            <LeaveActionsMenu
+              label={period ? `إجازة ${leaveScopeText(leave)}` : `إجازة ${title}`}
+              open={menuLeaveId === leave.id}
+              disabled={busy}
+              onToggle={(next) => setMenuLeaveId(next ? leave.id : "")}
+              onEdit={() => startEditLeave(leave)}
+              onDelete={() => { setMenuLeaveId(""); setConfirmDeleteId(leave.id); }}
+            />
+          )}
+        </div>
         {confirming && (
           <div className="tp-leaves__confirm" role="alertdialog" aria-label="تأكيد حذف الإجازة">
             <p>
@@ -969,7 +1051,7 @@ export function LeavesDialog({ open, onOpenChange, canManage }: Props) {
           </div>
         )}
         {sortedLeaves.length > 0 && (
-          <ul className="tp-leaves__list" aria-busy={selectedLeavesLoading}>
+          <ul className="tp-leave-items" aria-busy={selectedLeavesLoading}>
             {sortedLeaves.map(renderLeaveRow)}
           </ul>
         )}
@@ -1179,38 +1261,54 @@ export function LeavesDialog({ open, onOpenChange, canManage }: Props) {
     return (
       <>
         <section
-          className="tp-leaves__student"
+          className="tp-leave-card tp-leaves__student"
           data-tone={headerStudent.leaves.state ? STATE_TONE[headerStudent.leaves.state] : undefined}
           data-locked={student.status === "مؤرشف" ? "archived" : student.status === "مفصول" ? "dismissed" : "none"}
           aria-label="الطالب"
         >
-          <div className="tp-leaves__student-main">
-            <StudentIdentity student={headerStudent} />
-            <p className="tp-modal__muted">
-              {[student.courseName, student.studyType ? `نظام الدراسة: ${student.studyType}` : "", `الفرص: ${formatOpportunityBalance(student, { separator: " / " })}`]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-          </div>
-          <div className="tp-leaves__student-actions">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => (form ? setForm(null) : backToList())}
-              disabled={busy}
-            >
-              <ArrowRight className="size-4" aria-hidden="true" />رجوع
-            </Button>
-            {canManage && !form && (
+          <LeaveCardHead student={headerStudent}>
+            <div className="tp-leaves__student-actions">
               <Button
                 type="button"
-                onClick={startAdd}
-                disabled={busy || Boolean(selectedLeaveStudentBlockedReason)}
-                title={selectedLeaveStudentBlockedReason || undefined}
+                variant="outline"
+                onClick={() => (form ? setForm(null) : backToList())}
+                disabled={busy}
               >
-                <CalendarPlus className="size-4" aria-hidden="true" />إضافة إجازة
+                <ArrowRight className="size-4" aria-hidden="true" />رجوع
               </Button>
+              {canManage && !form && (
+                <Button
+                  type="button"
+                  onClick={startAdd}
+                  disabled={busy || Boolean(selectedLeaveStudentBlockedReason)}
+                  title={selectedLeaveStudentBlockedReason || undefined}
+                >
+                  <CalendarPlus className="size-4" aria-hidden="true" />إضافة إجازة
+                </Button>
+              )}
+            </div>
+          </LeaveCardHead>
+          <div className="tp-leave-card__facts">
+            <div className="tp-leave-card__fact">
+              <span className="tp-leave-card__fact-label"><MessageCircle aria-hidden="true" />التواصل</span>
+              <TelegramButton student={headerStudent} />
+            </div>
+            {student.courseName && (
+              <div className="tp-leave-card__fact">
+                <span className="tp-leave-card__fact-label"><BookOpen aria-hidden="true" />الدورة</span>
+                <b className="tp-leave-card__value">{student.courseName}</b>
+              </div>
             )}
+            {student.studyType && (
+              <div className="tp-leave-card__fact">
+                <span className="tp-leave-card__fact-label"><GraduationCap aria-hidden="true" />نظام الدراسة</span>
+                <b className="tp-leave-card__value">{student.studyType}</b>
+              </div>
+            )}
+            <div className="tp-leave-card__fact">
+              <span className="tp-leave-card__fact-label"><ChartColumn aria-hidden="true" />الفرص</span>
+              <b className="tp-leave-card__value" dir="ltr">{formatOpportunityBalance(student, { separator: " / " })}</b>
+            </div>
           </div>
         </section>
 
