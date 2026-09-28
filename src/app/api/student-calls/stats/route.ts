@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+import { loadRecordedChargeByGradeId } from "@/lib/call-recorded-impact-server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
@@ -66,6 +67,7 @@ type DbStudentLite = {
   subSite: string | null;
   locationScope: string | null;
   createdAt: Date;
+  courseId: string;
   /** Active grace periods, attached after loading. */
   gracePeriods?: GracePeriodRange[];
 };
@@ -73,6 +75,7 @@ type DbStudentLite = {
 type DbGradeLite = {
   id: string;
   studentId: string;
+  examId?: string;
   status: string;
   score: number | null;
   notes: string | null;
@@ -194,6 +197,8 @@ function gradeMatchesStatusFilter(
   student?: DbStudentLite,
   leaves: DbLeaveLite[] = [],
   absenceSource?: CallAbsenceSource | null,
+  /** From the opportunities ledger when known; the rule is only a fallback. */
+  recordedCharge?: boolean,
 ): boolean {
   if (!grade && !absenceSource) return false;
   if (filter === "dismissed") {
@@ -211,10 +216,11 @@ function gradeMatchesStatusFilter(
     return Boolean(absenceSource) || kind !== "missing";
   }
   if (filter === "absent") return Boolean(absenceSource);
-  if (filter === "discounted") return isDeductedImpact(impactKind);
+  const deducted = recordedCharge ?? isDeductedImpact(impactKind);
+  if (filter === "discounted") return deducted;
   if (filter === "passed") return kind === "passed" || kind === "full";
   if (filter === "failed") {
-    return !isDeductedImpact(impactKind) && (kind === "failed" || kind === "academic-accounting");
+    return !deducted && (kind === "failed" || kind === "academic-accounting");
   }
   if (filter === "protected") return kind === "protected";
   return kind === filter;
@@ -341,6 +347,7 @@ export async function GET(req: NextRequest) {
               subSite: true,
               locationScope: true,
               createdAt: true,
+              courseId: true,
             },
           }),
           db.grade.findMany({
@@ -351,6 +358,7 @@ export async function GET(req: NextRequest) {
             select: {
               id: true,
               studentId: true,
+              examId: true,
               status: true,
               score: true,
               notes: true,
@@ -453,6 +461,38 @@ export async function GET(req: NextRequest) {
       }
     });
 
+    // Same ledger evidence as the calls list and the card's badge.
+    const studentById = new Map(students.map((student) => [student.id, student]));
+    const recordedChargeByGradeId =
+      statusFilter === "discounted" || statusFilter === "failed"
+        ? await loadRecordedChargeByGradeId(
+            grades.flatMap((grade) => {
+              const owner = studentById.get(grade.studentId);
+              return owner
+                ? [{
+                    ...grade,
+                    examId: grade.examId || exam.id,
+                    student: {
+                      id: owner.id,
+                      status: owner.status,
+                      courseId: owner.courseId,
+                      createdAt: owner.createdAt,
+                      gracePeriods: owner.gracePeriods || [],
+                    },
+                    exam,
+                  }]
+                : [];
+            }) as Parameters<typeof loadRecordedChargeByGradeId>[0],
+            "StudentCallStats",
+          )
+        : new Map<string, boolean>();
+    const recordedChargeFor = (grade: DbGradeLite | undefined): boolean | undefined =>
+      !grade || (statusFilter !== "discounted" && statusFilter !== "failed")
+        ? undefined
+        : grade.id.startsWith("implicit-absence:")
+          ? false
+          : recordedChargeByGradeId.get(grade.id);
+
     const baseMatching = students.filter((student) => {
       const storedGrade = gradeByStudentId.get(student.id);
       const studentLeaves = leavesByStudentId.get(student.id) || [];
@@ -480,6 +520,7 @@ export async function GET(req: NextRequest) {
           student,
           studentLeaves,
           absenceSource,
+          recordedChargeFor(grade),
         )
       ) {
         return false;

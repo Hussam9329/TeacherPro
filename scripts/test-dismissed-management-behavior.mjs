@@ -9,6 +9,7 @@ import {
   buildOpportunityTelegramAttachment,
   buildOpportunityTelegramHtml,
   buildOpportunityTelegramReport,
+  opportunityMovementSentence,
   canUseDirectDismissedTelegramDraft,
   canUseSingleDismissedTelegramMessage,
   classifyDismissedOpportunityMovement,
@@ -303,17 +304,35 @@ test("opportunity-source Telegram report mirrors the HTML export tables", () => 
 
   assert.match(message, /كل الامتحانات/);
   assert.match(message, /1\. الامتحان اليومي 12 — يومي/);
-  assert.match(message, /الدرجة: 18 من 25/);
-  assert.match(message, /الحالة: درجة/);
+  assert.match(message, /النتيجة: 18 من 25 · درجة/);
   assert.match(message, /2\. الامتحان التراكمي 4 — تراكمي/);
-  assert.match(message, /الدرجة: — من 30/);
-  assert.match(message, /الحالة: غائب/);
+  assert.match(message, /النتيجة: غائب/);
 
+  // Movements read as sentences with the reason, never as raw numbers.
   assert.match(message, /سجل تغيّر الفرص/);
-  assert.match(message, /السبب: فقدان فرصة بسبب الغياب/);
-  assert.match(message, /مقدار التغيير: -1/);
-  assert.match(message, /الامتحان: الامتحان التراكمي 4/);
+  assert.match(message, /خُصمت فرصة، السبب: فقدان فرصة بسبب الغياب \(الامتحان: الامتحان التراكمي 4\)/);
+  assert.doesNotMatch(message, /مقدار التغيير|الحالة: درجة/);
   assert.match(message, /إدارة حسن فلاح\nمدرس مادة الأحياء$/);
+});
+
+test("opportunity movements read as plain sentences without internal markers", () => {
+  const sentence = (log) => opportunityMovementSentence({ date: "", examName: null, ...log });
+  assert.equal(sentence({ action: "خصم فرص", movementKind: "deduct", amount: 1, reason: "سلوك" }), "خُصمت فرصة، السبب: سلوك");
+  assert.equal(sentence({ action: "إضافة فرص", movementKind: "add", amount: 2, reason: "تعويض" }), "أُضيفت فرصتان، السبب: تعويض");
+  assert.equal(
+    sentence({ action: "إضافة فرص", movementKind: "add", amount: 1, reason: "تراجع موثق عن خصم: سلوك [undo-ref:log_9]" }),
+    "أُلغي الخصم ورجعت فرصة، وكان السبب: سلوك",
+  );
+  assert.equal(
+    sentence({ action: "خصم فرص", movementKind: "deduct", amount: 2, appliedAmount: 0, reason: "سلوك [مطلوب: 2، مطبّق: 0، قبل: 0 → بعد: 0] [zero-balance-violation]" }),
+    "لم يتغيّر عدد الفرص، السبب: سلوك",
+  );
+  assert.equal(
+    sentence({ action: "بداية رصيد الفصل", movementKind: "chapter-start", amount: 3, effectText: "أصبح الرصيد 3", reason: "بدأ حساب فرص هذا الفصل برصيد جديد؛ خصومات الفصل السابق لا تُخصم منه." }),
+    "بداية رصيد الفصل: أصبح الرصيد 3. بدأ حساب فرص هذا الفصل برصيد جديد؛ خصومات الفصل السابق لا تُخصم منه.",
+  );
+  assert.equal(sentence({ action: "فصل من الدراسة", movementKind: "dismiss", amount: 0, reason: "غياب متكرر" }), "فُصل الطالب من الدراسة، السبب: غياب متكرر");
+  assert.doesNotMatch(sentence({ action: "خصم", amount: -3, reason: "x [undo-ref:1]" }), /\[|\]|-3/);
 });
 
 test("opportunity-source Telegram report handles empty records like the HTML report", () => {
@@ -374,14 +393,14 @@ test("opportunity-source HTML fallback keeps the export tables and escapes text"
   );
   assert.match(
     html,
-    /<th>الامتحان<\/th><th>النوع<\/th><th>التاريخ<\/th><th>الدرجة<\/th><th>الامتحان من<\/th><th>الحالة<\/th>/,
+    /<th>الامتحان<\/th><th>النوع<\/th><th>التاريخ<\/th><th>النتيجة<\/th><th>الفرص<\/th>/,
   );
   assert.match(
     html,
-    /<th>السبب<\/th><th>مقدار التغيير<\/th><th>التاريخ<\/th><th>الامتحان<\/th>/,
+    /<th>التاريخ<\/th><th>ما حدث<\/th><th>الامتحان<\/th>/,
   );
   assert.match(html, /&lt;طالب&gt;/);
-  assert.match(html, /&lt;سبب&gt;/);
-  assert.match(html, /مقدار التغيير/);
+  assert.match(html, /خُصمت فرصتان، السبب: &lt;سبب&gt;/);
+  assert.doesNotMatch(html, /مقدار التغيير/);
   assert.match(html, /تم إنشاء هذا التقرير من نفس مصدر بيانات تصدير HTML/);
 });

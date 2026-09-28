@@ -503,6 +503,10 @@ export type OpportunityTelegramGrade = {
   score: number | null;
   fullMark: number | null;
   status: string;
+  /** The report's own words: «ناجح»، «غياب»، «إجازة»… */
+  outcome?: string;
+  /** The report's effect on the opportunities: «لا خصم»، «خُصمت فرصة»… */
+  opportunityEffect?: string;
 };
 
 export type OpportunityTelegramLog = {
@@ -511,6 +515,11 @@ export type OpportunityTelegramLog = {
   reason: string | null;
   date: string;
   examName: string | null;
+  appliedAmount?: number | null;
+  balanceAfter?: number | null;
+  /** From the student report's movement presentation. */
+  movementKind?: string;
+  effectText?: string;
 };
 
 export type OpportunityTelegramDetails = {
@@ -570,6 +579,20 @@ function opportunityIdentityLines(student: OpportunityTelegramStudent): string[]
   return lines;
 }
 
+function opportunityScoreText(grade: OpportunityTelegramGrade): string {
+  if (grade.score === null || grade.score === undefined) return "";
+  const score = opportunityReportNumber(grade.score);
+  return grade.fullMark === null || grade.fullMark === undefined
+    ? score
+    : `${score} من ${opportunityReportNumber(grade.fullMark)}`;
+}
+
+/** «35 من 100 · أقل من درجة النجاح» — the report's words, never a raw status. */
+function opportunityGradeResult(grade: OpportunityTelegramGrade): string {
+  const outcome = cleanText(grade.outcome) || cleanText(grade.status);
+  return [opportunityScoreText(grade), outcome].filter(Boolean).join(" · ") || "—";
+}
+
 function opportunityExamLines(grades: OpportunityTelegramGrade[]): string {
   if (!grades.length) return "لا توجد امتحانات مسجلة لهذا الطالب.";
   return grades
@@ -579,37 +602,70 @@ function opportunityExamLines(grades: OpportunityTelegramGrade[]): string {
         cleanText(grade.examType),
         cleanText(grade.examDate) ? opportunityReportDate(grade.examDate) : "",
       ].filter(Boolean);
-      const score = opportunityReportNumber(grade.score);
-      const fullMark = grade.fullMark;
-      const scoreLine =
-        fullMark === null || fullMark === undefined
-          ? `الدرجة: ${score}`
-          : `الدرجة: ${score} من ${opportunityReportNumber(fullMark)}`;
       const rows = [
         `${index + 1}. ${headParts.join(" — ")}`,
-        scoreLine,
+        `النتيجة: ${opportunityGradeResult(grade)}`,
       ];
-      if (cleanText(grade.status)) {
-        rows.push(`الحالة: ${cleanText(grade.status)}`);
-      }
+      const effect = cleanText(grade.opportunityEffect);
+      if (effect) rows.push(`الفرص: ${effect}`);
       return [...rows, ""];
     })
     .join("\n")
     .trim();
 }
 
+function opportunityCountWords(count: number): string {
+  if (count === 1) return "فرصة";
+  if (count === 2) return "فرصتان";
+  if (count >= 3 && count <= 10) return `${count} فرص`;
+  return `${count} فرصة`;
+}
+
+const UNDO_REASON = /^تراجع موثق عن (خصم|إضافة)\s*:?\s*/u;
+const INTERNAL_REASON_MARKERS = /\s*\[(?:undo-ref|academic-[a-z-]+|zero-balance-violation|قبل|مطلوب)[^\]]*\]/gu;
+const PLACEHOLDER_REASON = "لم يُسجّل سبب إضافي لهذه الحركة.";
+
+/**
+ * One opportunity movement as a sentence a parent reads: «خُصمت فرصة»،
+ * «أُلغي الخصم ورجعت فرصة»، «بداية رصيد الفصل: أصبح الرصيد 3» — with the
+ * reason after it and no internal marker.
+ */
+export function opportunityMovementSentence(log: OpportunityTelegramLog): string {
+  const kind = cleanText(log.movementKind);
+  const rawReason = cleanText(log.reason).replace(INTERNAL_REASON_MARKERS, "").trim();
+  const undo = rawReason.match(UNDO_REASON);
+  const reason = (undo ? rawReason.slice(undo[0].length) : rawReason).trim();
+  const amount = Math.abs(Math.trunc(Number(log.appliedAmount ?? log.amount) || 0));
+  const words = opportunityCountWords(amount);
+  const withReason = (sentence: string, label = "السبب") =>
+    reason && reason !== PLACEHOLDER_REASON ? `${sentence}، ${label}: ${reason}` : sentence;
+
+  if (undo) {
+    const cancelled = undo[1] === "خصم" ? "الخصم" : "الإضافة";
+    const effect = amount === 0
+      ? "ولم يتغيّر عدد الفرص"
+      : undo[1] === "خصم" ? `ورجعت ${words}` : `وخُصمت ${words}`;
+    return withReason(`أُلغي ${cancelled} ${effect}`, "وكان السبب");
+  }
+  if (kind === "deduct" || (!kind && /خصم/.test(cleanText(log.action)))) {
+    return withReason(amount === 0 ? "لم يتغيّر عدد الفرص" : amount === 1 ? "خُصمت فرصة" : `خُصمت ${words}`);
+  }
+  if (kind === "add" || (!kind && cleanText(log.action) === "إضافة")) {
+    return withReason(amount === 0 ? "لم يتغيّر عدد الفرص" : amount === 1 ? "أُضيفت فرصة" : `أُضيفت ${words}`);
+  }
+  if (kind === "dismiss") return withReason("فُصل الطالب من الدراسة");
+  if (kind === "return") return reason && reason !== PLACEHOLDER_REASON ? reason : "عاد الطالب إلى الدراسة";
+  const action = cleanText(log.action) || "تحديث الفرص";
+  const effect = cleanText(log.effectText);
+  const head = effect ? `${action}: ${effect}` : action;
+  return reason && reason !== PLACEHOLDER_REASON ? `${head}. ${reason}` : head;
+}
+
 function opportunityLogLines(logs: OpportunityTelegramLog[]): string | null {
-  const rows = logs
-    .map((log) => {
-      const reason = cleanText(log.reason) || "غير مسجل";
-      const parts = [
-        `السبب: ${reason}`,
-        `مقدار التغيير: ${opportunityReportNumber(log.amount)}`,
-        `التاريخ: ${opportunityReportDate(log.date)}`,
-        `الامتحان: ${cleanText(log.examName) || "—"}`,
-      ];
-      return `• ${parts.join(" · ")}`;
-    });
+  const rows = logs.map((log) => {
+    const exam = cleanText(log.examName);
+    return `• ${opportunityReportDate(log.date)} — ${opportunityMovementSentence(log)}${exam ? ` (الامتحان: ${exam})` : ""}`;
+  });
   return rows.length ? rows.join("\n") : null;
 }
 
@@ -704,7 +760,6 @@ export function buildOpportunityTelegramHtml(
       return escape(raw);
     }
   };
-  const fmtNum = (value: unknown) => escape(opportunityReportNumber(value));
 
   const grades = details.grades || [];
   const logs = details.opportunityLogs || [];
@@ -740,27 +795,25 @@ export function buildOpportunityTelegramHtml(
             <td>${escape(grade.examName)}</td>
             <td>${escape(grade.examType)}</td>
             <td>${fmtDate(grade.examDate)}</td>
-            <td>${fmtNum(grade.score)}</td>
-            <td>${fmtNum(grade.fullMark)}</td>
-            <td>${escape(grade.status)}</td>
+            <td>${escape(opportunityGradeResult(grade))}</td>
+            <td>${escape(cleanText(grade.opportunityEffect) || "—")}</td>
           </tr>`,
         )
         .join("")
-    : '<tr class="empty-row"><td colspan="6">لا توجد امتحانات مسجلة لهذا الطالب</td></tr>';
+    : '<tr class="empty-row"><td colspan="5">لا توجد امتحانات مسجلة لهذا الطالب</td></tr>';
 
   const logsSection = logs.length
     ? `<h2 class="section-title">سجل تغيّر الفرص</h2>
 <table>
   <thead>
-    <tr><th>السبب</th><th>مقدار التغيير</th><th>التاريخ</th><th>الامتحان</th></tr>
+    <tr><th>التاريخ</th><th>ما حدث</th><th>الامتحان</th></tr>
   </thead>
   <tbody>
     ${logs
       .map(
         (log) => `<tr>
-          <td>${escape(cleanText(log.reason) || "غير مسجل")}</td>
-          <td>${fmtNum(log.amount)}</td>
           <td>${fmtDate(log.date)}</td>
+          <td>${escape(opportunityMovementSentence(log))}</td>
           <td>${escape(cleanText(log.examName) || "—")}</td>
         </tr>`,
       )
@@ -805,7 +858,7 @@ tbody tr:nth-child(even){background:#F7F5E7}
 <h2 class="section-title">كل الامتحانات</h2>
 <table>
   <thead>
-    <tr><th>الامتحان</th><th>النوع</th><th>التاريخ</th><th>الدرجة</th><th>الامتحان من</th><th>الحالة</th></tr>
+    <tr><th>الامتحان</th><th>النوع</th><th>التاريخ</th><th>النتيجة</th><th>الفرص</th></tr>
   </thead>
   <tbody>${gradeRows}</tbody>
 </table>

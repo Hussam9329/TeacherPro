@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
 import { annotateGradeRecordedImpacts } from "@/lib/grade-recorded-impact-server";
 import { annotateGradeSettlementEffects } from "@/lib/grade-settlement-server";
+import { loadRecordedChargeByGradeId } from "@/lib/call-recorded-impact-server";
 import type { ReportGradePresentation } from "@/lib/student-report-presentation";
 import type { GracePeriodRange } from "@/lib/grace-periods";
 import { requirePermission } from "@/lib/server-auth";
@@ -380,7 +381,10 @@ function gradeMatchesStatusFilter(
   impactKind: GradeClassificationKind,
   absenceSource?: CallAbsenceSource | null,
   studentStatus?: string,
+  /** From the opportunities ledger when known; the rule is only a fallback. */
+  recordedCharge?: boolean,
 ): boolean {
+  const deducted = recordedCharge ?? isDeductedImpact(impactKind);
   if (filter === "dismissed") {
     return studentStatus === STUDENT_STATUS_DISMISSED;
   }
@@ -390,10 +394,10 @@ function gradeMatchesStatusFilter(
     return Boolean(absenceSource) || !NON_DISPLAY_CALL_KINDS.has(kind);
   }
   if (filter === "absent") return Boolean(absenceSource);
-  if (filter === "discounted") return isDeductedImpact(impactKind);
+  if (filter === "discounted") return deducted;
   if (filter === "passed") return kind === "passed" || kind === "full";
   if (filter === "failed") {
-    return !isDeductedImpact(impactKind) && (kind === "failed" || kind === "academic-accounting");
+    return !deducted && (kind === "failed" || kind === "academic-accounting");
   }
   if (filter === "protected") return kind === "protected";
   return kind === filter;
@@ -754,6 +758,33 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // «المخصومين» and «راسب غير مخصوم» follow what the ledger recorded, the
+    // same evidence the card's badge shows. A derived absence has no stored
+    // grade, so no deduction was ever recorded for it.
+    const recordedChargeByGradeId =
+      statusFilter === "discounted" || statusFilter === "failed"
+        ? await loadRecordedChargeByGradeId(
+            selectedGrades.map((grade) => ({
+              ...grade,
+              student: {
+                id: grade.student.id,
+                status: grade.student.status,
+                courseId: grade.student.courseId,
+                createdAt: grade.student.createdAt,
+                gracePeriods: grade.student.gracePeriods || [],
+              },
+              exam: courseExamById.get(grade.examId) || exam,
+            })) as Parameters<typeof loadRecordedChargeByGradeId>[0],
+            "StudentCallCandidates",
+          )
+        : new Map<string, boolean>();
+    const recordedChargeFor = (grade: DbGradeLite): boolean | undefined =>
+      statusFilter !== "discounted" && statusFilter !== "failed"
+        ? undefined
+        : grade.id.startsWith("implicit-absence:")
+          ? false
+          : recordedChargeByGradeId.get(grade.id);
+
     const matching = selectedStudents.flatMap((student) => {
       const storedGrade = selectedGradeByStudentId.get(student.id);
       const leaves = leavesForExam(selectedLeavesByStudentId, student.id, exam);
@@ -783,6 +814,7 @@ export async function GET(req: NextRequest) {
           impactKind,
           absenceSource,
           student.status,
+          recordedChargeFor(grade),
         )
       )
         return [];

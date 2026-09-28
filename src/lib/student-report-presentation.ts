@@ -11,7 +11,7 @@ export function reportNumber(value: unknown): number | null {
 
 export function studentReportText(value: unknown): string {
   return String(value ?? "")
-    .replace(/\[(?:academic-[^\]]*|zero-balance-violation|قبل:[^\]]*)\]/g, "")
+    .replace(/\[(?:academic-[^\]]*|zero-balance-violation|قبل:[^\]]*|مطلوب:[^\]]*|undo-ref:[^\]]*)\]/g, "")
     .replace(/تلقائي(?:اً|ا|ة)?/g, "")
     .replace(/تسوية تاريخية\s*:\s*/g, "")
     .replace(/\s+/g, " ")

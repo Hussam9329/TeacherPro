@@ -419,6 +419,21 @@ assert(
   'كارت الطالب: رأس، لوحة الامتحان والنتيجة، صفا التواصل والإجراء (مع بدون إجراء)، الملاحظة، ورموز QR ظاهرة مباشرة',
 );
 
+const recordedChargeHelper = read('src/lib/call-recorded-impact-server.ts');
+assert(
+  recordedChargeHelper.includes('annotateGradeSettlementEffects(grades)') &&
+    recordedChargeHelper.includes('annotateGradeRecordedImpacts(grades)') &&
+    recordedChargeHelper.includes('!impact.text.includes("لا أثر على الرصيد الحالي")') &&
+    [candidates, stats].every((source) =>
+      source.includes('loadRecordedChargeByGradeId(') &&
+      source.includes('const deducted = recordedCharge ?? isDeductedImpact(impactKind);') &&
+      source.includes('if (filter === "discounted") return deducted;') &&
+      source.includes('!deducted && (kind === "failed" || kind === "academic-accounting")') &&
+      source.includes('grade.id.startsWith("implicit-absence:")') &&
+      source.includes('recordedChargeFor(grade)')),
+  'فلتر «المخصومين» وعدده يعتمدان سجل الفرص الفعلي (نفس دليل شارة الكارت)، والغياب المشتق بلا خصم',
+);
+
 if (process.exitCode) {
   console.error('\nفشل اختبار سلامة تبويبة المكالمات. راجع الرسائل أعلاه.');
   process.exit(process.exitCode);

@@ -744,10 +744,11 @@ export function DismissedManagementView() {
     ).trim();
     setSavingNoteIds((current) => ({ ...current, [student.id]: true }));
     try {
-      const result = await studentApi.update(student.id, {
-        dismissalNotes: nextNote,
-        expectedMutationToken: student.mutationToken || "",
-      });
+      const result = await studentApi.updateDismissalNotes(
+        student.id,
+        nextNote,
+        student.mutationToken || "",
+      );
       if (!result.ok || result.queued) {
         toast.error(result.error || "تعذر حفظ ملاحظات الفصل.");
         return;

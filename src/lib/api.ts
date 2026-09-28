@@ -1482,6 +1482,9 @@ export const studentRegisterApi = {
 };
 
 export const studentApi = {
+  /** «ملاحظات الفصل» of a dismissed student (the general edit never writes them). */
+  updateDismissalNotes: (id: string, dismissalNotes: string, expectedMutationToken = "") =>
+    apiPut("students/dismissal-notes", { studentId: id, dismissalNotes, expectedMutationToken }),
   list: async (
     query: StudentListQuery = {},
     options: ApiGetOptions = {},
