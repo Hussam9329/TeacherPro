@@ -152,7 +152,7 @@ export async function GET(req: NextRequest) {
         });
         const currentEnrollmentStartedAt = enrollmentArchives[0]?.createdAt || null;
 
-        const [grades, opportunityLogs, studentLeaves, studentCalls, studentNotes] =
+        const [grades, opportunityLogs, studentLeaves, studentCalls, studentNotes, pendingGradeNotes] =
           await Promise.all([
             tx.grade.findMany({
               where: { studentId },
@@ -190,6 +190,13 @@ export async function GET(req: NextRequest) {
               select: NOTE_SELECT,
               orderBy: [{ date: "desc" }, { id: "desc" }],
             }),
+            // A score typed while it could not count (dismissed, on leave,
+            // before registration) waits here, never as a Grade row.
+            tx.gradeSmartNote.findMany({
+              where: { studentId, status: "PENDING", score: { not: null } },
+              select: { examId: true, score: true, category: true, attemptedAt: true },
+              orderBy: [{ attemptedAt: "desc" }, { id: "desc" }],
+            }),
           ]);
 
         const examIds = Array.from(
@@ -199,6 +206,7 @@ export async function GET(req: NextRequest) {
               ...opportunityLogs.map((log) => log.examId),
               ...studentLeaves.map((leave) => leave.examId),
               ...studentCalls.map((call) => call.examId),
+              ...pendingGradeNotes.map((note) => note.examId),
             ]
               .map((id) => String(id || "").trim())
               .filter(Boolean),
@@ -274,6 +282,7 @@ export async function GET(req: NextRequest) {
           studentLeaves,
           studentCalls,
           studentNotes,
+          pendingGradeNotes,
           enrollmentArchives,
           auditResult,
         };
@@ -295,6 +304,7 @@ export async function GET(req: NextRequest) {
       studentLeaves,
       studentCalls,
       studentNotes,
+      pendingGradeNotes,
       enrollmentArchives,
       auditResult,
     } = snapshot;
@@ -320,8 +330,10 @@ export async function GET(req: NextRequest) {
     });
 
     const visibleExamIds = new Set<string>();
-    if (access.grades)
+    if (access.grades) {
       grades.forEach((grade) => visibleExamIds.add(grade.examId));
+      pendingGradeNotes.forEach((note) => visibleExamIds.add(note.examId));
+    }
     if (access.opportunities)
       opportunityLogs.forEach((log) => {
         if (log.examId) visibleExamIds.add(log.examId);
@@ -375,6 +387,32 @@ export async function GET(req: NextRequest) {
           }))
         : [],
       audit: auditResult.metadata,
+      // What the student report needs to compute a correct result, whatever
+      // sections the exporter may read: the status, the registration day,
+      // the days of each leave and the recorded dismissals. Only facts used
+      // for the calculation — no leave reason, note, phone or call.
+      reportContext: access.grades || access.opportunities
+        ? {
+            status: student.status,
+            registeredAt: student.createdAt,
+            leaves: studentLeaves.map((leave) => ({
+              examId: leave.examId,
+              leaveType: leave.leaveType,
+              date: leave.date,
+              dateFrom: leave.dateFrom,
+              dateTo: leave.dateTo,
+            })),
+            dismissals: studentNotes
+              .filter((note) => note.kind === "إجراء" && /^(?:تم )?فصل الطالب/u.test(String(note.text || "")))
+              .map((note) => ({
+                date: note.dismissalDate || note.date,
+                reason: String(note.dismissalReason || "").trim(),
+              })),
+            pendingGrades: access.grades
+              ? pendingGradeNotes.map((note) => ({ examId: note.examId, score: note.score, category: note.category }))
+              : [],
+          }
+        : null,
       sections: access,
       snapshotVersion,
       source: "database" as const,

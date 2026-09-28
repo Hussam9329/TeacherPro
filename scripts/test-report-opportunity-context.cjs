@@ -91,7 +91,7 @@ assert.equal(effect({ status: "درجة", score: 0 }, exam, []), "لا خصم");
 assert.equal(effect({ status: "درجة", score: 0 }, { ...exam, noDiscount: true }, []), "امتحان بدون خصم");
 assert.equal(effect({ status: "غائب" }, exam, [{ ...debit, amount: 1 }]), "خُصمت فرصة");
 assert.equal(effect({ status: "غائب" }, exam, [{ ...debit, amount: 3 }]), "خُصمت 3 فرص");
-assert.equal(effect({ status: "غائب" }, exam, [debit, dismissal]), "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان");
+assert.equal(effect({ status: "غائب" }, exam, [debit, dismissal]), "خُصمت فرصتان وفُصلت بسبب هذا الامتحان");
 
 const graceContext = { settlement: null, balanceNotes: [], gracePeriods: [{ startDate: "2026-09-01", endDate: "2026-09-15" }] };
 const toneCases = [

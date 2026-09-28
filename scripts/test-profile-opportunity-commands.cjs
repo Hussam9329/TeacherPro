@@ -76,6 +76,7 @@ const tx = {
     findMany: findMany("student", () => [student]),
   },
   grade: { findMany: findMany("grade", () => [grade]) },
+  gradeSmartNote: { findMany: findMany("gradeSmartNote", () => []) },
   exam: { findMany: findMany("exam", () => [exam]) },
   opportunityLog: { findMany: findMany("opportunityLog", () => logs) },
   courseChapter: { findMany: findMany("courseChapter", () => links) },

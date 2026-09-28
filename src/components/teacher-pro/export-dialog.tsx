@@ -20,7 +20,7 @@ import { toast } from "@/lib/user-toast";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 import { buildProfessionalXlsx } from "@/lib/xlsx-export";
 import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
-import { buildReportOpportunityContext, buildReportTimelineEvents, reportGradeTimelineDate, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, type ReportBalanceNote, type ReportTimelineEvent, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
+import { buildReportOpportunityContext, buildReportTimelineEvents, reportGradeTimelineDate, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, studentReportText, type ReportBalanceNote, type ReportTimelineEvent, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
 import { GRACE_PERIOD_EXCUSE_LABEL, isStudentInGracePeriod, normalizeGracePeriodRanges } from "@/lib/grace-periods";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS, type AcademicOpportunityCommandEffect } from "@/lib/academic-types";
 import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
@@ -197,9 +197,11 @@ export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): Stude
   );
 }
 
+const PUBLIC_GRADE_OUTCOMES = new Set(["ناجح", "راسب", "الدرجة كاملة"]);
+
 type PublicStudentHtmlDetails = Pick<StudentDetails, "activeChapterName" | "timelineEvents"> & {
   grades: Array<Pick<StudentGradeDetail,
-    "examName" | "examType" | "examDate" | "timelineDate" | "score" | "fullMark" | "status" | "opportunityEffect" | "opportunityTone"
+    "examName" | "examType" | "examDate" | "timelineDate" | "score" | "fullMark" | "status" | "outcome" | "opportunityEffect" | "opportunityTone"
   >>;
 };
 
@@ -222,6 +224,9 @@ function buildPublicStudentHtmlData(details: StudentDetailsMap, students: Studen
         score: grade.score,
         fullMark: grade.fullMark,
         status: grade.status,
+        // «ناجح» / «راسب» / «الدرجة كاملة»: the row's result and colour.
+        // Any other stored outcome stays out of the public file.
+        outcome: PUBLIC_GRADE_OUTCOMES.has(String(grade.outcome)) ? grade.outcome : "",
         opportunityEffect: grade.opportunityEffect,
         opportunityTone: grade.opportunityTone,
       })).sort((a, b) => (new Date(a.examDate).getTime() || 0) - (new Date(b.examDate).getTime() || 0)),
@@ -261,6 +266,17 @@ export type StudentProfileLogSnapshot = {
     since?: unknown;
     examIds?: unknown;
   } | null;
+  /**
+   * Facts the report needs whatever sections the exporter may read (status,
+   * registration day, leave days, recorded dismissals, pending scores).
+   */
+  reportContext?: {
+    status?: unknown;
+    registeredAt?: unknown;
+    leaves?: StudentLeaveLike[] | null;
+    dismissals?: Array<{ date?: unknown; reason?: unknown }> | null;
+    pendingGrades?: Array<{ examId?: unknown; score?: unknown; category?: unknown }> | null;
+  } | null;
 };
 
 /**
@@ -297,7 +313,7 @@ function resolveActiveChapterExamFilter(
  */
 function resolveActiveChapterLogScope(
   profile: StudentProfileLogSnapshot,
-): { examIds: string[]; since: string | null } | null {
+): { examIds: string[]; since: string | null; chapterId: string | null } | null {
   const currentChapter = profile.currentChapter;
   if (!currentChapter || typeof currentChapter !== "object") {
     return null;
@@ -313,7 +329,94 @@ function resolveActiveChapterLogScope(
       .filter(Boolean),
     since:
       typeof sinceRaw === "string" && sinceRaw.trim() ? sinceRaw.trim() : null,
+    chapterId: typeof currentChapter.id === "string" && currentChapter.id.trim() ? currentChapter.id.trim() : null,
   };
+}
+
+/** «28 سبتمبر 2026، 3:45 م» in Baghdad time, for the report's opening page. */
+function reportGeneratedText(date: Date): string {
+  try {
+    const day = date.toLocaleDateString("ar-EG-u-nu-latn", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Baghdad" });
+    const time = date.toLocaleTimeString("ar-EG-u-nu-latn", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Baghdad" });
+    return `${day}، ${time}`;
+  } catch {
+    return date.toISOString();
+  }
+}
+
+/** A typed score kept for review and never counted. */
+const PENDING_GRADE_STATUS = "غير محتسبة";
+
+const DISMISSAL_PAIR_WINDOW_MS = 60_000;
+
+function isReportDismissalLog(log: Record<string, unknown>): boolean {
+  const action = String(log.action || "").trim();
+  return action.startsWith("فصل") ||
+    (action === "خصم" && /^فصل الطالب/u.test(String(log.reason || "").trim()));
+}
+
+/**
+ * Dismissal lines the movement timeline cannot carry:
+ * - a manual dismissal of a student whose balance was already 0 writes no
+ *   opportunity movement, only its dismissal record;
+ * - a student dismissed during an earlier chapter who is still dismissed now:
+ *   each chapter starts afresh, so one line explains the status carried in.
+ */
+function reportDismissalEvents(
+  profile: StudentProfileLogSnapshot,
+  rawLogs: Array<Record<string, unknown>>,
+  scopedLogs: Array<Record<string, unknown>>,
+  logScope: { examIds: string[]; since: string | null; chapterId: string | null } | null,
+  studentStatus: string,
+): ReportTimelineEvent[] {
+  const events: ReportTimelineEvent[] = [];
+  const sinceTime = logScope?.since ? Date.parse(logScope.since) : NaN;
+  const dismissalLogTimes = rawLogs
+    .filter(isReportDismissalLog)
+    .map((log) => Date.parse(String(log.date || "")))
+    .filter(Number.isFinite);
+  const dismissals = (profile.reportContext?.dismissals || [])
+    .map((item) => ({ time: Date.parse(String(item.date || "")), reason: studentReportText(item.reason) }))
+    .filter((item) => Number.isFinite(item.time));
+
+  for (const dismissal of dismissals) {
+    if (Number.isFinite(sinceTime) && dismissal.time < sinceTime) continue;
+    if (dismissalLogTimes.some((time) => Math.abs(time - dismissal.time) <= DISMISSAL_PAIR_WINDOW_MS)) continue;
+    events.push({
+      date: new Date(dismissal.time).toISOString(),
+      text: dismissal.reason ? `فصلتك الإدارة بسبب: ${dismissal.reason}` : "فصلتك الإدارة",
+      kind: "deduct",
+      balanceAfter: 0,
+    });
+  }
+
+  if (studentStatus === "مفصول" && logScope?.since && !events.length && !scopedLogs.some(isReportDismissalLog)) {
+    const examNames = new Map(
+      [...(profile.allCourseExams || []), ...(profile.exams || [])]
+        .map((exam) => [String(exam.id || ""), String(exam.name || "")] as const),
+    );
+    const previousLog = rawLogs
+      .filter((log) => isReportDismissalLog(log) && !opportunityLogWithinActiveChapter(log, logScope))
+      .sort((a, b) => (Date.parse(String(b.date || "")) || 0) - (Date.parse(String(a.date || "")) || 0))[0];
+    const previousNote = dismissals
+      .filter((item) => !Number.isFinite(sinceTime) || item.time < sinceTime)
+      .sort((a, b) => b.time - a.time)[0];
+    if (previousLog || previousNote) {
+      const chapterName = String(previousLog?.chapterNameSnapshot || "").trim() || "الفصل السابق";
+      const examName = previousLog ? examNames.get(String(previousLog.examId || "")) || "" : "";
+      const manualReason = previousLog
+        ? studentReportText(String(previousLog.reason || "").replace(/^فصل الطالب\s*:?\s*/u, ""))
+        : previousNote?.reason || "";
+      const cause = examName ? ` بسبب ${examName}` : manualReason ? ` بسبب: ${manualReason}` : "";
+      events.push({
+        date: logScope.since,
+        text: `فُصلت خلال ${chapterName}${cause}، وبقيت حالتك «مفصول» عند بدء هذا الفصل`,
+        kind: "deduct",
+        balanceAfter: null,
+      });
+    }
+  }
+  return events;
 }
 
 /**
@@ -345,14 +448,21 @@ export function buildStudentDetailsFromProfileLog(
   const timelineEvents = buildReportTimelineEvents(scopedLogs, profile.currentChapter?.id,
     profile.opportunityCommandEffects, profile.student?.opportunityLimit);
   const gracePeriods = normalizeGracePeriodRanges(profile.student?.gracePeriods);
-  const studentLeaves = Array.isArray(profile.studentLeaves) ? profile.studentLeaves : [];
+  // The report context is given to every exporter who can see grades or
+  // opportunities; the profile's own fields are only a fallback.
+  const reportContext = profile.reportContext || null;
+  const studentLeaves = Array.isArray(reportContext?.leaves)
+    ? reportContext.leaves
+    : Array.isArray(profile.studentLeaves) ? profile.studentLeaves : [];
+  const studentStatus = String(reportContext?.status ?? profile.student?.status ?? "");
+  const registeredAt = (reportContext?.registeredAt ?? profile.student?.createdAt) as string | Date | null | undefined;
+  timelineEvents.push(...reportDismissalEvents(profile, rawLogs, scopedLogs, logScope, studentStatus));
+  timelineEvents.sort((a, b) => (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0));
   const opportunityContext = {
     ...buildReportOpportunityContext(rawLogs, String(profile.currentChapter?.id || "")),
     gracePeriods,
-    registeredAt: profile.student?.createdAt as string | Date | null | undefined,
+    registeredAt,
     historical: true,
-    studentStatus: String(profile.student?.status || ""),
-    reactivationDates: timelineEvents.filter(event => event.kind === "return").map(event => event.date),
   };
   const includeExam = (status: unknown, exam: Record<string, unknown> | undefined): boolean =>
     status !== "قبل تسجيل الطالب" && isExamOnOrAfterStudentRegistration(
@@ -404,6 +514,33 @@ export function buildStudentDetailsFromProfileLog(
         passMark: reportNumber(exam?.passMark),
       };
     });
+
+  // A score typed while it could not count (the student was dismissed, on
+  // leave or not yet registered) waits for review and is never counted.
+  const pendingExamIds = new Set(
+    (reportContext?.pendingGrades || [])
+      .map((item) => String(item.examId || ""))
+      .filter((examId) => examId && !gradeExamIds.has(examId)),
+  );
+  for (const examId of pendingExamIds) {
+    const examRecord = examMap.get(examId);
+    if (!examRecord || (chapterExamIds && !chapterExamIds.has(examId))) continue;
+    gradeExamIds.add(examId);
+    grades.push({
+      examId,
+      examName: String(examRecord.name || "امتحان غير محدد"),
+      examType: String(examRecord.type || ""),
+      examDate: String(examRecord.date || ""),
+      score: null,
+      fullMark: examRecord.fullMark === null || examRecord.fullMark === undefined ? null : Number(examRecord.fullMark),
+      status: PENDING_GRADE_STATUS,
+      notes: null,
+      outcome: PENDING_GRADE_STATUS,
+      opportunityEffect: "بدون أثر على الفرص",
+      opportunityTone: "ordinary",
+      passMark: reportNumber(examRecord.passMark),
+    });
+  }
 
   // إضافة امتحانات الدورة التي ليس للطالب سجل درجات فيها — ضمن امتحانات
   // الفصل النشط الحالي فقط عند توفر سياق الفصل النشط.
@@ -476,8 +613,8 @@ export function buildStudentDetailsFromProfileLog(
     generatedAt: profile.generatedAt ?? null,
     studentSnapshot: student ? {
       name: String(student.name || ""), code: String(student.code || ""),
-      status: String(student.status || ""), opportunities: reportNumber(student.opportunities),
-      opportunityLimit: reportNumber(student.opportunityLimit), registeredAt: student.createdAt ? String(student.createdAt) : null,
+      status: studentStatus, opportunities: reportNumber(student.opportunities),
+      opportunityLimit: reportNumber(student.opportunityLimit), registeredAt: registeredAt ? String(registeredAt) : null,
     } : undefined,
   };
 }
@@ -651,6 +788,32 @@ const DETAILS_MODAL_CSS = `
   .tp-grade-deduction .tp-mobile-field-value { color: #9F1239; font-weight: 700; }
   .tp-grade-dismissal .tp-mobile-field-value { color: #7F1D1D; font-weight: 800; }
   .tp-grade-no-deduction .tp-mobile-field-value { color: #166534; font-weight: 700; }
+  /* One colour per result: passed green, failed amber, deducted red,
+     dismissed deep red, excused blue, not counted grey. */
+  .tp-grades-table tbody tr.tp-result-passed { background: #F0FDF4; }
+  .tp-grades-table tbody tr.tp-result-failed { background: #FFFBEB; }
+  .tp-grades-table tbody tr.tp-result-deducted { background: #FFF1F2; }
+  .tp-grades-table tbody tr.tp-result-dismissed { background: #FEE2E2; }
+  .tp-grades-table tbody tr.tp-result-excused { background: #EFF6FF; }
+  .tp-grades-table tbody tr.tp-result-neutral { background: #FFFFFF; }
+  .tp-grades-table tbody tr[class*="tp-result-"] > td:first-child { border-inline-start: 4px solid #CBD5E1; padding-inline-start: 14px; }
+  .tp-grades-table tbody tr.tp-result-passed > td:first-child { border-inline-start-color: #16A34A; }
+  .tp-grades-table tbody tr.tp-result-failed > td:first-child { border-inline-start-color: #D97706; }
+  .tp-grades-table tbody tr.tp-result-deducted > td:first-child { border-inline-start-color: #E11D48; }
+  .tp-grades-table tbody tr.tp-result-dismissed > td:first-child { border-inline-start-color: #991B1B; }
+  .tp-grades-table tbody tr.tp-result-excused > td:first-child { border-inline-start-color: #2563EB; }
+  .tp-result-passed .tp-result-effect .tp-mobile-field-value { color: #166534; font-weight: 700; }
+  .tp-result-failed .tp-result-effect .tp-mobile-field-value { color: #92400E; font-weight: 700; }
+  .tp-result-deducted .tp-result-effect .tp-mobile-field-value { color: #9F1239; font-weight: 700; }
+  .tp-result-dismissed .tp-result-effect .tp-mobile-field-value { color: #7F1D1D; font-weight: 800; }
+  .tp-result-excused .tp-result-effect .tp-mobile-field-value { color: #1E40AF; font-weight: 700; }
+  .tp-result-neutral .tp-result-effect .tp-mobile-field-value { color: #475569; font-weight: 600; }
+  .tp-result-pill { display: inline-block; margin-inline-start: 6px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1.9; white-space: nowrap; }
+  .tp-result-pill-passed { background: #DCFCE7; color: #166534; }
+  .tp-result-pill-failed { background: #FEF3C7; color: #92400E; }
+  .tp-result-pill-excused { background: #DBEAFE; color: #1E40AF; }
+  .tp-result-pill-neutral { background: #E2E8F0; color: #475569; }
+  .tp-report-generated { margin: 6px 0 0; color: #5B6674; font-size: 13px; }
   .tp-grades-table tbody tr.tp-timeline-event { background: #EAF4EF; }
   .tp-grades-table tbody tr.tp-timeline-event-reset { background: #EDF2F8; }
   .tp-grades-table tbody tr.tp-timeline-event-deduct { background: #FFF1F2; }
@@ -685,6 +848,13 @@ const DETAILS_MODAL_CSS = `
     .tp-details-table tr { border: 1px solid #E6E3D9; border-radius: 12px; margin-bottom: 12px; padding: 6px 12px; background: #FBF9EB; }
     .tp-grades-table tbody tr.tp-grade-row-dismissed { border-color: #991B1B; border-inline-start-width: 4px; }
     .tp-grades-table tbody tr.tp-grade-row-dismissed > td:first-child { border-inline-start: 0; padding-inline-start: 0; }
+    .tp-grades-table tbody tr[class*="tp-result-"] { border-inline-start-width: 4px; }
+    .tp-grades-table tbody tr.tp-result-passed { border-inline-start-color: #16A34A; }
+    .tp-grades-table tbody tr.tp-result-failed { border-inline-start-color: #D97706; }
+    .tp-grades-table tbody tr.tp-result-deducted { border-inline-start-color: #E11D48; }
+    .tp-grades-table tbody tr.tp-result-dismissed { border-color: #991B1B; }
+    .tp-grades-table tbody tr.tp-result-excused { border-inline-start-color: #2563EB; }
+    .tp-grades-table tbody tr[class*="tp-result-"] > td:first-child { border-inline-start: 0; padding-inline-start: 0; }
     .tp-details-table tr:not(.tp-empty-row) td { display: grid; grid-template-columns: minmax(96px, 38%) minmax(0, 1fr); gap: 10px; width: 100%; min-width: 0; min-height: 44px; padding: 10px 0; border: 0; border-bottom: 1px solid #E6E3D9; }
     .tp-mobile-field-label { display: block; color: #5B6674; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
     .tp-mobile-field-value { display: block; overflow-wrap: anywhere; }
@@ -976,19 +1146,26 @@ const DETAILS_MODAL_JS = `
             + '<time datetime="' + esc(event.date) + '">' + fmtEventDate(event.date) + '</time></div></td></tr>';
         }
         var g = entry.grade;
-        var score = g.status === 'غش' ? 'غش' : g.score === null || g.score === undefined
-          ? (g.status === 'مجاز' ? 'إجازة' : g.status === ${JSON.stringify(GRACE_PERIOD_EXCUSE_LABEL)} ? 'مجاز' : g.status === 'غائب' ? 'غياب' : 'بانتظار الدرجة')
-          : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>';
-        var effectText = String(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.').trim();
+        var excused = g.status === 'مجاز' || g.status === ${JSON.stringify(GRACE_PERIOD_EXCUSE_LABEL)} || g.status === 'قبل تسجيل الطالب';
         var tone = ['ordinary', 'excused', 'deducted', 'dismissed'].indexOf(g.opportunityTone) >= 0 ? g.opportunityTone : 'ordinary';
-        var effectClass = tone === 'dismissed' ? 'tp-grade-deduction tp-grade-dismissal'
-          : /^(لا خصم|بدون خصم|امتحان بدون خصم)/.test(effectText) ? 'tp-grade-no-deduction'
-          : /^خُصمت /.test(effectText) ? 'tp-grade-deduction' : '';
-        return '<tr role="row" class="tp-grade-row-' + tone + '">'
+        // One result decides the colour of the whole row.
+        var result = tone === 'dismissed' ? 'dismissed'
+          : tone === 'deducted' ? 'deducted'
+          : excused || tone === 'excused' ? 'excused'
+          : g.outcome === 'ناجح' || g.outcome === 'الدرجة كاملة' ? 'passed'
+          : g.outcome === 'راسب' || g.status === 'غائب' || g.status === 'غش' ? 'failed'
+          : 'neutral';
+        var pill = g.outcome === 'ناجح' || g.outcome === 'الدرجة كاملة' ? '<span class="tp-result-pill tp-result-pill-passed">' + esc(g.outcome) + '</span>'
+          : g.outcome === 'راسب' ? '<span class="tp-result-pill tp-result-pill-failed">راسب</span>' : '';
+        var score = g.status === 'غش' ? 'غش' : g.score === null || g.score === undefined
+          ? (g.status === 'مجاز' ? 'إجازة' : g.status === ${JSON.stringify(GRACE_PERIOD_EXCUSE_LABEL)} ? 'مجاز فترة سماح' : g.status === 'غائب' ? 'غياب' : g.status === ${JSON.stringify(PENDING_GRADE_STATUS)} ? ${JSON.stringify(PENDING_GRADE_STATUS)} : 'بانتظار الدرجة')
+          : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>' + pill;
+        var effectText = String(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.').trim();
+        return '<tr role="row" class="tp-grade-row-' + tone + ' tp-result-' + result + '">'
           + mobileCell('الامتحان', '<strong class="tp-event-title">' + esc(g.examName) + '</strong><span class="tp-event-exam">' + esc(g.examType) + '</span>')
           + mobileCell('تاريخ الامتحان', fmtDate(g.examDate) || 'غير مسجّل')
           + mobileCell('الدرجة', score)
-          + mobileCell('الأثر على الفرص', esc(effectText), effectClass)
+          + mobileCell('الأثر على الفرص', esc(effectText), 'tp-result-effect')
           + '</tr>';
       }).join('');
       if (!data.grades || !data.grades.length) gradesBody.innerHTML += '<tr class="tp-empty-row" role="row"><td colspan="4" role="cell">لا توجد امتحانات لعرضها في هذه النسخة.</td></tr>';
@@ -1193,7 +1370,7 @@ export function buildHtml<T>(
           getRowId: options.getRowId,
         })}</tbody></table></div>`;
   const metaLine = interactiveMode
-    ? '<p class="tp-report-intro">اعرف درجاتك، وفرصك المتبقية، وأثر كل امتحان عليها.</p>'
+    ? `<p class="tp-report-intro">اعرف درجاتك، وفرصك المتبقية، وأثر كل امتحان عليها.</p><p class="tp-report-generated">آخر تحديث: ${escapeHtml(reportGeneratedText(new Date()))}</p>`
     : `<div class="meta">عدد الصفوف: ${rows.length} | عدد الأعمدة: ${columns.length}</div>`;
 
   return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">${viewportMeta}<title>${escapeHtml(humanizeTeacherProText(interactiveMode && !options.documentTitle ? reportHeading : documentTitle))}</title><style>

@@ -187,6 +187,8 @@ export function computeActiveChapterReportContext(
 export type ActiveChapterOpportunityLogLike = {
   examId?: unknown;
   date?: unknown;
+  /** The chapter the movement was recorded under, when known. */
+  chapterId?: unknown;
 };
 
 /**
@@ -203,14 +205,16 @@ export type ActiveChapterOpportunityLogLike = {
  * - غياب سياق الفصل النشط كلياً: يُعرض كل شيء (السلوك القديم) حتى لا
  *   يخفي التقرير بيانات بسبب غياب الفصل النشط أو تعارضه.
  *
- * مقارنة اليوم بغداد (baghdadDateKey) حتى تعمل الحدود المخزنة كمفتاح يوم
- * أو كطابع زمني كامل بنفس الدقة. التسوية تُسك بلحظة الانتقال نفسها،
- * فيومها يساوي يوم الحد ويدخل بالشرط «>=» المتعمد.
+ * كل فصل بداية جديدة: الحركة المسجلة على فصل تُعرض مع فصلها فقط، فخصم
+ * يدوي صار صباح يوم الانتقال (بالفصل السابق) لا يظهر بتقرير الفصل الجديد.
+ * حركة قديمة بلا فصل مسجل تُقارن بلحظة الانتقال الدقيقة إن كانت معروفة،
+ * وإلا بيومها (baghdadDateKey). التسوية تُسك بلحظة الانتقال نفسها فتدخل
+ * بالشرط «>=» المتعمد.
  */
 export function opportunityLogWithinActiveChapter(
   log: ActiveChapterOpportunityLogLike | null | undefined,
   context:
-    | Pick<ActiveChapterReportContext, "examIds" | "since">
+    | (Pick<ActiveChapterReportContext, "examIds" | "since"> & { chapterId?: string | null })
     | null
     | undefined,
 ): boolean {
@@ -218,7 +222,16 @@ export function opportunityLogWithinActiveChapter(
   const examId = String(log?.examId ?? "")
     .trim();
   if (examId) return context.examIds.includes(examId);
+  const logChapterId = String(log?.chapterId ?? "").trim();
+  const contextChapterId = String(context.chapterId ?? "").trim();
+  if (logChapterId && contextChapterId) return logChapterId === contextChapterId;
   if (!context.since) return true;
+  const sinceText = String(context.since);
+  const sinceTime = sinceText.length > 10 ? Date.parse(sinceText) : NaN;
+  const logTime = log?.date instanceof Date
+    ? log.date.getTime()
+    : typeof log?.date === "string" ? Date.parse(log.date) : NaN;
+  if (Number.isFinite(sinceTime) && Number.isFinite(logTime)) return logTime >= sinceTime;
   const boundaryDay = baghdadDateKey(context.since);
   const logDay = baghdadDateKey(
     log?.date instanceof Date

@@ -81,7 +81,7 @@ test("zero applied deduction, no-discount, pending and excluded grades never inv
 test("grace and actual leave records are included even when the grade has no embedded leaves", async () => {
   const grace = grade({ student: { ...baseStudent, gracePeriods: [{ startDate: "2026-09-15", endDate: "2026-09-20" }] } });
   await harness().annotate([grace]);
-  assert.deepEqual(grace.recordedOpportunityImpact, { text: "بدون خصم (فترة سماح لغاية 20-9-2026)", tone: "excused" });
+  assert.deepEqual(grace.recordedOpportunityImpact, { text: "بدون خصم (فترة سماح لغاية 20 سبتمبر 2026)", tone: "excused" });
   for (const leave of [
     { studentId: "student-a", examId: "exam-a", leaveType: "exam" },
     { studentId: "student-a", leaveType: "period", dateFrom: at(15), dateTo: at(17) },
@@ -104,21 +104,22 @@ test("settled history retains the original debit while explaining today's protec
   assert.equal(noDebit[0].recordedOpportunityImpact.text, "لا أثر على الرصيد الحالي");
 });
 
-test("only a completed later return with active status marks a dismissal as former", async () => {
+test("dismissal wording is fixed for staff whatever the student's status or later movements", async () => {
   const dismissal = log({ action: "فصل تلقائي", amount: 0, appliedAmount: 0 });
   const cases = [
-    { action: "إعادة تفعيل", later: true, active: true, former: true },
-    { action: "رصيد بعد تعهد", later: true, active: true, former: true },
-    { action: "إضافة", later: true, active: true, former: false },
-    { action: "إعادة تعيين", later: true, active: true, former: false },
-    { action: "إعادة تفعيل", later: false, active: true, former: false },
-    { action: "إعادة تفعيل", later: true, active: false, former: false },
+    { action: "إعادة تفعيل", later: true, active: true },
+    { action: "رصيد بعد تعهد", later: true, active: true },
+    { action: "إضافة", later: true, active: true },
+    { action: "إعادة تعيين", later: true, active: true },
+    { action: "إعادة تفعيل", later: false, active: true },
+    { action: "إعادة تفعيل", later: true, active: false },
   ];
   for (const scenario of cases) {
     const rows = [grade({ student: { ...baseStudent, status: scenario.active ? "نشط" : "مفصول" } })];
     const returned = log({ id: "return", examId: null, action: scenario.action, amount: 2, balanceAfter: 2, date: at(scenario.later ? 18 : 15) });
     await harness({ logs: [dismissal, returned] }).annotate(rows);
-    assert.equal(rows[0].recordedOpportunityImpact.text.includes("سابقاً"), scenario.former, JSON.stringify(scenario));
+    assert.equal(rows[0].recordedOpportunityImpact.text, "فُصل الطالب بسبب هذا الامتحان", JSON.stringify(scenario));
+    assert.equal(rows[0].recordedOpportunityImpact.tone, "dismissed");
   }
 });
 

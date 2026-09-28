@@ -372,6 +372,39 @@ must(
   "حركة بلا امتحان: تظهر من يوم الانتقال فصاعداً (التسوية بيومها تظهر) وما قبله يُخفى",
 );
 
+// كل فصل بداية جديدة: الحركة المسجلة على فصل تُعرض بفصلها فقط، وحركة بلا
+// فصل مسجّل تُقارن بلحظة الانتقال الدقيقة لا بيومها.
+const chapterIdScope = { ...chapterLogScope, chapterId: "chapter-2" };
+must(
+  !opportunityLogWithinActiveChapter(
+    { examId: null, chapterId: "chapter-1", date: "2026-08-20T09:00:00.000Z" },
+    chapterIdScope,
+  ) &&
+    opportunityLogWithinActiveChapter(
+      { examId: null, chapterId: "chapter-2", date: "2026-08-14T17:39:56.000Z" },
+      chapterIdScope,
+    ),
+  "حركة مسجلة على فصل: تُعرض بفصلها مهما كان تاريخها",
+);
+must(
+  !opportunityLogWithinActiveChapter(
+    { examId: null, date: "2026-08-14T08:00:00.000Z" },
+    chapterIdScope,
+  ) &&
+    opportunityLogWithinActiveChapter(
+      { examId: null, date: "2026-08-14T18:00:00.000Z" },
+      chapterIdScope,
+    ),
+  "خصم يدوي صباح يوم الانتقال لا يظهر في الفصل الجديد، وما بعد الانتقال يظهر",
+);
+must(
+  opportunityLogWithinActiveChapter(
+    { examId: null, date: "2026-08-14T08:00:00.000Z" },
+    { examIds: [], since: "2026-08-14" },
+  ),
+  "حد بلا وقت: تبقى المقارنة باليوم كما كانت",
+);
+
 // بلا انتقال بعد (الفصل الأول منذ البداية): الحركات غير المرتبطة بامتحان كلها ظاهرة.
 assert.equal(
   opportunityLogWithinActiveChapter(

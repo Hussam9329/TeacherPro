@@ -749,8 +749,8 @@ check("HTML يميز الإجازة والغياب المثبت والدرجات
     const rendered = dom.elements.tpGradesBody.innerHTML;
     assert.equal(rendered.match(/data-label="الدرجة"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], scenario.cell, scenario.label);
     assert.equal(rendered.match(/data-label="الأثر على الفرص"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], scenario.effect, scenario.label);
-    if (scenario.logs) assert.match(rendered, /tp-grade-deduction/, scenario.label);
-    if (scenario.effect === "لا خصم") assert.match(rendered, /tp-grade-no-deduction/, scenario.label);
+    if (scenario.logs) assert.match(rendered, /tp-result-(?:deducted|dismissed)/, scenario.label);
+    if (scenario.effect === "لا خصم") assert.match(rendered, /tp-result-(?:excused|passed|failed|neutral)/, scenario.label);
     assert.equal(details.studentSnapshot.opportunities, 2);
     assert.equal(JSON.stringify(profile), original, "presentation never mutates grades, leave, balances or logs");
   }
@@ -790,20 +790,20 @@ check("الإجازات الفعلية تغطي الامتحان المحدد و
 
 check("HTML يعرض غير الحاضر ضمن السماح مجازاً بتواريخ بغداد ويحفظ الدرجات والخصومات المسجلة", () => {
   const period = { startDate: "2026-09-01", endDate: "2026-09-10" };
-  const graceEffect = "بدون خصم (فترة سماح لغاية 10-9-2026)";
+  const graceEffect = "بدون خصم (فترة سماح لغاية 10 سبتمبر 2026)";
   const cases = [
-    { label: "missing-grade", date: "2026-09-04", cell: "مجاز", effect: graceEffect },
-    { label: "recorded-absence", date: "2026-09-05", grade: { status: "غائب", score: null }, cell: "مجاز", effect: graceEffect },
-    { label: "baghdad-first-instant", date: "2026-08-31T21:00:00Z", cell: "مجاز", effect: graceEffect },
-    { label: "baghdad-last-instant", date: "2026-09-10T20:59:59Z", cell: "مجاز", effect: graceEffect },
+    { label: "missing-grade", date: "2026-09-04", cell: "مجاز فترة سماح", effect: graceEffect },
+    { label: "recorded-absence", date: "2026-09-05", grade: { status: "غائب", score: null }, cell: "مجاز فترة سماح", effect: graceEffect },
+    { label: "baghdad-first-instant", date: "2026-08-31T21:00:00Z", cell: "مجاز فترة سماح", effect: graceEffect },
+    { label: "baghdad-last-instant", date: "2026-09-10T20:59:59Z", cell: "مجاز فترة سماح", effect: graceEffect },
     { label: "before-start", date: "2026-08-31T20:59:59Z", cell: "بانتظار الدرجة", effect: "—" },
     { label: "after-end", date: "2026-09-10T21:00:00Z", cell: "بانتظار الدرجة", effect: "—" },
     { label: "cancelled-period", date: "2026-09-04", cancelledAt: "2026-09-02T10:00:00Z", cell: "بانتظار الدرجة", effect: "—" },
     { label: "zero-score", date: "2026-09-04", grade: { status: "درجة", score: 0 }, cell: "<bdi>0 / 20</bdi>", effect: graceEffect },
     { label: "recorded-score", date: "2026-09-04", grade: { status: "درجة", score: 18 }, cell: "<bdi>18 / 20</bdi>", effect: graceEffect },
-    { label: "legacy-placeholder", date: "2026-09-04", grade: { status: "ضمن فترة السماح", score: null }, cell: "مجاز", effect: graceEffect },
+    { label: "legacy-placeholder", date: "2026-09-04", grade: { status: "ضمن فترة السماح", score: null }, cell: "مجاز فترة سماح", effect: graceEffect },
     { label: "legacy-without-period", date: "2026-09-11", grade: { status: "ضمن فترة السماح", score: null }, cell: "بانتظار الدرجة", effect: "—" },
-    { label: "stored-deduction", date: "2026-09-04", logs: [{ action: "خصم", amount: 1 }], cell: "مجاز", effect: "خُصمت فرصة" },
+    { label: "stored-deduction", date: "2026-09-04", logs: [{ action: "خصم", amount: 1 }], cell: "مجاز فترة سماح", effect: "خُصمت فرصة" },
   ];
   for (const scenario of cases) {
     const exam = { id: "grace-exam", name: "الأسبوعي 2", date: scenario.date, fullMark: 20 };
@@ -823,8 +823,8 @@ check("HTML يعرض غير الحاضر ضمن السماح مجازاً بتو
     const gradeCell = rendered.match(/data-label="الدرجة"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1];
     assert.equal(gradeCell, scenario.cell, scenario.label);
     assert.ok(rendered.includes(scenario.effect), scenario.label);
-    if (scenario.effect === graceEffect) assert.match(rendered, /tp-grade-no-deduction/);
-    if (scenario.logs) assert.match(rendered, /tp-grade-deduction/);
+    if (scenario.effect === graceEffect) assert.match(rendered, /tp-result-(?:excused|passed|failed|neutral)/);
+    if (scenario.logs) assert.match(rendered, /tp-result-(?:deducted|dismissed)/);
     assert.equal(JSON.stringify(profile), original, "report cannot mutate stored grades, periods or balance");
     assert.equal(details.studentSnapshot.opportunities, 3);
   }
@@ -887,9 +887,9 @@ check("HTML يعرض الغش بحالته الصحيحة وأثره من الخ
     { label: "cheating-three", logs: [{ ...deduction, amount: 3 }], effect: "خُصمت 3 فرص", deduction: true },
     { label: "cheating-zero-applied", logs: [{ ...deduction, appliedAmount: 0 }], effect: "لا خصم" },
     { label: "cheating-without-log", effect: "لا خصم" },
-    { label: "cheating-dismissal", logs: [deduction, { action: "فصل تلقائي", amount: 0 }], effect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان", deduction: true },
+    { label: "cheating-dismissal", logs: [deduction, { action: "فصل تلقائي", amount: 0 }], effect: "خُصمت فرصتان وفُصلت بسبب هذا الامتحان", deduction: true },
     { label: "cheating-settled-history-retained", logs: [deduction, { action: "إعادة تعيين", amount: 3, balanceAfter: 3, ledgerVersion: 2, date: "2026-09-06", settledGradeIds: '["cheating-grade"]' }], effect: "خُصمت فرصتان", deduction: true },
-    { label: "cheating-during-grace", student: { gracePeriods: [{ startDate: "2026-09-01", endDate: "2026-09-10" }] }, effect: "بدون خصم (فترة سماح لغاية 10-9-2026)" },
+    { label: "cheating-during-grace", student: { gracePeriods: [{ startDate: "2026-09-01", endDate: "2026-09-10" }] }, effect: "بدون خصم (فترة سماح لغاية 10 سبتمبر 2026)" },
   ];
   for (const scenario of cases) {
     const profile = {
@@ -907,7 +907,7 @@ check("HTML يعرض الغش بحالته الصحيحة وأثره من الخ
     const rendered = dom.elements.tpGradesBody.innerHTML;
     assert.equal(rendered.match(/data-label="الدرجة"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], "غش", scenario.label);
     assert.equal(rendered.match(/data-label="الأثر على الفرص"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], scenario.effect, scenario.label);
-    assert.match(rendered, scenario.deduction ? /tp-grade-deduction/ : /tp-grade-no-deduction/);
+    assert.match(rendered, scenario.deduction ? /tp-result-(?:deducted|dismissed)/ : /tp-result-(?:excused|passed|failed|neutral)/);
     assert.equal(JSON.stringify(profile), original);
     assert.equal(details.studentSnapshot.opportunities, 1);
   }
@@ -982,7 +982,7 @@ check("نص أثر الامتحان مبسط ويحفظ عدد الخصومات 
   assert.equal(effect([{ action: "خصم", amount: 1, appliedAmount: 0 }]), "لا خصم");
   assert.equal(effect([{ action: "خصم", amount: 2 }]), "خُصمت فرصتان");
   assert.equal(effect([{ action: "خصم", amount: 3 }]), "خُصمت 3 فرص");
-  assert.match(effect([{ action: "فصل", amount: 0 }]), /سُجّل فصل بسبب هذا الامتحان/);
+  assert.match(effect([{ action: "فصل", amount: 0 }]), /فُصلت بسبب هذا الامتحان/);
 });
 
 check("ألوان صفوف التقرير تعتمد على أثر الامتحان الفعلي وتبقى دلالته مكتوبة بجانب اللون", () => {
@@ -1000,17 +1000,17 @@ check("ألوان صفوف التقرير تعتمد على أثر الامتح�
     { label: "ordinary-recorded-absence", grade: { status: "غائب", score: null }, tone: "ordinary", effect: "لا خصم" },
     { label: "formal-leave-green", grade: { status: "مجاز", score: null }, tone: "excused", effect: "لا خصم" },
     { label: "effective-exam-leave-green", leaves: [{ examId: exam.id }], tone: "excused", effect: "لا خصم" },
-    { label: "grace-green", grace: true, tone: "excused", effect: "بدون خصم (فترة سماح لغاية 15-9-2026)" },
-    { label: "scored-grace-green", grade: { status: "درجة", score: 18 }, grace: true, tone: "excused", effect: "بدون خصم (فترة سماح لغاية 15-9-2026)" },
+    { label: "grace-green", grace: true, tone: "excused", effect: "بدون خصم (فترة سماح لغاية 15 سبتمبر 2026)" },
+    { label: "scored-grace-green", grade: { status: "درجة", score: 18 }, grace: true, tone: "excused", effect: "بدون خصم (فترة سماح لغاية 15 سبتمبر 2026)" },
     { label: "deduction-pink", grade: { status: "غائب" }, logs: [debit], tone: "deducted", effect: "خُصمت فرصتان" },
     { label: "zero-applied-no-pink", grade: { status: "غائب" }, logs: [{ ...debit, appliedAmount: 0 }], tone: "ordinary", effect: "لا خصم" },
     { label: "deduction-precedes-grace", grace: true, logs: [debit], tone: "deducted", effect: "خُصمت فرصتان" },
     { label: "deduction-precedes-leave", grade: { status: "مجاز" }, logs: [debit], tone: "deducted", effect: "خُصمت فرصتان" },
-    { label: "dismissal-strongest", grade: { status: "غش" }, grace: true, logs: [debit, dismissal], tone: "dismissed", effect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان" },
-    { label: "dismissal-with-zero-deduction", grade: { status: "غائب" }, logs: [{ ...debit, appliedAmount: 0 }, dismissal], tone: "dismissed", effect: "سُجّل فصل بسبب هذا الامتحان" },
-    { label: "settled-old-dismissal-retained", grade: { status: "غائب" }, logs: [debit, dismissal, settlement], tone: "dismissed", effect: "خُصمت فرصتان. سُجّل فصل سابقاً بسبب هذا الامتحان" },
-    { label: "later-manual-deduction-keeps-complete-history", grade: { status: "غائب" }, logs: [debit, dismissal, settlement, { action: "خصم", amount: 1, date: "2026-09-17" }], tone: "dismissed", effect: "خُصمت 3 فرص. سُجّل فصل سابقاً بسبب هذا الامتحان" },
-    { label: "later-manual-dismissal-keeps-earlier-deduction", grade: { status: "غائب" }, logs: [debit, dismissal, settlement, { action: "فصل", amount: 0, date: "2026-09-17" }], tone: "dismissed", effect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان" },
+    { label: "dismissal-strongest", grade: { status: "غش" }, grace: true, logs: [debit, dismissal], tone: "dismissed", effect: "خُصمت فرصتان وفُصلت بسبب هذا الامتحان" },
+    { label: "dismissal-with-zero-deduction", grade: { status: "غائب" }, logs: [{ ...debit, appliedAmount: 0 }, dismissal], tone: "dismissed", effect: "فُصلت بسبب هذا الامتحان" },
+    { label: "settled-old-dismissal-retained", grade: { status: "غائب" }, logs: [debit, dismissal, settlement], tone: "dismissed", effect: "خُصمت فرصتان وفُصلت بسبب هذا الامتحان" },
+    { label: "later-manual-deduction-keeps-complete-history", grade: { status: "غائب" }, logs: [debit, dismissal, settlement, { action: "خصم", amount: 1, date: "2026-09-17" }], tone: "dismissed", effect: "خُصمت 3 فرص وفُصلت بسبب هذا الامتحان" },
+    { label: "later-manual-dismissal-keeps-earlier-deduction", grade: { status: "غائب" }, logs: [debit, dismissal, settlement, { action: "فصل", amount: 0, date: "2026-09-17" }], tone: "dismissed", effect: "خُصمت فرصتان وفُصلت بسبب هذا الامتحان" },
     { label: "student-status-alone-does-not-color-exam", studentStatus: "مفصول", grade: { status: "درجة", score: 18 }, tone: "ordinary", effect: "لا خصم" },
   ];
   for (const scenario of cases) {
@@ -1039,7 +1039,7 @@ check("ألوان صفوف التقرير تعتمد على أثر الامتح�
     assert.match(rendered, new RegExp('<tr[^>]*class="[^"]*\\btp-grade-row-' + scenario.tone + '\\b'), scenario.label);
     assert.equal((rendered.match(/tp-grade-row-(?:ordinary|excused|deducted|dismissed)/g) || []).length, 1, "one exam has one semantic row tone");
     assert.equal(rendered.match(/data-label="الأثر على الفرص"[^]*?tp-mobile-field-value">([^]*?)<\/span>/)?.[1], scenario.effect, "color never replaces the factual effect text");
-    if (scenario.tone === "dismissed") assert.match(rendered, /سُجّل فصل (?:سابقاً )?بسبب هذا الامتحان/, scenario.label);
+    if (scenario.tone === "dismissed") assert.match(rendered, /فُصلت بسبب هذا الامتحان/, scenario.label);
     assert.equal(JSON.stringify(profile), before, "row styling never mutates balances, grades, excuses or ledger records");
     assert.equal(details.studentSnapshot.opportunities, 3);
   }
@@ -1248,7 +1248,7 @@ check("استعادة برصيد جديد تظهر بعد الخصم التار�
   assert.match(dom.elements.tpGradesBody.innerHTML, /أُعيد تفعيلك برصيد 3 فرص/);
   assert.match(dom.elements.tpGradesBody.innerHTML, /16 سبتمبر 2026/);
   assert.doesNotMatch(dom.elements.tpStudentOverview.innerHTML, /PRIVATE_ADMIN_REASON/);
-  assert.match(dom.elements.tpGradesBody.innerHTML, /tp-grade-deduction/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /tp-result-(?:deducted|dismissed)/);
   assert.match(dom.elements.tpGradesBody.innerHTML, /خُصمت فرصتان/);
   assert.match(dom.elements.tpGradesBody.innerHTML, /غياب/);
   const withoutExams = selectHtmlReportExams({ s1: details }, []);
@@ -1278,7 +1278,7 @@ check("إضافة الإدارة تظهر كسطر مؤرخ بعد الامتح�
   assert.doesNotMatch(dom.elements.tpStudentOverview.innerHTML, /أضافت الإدارة|13 سبتمبر 2026/);
   assert.match(dom.elements.tpGradesBody.innerHTML, /سُجّل منح فرصتين/);
   assert.match(dom.elements.tpGradesBody.innerHTML, /13 سبتمبر 2026/);
-  assert.match(dom.elements.tpGradesBody.innerHTML, /tp-grade-deduction/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /tp-result-(?:deducted|dismissed)/);
   assert.match(dom.elements.tpStudentOverview.innerHTML, /<strong>3<\/strong>/);
 });
 
@@ -1406,7 +1406,7 @@ check("حالة خصم فرصتين ثم غياب ثم فصل تبقى بتار�
     ].map(log => ({ chapterId: "third", ...log })),
   };
   const { details, dom, rendered, sequence, html } = renderedTimeline(profile, "restore-one-complete-history");
-  assert.deepEqual(details.grades.map(grade => grade.opportunityEffect), ["خُصمت فرصتان", "خُصمت فرصة", "لا خصم", "سُجّل فصل سابقاً بسبب هذا الامتحان"]);
+  assert.deepEqual(details.grades.map(grade => grade.opportunityEffect), ["خُصمت فرصتان", "خُصمت فرصة", "لا خصم", "فُصلت بسبب هذا الامتحان"]);
   assert.deepEqual(sequence, [
     exams[0].name, "event:2026-09-13T13:22:00Z", exams[1].name, exams[2].name, exams[3].name,
     "event:2026-09-26T12:41:00Z",
@@ -1569,15 +1569,15 @@ check("رصيد بداية الفصل يسبق امتحان اليوم نفسه 
   assert.doesNotMatch(rendered, /15 سبتمبر|سُجّلت النتيجة/);
 });
 
-check("وصف الفصل السابق يتطلب استعادة لاحقة وحالة نشطة ولا يخفي شارة الفصل الحالي", () => {
+check("وصف الفصل بسبب الامتحان ثابت مهما كانت الحالة الحالية ولا يخفي شارة الفصل الحالي", () => {
   const exam = { id: "dismissal-exam", name: "امتحان أثر الفصل", date: "2026-09-16T00:00:00Z", fullMark: 20 };
   const cases = [
-    { label: "active-after-return", status: "نشط", action: "رصيد إعادة التفعيل", movementDate: "2026-09-18T10:00:00Z", former: true },
-    { label: "currently-dismissed-after-return", status: "مفصول", action: "رصيد إعادة التفعيل", movementDate: "2026-09-18T10:00:00Z", former: false },
-    { label: "active-without-return", status: "نشط", former: false },
-    { label: "return-precedes-dismissal", status: "نشط", action: "رصيد إعادة التفعيل", movementDate: "2026-09-15T10:00:00Z", former: false },
-    { label: "credit-is-not-return", status: "نشط", action: "إضافة", movementDate: "2026-09-18T10:00:00Z", former: false },
-    { label: "reset-is-not-return", status: "نشط", action: "إعادة تعيين", movementDate: "2026-09-18T10:00:00Z", former: false },
+    { label: "active-after-return", status: "نشط", action: "رصيد إعادة التفعيل", movementDate: "2026-09-18T10:00:00Z" },
+    { label: "currently-dismissed-after-return", status: "مفصول", action: "رصيد إعادة التفعيل", movementDate: "2026-09-18T10:00:00Z" },
+    { label: "active-without-return", status: "نشط" },
+    { label: "return-precedes-dismissal", status: "نشط", action: "رصيد إعادة التفعيل", movementDate: "2026-09-15T10:00:00Z" },
+    { label: "credit-is-not-return", status: "نشط", action: "إضافة", movementDate: "2026-09-18T10:00:00Z" },
+    { label: "reset-is-not-return", status: "نشط", action: "إعادة تعيين", movementDate: "2026-09-18T10:00:00Z" },
   ];
   for (const scenario of cases) {
     const profile = {
@@ -1592,13 +1592,144 @@ check("وصف الفصل السابق يتطلب استعادة لاحقة وح�
     };
     const before = JSON.stringify(profile);
     const { details, dom, rendered } = renderedTimeline(profile, scenario.label);
-    const expected = scenario.former ? "سُجّل فصل سابقاً بسبب هذا الامتحان" : "سُجّل فصل بسبب هذا الامتحان";
+    const expected = "فُصلت بسبب هذا الامتحان";
     assert.equal(details.grades[0].opportunityEffect, expected, scenario.label);
     assert.match(rendered, new RegExp(expected), scenario.label);
     assert.equal(details.grades[0].opportunityTone, "dismissed", "historic evidence retains its recorded severity");
     assert.equal(dom.elements.tpModalDismissedBadge.style.display, scenario.status === "مفصول" ? "" : "none", scenario.label);
     assert.equal(JSON.stringify(profile), before);
   }
+});
+
+check("سياق التقرير يجعل النتيجة نفسها مهما كانت صلاحيات المصدّر", () => {
+  const exams = [
+    { id: "before-registration", name: "امتحان قبل التسجيل", date: "2026-09-02T00:00:00Z", fullMark: 20 },
+    { id: "leave-exam", name: "امتحان الإجازة", date: "2026-09-12T00:00:00Z", fullMark: 20 },
+  ];
+  // The exporter cannot read the student file or follow-up: no status, no
+  // registration day and no leaves arrive with the profile itself.
+  const profile = {
+    student: { opportunities: 0 },
+    currentChapter: { id: "context", name: "الفصل الحالي", examIds: exams.map(exam => exam.id) },
+    exams, allCourseExams: exams,
+    grades: [{ id: "leave-grade", examId: "leave-exam", status: "غائب", score: null, createdAt: "2026-09-12T10:00:00Z" }],
+    opportunityLogs: [],
+    reportContext: {
+      status: "مفصول", registeredAt: "2026-09-10T08:00:00Z",
+      leaves: [{ examId: "leave-exam", leaveType: "exam", date: null, dateFrom: null, dateTo: null }],
+      dismissals: [], pendingGrades: [],
+    },
+  };
+  const { details, dom, rendered } = renderedTimeline(profile, "report-context");
+  assert.deepEqual(details.grades.map(grade => grade.examName), ["امتحان الإجازة"], "an exam before registration stays out");
+  assert.equal(details.grades[0].opportunityEffect, "لا خصم");
+  assert.equal(details.grades[0].opportunityTone, "excused");
+  assert.match(rendered, /tp-result-excused/);
+  assert.equal(dom.elements.tpModalDismissedBadge.style.display, "", "the dismissed badge follows the recorded status");
+});
+
+check("درجة الطالب المعلّقة تظهر «غير محتسبة» ولا تغطي درجة مسجّلة", () => {
+  const exams = [
+    { id: "pending-exam", name: "امتحان معلّق", date: "2026-09-14T00:00:00Z", fullMark: 20 },
+    { id: "graded-exam", name: "امتحان مسجّل", date: "2026-09-15T00:00:00Z", fullMark: 20, passMark: 10 },
+  ];
+  const profile = {
+    student: { status: "مفصول", opportunities: 0 },
+    currentChapter: { id: "pending", name: "الفصل الحالي", examIds: exams.map(exam => exam.id) },
+    exams, allCourseExams: exams,
+    grades: [{ id: "graded", examId: "graded-exam", status: "درجة", score: 15, createdAt: "2026-09-15T10:00:00Z" }],
+    opportunityLogs: [],
+    reportContext: {
+      status: "مفصول", registeredAt: "2026-09-01T00:00:00Z", leaves: [], dismissals: [],
+      pendingGrades: [
+        { examId: "pending-exam", score: 17, category: "dismissed" },
+        { examId: "graded-exam", score: 3, category: "dismissed" },
+      ],
+    },
+  };
+  const { details, rendered } = renderedTimeline(profile, "pending-grade");
+  const pending = details.grades.find(grade => grade.examName === "امتحان معلّق");
+  assert.equal(pending.status, "غير محتسبة");
+  assert.equal(pending.opportunityEffect, "بدون أثر على الفرص");
+  const graded = details.grades.find(grade => grade.examName === "امتحان مسجّل");
+  assert.equal(graded.score, 15, "a saved grade is never replaced by a pending note");
+  assert.match(rendered, /غير محتسبة/);
+  assert.doesNotMatch(rendered, /امتحان معلّق[^]*?بانتظار الدرجة/);
+  assert.doesNotMatch(rendered, /<bdi>17 \//, "the pending score itself is not shown as a result");
+});
+
+check("الفصل اليدوي يظهر سطراً صريحاً بسببه حتى لو كان الرصيد صفراً", () => {
+  const exam = { id: "manual-exam", name: "امتحان", date: "2026-09-12T00:00:00Z", fullMark: 20 };
+  const base = {
+    student: { status: "مفصول", opportunities: 0 },
+    currentChapter: { id: "manual", name: "الفصل الحالي", examIds: [exam.id] },
+    exams: [exam], allCourseExams: [exam],
+    grades: [{ id: "manual-grade", examId: exam.id, status: "درجة", score: 18, createdAt: "2026-09-12T10:00:00Z" }],
+  };
+  // Balance already 0: only the dismissal record exists.
+  const zero = renderedTimeline({
+    ...base, opportunityLogs: [],
+    reportContext: { status: "مفصول", registeredAt: null, leaves: [], pendingGrades: [],
+      dismissals: [{ date: "2026-09-13T09:00:00Z", reason: "غياب متكرر بدون عذر" }] },
+  }, "manual-dismissal-zero");
+  assert.match(zero.rendered, /فصلتك الإدارة بسبب: غياب متكرر بدون عذر/);
+  // A balance taken away by the dismissal: one line, never two.
+  const withLog = renderedTimeline({
+    ...base,
+    opportunityLogs: [{ action: "خصم", amount: 2, appliedAmount: 2, balanceBefore: 2, balanceAfter: 0, ledgerVersion: 2,
+      reason: "فصل الطالب: غياب متكرر بدون عذر", date: "2026-09-13T09:00:00Z", chapterId: "manual" }],
+    reportContext: { status: "مفصول", registeredAt: null, leaves: [], pendingGrades: [],
+      dismissals: [{ date: "2026-09-13T09:00:01Z", reason: "غياب متكرر بدون عذر" }] },
+  }, "manual-dismissal-balance");
+  assert.equal([...withLog.rendered.matchAll(/فصلتك الإدارة/g)].length, 1);
+  assert.match(withLog.rendered, /فصلتك الإدارة بسبب: غياب متكرر بدون عذر — أصبح الرصيد 0/);
+  assert.doesNotMatch(withLog.rendered, /خصمت الإدارة/);
+});
+
+check("كل فصل بداية جديدة: حركة الفصل السابق لا تظهر، والمفصول قبله يُشرح بسطر واحد", () => {
+  const oldExam = { id: "old-exam", name: "امتحان 4", date: "2026-08-10T00:00:00Z", fullMark: 20 };
+  const newExam = { id: "new-exam", name: "امتحان الفصل الثاني", date: "2026-09-20T00:00:00Z", fullMark: 20 };
+  const profile = {
+    student: { status: "مفصول", opportunities: 0 },
+    currentChapter: { id: "chapter-2", name: "الفصل الثاني", since: "2026-09-14T09:00:00.000Z", examIds: [newExam.id] },
+    exams: [oldExam, newExam], allCourseExams: [oldExam, newExam],
+    grades: [],
+    opportunityLogs: [
+      { action: "فصل تلقائي", amount: 0, examId: oldExam.id, date: "2026-08-10T12:00:00Z", chapterId: "chapter-1", chapterNameSnapshot: "الفصل الأول" },
+      // Same day as the switch, but in the morning and on the first chapter.
+      { action: "خصم", amount: 1, appliedAmount: 1, balanceAfter: 0, ledgerVersion: 2, reason: "سلوك", date: "2026-09-14T06:00:00Z", chapterId: "chapter-1" },
+    ],
+    reportContext: { status: "مفصول", registeredAt: null, leaves: [], dismissals: [], pendingGrades: [] },
+  };
+  const { rendered } = renderedTimeline(profile, "carried-dismissal");
+  assert.match(rendered, /فُصلت خلال الفصل الأول بسبب امتحان 4، وبقيت حالتك «مفصول» عند بدء هذا الفصل/);
+  assert.doesNotMatch(rendered, /سلوك|خصمت الإدارة/, "a first-chapter movement stays in its chapter");
+  const active = renderedTimeline({ ...profile, student: { status: "نشط", opportunities: 3 }, reportContext: { ...profile.reportContext, status: "نشط" } }, "carried-active");
+  assert.doesNotMatch(active.rendered, /وبقيت حالتك/, "only a student still dismissed gets the line");
+});
+
+check("لون الصف يتبع النتيجة: ناجح أخضر وراسب مميّز وتاريخ التحديث بالصفحة الأولى فقط", () => {
+  const exams = [
+    { id: "pass", name: "امتحان ناجح", date: "2026-09-12T00:00:00Z", fullMark: 20, passMark: 10 },
+    { id: "fail", name: "امتحان راسب", date: "2026-09-13T00:00:00Z", fullMark: 20, passMark: 10, noDiscount: true },
+  ];
+  const profile = {
+    student: { status: "نشط", opportunities: 3 },
+    currentChapter: { id: "colours", name: "الفصل الحالي", examIds: exams.map(exam => exam.id) },
+    exams, allCourseExams: exams,
+    grades: [
+      { id: "g-pass", examId: "pass", status: "درجة", score: 15, createdAt: "2026-09-12T10:00:00Z" },
+      { id: "g-fail", examId: "fail", status: "درجة", score: 4, createdAt: "2026-09-13T10:00:00Z" },
+    ],
+    opportunityLogs: [],
+  };
+  const { html, rendered } = renderedTimeline(profile, "result-colours");
+  const rowOf = name => rendered.match(new RegExp(`<tr[^>]*>(?:(?!</tr>)[^])*${name}(?:(?!</tr>)[^])*</tr>`))?.[0] || "";
+  assert.match(rowOf("امتحان ناجح"), /tp-result-passed/);
+  assert.match(rowOf("امتحان ناجح"), /tp-result-pill-passed">ناجح/);
+  assert.match(rowOf("امتحان راسب"), /tp-result-failed/);
+  assert.match(rowOf("امتحان راسب"), /tp-result-pill-failed">راسب/);
+  assert.equal([...html.matchAll(/آخر تحديث:/g)].length, 1, "the update time appears once, on the opening page");
 });
 
 // Recreate the previous wire payload and its snapshot-based balance read. All
@@ -1639,9 +1770,9 @@ function privatePayloadFixture() {
   const grades = [
     { status: "درجة", score: 0, opportunityTone: "ordinary", opportunityEffect: "لا خصم" },
     { status: "مجاز", score: null, opportunityTone: "excused", opportunityEffect: "لا خصم" },
-    { status: "مجاز — فترة سماح", score: null, opportunityTone: "excused", opportunityEffect: "بدون خصم (فترة سماح لغاية 10-9-2026)" },
+    { status: "مجاز — فترة سماح", score: null, opportunityTone: "excused", opportunityEffect: "بدون خصم (فترة سماح لغاية 10 سبتمبر 2026)" },
     { status: "غائب", score: null, opportunityTone: "deducted", opportunityEffect: "خُصمت فرصة" },
-    { status: "غش", score: null, opportunityTone: "dismissed", opportunityEffect: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان" },
+    { status: "غش", score: null, opportunityTone: "dismissed", opportunityEffect: "خُصمت فرصتان وفُصلت بسبب هذا الامتحان" },
     { status: "درجة معلّقة", score: null, opportunityTone: "ordinary", opportunityEffect: "—" },
   ].map((grade, index) => ({
     ...grade,
@@ -1689,7 +1820,7 @@ check("ملف HTML ينقل حقول العرض حصراً ويحذف السجل
   const publicDetails = JSON.parse(JSON.stringify(sandbox.STUDENT_DETAILS));
   const publicStudents = JSON.parse(JSON.stringify(sandbox.STUDENT_LIST));
   const detailKeys = ["activeChapterName", "timelineEvents", "grades"].sort();
-  const gradeKeys = ["examName", "examType", "examDate", "timelineDate", "score", "fullMark", "status", "opportunityEffect", "opportunityTone"].sort();
+  const gradeKeys = ["examName", "examType", "examDate", "timelineDate", "score", "fullMark", "status", "outcome", "opportunityEffect", "opportunityTone"].sort();
   const studentKeys = ["id", "name", "code", "courseName", "opportunities", "status"].sort();
   assert.deepEqual(Object.keys(publicDetails).sort(), ["s1", "s2", "s3"]);
   for (const detail of Object.values(publicDetails)) {
@@ -1708,7 +1839,11 @@ check("ملف HTML ينقل حقول العرض حصراً ويحذف السجل
   assert.equal(publicStudents[2].courseName, fixture.list[2].courseName);
   assert.doesNotMatch(html, /PRIVATE_|1999-01-01T01:23:45Z|1999-02-02T02:34:56Z|1999-03-03T03:45:56Z/);
   const wireData = JSON.stringify({ details: publicDetails, students: publicStudents });
-  assert.doesNotMatch(wireData, /"(?:opportunityLogs|studentSnapshot|passMark|registeredAt|generatedAt|activeChapterSince|examId|outcome|notes|reason)"/);
+  assert.doesNotMatch(wireData, /"(?:opportunityLogs|studentSnapshot|passMark|registeredAt|generatedAt|activeChapterSince|examId|notes|reason)"/);
+  // Only the three result words travel; any other stored outcome is dropped.
+  for (const detail of Object.values(publicDetails)) {
+    for (const grade of detail.grades) assert.ok(["", "ناجح", "راسب", "الدرجة كاملة"].includes(grade.outcome), grade.outcome);
+  }
   assert.equal(JSON.stringify(fixture), original, "preparing a public file must not mutate the full internal snapshot");
 });
 

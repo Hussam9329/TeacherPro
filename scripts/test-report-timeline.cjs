@@ -139,7 +139,7 @@ const balanceContext = context([debit, dismissal, grant], "chapter");
 const historical = { ...balanceContext, historical: true };
 assert.equal(presentation(grade, exam, [debit, dismissal], balanceContext).text, "لا خصم (قبل رصيدك الجديد)", "default callers keep their effective-balance semantics");
 assert.deepEqual(presentation(grade, exam, [debit, dismissal], historical), {
-  text: "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان", tone: "dismissed",
+  text: "خُصمت فرصتان وفُصلت بسبب هذا الامتحان", tone: "dismissed",
 });
 assert.equal(presentation(grade, exam, [], historical).text, "لا يوجد خصم مسجّل", "a missing debit is not invented from an absence");
 assert.equal(presentation({ ...grade, status: "درجة", score: 20 }, exam, [], historical).text, "لا يوجد خصم مسجّل");
@@ -149,40 +149,24 @@ assert.equal(presentation(grade, { ...exam, noDiscount: true }, [], historical).
 assert.equal(presentation({ ...grade, status: "مجاز" }, exam, [], historical).text, "لا خصم");
 assert.equal(presentation(grade, exam, [debit, log("خصم", 16, { amount: 1 })], historical).text, "خُصمت 3 فرص", "history includes both earlier and later recorded debits");
 
-const historicalDismissalContext = { ...historical, studentStatus: "نشط", reactivationDates: [at(15)] };
-const pastDismissalText = "خُصمت فرصتان. سُجّل فصل سابقاً بسبب هذا الامتحان";
-const currentDismissalText = "خُصمت فرصتان. سُجّل فصل بسبب هذا الامتحان";
-assert.deepEqual(presentation(grade, exam, [debit, dismissal], historicalDismissalContext), {
-  text: pastDismissalText, tone: "dismissed",
-}, "explicit later recovery marks the historical event without losing its deduction or tone");
+// The dismissal line tells what happened at the time. Today's status and any
+// later return, credit or reset never change it (a return is its own line).
+const dismissalText = "خُصمت فرصتان وفُصلت بسبب هذا الامتحان";
 for (const patch of [
-  { studentStatus: "مفصول" }, { studentStatus: "مؤرشف" }, { studentStatus: undefined },
-  { reactivationDates: undefined }, { reactivationDates: [] },
-  { reactivationDates: [at(9)] }, { reactivationDates: [dismissal.date] },
-  { reactivationDates: ["invalid"] },
-]) assert.equal(presentation(grade, exam, [debit, dismissal], { ...historicalDismissalContext, ...patch }).text,
-  currentDismissalText, "current dismissal wording remains when later recovery is not proved: " + JSON.stringify(patch));
+  {}, { studentStatus: "نشط" }, { studentStatus: "مفصول" }, { studentStatus: "مؤرشف" },
+  { reactivationDates: [at(15)] }, { reactivationDates: [at(9)] }, { reactivationDates: ["invalid"] },
+]) assert.equal(presentation(grade, exam, [debit, dismissal], { ...historical, ...patch }).text,
+  dismissalText, "fixed dismissal wording: " + JSON.stringify(patch));
 for (const date of [undefined, "", "invalid", new Date(NaN)]) {
-  assert.equal(presentation(grade, exam, [debit, { ...dismissal, date }], historicalDismissalContext).text,
-    currentDismissalText, "invalid or missing dismissal time prevents historical-order inference");
+  assert.equal(presentation(grade, exam, [debit, { ...dismissal, date }], historical).text, dismissalText);
 }
-assert.equal(presentation(grade, exam, [debit, dismissal, log("فصل تلقائي", 16, { amount: 0 })], historicalDismissalContext).text,
-  currentDismissalText, "a new dismissal after recovery is not marked as old");
-assert.equal(presentation(grade, exam, [debit, dismissal, log("فصل تلقائي", 14, { amount: 0 })], historicalDismissalContext).text,
-  pastDismissalText, "the return must follow every dismissal attached to the exam");
-assert.equal(presentation(grade, exam, [debit, dismissal, log("فصل تلقائي", 16, { amount: 0 })], {
-  ...historicalDismissalContext, reactivationDates: [at(15), "invalid", at(17)],
-}).text, pastDismissalText, "a later valid return can cover the newest dismissal");
-const ordinaryMovements = timeline([log("إضافة", 15, { amount: 1 }), log("إعادة تعيين", 16, { amount: 3 })]);
-assert.equal(presentation(grade, exam, [debit, dismissal], {
-  ...historicalDismissalContext,
-  reactivationDates: ordinaryMovements.filter(event => event.kind === "return").map(event => event.date),
-}).text, currentDismissalText, "ordinary added opportunities and resets never establish a return to study");
-assert.equal(presentation(grade, exam, [debit, dismissal], {
-  ...historicalDismissalContext, settlement: null, historical: false,
-}).text, currentDismissalText, "non-historical callers keep their existing wording");
-assert.equal(presentation(grade, exam, [dismissal], historicalDismissalContext).text,
-  "سُجّل فصل سابقاً بسبب هذا الامتحان", "historical wording does not invent a deduction");
+assert.equal(presentation(grade, exam, [debit, dismissal, log("فصل تلقائي", 16, { amount: 0 })], historical).text, dismissalText);
+assert.equal(presentation(grade, exam, [debit, dismissal], { ...historical, settlement: null, historical: false }).text,
+  dismissalText, "non-historical callers use the same wording");
+assert.deepEqual(presentation(grade, exam, [dismissal], historical), { text: "فُصلت بسبب هذا الامتحان", tone: "dismissed" },
+  "the wording does not invent a deduction");
+assert.equal(presentation(grade, exam, [debit, dismissal], { ...historical, audience: "staff" }).text,
+  "خُصمت فرصتان وفُصل الطالب بسبب هذا الامتحان", "staff screens name the student instead of addressing them");
 
 const between = timeline([log("إضافة", 11, { amount: 1 })], "chapter");
 assert.equal(gradeDate(grade, exam, between), exam.date, "a later-day credit never moves an older exam to its entry day");

@@ -9,6 +9,19 @@ export function reportNumber(value: unknown): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+/** «11 سبتمبر 2026»: the same date words the report uses everywhere. */
+export function reportDayText(day: string): string {
+  const [year, month, date] = String(day || "").slice(0, 10).split("-").map(Number);
+  if (!year || !month || !date) return String(day || "");
+  try {
+    return new Date(Date.UTC(year, month - 1, date)).toLocaleDateString("ar-EG-u-nu-latn", {
+      day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+    });
+  } catch {
+    return `${date}-${month}-${year}`;
+  }
+}
+
 export function studentReportText(value: unknown): string {
   return String(value ?? "")
     .replace(/\[(?:academic-[^\]]*|zero-balance-violation|قبل:[^\]]*|مطلوب:[^\]]*|undo-ref:[^\]]*)\]/g, "")
@@ -53,9 +66,8 @@ export type ReportOpportunityContext = {
   balanceNotes: ReportBalanceNote[];
   /** Show recorded past effects alongside dated balance movements. */
   historical?: boolean;
-  studentStatus?: string;
-  /** Completed returns to study only; additions and resets are not returns. */
-  reactivationDates?: readonly string[];
+  /** Who reads the text: the student's own report (default) or staff screens. */
+  audience?: "student" | "staff";
   /** The student's active grace periods: the only source of grace in reports. */
   gracePeriods?: readonly GracePeriodRange[];
   registeredAt?: string | Date | null;
@@ -142,8 +154,12 @@ export function buildReportTimelineEvents(
       if (amount === null || amount <= 0) continue;
       const kind = action === "إضافة" ? "add" : "deduct";
       const effect = reportCommandEffect(log, commandEffects);
+      const manualDismissal = kind === "deduct" && /^فصل الطالب/u.test(String(log.reason || "").trim());
       let text: string;
-      if (effect) {
+      if (manualDismissal) {
+        const reason = studentReportText(String(log.reason || "").replace(/^فصل الطالب\s*:?\s*/u, ""));
+        text = `${reason ? `فصلتك الإدارة بسبب: ${reason}` : "فصلتك الإدارة"} — أصبح الرصيد ${effect?.balanceAfter ?? 0}`;
+      } else if (effect) {
         if (kind === "add" && effect.amount === 0) {
           text = `${pledge ? "بعد قبول التعهّد، " : ""}بقي رصيدك مكتملًا عند ${effect.balanceAfter} فرص (الحد الأعلى لفرص الفصل)`;
         } else {
@@ -351,10 +367,10 @@ export function reportGradeOutcome(grade: Record<string, unknown>, exam?: Record
     if (score === null) return "بانتظار الدرجة";
     const full = reportNumber(exam?.fullMark);
     const pass = reportNumber(exam?.passMark);
-    return full !== null && score === full ? "الدرجة كاملة" : pass === null ? "درجة مسجّلة" : score >= pass ? "ناجح" : "أقل من درجة النجاح";
+    return full !== null && score === full ? "الدرجة كاملة" : pass === null ? "درجة مسجّلة" : score >= pass ? "ناجح" : "راسب";
   }
   // The retired grace placeholder is not a result: it records nothing.
-  return ({ "غائب": "غياب", "غش": "غش", "مجاز": "إجازة", [GRACE_PERIOD_EXCUSE_LABEL]: "مجاز", "قبل تسجيل الطالب": "قبل تسجيلك" } as Record<string, string>)[status] || "بانتظار الدرجة";
+  return ({ "غائب": "غياب", "غش": "غش", "مجاز": "إجازة", [GRACE_PERIOD_EXCUSE_LABEL]: "مجاز فترة سماح", "قبل تسجيل الطالب": "قبل تسجيلك" } as Record<string, string>)[status] || "بانتظار الدرجة";
 }
 
 export type ReportGradeTone = "ordinary" | "excused" | "deducted" | "dismissed";
@@ -379,26 +395,18 @@ export function reportGradePresentation(grade: Record<string, unknown>, exam: Re
   const deducted = deductions.reduce((sum, l) => sum + (reportNumber(l.appliedAmount) ?? reportNumber(l.amount) ?? 0), 0);
   const dismissals = effectiveLogs.filter(l => String(l.action || "").startsWith("فصل"));
   const dismissed = dismissals.length > 0;
-  const dismissalDates = dismissals.map(reportLogDate);
-  // Calling a dismissal historical requires both the current active status
-  // and a completed return after every recorded dismissal for this exam.
-  // Missing dates cannot establish that order, and a later new dismissal
-  // must not be explained away by an earlier return.
-  const historicalDismissal = Boolean(context?.historical && context.studentStatus === "نشط" &&
-    dismissed && dismissalDates.every(date => date !== null) &&
-    context.reactivationDates?.some(value => {
-      const date = reportLogDate({ date: value });
-      return date !== null && dismissalDates.every(dismissalDate => Date.parse(date) > Date.parse(dismissalDate!));
-    }));
   const deductionText = deducted === 1
     ? "خُصمت فرصة"
     : deducted === 2
       ? "خُصمت فرصتان"
       : deducted > 0 ? `خُصمت ${deducted} فرص` : "";
+  // What happened at the time, whatever the student's status is today; a
+  // later return is its own line in the timeline.
+  const dismissalText = context?.audience === "staff" ? "فُصل الطالب بسبب هذا الامتحان" : "فُصلت بسبب هذا الامتحان";
   if (deducted || dismissed) return {
-    text: [deductionText, dismissed
-      ? historicalDismissal ? "سُجّل فصل سابقاً بسبب هذا الامتحان" : "سُجّل فصل بسبب هذا الامتحان"
-      : ""].filter(Boolean).join(". "),
+    text: dismissed
+      ? deductionText ? `${deductionText} و${dismissalText}` : dismissalText
+      : deductionText,
     tone: dismissed ? "dismissed" : "deducted",
   };
   const gracePeriod = findStudentGracePeriod(context?.gracePeriods, exam?.date as string | Date | null | undefined);
@@ -413,8 +421,7 @@ export function reportGradePresentation(grade: Record<string, unknown>, exam: Re
   if (grade.academicEffectExcluded) return withoutPenalty("لا خصم");
   if (grade.status === "مجاز") return withoutPenalty("لا خصم");
   if (gracePeriod) {
-    const [year, month, day] = gracePeriod.endDate.split("-").map(Number);
-    return withoutPenalty(`بدون خصم (فترة سماح لغاية ${day}-${month}-${year})`);
+    return withoutPenalty(`بدون خصم (فترة سماح لغاية ${reportDayText(gracePeriod.endDate)})`);
   }
   if (reportNumber(grade.score) === null && grade.status !== "غائب" && grade.status !== "غش") return withoutPenalty("—");
   if (exam?.noDiscount) return withoutPenalty("امتحان بدون خصم");

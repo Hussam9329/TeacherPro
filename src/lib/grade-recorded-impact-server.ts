@@ -8,7 +8,6 @@ import {
 } from "./grade-classification";
 import {
   buildReportOpportunityContext,
-  buildReportTimelineEvents,
   reportGradePresentation,
   type ReportOpportunityContext,
 } from "./student-report-presentation";
@@ -83,11 +82,9 @@ export async function annotateGradeRecordedImpacts<T extends GradeWithImpactCont
         // Ambiguous active chapters cannot establish a settlement context.
         ...buildReportOpportunityContext(studentLogs, chapterByCourse.get(grade.student.courseId)),
         historical: true,
-        studentStatus: grade.student.status,
+        audience: "staff",
         registeredAt: grade.student.createdAt,
         gracePeriods: grade.student.gracePeriods || [],
-        reactivationDates: buildReportTimelineEvents(studentLogs)
-          .filter(event => event.kind === "return").map(event => event.date),
       };
       contexts.set(grade.studentId, context);
     }
