@@ -247,7 +247,7 @@ a.tp-rcard__contact:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--t
 /* Balance dots: ●●○ */
 .tp-meter { display: inline-flex; gap: 0.25rem; vertical-align: middle; }
 .tp-meter > i { inline-size: 0.7rem; block-size: 0.7rem; border-radius: 50%; background: var(--tone, var(--status-success-vivid)); }
-.tp-meter > i[data-off="true"] { background: var(--tp-panel-strong); }
+.tp-meter > i[data-off="true"] { background: transparent; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--tp-text-muted) 55%, transparent); }
 
 .tp-list-empty { margin: 0; padding: 1.25rem 1rem; border: 1px dashed var(--tp-border-strong); border-radius: 1rem; color: var(--tp-text-muted); font-size: 0.9rem; font-weight: 650; text-align: center; }
 

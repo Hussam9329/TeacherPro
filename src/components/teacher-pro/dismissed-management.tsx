@@ -32,10 +32,8 @@ import {
   buildStudentDetailsFromProfileLog,
   sanitizeStudentDetailsForHtml,
 } from "./export-dialog";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,6 +45,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
+import { ListToolbar } from "./list-toolbar";
 import { toLatinDigits } from "@/lib/format";
 import {
   getOpportunityBalance,
@@ -67,19 +66,14 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Clock3,
   Download,
-  FileClock,
-  GraduationCap,
   Handshake,
+  Pencil,
   MessageCircle,
   Phone,
   RotateCcw,
   Search,
   Send,
-  ShieldAlert,
-  UserRound,
-  Users,
 } from "lucide-react";
 
 const PAGE_SIZE = 24;
@@ -405,6 +399,7 @@ export function DismissedManagementView() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState("");
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [editingNoteIds, setEditingNoteIds] = useState<Record<string, boolean>>({});
   const [savingNoteIds, setSavingNoteIds] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [histories, setHistories] = useState<Record<string, StudentHistory>>({});
@@ -514,7 +509,8 @@ export function DismissedManagementView() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const params = new URLSearchParams({ historyScope });
+    // Every filter but the scope: the scope buttons count inside this set.
+    const params = new URLSearchParams({ historyScope: "all" });
     if (courseId) params.set("courseId", courseId);
     if (notesFilter !== "all") params.set("notesFilter", notesFilter);
     if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
@@ -550,7 +546,7 @@ export function DismissedManagementView() {
       });
 
     return () => controller.abort();
-  }, [courseId, debouncedSearch, historyScope, notesFilter, syncKey]);
+  }, [courseId, debouncedSearch, notesFilter, syncKey]);
 
   useEffect(() => {
     const controllers = historyControllersRef.current;
@@ -729,14 +725,14 @@ export function DismissedManagementView() {
     downloadHistoryHtml(history);
   };
 
-  const handleSaveDismissalNote = async (student: ManagedDismissalStudent) => {
+  const handleSaveDismissalNote = async (student: ManagedDismissalStudent): Promise<boolean> => {
     if (!canEditDismissalNotes) {
       toast.error("لا تملك صلاحية تعديل ملاحظات الفصل.");
-      return;
+      return false;
     }
     if (student.status !== "مفصول") {
       toast.warning("ملاحظات الفصل الحالية تُعدّل للطالب المفصول حالياً فقط.");
-      return;
+      return false;
     }
 
     const nextNote = String(
@@ -751,14 +747,14 @@ export function DismissedManagementView() {
       );
       if (!result.ok || result.queued) {
         toast.error(result.error || "تعذر حفظ ملاحظات الفصل.");
-        return;
+        return false;
       }
 
       const updatedStudent = (result.data as { student?: ManagedDismissalStudent } | null)
         ?.student;
       if (!updatedStudent) {
         toast.error("تم تنفيذ الطلب لكن تعذر قراءة سجل الطالب المحدث. حدّث الصفحة.");
-        return;
+        return false;
       }
 
       setStudents((current) =>
@@ -787,12 +783,14 @@ export function DismissedManagementView() {
         dispatchLocal: true,
       });
       toast.success("تم حفظ ملاحظات الفصل.");
+      return true;
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
           : "تعذر حفظ ملاحظات الفصل.",
       );
+      return false;
     } finally {
       setSavingNoteIds((current) => ({ ...current, [student.id]: false }));
     }
@@ -878,155 +876,96 @@ export function DismissedManagementView() {
   );
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card className="tp-tone-card" data-tone="info">
-          <CardContent className="flex items-center justify-between gap-3 p-4">
-            <div>
-              <p className="text-xs text-muted-foreground">حسب الفلترة</p>
-              <p className="tp-tone-card__value text-2xl font-black">
-                {statsLoading ? "..." : stats.total}
-              </p>
+    <div className="tp-list">
+      <ListToolbar
+        label="البحث والتصفية في المفصولين"
+        search={
+          <div className="relative">
+            <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="dismissed-management-search"
+              data-teacherpro-search="true"
+              aria-label="بحث في المفصولين"
+              className="pr-9"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="ابحث بالاسم أو الكود أو التيليجرام أو الهاتف أو سبب الفصل"
+            />
+          </div>
+        }
+        chips={[
+          { key: "current", label: "مفصول حالياً", tone: "danger", count: statsLoading ? null : stats.current },
+          { key: "former", label: "مفصول سابقاً", tone: "warning", count: statsLoading ? null : stats.former },
+          { key: "all", label: "الحاليون والسابقون", count: statsLoading ? null : stats.current + stats.former },
+        ]}
+        chipsLabel="حالة الفصل"
+        activeChip={historyScope}
+        onChipChange={(value) => {
+          setHistoryScope(value as "all" | "current" | "former");
+          setPage(1);
+        }}
+        activeFilterCount={Number(Boolean(courseId)) + Number(notesFilter !== "all")}
+        onClearFilters={() => {
+          setCourseId("");
+          setNotesFilter("all");
+          setPage(1);
+        }}
+        filters={
+          <>
+            <div className="space-y-1.5">
+              <Label>اسم الدورة</Label>
+              <Select
+                value={courseId || "all"}
+                onValueChange={(value) => {
+                  setCourseId(value === "all" ? "" : value);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الدورات</SelectItem>
+                  {courseOptions.map((course) => (
+                    <SelectItem key={course.id} value={course.id}>
+                      {course.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <span className="tp-tone-card__icon" aria-hidden="true">
-              <Users />
-            </span>
-          </CardContent>
-        </Card>
-        <Card className="tp-tone-card" data-tone="danger">
-          <CardContent className="flex items-center justify-between gap-3 p-4">
-            <div>
-              <p className="text-xs text-muted-foreground">مفصول حالياً</p>
-              <p className="tp-tone-card__value text-2xl font-black">
-                {statsLoading ? "..." : stats.current}
-              </p>
+            <div className="space-y-1.5">
+              <Label>ملاحظات الفصل</Label>
+              <Select
+                value={notesFilter}
+                onValueChange={(value) => {
+                  setNotesFilter(value as NotesFilter);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="with-notes">عندهم ملاحظات ({statsLoading ? "…" : stats.withNotes})</SelectItem>
+                  <SelectItem value="without-notes">بدون ملاحظات</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <span className="tp-tone-card__icon" aria-hidden="true">
-              <ShieldAlert />
-            </span>
-          </CardContent>
-        </Card>
-        <Card className="tp-tone-card" data-tone="warning">
-          <CardContent className="flex items-center justify-between gap-3 p-4">
-            <div>
-              <p className="text-xs text-muted-foreground">مفصول سابقاً</p>
-              <p className="tp-tone-card__value text-2xl font-black">
-                {statsLoading ? "..." : stats.former}
-              </p>
-            </div>
-            <span className="tp-tone-card__icon" aria-hidden="true">
-              <RotateCcw />
-            </span>
-          </CardContent>
-        </Card>
-        <Card className="tp-tone-card" data-tone="info">
-          <CardContent className="flex items-center justify-between gap-3 p-4">
-            <div>
-              <p className="text-xs text-muted-foreground">مع ملاحظات</p>
-              <p className="tp-tone-card__value text-2xl font-black">
-                {statsLoading ? "..." : stats.withNotes}
-              </p>
-            </div>
-            <span className="tp-tone-card__icon" aria-hidden="true">
-              <FileClock />
-            </span>
-          </CardContent>
-        </Card>
-      </div>
+          </>
+        }
+        summary={loading ? "جاري التحميل…" : <>المعروض <b>{students.length}</b> من <b>{totalCount}</b></>}
+      />
 
       {statsError ? (
         <div className="rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 text-sm text-warning">
           {statsError}
         </div>
       ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShieldAlert className="size-5" />
-            إدارة المفصولين
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="space-y-1.5">
-            <Label>اسم الدورة</Label>
-            <Select
-              value={courseId || "all"}
-              onValueChange={(value) => {
-                setCourseId(value === "all" ? "" : value);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">كل الدورات</SelectItem>
-                {courseOptions.map((course) => (
-                  <SelectItem key={course.id} value={course.id}>
-                    {course.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>الحالة</Label>
-            <Select
-              value={historyScope}
-              onValueChange={(value) => {
-                setHistoryScope(value as "all" | "current" | "former");
-                setPage(1);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="current">المفصولون حالياً</SelectItem>
-                <SelectItem value="former">المفصولون سابقاً</SelectItem>
-                <SelectItem value="all">الحاليون والسابقون</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>ملاحظات الفصل</Label>
-            <Select
-              value={notesFilter}
-              onValueChange={(value) => {
-                setNotesFilter(value as NotesFilter);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">الكل</SelectItem>
-                <SelectItem value="with-notes">مع ملاحظات</SelectItem>
-                <SelectItem value="without-notes">بدون ملاحظات</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="dismissed-management-search">البحث</Label>
-            <div className="relative">
-              <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="dismissed-management-search"
-                data-teacherpro-search="true"
-                className="pr-9"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="الاسم / الكود / تيليجرام / يوزر تيليجرام / رقم الطالب / رقم ولي الأمر / سبب الفصل"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {error ? (
         <div className="rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-4 text-sm text-danger">
@@ -1040,235 +979,197 @@ export function DismissedManagementView() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <ul className="tp-rcards" data-columns="2" aria-label="الطلاب المفصولون">
         {students.map((student) => {
           const history = histories[student.id];
           const isOpen = Boolean(expanded[student.id]);
-          const siteText =
-            [
-              student.locationScope,
-              student.mainSite,
-              student.subSite,
-            ]
-              .filter(Boolean)
-              .join(" / ") || "—";
+          const current = student.status === "مفصول";
+          const tone = current ? "danger" : "warning";
+          const reason =
+            displayReasonText(student.dismissalReason || student.lastDismissalReason) || "لا يوجد سبب مسجل";
+          const balance = Math.max(0, Number(student.opportunities ?? 0));
+          const base = Math.max(0, Number(student.baseOpportunities ?? 0));
+          const missingContacts = [
+            !student.phone ? "رقم الطالب" : "",
+            !student.parentPhone ? "رقم ولي الأمر" : "",
+          ].filter(Boolean);
+          const canEditNote = current && canEditDismissalNotes;
+          const editingNote = canEditNote && Boolean(editingNoteIds[student.id]);
 
           return (
-            <Card
+            <li
               key={student.id}
-              className="overflow-hidden border-danger-line shadow-sm"
-              data-dismissed={student.status === "مفصول" || undefined}
+              className="tp-rcard"
+              data-tone={tone}
+              data-dismissed={current || undefined}
             >
-              <div className={`h-1.5 ${student.status === "مفصول" ? "bg-gradient-to-l from-danger-vivid to-warning-vivid" : "bg-warning-vivid"}`} />
-              <CardContent className="space-y-4 p-4 sm:p-5">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-black leading-tight">
-                        {student.name}
-                      </h3>
-                      <Badge variant={student.status === "مفصول" ? "destructive" : "secondary"}>
-                        {student.status === "مفصول" ? "مفصول" : "مفصول سابقاً"}
-                      </Badge>
+              <div className="tp-rcard__head">
+                <span className="tp-rcard__light" data-tone={tone} aria-hidden="true" />
+                <h3 className="tp-rcard__name">{student.name}</h3>
+                <span className="tp-rcard__sep" aria-hidden="true" />
+                <span dir="ltr" className="tp-rcard__code">{student.code}</span>
+                <span className="tp-rcard__sub">{courseName(student.courseId)}</span>
+                <span className="tp-rcard__head-end">
+                  <span className="tp-rcard__pill" data-tone={tone} data-solid={current ? "true" : undefined}>
+                    {current ? "مفصول" : "مفصول سابقاً"}
+                  </span>
+                </span>
+              </div>
+
+              <div className="tp-rcard__body" data-tile={current && canReactivate ? "true" : undefined}>
+                <div className="tp-rcard__main">
+                  <div className="tp-rcard__panel" data-tone={tone}>
+                    <span className="tp-rcard__eyebrow">{current ? "سبب الفصل" : "سبب آخر فصل"}</span>
+                    <span className="tp-rcard__title">{reason}</span>
+                    <span className="tp-rcard__line">
+                      {student.lastDismissalAt ? (
+                        <>
+                          {current ? "فُصل" : "آخر فصل"} {formatBaghdadDateTime(student.lastDismissalAt)} ·{" "}
+                        </>
+                      ) : null}
+                      الفرص{" "}
+                      <span className="tp-meter" data-tone="danger" aria-hidden="true">
+                        {Array.from({ length: Math.min(Math.max(base, balance), 6) }, (_, index) => (
+                          <i key={index} data-off={index >= balance ? "true" : undefined} />
+                        ))}
+                      </span>{" "}
+                      <b>{balance}</b> من <b>{base}</b>
+                    </span>
+                  </div>
+
+                  {editingNote ? (
+                    <div className="grid gap-2">
+                      <Label htmlFor={`dismissal-note-${student.id}`}>ملاحظات الفصل</Label>
+                      <textarea
+                        id={`dismissal-note-${student.id}`}
+                        value={noteDrafts[student.id] ?? student.dismissalNotes ?? ""}
+                        onChange={(event) =>
+                          setNoteDrafts((draft) => ({
+                            ...draft,
+                            [student.id]: event.target.value,
+                          }))
+                        }
+                        className="min-h-20 w-full resize-y rounded-2xl border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
+                        placeholder="اكتب ملاحظات الفصل الخاصة بهذا الطالب..."
+                        disabled={Boolean(savingNoteIds[student.id])}
+                      />
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={Boolean(savingNoteIds[student.id])}
+                          onClick={() => {
+                            setEditingNoteIds((open) => ({ ...open, [student.id]: false }));
+                            setNoteDrafts((draft) => {
+                              const next = { ...draft };
+                              delete next[student.id];
+                              return next;
+                            });
+                          }}
+                        >
+                          إلغاء
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={Boolean(savingNoteIds[student.id])}
+                          onClick={async () => {
+                            const saved = await handleSaveDismissalNote(student);
+                            if (saved) setEditingNoteIds((open) => ({ ...open, [student.id]: false }));
+                          }}
+                        >
+                          {savingNoteIds[student.id] ? "جاري حفظ الملاحظات..." : "حفظ الملاحظات"}
+                        </Button>
+                      </div>
                     </div>
-                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <span>الكود: {student.code}</span>
-                      <span>اسم الدورة: {courseName(student.courseId)}</span>
-                      <span>المدرسة: {student.school || "—"}</span>
-                      <span>الجنس: {student.gender || "—"}</span>
-                      <span>تاريخ التسجيل: {formatBaghdadDateTime(student.createdAt)}</span>
-                      {student.status !== "مفصول" && student.lastDismissalAt ? (
-                        <span>آخر فصل: {formatBaghdadDateTime(student.lastDismissalAt)}</span>
+                  ) : student.dismissalNotes || canEditNote ? (
+                    <div className="tp-rcard__foot">
+                      {student.dismissalNotes ? (
+                        <>
+                          <span className="tp-rcard__label">ملاحظة الفصل:</span>
+                          <span className="min-w-0 text-sm font-semibold [overflow-wrap:anywhere]">{student.dismissalNotes}</span>
+                        </>
+                      ) : null}
+                      {canEditNote ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditingNoteIds((open) => ({ ...open, [student.id]: true }))}
+                        >
+                          {student.dismissalNotes ? (
+                            <>
+                              <Pencil className="size-4" aria-hidden="true" />
+                              تعديل
+                            </>
+                          ) : (
+                            "+ إضافة ملاحظة"
+                          )}
+                        </Button>
                       ) : null}
                     </div>
-                  </div>
-                  <div className="rounded-xl border border-danger-line bg-danger-soft px-3 py-2 text-xs sm:basis-64 sm:shrink-0">
-                    <b className="block text-danger">
-                      {student.status === "مفصول" ? "سبب الفصل" : "سبب آخر فصل"}
-                    </b>
-                    <span>
-                      {displayReasonText(student.dismissalReason || student.lastDismissalReason) || "لا يوجد سبب مسجل"}
-                    </span>
-                    {student.dismissalNotes ? (
-                      <span className="mt-1 block border-t border-danger-line/50 pt-1 text-[11px] text-muted-foreground">
-                        {student.dismissalNotes}
-                      </span>
-                    ) : null}
-                  </div>
+                  ) : null}
                 </div>
 
-                {student.status === "مفصول" && canEditDismissalNotes ? (
-                  <div className="space-y-2 rounded-2xl border bg-muted/10 p-3">
-                    <Label htmlFor={`dismissal-note-${student.id}`}>
-                      ملاحظات الفصل
-                    </Label>
-                    <textarea
-                      id={`dismissal-note-${student.id}`}
-                      value={
-                        noteDrafts[student.id] ?? student.dismissalNotes ?? ""
-                      }
-                      onChange={(event) =>
-                        setNoteDrafts((current) => ({
-                          ...current,
-                          [student.id]: event.target.value,
-                        }))
-                      }
-                      className="min-h-24 w-full resize-y rounded-2xl border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
-                      placeholder="اكتب ملاحظات الفصل الخاصة بهذا الطالب..."
-                      disabled={Boolean(savingNoteIds[student.id])}
-                    />
-                    <div className="flex justify-end">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={Boolean(savingNoteIds[student.id])}
-                        onClick={() => void handleSaveDismissalNote(student)}
-                      >
-                        {savingNoteIds[student.id]
-                          ? "جاري حفظ الملاحظات..."
-                          : "حفظ الملاحظات"}
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="rounded-xl border p-3">
-                    <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
-                      <GraduationCap className="size-4" />
-                      الدراسة
-                    </div>
-                    <p className="text-sm font-medium">
-                      {[student.courseProgram, student.courseTerm, student.studyType]
-                        .filter(Boolean)
-                        .join(" · ") || "—"}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border p-3">
-                    <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
-                      <UserRound className="size-4" />
-                      الموقع
-                    </div>
-                    <p className="text-sm font-medium">{siteText}</p>
-                  </div>
-                  <div className="rounded-xl border p-3">
-                    <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
-                      <Clock3 className="size-4" />
-                      رصيد الفرص
-                    </div>
-                    <p className="text-sm font-medium">
-                      {student.opportunities ?? 0} / الأساس{" "}
-                      {student.baseOpportunities ?? 0}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2 [&>[data-slot=button]]:flex-1">
-                  {student.phone ? (
-                    <Button asChild variant="outline">
-                      <a
-                        href={whatsappLink(student.phone)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <Phone className="size-4" />
-                        <span dir="ltr" className="tabular-nums">{student.phone}</span>
-                      </a>
-                    </Button>
-                  ) : (
-                    <Button type="button" variant="outline" disabled>
-                      <Phone className="size-4" />
-                      رقم الطالب غير متوفر
-                    </Button>
-                  )}
-                  {student.parentPhone ? (
-                    <Button asChild variant="outline">
-                      <a
-                        href={whatsappLink(student.parentPhone)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <MessageCircle className="size-4" />
-                        <span dir="ltr" className="tabular-nums">{student.parentPhone}</span>
-                      </a>
-                    </Button>
-                  ) : (
-                    <Button type="button" variant="outline" disabled>
-                      <MessageCircle className="size-4" />
-                      رقم ولي الأمر غير متوفر
-                    </Button>
-                  )}
-                  <Button
+                {current && canReactivate ? (
+                  <button
                     type="button"
-                    variant="outline"
-                    disabled={
-                      !studentTelegramHandle(student) ||
-                      historyLoading[student.id] ||
-                      telegramLoading[student.id]
-                    }
+                    className="tp-rcard__tile"
+                    disabled={isReactivating}
+                    onClick={() => {
+                      setRestorationMode("pledge");
+                      setRestorationAmount("1");
+                      setRestorationReason("");
+                      setReactivateDialog({ student, open: true });
+                    }}
+                  >
+                    <span className="tp-rcard__tile-icon" aria-hidden="true">
+                      <RotateCcw />
+                    </span>
+                    <span className="tp-rcard__tile-text">إرجاع الطالب</span>
+                    <span className="tp-rcard__tile-hint">بعد تعهّد أو برصيد تختاره</span>
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="tp-rcard__foot">
+                {student.phone ? (
+                  <a className="tp-rcard__contact" href={whatsappLink(student.phone)} target="_blank" rel="noreferrer">
+                    <Phone aria-hidden="true" />
+                    <span dir="ltr" className="tabular-nums">{student.phone}</span>
+                  </a>
+                ) : null}
+                {student.parentPhone ? (
+                  <a className="tp-rcard__contact" href={whatsappLink(student.parentPhone)} target="_blank" rel="noreferrer">
+                    <MessageCircle aria-hidden="true" />
+                    ولي الأمر <span dir="ltr" className="tabular-nums">{student.parentPhone}</span>
+                  </a>
+                ) : null}
+                {studentTelegramHandle(student) ? (
+                  <button
+                    type="button"
+                    className="tp-rcard__contact"
+                    disabled={historyLoading[student.id] || telegramLoading[student.id]}
                     onClick={() => void openTelegram(student)}
                   >
-                    <Send className="size-4" />
+                    <Send aria-hidden="true" />
                     <span className="min-w-0 [overflow-wrap:anywhere]">
-                      {telegramLoading[student.id]
-                        ? "جاري تجهيز التقرير..."
-                        : student.username || student.telegram || "تيليجرام غير متوفر"}
+                      {telegramLoading[student.id] ? "جاري تجهيز التقرير..." : student.username || student.telegram}
                     </span>
-                  </Button>
-                </div>
-
-                <div className="flex flex-wrap gap-2 border-t pt-3">
-                  {student.status === "مفصول" && canReactivate ? (
-                    <div className="grid w-full min-w-0 gap-3 sm:grid-cols-2">
-                      <div className="min-w-0 space-y-1.5">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="h-auto min-h-10 w-full whitespace-normal py-2"
-                          disabled={isReactivating}
-                          aria-describedby={`pledge-return-${student.id}`}
-                          onClick={() => {
-                            setRestorationMode("pledge");
-                            setReactivateDialog({ student, open: true });
-                          }}
-                        >
-                          <Handshake className="size-4 shrink-0" />
-                          إرجاع بعد تعهّد
-                        </Button>
-                        <p id={`pledge-return-${student.id}`} className="text-xs text-muted-foreground">
-                          يعود نشطاً ويصبح رصيده فرصتين.
-                        </p>
-                      </div>
-                      <div className="min-w-0 space-y-1.5">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-auto min-h-10 w-full whitespace-normal py-2"
-                          disabled={isReactivating}
-                          aria-describedby={`manual-return-${student.id}`}
-                          onClick={() => {
-                            setRestorationMode("manual");
-                            setRestorationAmount("1");
-                            setRestorationReason("");
-                            setReactivateDialog({ student, open: true });
-                          }}
-                        >
-                          <RotateCcw className="size-4 shrink-0" />
-                          إرجاع برصيد تختاره
-                        </Button>
-                        <p id={`manual-return-${student.id}`} className="text-xs text-muted-foreground">
-                          تحدد رصيد العودة النهائي وسبب الإرجاع.
-                        </p>
-                      </div>
-                    </div>
-                  ) : null}
+                  </button>
+                ) : null}
+                {missingContacts.length ? (
+                  <span className="tp-rcard__pill" data-tone="warning">ناقص {missingContacts.join(" و")}</span>
+                ) : null}
+                <span className="tp-rcard__foot-end">
                   <Button
                     type="button"
-                    className="flex-1"
-                    variant={isOpen ? "secondary" : "default"}
+                    size="sm"
+                    variant={isOpen ? "secondary" : "ghost"}
                     onClick={() => void toggleHistory(student.id)}
                     disabled={historyLoading[student.id]}
+                    aria-expanded={isOpen}
                   >
                     {historyLoading[student.id] ? (
                       "جاري تحميل السجل..."
@@ -1280,20 +1181,22 @@ export function DismissedManagementView() {
                     ) : (
                       <>
                         <ChevronDown className="size-4" />
-                        إظهار السجل الكامل
+                        السجل الكامل
                       </>
                     )}
                   </Button>
                   <Button
                     type="button"
-                    variant="outline"
+                    size="sm"
+                    variant="ghost"
                     onClick={() => void exportHtml(student)}
                     disabled={historyLoading[student.id]}
                   >
                     <Download className="size-4" />
                     تصدير HTML
                   </Button>
-                </div>
+                </span>
+              </div>
 
                 {historyErrors[student.id] ? (
                   <div className="rounded-xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm text-danger">
@@ -1359,11 +1262,10 @@ export function DismissedManagementView() {
                     </div>
                   </div>
                 ) : null}
-              </CardContent>
-            </Card>
+            </li>
           );
         })}
-      </div>
+      </ul>
 
       {!loading && students.length === 0 && !error ? (
         <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
@@ -1409,6 +1311,33 @@ export function DismissedManagementView() {
         <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>{restorationMode === "manual" ? "إرجاع برصيد تختاره" : "إرجاع بعد تعهّد"}</AlertDialogTitle>
+            <div role="group" aria-label="طريقة الإرجاع" className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                aria-pressed={restorationMode === "pledge"}
+                disabled={isReactivating}
+                className="grid gap-0.5 rounded-xl border p-3 text-right transition-colors aria-pressed:border-primary aria-pressed:bg-primary/10"
+                onClick={() => setRestorationMode("pledge")}
+              >
+                <span className="flex items-center gap-2 text-sm font-bold"><Handshake className="size-4" aria-hidden="true" />إرجاع بعد تعهّد</span>
+                <span className="text-xs text-muted-foreground">يعود نشطاً ويصبح رصيده فرصتين.</span>
+              </button>
+              <button
+                type="button"
+                aria-pressed={restorationMode === "manual"}
+                disabled={isReactivating}
+                className="grid gap-0.5 rounded-xl border p-3 text-right transition-colors aria-pressed:border-primary aria-pressed:bg-primary/10"
+                onClick={() => {
+                  if (restorationMode === "manual") return;
+                  setRestorationMode("manual");
+                  setRestorationAmount("1");
+                  setRestorationReason("");
+                }}
+              >
+                <span className="flex items-center gap-2 text-sm font-bold"><RotateCcw className="size-4" aria-hidden="true" />إرجاع برصيد تختاره</span>
+                <span className="text-xs text-muted-foreground">تحدد رصيد العودة النهائي وسبب الإرجاع.</span>
+              </button>
+            </div>
             <AlertDialogDescription>
               {restorationMode === "manual"
                 ? `حدّد رصيد العودة النهائي وسبب إرجاع «${reactivateDialog.student?.name || "الطالب المحدد"}». يبقى سجل الفصل السابق محفوظاً.`

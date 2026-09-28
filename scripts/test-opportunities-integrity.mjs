@@ -100,11 +100,12 @@ check(
 );
 
 check(
-  opportunitiesView.includes('statsBelowFullOpportunities') &&
-    opportunitiesView.includes('طلاب فرصهم المحفوظة ناقصة') &&
-    opportunitiesView.includes('طلاب بلا فصل نشط') &&
-    opportunitiesView.includes('طلاب ضمن تعارض فصول'),
-  'واجهة إدارة الفرص تعرض بطاقة الفرص الناقصة وتوضح أن مشاكل الفصول تخص الدورات لا الطلاب',
+  opportunitiesView.includes('statusCounts') &&
+    opportunitiesView.includes('healthNotes') &&
+    opportunitiesView.includes('بلا فصل نشط') &&
+    opportunitiesView.includes('تعارض فصول') &&
+    opportunitiesView.includes('فوق السقف'),
+  'واجهة إدارة الفرص تعدّ كل حالة على زر الفلترة وتذكر مشاكل الفصول مرة وحدة تحت البحث',
 );
 
 check(

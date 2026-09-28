@@ -55,15 +55,20 @@ export const callNotesManagementApi = {
     }, signal);
   },
 
-  async resolve(note: Pick<ManagedCallNote, "id" | "noteRevision">) {
+  async resolve(note: Pick<ManagedCallNote, "id" | "noteRevision">, resolved = true) {
     // A versioned, explicit value is sent once. An uncertain write is never
     // queued on this device or replayed over another user's later note edit.
     const response = await fetch("/api/student-calls/notes", {
       method: "PATCH",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", ...ownerHeaders() },
-      body: JSON.stringify({ id: note.id, expectedRevision: note.noteRevision, resolved: true }),
+      body: JSON.stringify({ id: note.id, expectedRevision: note.noteRevision, resolved }),
     });
     return responseBody(response);
+  },
+
+  /** «تراجع» right after «إنجاز»: the same note, back to waiting. */
+  reopen(note: Pick<ManagedCallNote, "id" | "noteRevision">) {
+    return callNotesManagementApi.resolve(note, false);
   },
 };

@@ -139,7 +139,7 @@ export function ListToolbar({
               <DialogTitle>{filtersTitle}</DialogTitle>
             </DialogHeader>
             <div className="tp-list-sheet__fields">{filters}</div>
-            <DialogFooter className="flex-row gap-2">
+            <DialogFooter className="flex-row gap-2 [&>[data-slot=button]]:w-auto">
               <Button type="button" className="flex-1" onClick={() => setOpen(false)}>
                 تطبيق
               </Button>

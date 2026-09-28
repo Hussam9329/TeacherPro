@@ -112,6 +112,18 @@ async function collectOpportunityCounts(
   };
 }
 
+/** The status buttons count inside every filter but the status itself. */
+async function collectStatusCounts(filters: Prisma.StudentWhereInput[]) {
+  const [all, active, hasOpportunities, noOpportunities, dismissed] = await Promise.all([
+    db.student.count({ where: composeStudentWhere(filters) }),
+    db.student.count({ where: composeStudentWhere([...filters, { status: "نشط" }]) }),
+    db.student.count({ where: composeStudentWhere([...filters, { status: "نشط", opportunities: { gt: 0 } }]) }),
+    db.student.count({ where: composeStudentWhere([...filters, { status: "نشط", opportunities: 0 }]) }),
+    db.student.count({ where: composeStudentWhere([...filters, { status: "مفصول" }]) }),
+  ]);
+  return { all, active, hasOpportunities, noOpportunities, dismissed };
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, "opportunities.view");
   if (authError) return authError;
@@ -129,11 +141,18 @@ export async function GET(req: NextRequest) {
     const system = filters.length
       ? await collectOpportunityCounts([])
       : filtered;
+    const statusCounts = await collectStatusCounts(buildOpportunityFilters({
+      courseId: searchParams.get("courseId"),
+      status: null,
+      opportunityCount: searchParams.get("opportunityCount"),
+      q: searchParams.get("q"),
+    }));
 
     return NextResponse.json({
       ...filtered,
       filtered,
       system,
+      statusCounts,
       source: "database",
     });
   } catch (error) {

@@ -496,53 +496,58 @@ a.tp-modal__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-foc
    Window-specific pieces that share the same tokens.
    ============================================================================ */
 
-/* «إدارة ملاحظات المكالمات» — note rows */
+/* «إدارة ملاحظات المكالمات» — one card per student, in the calls card's
+   look: name line, then the student's notes newest first, each with «إنجاز». */
 
-.tp-notes__row {
+.tp-notes__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.tp-notes__search { flex: 1 1 12rem; }
+.tp-notes__search > [data-slot="input"] { min-height: 2.75rem; }
+.tp-notes__filter-toggle { min-height: 2.75rem; gap: 0.4rem; border-radius: 0.9rem; }
+.tp-notes__filter-count { display: inline-grid; place-items: center; min-width: 1.35rem; height: 1.35rem; padding-inline: 0.3rem; border-radius: 999px; background: var(--tp-primary); color: var(--tp-on-primary); font-size: 0.72rem; font-weight: 800; }
+.tp-notes__filters { padding: 0.8rem; border: 1px dashed var(--tp-border-strong); border-radius: 1rem; background: var(--tp-panel); }
+.tp-notes__chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.tp-modal .tp-notes__chips .tp-modal__filter { flex: 0 0 auto; min-height: 2.5rem; padding: 0.3rem 0.45rem 0.3rem 0.85rem; border-radius: 999px; }
+.tp-notes__chips .tp-modal__filter-label { flex: 0 1 auto; }
+
+.tp-notes__cards { display: grid; gap: 0.8rem; margin: 0; padding: 0; list-style: none; }
+.tp-notes__card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 3rem;
-  grid-template-areas: "student done" "action done" "note note";
-  gap: 0.6rem 0.75rem;
-  padding: 0.9rem 1rem;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.95rem 1.05rem;
   border: 1px solid var(--tp-border);
-  border-inline-start: 4px solid var(--tp-border-strong);
-  border-radius: 1rem;
+  border-radius: 1.2rem;
   background: var(--tp-surface);
+  box-shadow: 0 14px 34px -28px color-mix(in srgb, var(--tp-deep) 55%, transparent);
 }
-.tp-notes__row[data-tone="success"], .tp-notes__row[data-tone="warning"], .tp-notes__row[data-tone="danger"] {
-  border-inline-start-color: var(--tone);
-  background: linear-gradient(to left, color-mix(in srgb, var(--tone) 8%, var(--tp-surface)), var(--tp-surface) 50%);
-}
-.tp-notes__student { grid-area: student; min-width: 0; }
-.tp-notes__action { grid-area: action; display: grid; gap: 0.25rem; align-content: start; min-width: 0; }
-.tp-notes__note { grid-area: note; display: grid; gap: 0.5rem; min-width: 0; }
-.tp-notes__note-scope { margin: 0; color: var(--tp-text-muted); font-size: 0.74rem; font-weight: 650; }
-.tp-notes__note-text { margin: 0; color: var(--tp-text); font-size: 0.92rem; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
-.tp-notes__when { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.9rem; width: fit-content; max-width: 100%; padding: 0.45rem 0.75rem; border-radius: 0.8rem; background: var(--tp-panel); color: var(--tp-text-muted); font-size: 0.74rem; }
-.tp-notes__when svg { width: 0.95rem; height: 0.95rem; }
-.tp-notes__when > span { display: inline-flex; align-items: center; gap: 0.4rem; }
-.tp-notes__when time { color: var(--tp-text); font-weight: 700; font-variant-numeric: tabular-nums; }
-.tp-notes__done {
-  grid-area: done;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.3rem;
-  min-height: 3rem;
-  border-radius: 0.8rem;
-  cursor: pointer;
-}
-.tp-notes__done:hover { background: var(--tp-panel); }
-.tp-notes__done > span { color: var(--tp-text-muted); font-size: 0.68rem; font-weight: 700; }
-.tp-notes__done[data-disabled="true"] { cursor: not-allowed; opacity: 0.6; }
-.tp-notes__headings { display: none; }
+.tp-notes__head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem 0.65rem; min-width: 0; }
+.tp-notes__name { min-width: 0; color: var(--tp-text); font-size: 1.05rem; font-weight: 850; line-height: 1.5; overflow-wrap: anywhere; }
+.tp-notes__sep { align-self: stretch; width: 1px; min-height: 1.35rem; background: var(--tp-border); }
+.tp-notes__tg { margin-inline-start: auto; }
 
-@container (min-width: 46rem) {
-  .tp-notes__row { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 2fr) 3.5rem; grid-template-areas: "student action note done"; align-items: start; gap: 1rem; }
-  .tp-notes__headings { position: sticky; top: 0; z-index: 1; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 2fr) 3.5rem; gap: 1rem; padding: 0.55rem 1rem; border: 1px solid var(--tp-border); border-radius: 0.75rem; background: var(--tp-panel-strong); color: var(--tp-text-muted); font-size: 0.72rem; font-weight: 700; }
-  .tp-notes__headings > :last-child { text-align: center; }
-  .tp-notes__done > span { display: none; }
+.tp-notes__items { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.tp-notes__item {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--tp-border);
+  border-inline-start: 3px solid var(--tone, var(--tp-border-strong));
+  border-radius: 0.85rem;
+  background: var(--tp-panel);
+}
+.tp-notes__item[data-tone="muted"] { --tone: var(--tp-border-strong); }
+.tp-notes__item-top { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; color: var(--tp-text-muted); font-size: 0.78rem; font-weight: 700; }
+.tp-notes__scope { color: var(--tp-text); font-weight: 750; }
+.tp-notes__when time { font-variant-numeric: tabular-nums; }
+.tp-notes__done { margin-inline-start: auto; min-height: 2.25rem; gap: 0.3rem; border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success-fg); font-weight: 800; }
+.tp-notes__done:hover { background: var(--status-success-solid); color: var(--status-success-on); }
+.tp-notes__text { margin: 0; color: var(--tp-text); font-size: 0.92rem; font-weight: 600; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tp-notes__last { margin: 0; color: var(--tp-text-muted); font-size: 0.76rem; font-weight: 650; }
+
+@container (max-width: 30rem) {
+  .tp-notes__sep { display: none; }
+  .tp-notes__tg { margin-inline-start: 0; }
+  .tp-notes__card { padding: 0.8rem; }
 }
 
 /* «اغلاق الكودات» — dismissed student rows */
@@ -609,7 +614,7 @@ a.tp-modal__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-foc
 }
 
 @media (max-height: 540px) {
-  .tp-notes__headings, .tp-closures__headings { position: static; }
+  .tp-closures__headings { position: static; }
 }
 
 /* ── Signal tones (last, so they override base values) ─────────────────── */

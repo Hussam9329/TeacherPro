@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { ChevronDown, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import "./tp-list.css";
 
@@ -23,9 +23,12 @@ export type RowAction = {
 export function RowActionsMenu({
   label,
   actions,
+  triggerText,
 }: {
   label: string;
   actions: RowAction[];
+  /** A labelled button instead of «⋯» (e.g. «عمليات جماعية»). */
+  triggerText?: string;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -99,15 +102,22 @@ export function RowActionsMenu({
         ref={buttonRef}
         type="button"
         variant="outline"
-        size="icon"
+        size={triggerText ? "default" : "icon"}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        aria-label={label}
+        aria-label={triggerText ? undefined : label}
         title={label}
         onClick={() => setOpen((value) => !value)}
       >
-        <MoreHorizontal aria-hidden="true" />
+        {triggerText ? (
+          <>
+            {triggerText}
+            <ChevronDown aria-hidden="true" />
+          </>
+        ) : (
+          <MoreHorizontal aria-hidden="true" />
+        )}
       </Button>
       {open ? (
         <div id={menuId} role="menu" aria-label={label} className="tp-row-menu__list">

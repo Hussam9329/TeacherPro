@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, CheckCheck, ClipboardList, Clock3, Loader2, RefreshCw, Search, X } from "lucide-react";
+import { Check, CheckCheck, ClipboardList, Loader2, RefreshCw, Search, Send, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { callNotesManagementApi, type ManagedCallNote } from "@/lib/call-notes-management-client";
@@ -53,6 +52,19 @@ function actionTone(status: string): "success" | "warning" | "danger" | "muted" 
   return "muted";
 }
 
+const ACTION_FILTERS: Array<{ key: ContactStatusFilter; label: string; tone?: "success" | "warning" | "danger" | "muted" }> = [
+  { key: "all", label: "الكل" },
+  { key: "no-action", label: "بدون إجراء", tone: "muted" },
+  { key: "unanswered", label: "لم يرد", tone: "warning" },
+  { key: "contacted", label: "تم الاتصال", tone: "success" },
+  { key: "wrong", label: "الرقم خاطئ", tone: "danger" },
+];
+
+function noteTime(createdAt: string) {
+  const time = Date.parse(createdAt);
+  return Number.isFinite(time) ? time : 0;
+}
+
 export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Props) {
   const [notes, setNotes] = useState<ManagedCallNote[]>([]);
   const [search, setSearch] = useState("");
@@ -61,6 +73,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
   const [actionFilter, setActionFilter] = useState<ContactStatusFilter>("all");
   const [selectedCourseName, setSelectedCourseName] = useState("");
   const [selectedExamName, setSelectedExamName] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
@@ -108,6 +121,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
     setCourseId("");
     setExamId("");
     setActionFilter("all");
+    setFiltersOpen(false);
     if (!open) return;
     void refresh();
     // The ordinary background sync intentionally waits while dialogs are open.
@@ -142,6 +156,9 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
       if (generation === generationRef.current) {
         setNotes((current) => current.filter((item) => item.id !== note.id));
       }
+      toast.success(`أُنجزت ملاحظة «${note.student.name}»`, {
+        action: { label: "تراجع", onClick: () => void reopenNote(note) },
+      });
       emitTeacherProDataChanged({
         source: "local-mutation",
         reason: "إنجاز ملاحظة المكالمات",
@@ -155,6 +172,27 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
       pendingRef.current.delete(note.id);
       setPendingIds(new Set(pendingRef.current));
       // Reconcile both failed/uncertain requests and changes by another user.
+      if (generation === generationRef.current) void refresh();
+    }
+  }
+
+  async function reopenNote(note: ManagedCallNote) {
+    if (!canManage) return;
+    const generation = generationRef.current;
+    mutationVersionRef.current += 1;
+    activeRequestRef.current?.abort();
+    try {
+      await callNotesManagementApi.reopen(note);
+      emitTeacherProDataChanged({
+        source: "local-mutation",
+        reason: "إعادة فتح ملاحظة المكالمات",
+        scopes: ["follow-up", "students", "dashboard", "logs"],
+        dispatchLocal: false,
+      });
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "تعذر التراجع. أعد المحاولة.");
+    } finally {
+      mutationVersionRef.current += 1;
       if (generation === generationRef.current) void refresh();
     }
   }
@@ -182,19 +220,36 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
   }, [courseNotes]);
   const hasGeneralNotes = courseNotes.some((note) => !note.examId);
   const hasFilters = Boolean(search.trim() || courseId || examId || actionFilter !== "all");
+  const panelFilterCount = Number(Boolean(courseId)) + Number(Boolean(examId));
   const totalCount = notes.filter((note) => !pendingIds.has(note.id)).length;
-  const visibleNotes = useMemo(() => {
+  // Everything but the action: the action buttons count inside this set.
+  const actionBase = useMemo(() => {
     const query = normalizeForSearch(search);
     return courseNotes.filter((note) => {
       if (pendingIds.has(note.id)) return false;
       if (examId === GENERAL_NOTES && note.examId) return false;
       if (examId && examId !== GENERAL_NOTES && note.examId !== examId) return false;
-      if (!contactStatusMatchesFilter(actionFilter, note.contactStatus)) return false;
       return !query || normalizeForSearch(
         `${note.student.name} ${note.student.code} ${note.student.telegram || ""} ${note.student.username || ""} ${note.notes}`,
       ).includes(query);
     });
-  }, [courseNotes, examId, actionFilter, search, pendingIds]);
+  }, [courseNotes, examId, search, pendingIds]);
+  const visibleNotes = useMemo(
+    () => actionBase.filter((note) => contactStatusMatchesFilter(actionFilter, note.contactStatus)),
+    [actionBase, actionFilter],
+  );
+  // One card per student, newest note first; students with the newest notes first.
+  const studentGroups = useMemo(() => {
+    const byStudent = new Map<string, ManagedCallNote[]>();
+    for (const note of visibleNotes) {
+      const group = byStudent.get(note.studentId) || [];
+      group.push(note);
+      byStudent.set(note.studentId, group);
+    }
+    return [...byStudent.values()]
+      .map((group) => group.slice().sort((left, right) => noteTime(right.createdAt) - noteTime(left.createdAt)))
+      .sort((left, right) => noteTime(right[0].createdAt) - noteTime(left[0].createdAt));
+  }, [visibleNotes]);
 
   function clearFilters() {
     setSearch("");
@@ -225,20 +280,42 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
         </div>
 
         <div className="tp-modal__body">
-          <div className="tp-modal__controls">
-            <div className="tp-modal__fields">
-              <label className="tp-modal__field">
-                <span>بحث</span>
-                <div className="tp-modal__input-wrap">
-                  <Search aria-hidden="true" />
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    aria-label="بحث في ملاحظات المكالمات"
-                    placeholder="الاسم، الكود، تيليجرام أو الملاحظة"
-                  />
-                </div>
-              </label>
+          <div className="tp-notes__toolbar">
+            <div className="tp-modal__input-wrap tp-notes__search">
+              <Search aria-hidden="true" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                aria-label="بحث في ملاحظات المكالمات"
+                placeholder="ابحث بالاسم أو الكود أو التيليجرام أو نص الملاحظة"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="tp-notes__filter-toggle"
+              aria-expanded={filtersOpen}
+              onClick={() => setFiltersOpen((value) => !value)}
+            >
+              <SlidersHorizontal className="size-4" aria-hidden="true" />
+              تصفية
+              {panelFilterCount > 0 && <span className="tp-notes__filter-count">{panelFilterCount}</span>}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="تحديث الملاحظات"
+              title="تحديث"
+              disabled={loading || pendingIds.size > 0}
+              onClick={() => void refresh()}
+            >
+              <RefreshCw className={`size-4 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />
+            </Button>
+          </div>
+
+          {filtersOpen && (
+            <div className="tp-modal__fields tp-notes__filters">
               <label className="tp-modal__field">
                 <span>اسم الدورة</span>
                 <div className="tp-modal__select-wrap" data-plain="true">
@@ -272,41 +349,42 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                   </select>
                 </div>
               </label>
-              <label className="tp-modal__field">
-                <span>الإجراء</span>
-                <div className="tp-modal__select-wrap" data-plain="true">
-                  <select
-                    aria-label="تصفية حسب الإجراء"
-                    value={actionFilter}
-                    onChange={(event) => setActionFilter(normalizeContactStatusFilter(event.target.value))}
-                  >
-                    <option value="all">كل الإجراءات</option>
-                    <option value="no-action">بدون إجراء</option>
-                    <option value="contacted">تم الاتصال</option>
-                    <option value="unanswered">لم يرد</option>
-                    <option value="wrong">الرقم خاطئ</option>
-                  </select>
-                </div>
-              </label>
             </div>
+          )}
+
+          <div role="group" aria-label="تصفية حسب الإجراء" className="tp-notes__chips">
+            {ACTION_FILTERS.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                className="tp-modal__filter"
+                data-action-filter={option.key}
+                data-tone={option.tone}
+                aria-pressed={actionFilter === option.key}
+                onClick={() => setActionFilter(normalizeContactStatusFilter(option.key))}
+              >
+                {option.tone && <span className="tp-modal__filter-dot" aria-hidden="true" />}
+                <span className="tp-modal__filter-label">{option.label}</span>
+                <span className="tp-modal__filter-count">
+                  {loaded ? actionBase.filter((note) => contactStatusMatchesFilter(option.key, note.contactStatus)).length : "…"}
+                </span>
+              </button>
+            ))}
           </div>
 
           <div className="tp-modal__toolbar">
             <span className="tp-modal__count" aria-live="polite">
               {loaded ? `المعروض ${visibleNotes.length} من ${totalCount} ملاحظة` : "الملاحظات"}
+              {loaded && " · الأحدث أولاً · الأوقات بتوقيت بغداد"}
             </span>
-            <div className="tp-modal__tools">
-              {hasFilters && (
+            {hasFilters && (
+              <div className="tp-modal__tools">
                 <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
                   <X className="size-4" aria-hidden="true" />
                   مسح الفلاتر
                 </Button>
-              )}
-              <Button type="button" variant="outline" size="sm" disabled={loading || pendingIds.size > 0} onClick={() => void refresh()}>
-                <RefreshCw className={`size-4 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />
-                تحديث
-              </Button>
-            </div>
+              </div>
+            )}
           </div>
 
           {error && <p role="alert" className="tp-modal__error">{error}</p>}
@@ -323,69 +401,76 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                 <p>{pendingIds.size > 0 ? "جاري حفظ الإنجاز..." : hasFilters ? "لا توجد ملاحظات تطابق البحث والفلاتر" : "لا توجد ملاحظات معلّقة"}</p>
               </div>
             ) : (
-              <div className="tp-modal__cards" data-columns="1">
-                <div aria-hidden="true" className="tp-notes__headings">
-                  <span>الطالب</span><span>الإجراء</span><span>الملاحظة</span><span>تم</span>
-                </div>
-                {visibleNotes.map((note) => {
-                  const telegram = describeTelegramHandle(note.student);
-                  const tone = actionTone(note.contactStatus);
+              <ul className="tp-notes__cards">
+                {studentGroups.map((group) => {
+                  const student = group[0].student;
+                  const telegram = describeTelegramHandle(student);
+                  const tone = actionTone(group[0].contactStatus);
                   return (
-                    <article key={note.id} className="tp-notes__row" data-tone={tone}>
-                      <div className="tp-modal__identity tp-notes__student">
-                        <p className="tp-modal__name"><span className="tp-modal__name-text">{note.student.name}</span></p>
-                        <div className="tp-modal__meta">
-                          <span className="tp-modal__chip" data-tone="outline"><span dir="ltr" className="tp-modal__code">{note.student.code}</span></span>
-                          {note.student.course && <span className="tp-modal__meta-item">{note.student.course.name}</span>}
-                        </div>
-                        <div className="tp-modal__meta">
-                          {telegram.href ? (
-                            <a href={telegram.href} dir="ltr" className="tp-modal__tg" aria-label={`فتح تيليجرام ${note.student.name}`}>
-                              @{telegram.value}
-                            </a>
-                          ) : telegram.value ? (
-                            <span dir="ltr" className="tp-modal__tg" data-plain="true">{telegram.value}</span>
-                          ) : (
-                            <span className="tp-modal__tg" data-plain="true">تيليجرام غير متوفر</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="tp-notes__action">
-                        <span className="tp-modal__chip" data-tone={tone}>{note.contactStatus || "بدون إجراء"}</span>
-                        {note.scope === "general" && note.contactExam && (
-                          <p className="tp-modal__muted">آخر إجراء: {note.contactExam.name}</p>
+                    <li key={student.id} className="tp-notes__card" data-tone={tone}>
+                      <div className="tp-notes__head">
+                        <span className="tp-modal__light" data-tone={tone} aria-hidden="true" />
+                        <span className="tp-notes__name">{student.name}</span>
+                        <span className="tp-notes__sep" aria-hidden="true" />
+                        <span dir="ltr" className="tp-modal__code">{student.code}</span>
+                        {student.course && <span className="tp-modal__chip">{student.course.name}</span>}
+                        {group.length > 1 && (
+                          <span className="tp-modal__chip" data-tone="outline">
+                            {group.length === 2 ? "ملاحظتان" : `${group.length} ملاحظات`}
+                          </span>
                         )}
+                        {telegram.href ? (
+                          <a href={telegram.href} dir="ltr" className="tp-modal__tg tp-notes__tg" aria-label={`فتح تيليجرام ${student.name}`}>
+                            <Send className="size-3.5" aria-hidden="true" />
+                            @{telegram.value}
+                          </a>
+                        ) : telegram.value ? (
+                          <span dir="ltr" className="tp-modal__tg tp-notes__tg" data-plain="true">{telegram.value}</span>
+                        ) : null}
                       </div>
-                      <div className="tp-notes__note">
-                        <p className="tp-notes__note-scope">
-                          {note.scope === "general" ? "ملاحظة عامة" : note.exam?.name || "امتحان غير مسمى"}
-                        </p>
-                        <p className="tp-notes__note-text">{note.notes}</p>
-                        <div className="tp-notes__when">
-                          <span>
-                            <CalendarDays aria-hidden="true" />
-                            تاريخ الملاحظة <time dateTime={note.createdAt}>{formatNoteDate(note.createdAt)}</time>
-                          </span>
-                          <span>
-                            <Clock3 aria-hidden="true" />
-                            <time dateTime={note.createdAt}>{formatNoteTime(note.createdAt)}</time> بتوقيت بغداد
-                          </span>
-                        </div>
-                      </div>
-                      <label className="tp-notes__done" data-disabled={!canManage}>
-                        <Checkbox
-                          checked={false}
-                          disabled={!canManage}
-                          onCheckedChange={(checked) => { if (checked === true) void resolveNote(note); }}
-                          aria-label={`إنجاز ملاحظة ${note.student.name}: ${note.notes}`}
-                          className="size-6"
-                        />
-                        <span>تم</span>
-                      </label>
-                    </article>
+                      <ol className="tp-notes__items">
+                        {group.map((note) => {
+                          const noteTone = actionTone(note.contactStatus);
+                          return (
+                            <li key={note.id} className="tp-notes__item" data-tone={noteTone}>
+                              <div className="tp-notes__item-top">
+                                <span className="tp-modal__chip" data-tone={noteTone}>{note.contactStatus || "بدون إجراء"}</span>
+                                <span className="tp-notes__scope">
+                                  {note.scope === "general" ? "ملاحظة عامة" : note.exam?.name || "امتحان غير مسمى"}
+                                </span>
+                                <span className="tp-notes__when">
+                                  <time dateTime={note.createdAt}>{formatNoteDate(note.createdAt)}</time>
+                                  {"، "}
+                                  <time dateTime={note.createdAt}>{formatNoteTime(note.createdAt)}</time>
+                                </span>
+                                {canManage && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="tp-notes__done"
+                                    data-note-done="true"
+                                    disabled={pendingIds.has(note.id)}
+                                    onClick={() => void resolveNote(note)}
+                                    aria-label={`إنجاز ملاحظة ${student.name}: ${note.notes}`}
+                                  >
+                                    <Check className="size-4" aria-hidden="true" />
+                                    إنجاز
+                                  </Button>
+                                )}
+                              </div>
+                              <p className="tp-notes__text">{note.notes}</p>
+                              {note.scope === "general" && note.contactExam && (
+                                <p className="tp-notes__last">آخر إجراء: {note.contactExam.name}</p>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             )}
           </section>
         </div>

@@ -74,7 +74,7 @@ check(
 check(
   management.includes('"مفصول سابقاً"') &&
     management.includes('useState<"all" | "current" | "former">("current")') &&
-    management.includes('<SelectItem value="former">المفصولون سابقاً</SelectItem>') &&
+    management.includes('{ key: "former", label: "مفصول سابقاً"') &&
     filters.includes('scope === "former"') &&
     filters.includes('scope === "all"'),
   "إدارة المفصولين تبدأ بالمفصولين حالياً وتتيح عرض المفصولين سابقاً بشكل منفصل",

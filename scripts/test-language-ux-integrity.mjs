@@ -133,7 +133,9 @@ must(
 
 must(
   [opportunitiesView, registryView, gradeRecordsView, logsView].every((source) =>
-    source.includes("CountScopeSummary"),
+    source.includes("CountScopeSummary") ||
+      // The list toolbar: counts on the filter buttons and one «المعروض … من …» line.
+      (source.includes("<ListToolbar") && source.includes("المعروض")),
   ),
   "الصفحات ذات العدادات الحساسة تعرض نطاق كل رقم بوضوح",
 );

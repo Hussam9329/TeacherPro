@@ -39,11 +39,13 @@ import { DEFAULT_MANUAL_RESTORATION_REASON, manualRestorationAmount } from "@/li
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { ExportDialog, buildStudentDetailsFromProfileLog, type ExportColumn, type StudentDetailsMap } from "./export-dialog";
 import { StudentProfileDialog } from "./student-profile-dialog";
-import { CountScopeSummary } from "./ui-kit";
+import { ChevronLeft } from "lucide-react";
+import { ListToolbar } from "./list-toolbar";
+import { RowActionsMenu } from "./row-actions-menu";
 import {
   formatOpportunityBalance,
+  getOpportunityBalance,
   getOpportunityLimit,
-  getOpportunityProgressPercent,
 } from "@/lib/opportunity-balance";
 import {
   displayOpportunityAction,
@@ -179,6 +181,7 @@ export function OpportunitiesView() {
     open: boolean;
   }>({ type: "add", open: false });
   const [bulkAmount, setBulkAmount] = useState(1);
+  const [bulkConfirmText, setBulkConfirmText] = useState("");
   const [bulkReason, setBulkReason] = useState("");
   const [bulkExcludeDismissed, setBulkExcludeDismissed] = useState(true);
   const [bulkExcludeFullOpportunities, setBulkExcludeFullOpportunities] =
@@ -393,28 +396,14 @@ export function OpportunitiesView() {
     if (databaseStatsLoading && !databaseStats) return "…";
     return value ?? "—";
   };
-  const systemStats = databaseStats?.system;
   const filteredStats = databaseStats?.filtered;
-  const statsTotal = databaseStatValue(systemStats?.total);
-  const statsHasOpportunities = databaseStatValue(systemStats?.hasOpportunities);
-  const statsNoOpportunities = databaseStatValue(systemStats?.noOpportunities);
-  const statsDismissed = databaseStatValue(systemStats?.dismissed);
-  const statsNoActiveChapter = databaseStatValue(systemStats?.noActiveChapter);
-  const statsConflicts = databaseStatValue(systemStats?.activeChapterConflicts);
-  const statsOverLimit = databaseStatValue(systemStats?.overLimit);
-  const statsFullOpportunities = databaseStatValue(systemStats?.fullOpportunities);
-  const statsBelowFullOpportunities = databaseStatValue(
-    systemStats?.belowFullOpportunities,
-  );
-  const statsSuffix = "";
-
-  const clearFilters = () => {
-    setSearch("");
-    setFilterCourseId("");
-    setFilterStatus("");
-    setFilterOpportunityCount("");
-    setPage(1);
-  };
+  const statusCounts = databaseStats?.statusCounts;
+  // Data that needs fixing, said once under the toolbar (only when present).
+  const healthNotes = [
+    Number(filteredStats?.noActiveChapter || 0) > 0 ? `${filteredStats?.noActiveChapter} بلا فصل نشط` : "",
+    Number(filteredStats?.activeChapterConflicts || 0) > 0 ? `${filteredStats?.activeChapterConflicts} تعارض فصول` : "",
+    Number(filteredStats?.overLimit || 0) > 0 ? `${filteredStats?.overLimit} فوق السقف` : "",
+  ].filter(Boolean);
 
   const selectedDetailsStudent = useMemo(
     () =>
@@ -878,15 +867,93 @@ export function OpportunitiesView() {
   };
 
   return (
-    <div className="tp-opportunities-page space-y-4">
-      {/* Filters */}
-      <Card className="tp-filter-card tp-opportunities-filters">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">فلاتر إدارة الفرص</CardTitle>
-        </CardHeader>
-        <CardContent className="tp-filter-content pt-2">
-          <div className="tp-filter-grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6">
-            <div className="tp-filter-field tp-filter-primary">
+    <div className="tp-opportunities-page tp-list">
+      <ListToolbar
+        label="البحث والتصفية في إدارة الفرص"
+        search={
+          <Input
+            id="opp-search"
+            name="search"
+            data-teacherpro-search="true"
+            autoComplete="off"
+            aria-label="بحث عن طالب"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="ابحث بالاسم أو الكود أو الهاتف أو يوزر التيليجرام أو المدرسة"
+          />
+        }
+        actions={
+          <>
+            <RowActionsMenu
+              label="عمليات جماعية حسب الفلترة الحالية"
+              triggerText="عمليات جماعية"
+              actions={[
+                {
+                  key: "bulk-add",
+                  label: "إضافة لكل المطابقين",
+                  disabled: bulkTargetLoading || bulkEligibleWithActiveChapterCount === 0,
+                  onSelect: () => {
+                    setBulkExcludeDismissed(true);
+                    setBulkConfirmText("");
+                    setBulkActionDialog({ type: "add", open: true });
+                  },
+                },
+                {
+                  key: "bulk-deduct",
+                  label: "خصم من كل المطابقين",
+                  danger: true,
+                  disabled: bulkTargetLoading || bulkEligibleWithActiveChapterCount === 0,
+                  onSelect: () => {
+                    setBulkExcludeFullOpportunities(true);
+                    setBulkConfirmText("");
+                    setBulkActionDialog({ type: "deduct", open: true });
+                  },
+                },
+              ]}
+            />
+            <ExportDialog
+              title="تصدير إدارة الفرص"
+              fileName="opportunities"
+              rows={opportunityExportRows}
+              fetchRows={fetchOpportunityExportRows}
+              columns={opportunityExportColumns}
+              triggerLabel="تصدير"
+              description="الامتحان بلا درجة يظهر حسب حالته: غياب، مجاز، إجازة، غش، أو بانتظار الدرجة."
+              fetchStudentDetails={fetchOpportunityStudentDetails}
+              selectHtmlExams
+              getRowId={(s) => String((s as Record<string, unknown>)?.id ?? "")}
+              totalRowCount={
+                typeof databaseStats?.filtered?.total === "number"
+                  ? databaseStats.filtered.total
+                  : null
+              }
+            />
+          </>
+        }
+        chips={[
+          { key: "", label: "الكل", count: statusCounts?.all ?? null },
+          { key: "has-opportunities", label: "نشط ولديه فرص", tone: "success", count: statusCounts?.hasOpportunities ?? null },
+          { key: "no-opportunities", label: "نشط بدون فرص", tone: "warning", count: statusCounts?.noOpportunities ?? null },
+          { key: "dismissed", label: "مفصولون", tone: "danger", count: statusCounts?.dismissed ?? null },
+        ]}
+        chipsLabel="حالة الطالب"
+        activeChip={filterStatus === "active" ? "" : filterStatus}
+        onChipChange={(value) => {
+          setFilterStatus(value);
+          setPage(1);
+        }}
+        activeFilterCount={Number(Boolean(filterCourseId)) + Number(Boolean(filterOpportunityCount))}
+        onClearFilters={() => {
+          setFilterCourseId("");
+          setFilterOpportunityCount("");
+          setPage(1);
+        }}
+        filters={
+          <>
+            <div className="space-y-1.5">
               <Label htmlFor="opp-course" className="text-xs font-bold">
                 اسم الدورة
               </Label>
@@ -911,33 +978,7 @@ export function OpportunitiesView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="tp-filter-field tp-filter-secondary">
-              <Label htmlFor="opp-status" className="text-xs font-bold">
-                حالة الطالب
-              </Label>
-              <Select
-                name="status"
-                value={filterStatus || "all"}
-                onValueChange={(v) => {
-                  setFilterStatus(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="opp-status">
-                  <SelectValue placeholder="كل الحالات" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل الحالات</SelectItem>
-                  <SelectItem value="active">طلاب نشطون</SelectItem>
-                  <SelectItem value="dismissed">طلاب مفصولون</SelectItem>
-                  <SelectItem value="has-opportunities">
-                    نشط ولديه فرص
-                  </SelectItem>
-                  <SelectItem value="no-opportunities">نشط بدون فرص</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="tp-filter-field tp-filter-secondary">
+            <div className="space-y-1.5">
               <Label htmlFor="opp-count" className="text-xs font-bold">
                 عدد الفرص
               </Label>
@@ -957,306 +998,134 @@ export function OpportunitiesView() {
                 placeholder="كل الأعداد أو اكتب رقماً"
               />
             </div>
-            <div className="tp-filter-field tp-filter-search xl:col-span-2">
-              <Label htmlFor="opp-search" className="text-xs font-bold">
-                بحث عن طالب
-              </Label>
-              <Input
-                id="opp-search"
-                name="search"
-                data-teacherpro-search="true"
-                autoComplete="off"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="اسم الطالب / الكود / الهاتف / يوزر تيليجرام / المدرسة"
-              />
-            </div>
-            <div className="tp-filter-actions">
-              <Button
-                variant="outline"
-                className="h-10 flex-1"
-                onClick={clearFilters}
-                disabled={
-                  !search &&
-                  !filterCourseId &&
-                  !filterStatus &&
-                  !filterOpportunityCount
-                }
-              >
-                مسح
-              </Button>
-              <ExportDialog
-                title="تصدير إدارة الفرص"
-                fileName="opportunities"
-                rows={opportunityExportRows}
-                fetchRows={fetchOpportunityExportRows}
-                columns={opportunityExportColumns}
-                triggerLabel="تصدير"
-                description="الامتحان بلا درجة يظهر حسب حالته: غياب، مجاز، إجازة، غش، أو بانتظار الدرجة."
-                fetchStudentDetails={fetchOpportunityStudentDetails}
-                selectHtmlExams
-                getRowId={(s) => String((s as Record<string, unknown>)?.id ?? "")}
-                totalRowCount={
-                  typeof databaseStats?.filtered?.total === "number"
-                    ? databaseStats.filtered.total
-                    : null
-                }
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="tp-opportunities-workspace">
-        <section
-          className="tp-opportunities-main-flow"
-          aria-label="سير عمل إدارة الفرص"
-        >
-      <Card className="tp-opportunities-bulk-card border-primary/20 bg-primary/5">
-        <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-black">
-              عمليات جماعية حسب الفلترة الحالية
-            </p>
-            <p className="text-xs text-muted-foreground">
-              يشمل الإجراء جميع الطلاب المطابقين للفلاتر في كل الصفحات.{" "}
-              {bulkTargetLoading
-                ? "جاري احتساب الطلاب المطابقين…"
-                : ""}{" "}
-              {bulkSkippedNoActiveChapterCount > 0
-                ? `يوجد ${bulkSkippedNoActiveChapterCount} طالب بلا فصل نشط.`
-                : ""}
-            </p>
-            <p className="text-[11px] text-muted-foreground">
-              النطاق: {activeCourseFilterName} • {activeStatusFilterName} •{" "}
-              {activeOpportunityFilterName}
-              {search.trim() ? ` • بحث: ${search.trim()}` : ""}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-              disabled={
-                bulkTargetLoading || bulkEligibleWithActiveChapterCount === 0
-              }
-              onClick={() => {
-                setBulkExcludeDismissed(true);
-                setBulkActionDialog({ type: "add", open: true });
-              }}
-            >
-              إضافة لكل المطابقين
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={
-                bulkTargetLoading || bulkEligibleWithActiveChapterCount === 0
-              }
-              onClick={() => {
-                setBulkExcludeFullOpportunities(true);
-                setBulkActionDialog({ type: "deduct", open: true });
-              }}
-            >
-              خصم من كل المطابقين
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <CountScopeSummary
-        className="tp-opportunities-count-summary"
-        subject="الطلاب"
-        systemTotal={databaseStatValue(systemStats?.total)}
-        filteredTotal={databaseStatValue(filteredStats?.total)}
-        pageCount={paged.length}
+          </>
+        }
+        summary={
+          <>
+            المعروض <b>{paged.length}</b> من <b>{databaseStatValue(filteredStats?.total)}</b>
+            {healthNotes.length ? <> · {healthNotes.join(" · ")}</> : null}
+          </>
+        }
       />
 
-      {/* Student Opportunities */}
-      <Card className="tp-opportunities-results-card">
-        <CardHeader>
-          <CardTitle>فرص الطلاب</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="@container space-y-2">
-            {studentsLoading ? (
-              <p className="empty-state py-8">
-                جاري تحميل الطلاب...
-              </p>
-            ) : paged.length === 0 ? (
-              <p className="empty-state py-8">
-                لا يوجد طلاب مطابقون للفلاتر الحالية
-              </p>
-            ) : (
-              paged.map((student) => {
-                const activeChapter = getStudentActiveChapter(student);
-                const hasChapter = hasSingleServerActiveChapter(student);
-                const oppPercent = getOpportunityProgressPercent(student);
-                const hasChapterConflict =
-                  Number((student as OpportunityStudent).activeChapterConflictCount || 0) > 1;
-                return (
-                  <div
-                    key={student.id}
-                    className="flex flex-col gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm transition-[border-color,box-shadow,background-color] duration-200 hover:border-primary/30 hover:shadow-lg @3xl:flex-row @3xl:items-center"
-                    data-dismissed={student.status === "مفصول" || undefined}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="min-w-0 flex-1 break-words text-sm font-medium [overflow-wrap:anywhere]">
-                          {student.name}
-                        </p>
-                        <Badge variant="outline" className="text-[10px]">
-                          {student.code}
-                        </Badge>
-                        {student.status === "مفصول" && (
-                          <Badge variant="destructive" className="text-[10px]">
-                            مفصول
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {courseName(student.courseId)}
-                        {activeChapter ? ` • ${activeChapter.name}` : ""}
-                      </p>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {activeChapter ? (
-                          <Badge variant="secondary" className="text-[10px]">
-                            سقف الفصل: {activeChapter.opportunities}
-                          </Badge>
-                        ) : null}
-                        {student.isOpportunityFull ? (
-                          <Badge variant="success" className="text-[10px]">
-                            فرص كاملة
-                          </Badge>
-                        ) : null}
-                        {student.isOpportunityOverLimit ? (
-                          <Badge variant="destructive" className="text-[10px]">
-                            فوق السقف
-                          </Badge>
-                        ) : null}
-                        {hasChapterConflict ? (
-                          <Badge variant="destructive" className="text-[10px]">
-                            تعارض فصول نشطة
-                          </Badge>
-                        ) : null}
-                      </div>
-                      {student.status === "مفصول" &&
-                        student.dismissalReason && (
-                          <p className="mt-1 text-xs font-semibold text-danger">
-                            {displayReasonText(student.dismissalReason)}
-                          </p>
-                        )}
-                      {!hasChapter && (
-                        <p className="mt-1 text-xs font-semibold text-danger">
-                          لم يتم اختيار الفصل لهم بعد؛ كل الإجراءات مقفلة.
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Opportunity Progress */}
-                    <div className="flex items-center gap-3">
-                      <div className="w-24">
-                        <div className="h-2 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${
-                              oppPercent > 50
-                                ? "bg-success-vivid"
-                                : oppPercent > 0
-                                  ? "bg-warning-vivid"
-                                  : "bg-danger-vivid"
-                            }`}
-                            style={{ width: `${oppPercent}%` }}
-                          />
-                        </div>
-                      </div>
-                      <span
-                        className={`font-bold text-sm ${
-                          student.opportunities === 0
-                            ? "text-danger"
-                            : student.opportunities <= 2
-                              ? "text-warning"
-                              : "text-success"
-                        }`}
-                      >
-                        {formatOpportunityBalance(student)}
+      {studentsLoading ? (
+        <p className="tp-list-empty">جاري تحميل الطلاب...</p>
+      ) : paged.length === 0 ? (
+        <p className="tp-list-empty">لا يوجد طلاب مطابقون للفلاتر الحالية</p>
+      ) : (
+        <ul className="tp-rcards" data-columns="2" aria-label="فرص الطلاب">
+          {paged.map((student) => {
+            const activeChapter = getStudentActiveChapter(student);
+            const hasChapter = hasSingleServerActiveChapter(student);
+            const hasChapterConflict =
+              Number((student as OpportunityStudent).activeChapterConflictCount || 0) > 1;
+            const dismissed = student.status === "مفصول";
+            const balance = getOpportunityBalance(student);
+            const limit = getOpportunityLimit(student);
+            const tone = dismissed ? "danger" : balance <= 0 ? "warning" : limit !== null && balance < limit ? "warning" : "success";
+            const dots = Math.min(Math.max(limit ?? 0, balance, 0), 6);
+            return (
+              <li key={student.id} className="tp-rcard" data-tone={dismissed ? "danger" : undefined} data-dismissed={dismissed || undefined}>
+                <div className="tp-rcard__head">
+                  <span className="tp-rcard__light" data-tone={tone} aria-hidden="true" />
+                  <h3 className="tp-rcard__name">{student.name}</h3>
+                  <span className="tp-rcard__sep" aria-hidden="true" />
+                  <span dir="ltr" className="tp-rcard__code">{student.code}</span>
+                  <span className="tp-rcard__sub">
+                    {courseName(student.courseId)}
+                    {activeChapter ? ` · ${activeChapter.name}` : ""}
+                  </span>
+                  <span className="tp-rcard__head-end">
+                    {dismissed ? <span className="tp-rcard__pill" data-tone="danger" data-solid="true">مفصول</span> : null}
+                    {student.isOpportunityOverLimit ? <span className="tp-rcard__pill" data-tone="danger">فوق السقف</span> : null}
+                    {hasChapterConflict ? <span className="tp-rcard__pill" data-tone="danger">تعارض فصول نشطة</span> : null}
+                  </span>
+                </div>
+                <div className="tp-rcard__body" data-tile="true">
+                  <div className="tp-rcard__main">
+                    <div className="tp-rcard__panel" data-tone={tone}>
+                      <span className="tp-rcard__eyebrow">الفرص{activeChapter ? ` · ${activeChapter.name}` : ""}</span>
+                      <span className="tp-rcard__title">
+                        <span className="tp-meter" data-tone={tone} aria-hidden="true">
+                          {Array.from({ length: dots }, (_, index) => (
+                            <i key={index} data-off={index >= balance ? "true" : undefined} />
+                          ))}
+                        </span>{" "}
+                        {formatOpportunityBalance(student, { separator: " من " })}
                       </span>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex flex-wrap gap-1 @3xl:justify-end">
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="text-xs font-bold"
-                        onClick={() => setProfileStudentId(student.id)}
-                      >
-                        ملف الطالب
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                        onClick={() => setDetailsStudentId(student.id)}
-                      >
-                        التفاصيل
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs text-success"
-                        disabled={!hasChapter}
-                        onClick={() => {
-                          setReason(student.status === "مفصول" ? DEFAULT_MANUAL_RESTORATION_REASON : "");
-                          setAmount(1);
-                          setActionDialog({
-                            studentId: student.id,
-                            expectedStatus: student.status,
-                            type: "add",
-                            open: true,
-                          });
-                        }}
-                      >
-                        إضافة
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs text-danger"
-                        disabled={!hasChapter || student.status === "مفصول"}
-                        onClick={() =>
-                          setActionDialog({
-                            studentId: student.id,
-                            type: "deduct",
-                            open: true,
-                          })
-                        }
-                      >
-                        خصم
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-xs"
-                        disabled={!hasChapter || student.status === "مفصول"}
-                        onClick={() =>
-                          setActionDialog({
-                            studentId: student.id,
-                            type: "reset",
-                            open: true,
-                          })
-                        }
-                      >
-                        إعادة تعيين
-                      </Button>
+                      {dismissed && student.dismissalReason ? (
+                        <span className="tp-rcard__line">فُصل: {displayReasonText(student.dismissalReason)}</span>
+                      ) : null}
+                      {!hasChapter ? (
+                        <span className="tp-rcard__line">لم يتم اختيار الفصل لهم بعد؛ كل الإجراءات مقفلة.</span>
+                      ) : null}
                     </div>
                   </div>
-                );
-              })
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                  <button type="button" className="tp-rcard__tile" onClick={() => setProfileStudentId(student.id)}>
+                    <span className="tp-rcard__tile-icon" aria-hidden="true">
+                      <ChevronLeft />
+                    </span>
+                    <span className="tp-rcard__tile-text">ملف الطالب</span>
+                    <span className="tp-rcard__tile-hint">الدرجات والحركات</span>
+                  </button>
+                </div>
+                <div className="tp-rcard__foot">
+                  <Button variant="ghost" size="sm" onClick={() => setDetailsStudentId(student.id)}>
+                    التفاصيل
+                  </Button>
+                  <span className="tp-rcard__foot-end">
+                    <RowActionsMenu
+                      label={`تعديل فرص ${student.name}`}
+                      triggerText="تعديل الفرص"
+                      actions={[
+                        {
+                          key: "add",
+                          label: "إضافة فرص",
+                          disabled: !hasChapter,
+                          onSelect: () => {
+                            setReason(dismissed ? DEFAULT_MANUAL_RESTORATION_REASON : "");
+                            setAmount(1);
+                            setActionDialog({
+                              studentId: student.id,
+                              expectedStatus: student.status,
+                              type: "add",
+                              open: true,
+                            });
+                          },
+                        },
+                        {
+                          key: "deduct",
+                          label: "خصم فرص",
+                          danger: true,
+                          disabled: !hasChapter || dismissed,
+                          onSelect: () =>
+                            setActionDialog({
+                              studentId: student.id,
+                              type: "deduct",
+                              open: true,
+                            }),
+                        },
+                        {
+                          key: "reset",
+                          label: "إعادة تعيين",
+                          danger: true,
+                          disabled: !hasChapter || dismissed,
+                          onSelect: () =>
+                            setActionDialog({
+                              studentId: student.id,
+                              type: "reset",
+                              open: true,
+                            }),
+                        },
+                      ]}
+                    />
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
@@ -1282,102 +1151,6 @@ export function OpportunitiesView() {
           </Button>
         </div>
       )}
-
-        </section>
-
-        <aside className="tp-opportunities-stats-rail" aria-label="إحصائيات إدارة الفرص">
-          {/* Opportunity Overview */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-black">إجمالي الطلاب</h3>
-              <Badge variant="outline">نطاق كلي</Badge>
-            </div>
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-8">
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-success">
-                  {statsHasOpportunities}
-                  {statsSuffix}
-                </p>
-                <p className="text-xs text-muted-foreground">طلاب لديهم فرص محفوظة</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-warning">
-                  {statsNoOpportunities}
-                  {statsSuffix}
-                </p>
-                <p className="text-xs text-muted-foreground">طلاب نشطون بلا فرص محفوظة</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-danger">
-                  {statsDismissed}
-                  {statsSuffix}
-                </p>
-                <p className="text-xs text-muted-foreground">مفصولون</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold">
-                  {statsTotal}
-                  {statsSuffix}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  إجمالي الطلاب
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-warning">
-                  {statsNoActiveChapter}
-                </p>
-                <p className="text-xs text-muted-foreground">طلاب بلا فصل نشط</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-danger">
-                  {statsConflicts}
-                </p>
-                <p className="text-xs text-muted-foreground">طلاب ضمن تعارض فصول</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-primary">
-                  {statsFullOpportunities}
-                </p>
-                <p className="text-xs text-muted-foreground">فرص محفوظة كاملة</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-warning">
-                  {statsBelowFullOpportunities}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  طلاب فرصهم المحفوظة ناقصة
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-danger">
-                  {statsOverLimit}
-                </p>
-                <p className="text-xs text-muted-foreground">فوق السقف</p>
-              </CardContent>
-            </Card>
-            </div>
-          </div>
-
-        </aside>
-      </div>
 
       {/* Recent Opportunity Logs */}
       <Card>
@@ -1721,6 +1494,21 @@ export function OpportunitiesView() {
                 placeholder="مثلاً: سلوك ممتاز، إعفاء، مخالفة واجب، شك..."
               />
             </div>
+            {bulkActionDialog.type === "deduct" ? (
+              <div className="space-y-2 rounded-xl border border-danger-line bg-danger-soft p-3">
+                <Label htmlFor="bulk-opp-confirm" className="text-danger">
+                  للتأكيد، اكتب عدد الطلاب الذين سيُخصم منهم: {bulkTargetLoading ? "…" : bulkTargetCount}
+                </Label>
+                <Input
+                  id="bulk-opp-confirm"
+                  name="bulkConfirm"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={bulkConfirmText}
+                  onChange={(e) => setBulkConfirmText(e.target.value)}
+                />
+              </div>
+            ) : null}
           </div>
           <DialogFooter>
             <Button
@@ -1734,7 +1522,8 @@ export function OpportunitiesView() {
             <Button
               onClick={handleBulkAction}
               disabled={
-                isApplyingAction || bulkTargetLoading || bulkTargetCount === 0
+                isApplyingAction || bulkTargetLoading || bulkTargetCount === 0 ||
+                (bulkActionDialog.type === "deduct" && toLatinDigits(bulkConfirmText.trim()) !== String(bulkTargetCount))
               }
               variant={
                 bulkActionDialog.type === "deduct" ? "destructive" : "default"

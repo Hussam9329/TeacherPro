@@ -65,6 +65,8 @@ function harness() {
   const reads = [];
   const writes = [];
   const errors = [];
+  const reopens = [];
+  const toasts = [];
   const intervals = new Map();
   let props = {
     open: true,
@@ -129,20 +131,24 @@ function harness() {
       writes.push({ ...request, note });
       return request.promise;
     },
+    reopen(note) {
+      const request = deferred();
+      reopens.push({ ...request, note });
+      return request.promise;
+    },
   };
   const named = (names) => Object.fromEntries(names.map((name) => [name, name]));
   const jsx = (type, elementProps) => ({ type, props: elementProps });
   const dependencies = {
     react,
     'react/jsx-runtime': { jsx, jsxs: jsx },
-    'lucide-react': named(['CalendarDays', 'CheckCheck', 'ClipboardList', 'Clock3', 'Loader2', 'RefreshCw', 'Search', 'X']),
+    'lucide-react': named(['Check', 'CheckCheck', 'ClipboardList', 'Loader2', 'RefreshCw', 'Search', 'Send', 'SlidersHorizontal', 'X']),
     '@/components/ui/button': named(['Button']),
-    '@/components/ui/checkbox': named(['Checkbox']),
     '@/components/ui/dialog': named(['Dialog', 'DialogContent', 'DialogHeader', 'DialogTitle']),
     '@/components/ui/input': named(['Input']),
     '@/lib/call-notes-management-client': { callNotesManagementApi: api },
     '@/lib/teacherpro-sync': { emitTeacherProDataChanged() {} },
-    '@/lib/user-toast': { toast: { error: (error) => errors.push(error) } },
+    '@/lib/user-toast': { toast: { error: (error) => errors.push(error), success: (message, options) => toasts.push({ message, options }) } },
     '@/lib/validation': validationContext.exports,
     '@/lib/call-contact-status': loadHelper('src/lib/call-contact-status.ts'),
     './student-registry-helpers': loadHelper('src/components/teacher-pro/student-registry-helpers.ts'),
@@ -196,7 +202,7 @@ function harness() {
   }
 
   return {
-    reads, writes, errors, render,
+    reads, writes, errors, reopens, toasts, render,
     async flush() {
       // Drain promises originating in the VM realm before applying state updates.
       await new Promise((resolve) => setImmediate(resolve));
@@ -205,6 +211,14 @@ function harness() {
     tick() { [...intervals.values()].forEach((callback) => callback()); render(); },
     setProps(next) { props = { ...props, ...next }; render(); },
     nodes(type) { return walk(tree).filter((node) => node.type === type); },
+    // «إنجاز» buttons: one per visible note (only for people allowed to manage).
+    done() { return walk(tree).filter((node) => node.type === 'Button' && node.props['data-note-done'] === 'true'); },
+    // Course and exam live under «تصفية».
+    openFilters() {
+      const toggle = walk(tree).find((node) => node.type === 'Button' && node.props['aria-expanded'] !== undefined && JSON.stringify(node.props.children).includes('تصفية'));
+      if (toggle && !toggle.props['aria-expanded']) { toggle.props.onClick(); render(); }
+    },
+    pressedAction() { return walk(tree).find((node) => node.type === 'button' && node.props['aria-pressed'] === true)?.props['data-action-filter']; },
     text() { return JSON.stringify(tree); },
   };
 }
@@ -234,9 +248,9 @@ const note = (id = 'n1') => ({
   assert.equal(view.reads[0].signal.aborted, false);
   view.reads[0].resolve({ notes: [note()] });
   await view.flush();
-  assert.equal(view.nodes('Checkbox').length, 1);
-  assert(view.text().includes('تاريخ الملاحظة'));
-  assert(view.text().includes('بتوقيت بغداد'));
+  assert.equal(view.done().length, 1);
+  assert(view.text().includes('بتوقيت بغداد'), 'the time zone is said once for the list');
+  assert(!view.text().includes('تاريخ الملاحظة'), 'no repeated label on every note');
   assert.equal(view.nodes('time')[0].props.dateTime, '2026-09-18T22:30:00.000Z');
   assert.equal(view.nodes('time')[0].props.children, '19 سبتمبر 2026');
   assert.equal(view.nodes('time')[1].props.dateTime, '2026-09-18T22:30:00.000Z');
@@ -260,25 +274,25 @@ const note = (id = 'n1') => ({
   }
   console.log('PASS: Baghdad midnight, noon, minute padding and missing-date fallback do not alter notes.');
 
-  view.nodes('Checkbox')[0].props.onCheckedChange(true);
+  view.done()[0].props.onClick();
   view.render();
-  assert.equal(view.nodes('Checkbox').length, 0);
+  assert.equal(view.done().length, 0);
   view.tick();
   assert.equal(view.reads.length, 1);
   view.writes[0].reject(new Error('Network unavailable'));
   await view.flush();
-  assert.equal(view.nodes('Checkbox').length, 1);
+  assert.equal(view.done().length, 1);
   assert.equal(view.errors.length, 1);
   assert.equal(view.reads.length, 2);
   console.log('PASS: immediate hide, failed-save recovery, and authoritative reload.');
 
   view.reads[1].resolve({ notes: [note(), note('n2')] });
   await view.flush();
-  const boxes = view.nodes('Checkbox');
-  boxes[0].props.onCheckedChange(true);
-  boxes[1].props.onCheckedChange(true);
+  const boxes = view.done();
+  boxes[0].props.onClick();
+  boxes[1].props.onClick();
   view.render();
-  assert.equal(view.nodes('Checkbox').length, 0);
+  assert.equal(view.done().length, 0);
   view.writes[1].resolve({});
   await view.flush();
   assert.equal(view.reads.length, 2);
@@ -287,7 +301,7 @@ const note = (id = 'n1') => ({
   assert.equal(view.reads.length, 3);
   view.reads[2].resolve({ notes: [] });
   await view.flush();
-  assert.equal(view.nodes('Checkbox').length, 0);
+  assert.equal(view.done().length, 0);
   console.log('PASS: concurrent completions reconcile after all writes settle.');
 
   view = harness();
@@ -298,7 +312,7 @@ const note = (id = 'n1') => ({
   assert.equal(view.reads[0].signal.aborted, true);
   view.reads[0].resolve({ notes: [note('old')] });
   await view.flush();
-  assert.equal(view.nodes('Checkbox').length, 0);
+  assert.equal(view.done().length, 0);
   view.reads[1].resolve({ notes: [note('new')] });
   await view.flush();
   assert(view.text().includes('طالب تجريبي new'));
@@ -319,19 +333,22 @@ const note = (id = 'n1') => ({
   const general = { ...note('general'), examId: null, exam: null, scope: 'general' };
   view.reads[0].resolve({ notes: [first, second, general], totalCount: 3 });
   await view.flush();
-  assert.equal(view.nodes('Checkbox').length, 3);
+  assert.equal(view.done().length, 3);
   assert(view.text().includes('المعروض 3 من 3 ملاحظة'));
   assert(view.text().includes('الامتحان الثاني'));
   assert(view.text().includes('آخر إجراء: '));
+  view.openFilters();
   assert.equal(view.nodes('select')[0].props.value, '');
   assert.equal(view.nodes('select')[1].props.value, '');
   console.log('PASS: initial view includes every course, exam, and general note.');
 
   const selectCourse = (value) => {
+    view.openFilters();
     view.nodes('select')[0].props.onChange({ target: { value } });
     view.render();
   };
   const selectExam = (value) => {
+    view.openFilters();
     view.nodes('select')[1].props.onChange({ target: { value } });
     view.render();
   };
@@ -340,29 +357,29 @@ const note = (id = 'n1') => ({
     view.render();
   };
   selectExam('exam1');
-  assert.equal(view.nodes('Checkbox').length, 1);
+  assert.equal(view.done().length, 1);
   // A general note's latest contact exam does not make it an exam-specific note.
   assert(!view.text().includes('ملاحظة تجريبية general'));
   selectCourse('course1');
   assert.equal(view.nodes('select')[1].props.value, 'exam1');
   selectCourse('course2');
   assert.equal(view.nodes('select')[1].props.value, '');
-  assert.equal(view.nodes('Checkbox').length, 1);
+  assert.equal(view.done().length, 1);
   assert(view.text().includes('المعروض 1 من 3 ملاحظة'));
   selectCourse('');
   selectExam('__general__');
-  assert.equal(view.nodes('Checkbox').length, 1);
+  assert.equal(view.done().length, 1);
   assert(view.text().includes('ملاحظة تجريبية general'));
   selectExam('');
   search('احمد');
-  assert.equal(view.nodes('Checkbox').length, 1);
+  assert.equal(view.done().length, 1);
   assert(view.text().includes('أحمد علي'));
   search('BIO102');
-  assert.equal(view.nodes('Checkbox').length, 0);
+  assert.equal(view.done().length, 0);
   search('BIO-102');
-  assert.equal(view.nodes('Checkbox').length, 1);
+  assert.equal(view.done().length, 1);
   search('ولي الامر');
-  assert.equal(view.nodes('Checkbox').length, 1);
+  assert.equal(view.done().length, 1);
   console.log('PASS: search and course/exam filters narrow the global list with accurate totals.');
 
   view.tick();
@@ -370,11 +387,11 @@ const note = (id = 'n1') => ({
   view.reads[1].resolve({ notes: [first, second, general, note('added')], totalCount: 4 });
   await view.flush();
   assert.equal(view.nodes('Input')[0].props.value, 'ولي الامر');
-  assert.equal(view.nodes('Checkbox').length, 1);
+  assert.equal(view.done().length, 1);
   assert(view.text().includes('المعروض 1 من 4 ملاحظة'));
   view.nodes('Button').find((node) => JSON.stringify(node).includes('مسح الفلاتر')).props.onClick();
   view.render();
-  assert.equal(view.nodes('Checkbox').length, 4);
+  assert.equal(view.done().length, 4);
   assert.equal(view.nodes('Input')[0].props.value, '');
   assert.equal(view.nodes('select')[0].props.value, '');
   assert.equal(view.nodes('select')[1].props.value, '');
@@ -387,17 +404,19 @@ const note = (id = 'n1') => ({
   await view.flush();
   assert.equal(view.nodes('select')[0].props.value, 'course2');
   assert.equal(view.nodes('select')[1].props.value, 'exam2');
-  assert.equal(view.nodes('Checkbox').length, 0);
+  assert.equal(view.done().length, 0);
   assert(view.nodes('option').some((node) => node.props.value === 'course2' && node.props.children === 'الشتوية'));
   assert(view.nodes('option').some((node) => node.props.value === 'exam2' && node.props.children === 'الامتحان الثاني'));
   view.setProps({ open: false });
   view.setProps({ open: true });
   assert.equal(view.nodes('Input')[0].props.value, '');
+  assert.equal(view.nodes('select').length, 0, 'every reopening starts with «تصفية» closed');
+  view.openFilters();
   assert.equal(view.nodes('select')[0].props.value, '');
   assert.equal(view.nodes('select')[1].props.value, '');
   view.reads[3].resolve({ notes: [first, second, general], totalCount: 3 });
   await view.flush();
-  assert.equal(view.nodes('Checkbox').length, 3);
+  assert.equal(view.done().length, 3);
   console.log('PASS: completed filter facets stay labelled; every reopening starts unfiltered.');
 
   view = harness();
@@ -416,14 +435,14 @@ const note = (id = 'n1') => ({
   assert(view.nodes('a').some((node) => node.props.href === 'tg://resolve?domain=legacy_student'));
   assert(view.nodes('a').some((node) => node.props.href === 'tg://resolve?domain=current_student'));
   assert(view.text().includes('123456789'));
-  assert(view.text().includes('غير متوفر'));
+  assert(!view.text().includes('تيليجرام غير متوفر'), 'a missing Telegram shows nothing');
   const selectAction = (value) => {
-    view.nodes('select').find((node) => node.props['aria-label'] === 'تصفية حسب الإجراء').props.onChange({ target: { value } });
+    view.nodes('button').find((node) => node.props['data-action-filter'] === value).props.onClick();
     view.render();
   };
   for (const [index, filter] of ['no-action', 'contacted', 'unanswered', 'wrong'].entries()) {
     selectAction(filter);
-    assert.equal(view.nodes('Checkbox').length, 1);
+    assert.equal(view.done().length, 1);
     assert(view.text().includes(`ملاحظة تجريبية action-${index}`));
     assert(view.text().includes('المعروض 1 من 4 ملاحظة'));
   }
@@ -431,35 +450,73 @@ const note = (id = 'n1') => ({
   selectCourse('course1');
   selectExam('exam1');
   search('current_student');
-  assert.equal(view.nodes('Checkbox').length, 1, 'Action, course, exam, and Telegram search combine.');
+  assert.equal(view.done().length, 1, 'Action, course, exam, and Telegram search combine.');
   search('legacy_student');
-  assert.equal(view.nodes('Checkbox').length, 0);
+  assert.equal(view.done().length, 0);
   search('');
   view.tick();
   view.reads[1].resolve({ notes: actionNotes.filter((item) => item.contactStatus !== 'لم يرد') });
   await view.flush();
-  assert.equal(view.nodes('select')[2].props.value, 'unanswered', 'Polling preserves the action filter when its last match disappears.');
-  assert.equal(view.nodes('Checkbox').length, 0);
+  assert.equal(view.pressedAction(), 'unanswered', 'Polling preserves the action filter when its last match disappears.');
+  assert.equal(view.done().length, 0);
   view.nodes('Button').find((node) => JSON.stringify(node).includes('مسح الفلاتر')).props.onClick();
   view.render();
-  assert.equal(view.nodes('select')[2].props.value, 'all');
-  assert.equal(view.nodes('Checkbox').length, 3);
+  assert.equal(view.pressedAction(), 'all');
+  assert.equal(view.done().length, 3);
   selectAction('wrong');
   view.setProps({ open: false });
   view.setProps({ open: true });
-  assert.equal(view.nodes('select')[2].props.value, 'all');
+  assert.equal(view.pressedAction(), 'all');
   console.log('PASS: action filters combine, preserve polling state, reset correctly, and display/search Telegram handles safely.');
 
   view = harness();
   view.setProps({ canManage: false });
   view.reads[0].resolve({ notes: [note()] });
   await view.flush();
-  const readOnlyBox = view.nodes('Checkbox')[0];
-  assert.equal(readOnlyBox.props.disabled, true);
-  readOnlyBox.props.onCheckedChange(true);
+  assert.equal(view.done().length, 0, 'view-only users see the note without «إنجاز»');
+  assert(view.text().includes('ملاحظة تجريبية n1'));
   await view.flush();
   assert.equal(view.writes.length, 0);
   console.log('PASS: users with view-only access cannot complete notes.');
+
+  // One card per student, newest note first; the action buttons carry counts.
+  view = harness();
+  view.render();
+  const older = { ...note('older'), studentId: 'same', createdAt: '2026-09-20T08:00:00.000Z', contactStatus: '' };
+  older.student = { ...older.student, id: 'same', name: 'سلمان' };
+  const newer = { ...note('newer'), studentId: 'same', createdAt: '2026-09-27T17:11:00.000Z', contactStatus: 'لم يرد' };
+  newer.student = { ...newer.student, id: 'same', name: 'سلمان' };
+  const other = { ...note('other'), createdAt: '2026-09-23T15:07:00.000Z', contactStatus: 'تم الاتصال' };
+  view.reads[0].resolve({ notes: [older, other, newer] });
+  await view.flush();
+  const cards = view.nodes('li').filter((node) => node.props.className === 'tp-notes__card');
+  assert.equal(cards.length, 2, 'two students, two cards');
+  assert(JSON.stringify(cards[0]).includes('سلمان'), 'the student with the newest note comes first');
+  assert(JSON.stringify(cards[0]).includes('ملاحظتان'));
+  const firstCardNotes = JSON.stringify(cards[0]);
+  assert(firstCardNotes.indexOf('ملاحظة تجريبية newer') < firstCardNotes.indexOf('ملاحظة تجريبية older'), 'newest note first inside the card');
+  const chipCount = (key) => {
+    const chip = view.nodes('button').find((node) => node.props['data-action-filter'] === key);
+    return JSON.stringify(chip.props.children).match(/"children":(\d+)/)?.[1];
+  };
+  assert.equal(chipCount('all'), '3');
+  assert.equal(chipCount('unanswered'), '1');
+  assert.equal(chipCount('contacted'), '1');
+  assert.equal(chipCount('no-action'), '1');
+  assert.equal(chipCount('wrong'), '0');
+  console.log('PASS: one card per student, newest first, and counted action buttons.');
+
+  // «إنجاز» offers «تراجع», which reopens the same note.
+  view.done()[0].props.onClick();
+  view.render();
+  view.writes[0].resolve({});
+  await view.flush();
+  assert.equal(view.toasts.length, 1);
+  assert.equal(view.toasts[0].options.action.label, 'تراجع');
+  view.toasts[0].options.action.onClick();
+  assert.equal(view.reopens.length, 1);
+  assert.equal(view.reopens[0].note.id, 'newer');
+  console.log('PASS: a completed note can be reopened from the confirmation.');
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;
