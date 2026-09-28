@@ -262,5 +262,9 @@
   "20260928120000_clear_auto_leave_notes": {
     "kind": "audited-data-reconciliation",
     "checksum": "cb0d3890f513aae0649b9dae94c24a4e94ebd35a12ab75718ba12b3b9b898f65"
+  },
+  "20260928160000_tidy_automatic_notes": {
+    "kind": "audited-data-reconciliation",
+    "checksum": "54f2203cf5d22915970add60f7119fa596495ee910a85d96fcbd246bb8fccd30"
   }
 }

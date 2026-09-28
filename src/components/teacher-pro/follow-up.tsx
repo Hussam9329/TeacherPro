@@ -72,6 +72,7 @@ import {
   studentExamCallIdentityKey,
   studentExamCallIdentityMatches,
 } from "@/lib/call-identity";
+import { shortGradeNoteText } from "@/lib/grade-note-banners";
 import "./tp-modal.css";
 import "./calls.css";
 
@@ -831,9 +832,9 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       status,
       completed,
       completedAt: completed ? todayISO() : "",
-      notes:
-        existing?.notes ||
-        `${item?.reason || ""} | ${item.exam.name} | ${formatGradeScore(item.grade, item.exam, "—")}`,
+      // A contact-status row carries no automatic note; the teacher's notes
+      // live in their own «call-student-note» rows.
+      notes: existing?.notes || "",
     };
     const savingKey = `status:${studentExamCallIdentityKey(payload.studentId, payload.examId)}`;
     const previousCall = existing || null;
@@ -1181,10 +1182,10 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
         {call ? (
           <p className="tp-call-exam__meta">إجراء التواصل: {callStatusForLog(call) || "بدون إجراء"}</p>
         ) : null}
-        {item.grade.notes ? (
+        {shortGradeNoteText(item.grade.notes) ? (
           <div className="tp-call-exam__grade-note">
             <span>ملاحظة الدرجة</span>
-            <p>{item.grade.notes}</p>
+            <p>{shortGradeNoteText(item.grade.notes)}</p>
           </div>
         ) : null}
       </li>

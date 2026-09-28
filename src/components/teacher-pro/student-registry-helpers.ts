@@ -18,6 +18,7 @@ import {
   sanitizeTelegramInput,
 } from "@/lib/student-utils";
 import { searchAny } from "@/lib/validation";
+import { displayReasonText } from "@/lib/reason-display";
 import type { ExportColumn } from "./export-dialog";
 
 export type RegistryViewMode = "cards" | "table";
@@ -80,7 +81,7 @@ export const studentExportColumns: ExportColumn<any>[] = [
   { key: "locationScope", label: "نطاق الموقع", value: (student) => student.locationScope || "" },
   { key: "location", label: "الموقع", value: (student) => student.locationText || "" },
   { key: "status", label: "الحالة", value: (student) => student.status || "" },
-  { key: "dismissalReason", label: "سبب الفصل", value: (student) => student.dismissalReason || "", defaultSelected: false },
+  { key: "dismissalReason", label: "سبب الفصل", value: (student) => displayReasonText(student.dismissalReason), defaultSelected: false },
   { key: "opportunities", label: "الفرص", value: (student) => student.opportunities ?? "" },
   { key: "grace", label: "فترة السماح", value: (student) => formatStudentCurrentGrace(student) },
   { key: "createdAt", label: "تاريخ التسجيل", value: (student) => formatAppDate(student.createdAt) },

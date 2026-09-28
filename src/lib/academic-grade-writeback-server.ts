@@ -17,6 +17,7 @@ import {
 import { assertGradeStatusScoreConsistency } from "@/lib/grade-status-score-validation";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { endLeavesCoveringExamForGrade } from "@/lib/student-leave-grade-override-server";
+import { composeExcusedGradeNote } from "@/lib/grade-note-banners";
 import {
   LEAVE_END_CONFIRMATION_MESSAGE,
   LEAVE_END_CONFIRMATION_REQUIRED_CODE,
@@ -43,10 +44,21 @@ const STALE_AUTOMATIC_ABSENCE_NOTES_PATTERNS = [
   "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم",
 ] as const;
 
+// The short texts that replaced the long ones above (2026-09-28 tidy-up).
+// Matched exactly: a teacher's note that merely mentions them is untouched.
+const STALE_AUTOMATIC_ABSENCE_NOTES_EXACT = [
+  "قبل تسجيل الطالب",
+  "فترة سماح",
+] as const;
+
 function notesContainsStalePhrase(notes: string | null | undefined): boolean {
   if (!notes) return false;
-  return STALE_AUTOMATIC_ABSENCE_NOTES_PATTERNS.some((phrase) =>
-    notes.includes(phrase),
+  const trimmed = notes.trim();
+  return (
+    STALE_AUTOMATIC_ABSENCE_NOTES_EXACT.some((text) => trimmed === text) ||
+    STALE_AUTOMATIC_ABSENCE_NOTES_PATTERNS.some((phrase) =>
+      notes.includes(phrase),
+    )
   );
 }
 
@@ -121,11 +133,14 @@ function sanitizeStaleAbsenceNotes(input: {
   // mark an excused student as absent/cheating, we coerced the status to
   // "مجاز". Replace the stale absence note with an authoritative excused
   // note so the row never displays "تسجيل جماعي كغائب" on a "مجاز" record.
+  // The teacher's own words (typed now, or already on the row) are kept
+  // after the leave reason instead of being overwritten.
   if (coercedToExcusedDueToLeave) {
-    const reason = excusedLeaveReason?.trim();
-    return reason
-      ? `إجازة: ${reason}`
-      : "إجازة";
+    return composeExcusedGradeNote(
+      excusedLeaveReason,
+      callerNotes ?? previousNotes,
+      notesContainsStalePhrase,
+    );
   }
 
   // Rule 1: teacher corrected an absent/cheating row to a real grade,
@@ -328,11 +343,15 @@ function dayEndExclusive(value: Date | string | null | undefined): Date | null {
   return end;
 }
 
-async function hasBlockingLeave(
+/**
+ * The leave that covers this exam: a leave for the exam itself first, else a
+ * period leave whose days include the exam day. Null when none covers it.
+ */
+async function findBlockingLeave(
   client: PrismaClientLike,
   studentId: string,
   exam: { id: string; date: Date },
-): Promise<boolean> {
+): Promise<{ id: string; reason: string } | null> {
   const examDayStart = dayStart(exam.date);
   const examDayEnd = dayEndExclusive(exam.date);
   const periodWhere: Prisma.StudentLeaveWhereInput[] = [];
@@ -344,14 +363,17 @@ async function hasBlockingLeave(
     });
   }
 
-  const leave = await client.studentLeave.findFirst({
+  const leaves = await client.studentLeave.findMany({
     where: {
       studentId,
       OR: [{ examId: exam.id }, ...periodWhere],
     },
-    select: { id: true },
+    select: { id: true, examId: true, reason: true },
+    orderBy: { id: "asc" },
+    take: 10,
   });
-  return Boolean(leave);
+  const leave = leaves.find((row) => row.examId === exam.id) || leaves[0];
+  return leave ? { id: leave.id, reason: String(leave.reason || "") } : null;
 }
 
 export async function syncAcademicGradeWriteback(
@@ -523,7 +545,8 @@ export async function syncAcademicGradeWriteback(
   // caller disables non-numeric leave coercion. This prevents a bypass from
   // storing a counted grade beside an active leave or ending it silently.
   if (realNumericGrade || input.blockOnLeave !== false) {
-    const blockedByLeave = await hasBlockingLeave(client, studentId, exam);
+    const blockingLeave = await findBlockingLeave(client, studentId, exam);
+    const blockedByLeave = Boolean(blockingLeave);
     if (blockedByLeave) {
       // UNIFIED RULE: a real numeric grade (zero included) consciously
       // overrides the leave — the covering leave(s) end inside this same
@@ -554,15 +577,9 @@ export async function syncAcademicGradeWriteback(
         // ROOT-CAUSE FIX (leave + absence contradiction): silently COERCE the
         // status to "مجاز" so the row reflects the excused state. Notes are
         // sanitized below to remove the stale batch-absence phrase.
-        const leaveRow = await client.studentLeave.findFirst({
-          where: {
-            studentId,
-            OR: [{ examId }, { leaveType: "period" }],
-          },
-          select: { reason: true, leaveType: true },
-        });
+        // The reason comes from the very leave that covers this exam.
         coercedToExcusedDueToLeave = true;
-        excusedLeaveReason = leaveRow?.reason || "";
+        excusedLeaveReason = blockingLeave?.reason || "";
         // Mutate `status` so the rest of the function (notes sanitization,
         // upsert, score handling) sees "مجاز".
         status = "مجاز";
@@ -599,12 +616,9 @@ export async function syncAcademicGradeWriteback(
     );
   }
 
+  // A save without notes keeps the row's notes; no automatic note is written.
   const notes =
-    input.notes === undefined
-      ? input.sourceLabel
-        ? `تم تحديث الدرجة من ${input.sourceLabel}.`
-        : undefined
-      : String(input.notes || "");
+    input.notes === undefined ? undefined : String(input.notes || "");
 
   // ROOT-CAUSE FIX (stale absence notes): When the teacher corrects an
   // absent / cheating / excused row into a real numeric grade, the previous

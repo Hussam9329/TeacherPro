@@ -44,6 +44,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { examApi, examStatsApi, type ApiResult, type ExamRecordStat } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
+import { visibleGradeNote } from "@/lib/grade-note-banners";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import {
   ExamEditDialog,
@@ -83,7 +84,7 @@ const examGradeExportColumns: ExportColumn<any>[] = [
     label: "يوزر تيليجرام",
     value: (row) => row.student?.username || "",
   },
-  { key: "notes", label: "ملاحظات", value: (row) => row.grade.notes || "" },
+  { key: "notes", label: "ملاحظات", value: (row) => visibleGradeNote(row.grade.notes) },
 ];
 
 type ViewMode = "cards" | "table";

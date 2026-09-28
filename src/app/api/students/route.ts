@@ -1050,12 +1050,21 @@ export async function PUT(req: NextRequest) {
         const resetKind = transactionCourseChanged
           ? "course-transfer"
           : "same-course-new-student";
+        // The reason names the courses as people know them, never by id.
+        const transferCourses = transactionCourseChanged
+          ? await tx.course.findMany({
+              where: { id: { in: [lockedStudent.courseId, transactionTargetCourseId] } },
+              select: { id: true, name: true },
+            })
+          : [];
+        const transferCourseName = (courseId: string) =>
+          transferCourses.find((course) => course.id === courseId)?.name?.trim() || courseId;
         archiveSummary = await archiveAndResetStudentEnrollment(tx, {
           studentId: String(id),
           targetCourseId: transactionTargetCourseId,
           resetKind,
           reason: transactionCourseChanged
-            ? `نقل الطالب من دورة ${lockedStudent.courseId} إلى دورة ${transactionTargetCourseId} وبدء ملف جديد`
+            ? `نقل الطالب من دورة «${transferCourseName(lockedStudent.courseId)}» إلى دورة «${transferCourseName(transactionTargetCourseId)}» وبدء ملف جديد`
             : "اختيار اعتبار الطالب جديداً بعد تغيير إعداداته داخل الدورة نفسها",
           createdById: principal.id,
           createdByName: principal.name,

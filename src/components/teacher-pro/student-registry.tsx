@@ -136,6 +136,7 @@ import {
   type StudentEditRecovery,
   type StudentEditRecoveryChoice,
 } from "./student-edit-recovery";
+import { displayReasonText } from "@/lib/reason-display";
 import "./student-registry.css";
 
 export function StudentRegistryView() {
@@ -3269,7 +3270,7 @@ export function StudentRegistryView() {
                                   }
                                   {academicImpactPreview.projection.projected
                                     .dismissalReason
-                                    ? ` — ${academicImpactPreview.projection.projected.dismissalReason}`
+                                    ? ` — ${displayReasonText(academicImpactPreview.projection.projected.dismissalReason)}`
                                     : ""}
                                 </p>
                               )}

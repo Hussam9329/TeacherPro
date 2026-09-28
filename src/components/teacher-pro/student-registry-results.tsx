@@ -22,6 +22,7 @@ import {
   currentStudentGracePeriod,
   formatStudentCurrentGrace,
 } from "./student-registry-helpers";
+import { displayReasonText } from "@/lib/reason-display";
 import "./student-registry-results.css";
 
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
@@ -310,7 +311,7 @@ function StudentDismissalDetails({ student }: { student: Student }) {
   if (student.status !== "مفصول") return null;
   return (
     <div className="rounded-lg border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-2 text-xs font-medium text-danger">
-      <div>{student.dismissalReason || "سبب الفصل غير مدخل"}</div>
+      <div>{displayReasonText(student.dismissalReason) || "سبب الفصل غير مدخل"}</div>
       {student.dismissalNotes && (
         <div className="mt-1 text-danger/85">
           ملاحظات: {student.dismissalNotes}

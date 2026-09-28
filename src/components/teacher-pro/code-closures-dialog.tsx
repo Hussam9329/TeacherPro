@@ -14,6 +14,7 @@ import { normalizeForSearch } from "@/lib/validation";
 import { describeTelegramHandle } from "./student-registry-helpers";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { formatAppDate } from "@/lib/format";
+import { displayReasonText } from "@/lib/reason-display";
 import "./tp-modal.css";
 import "./code-closures-dialog.css";
 
@@ -334,7 +335,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
                             <ChevronDown aria-hidden="true" className={`size-4 ${reasonExpanded ? "rotate-180" : ""}`} />
                           </Button>
                           {reasonExpanded && (
-                            <p id={reasonId} className="tp-closures__reason">{student.dismissalReason || "سبب الفصل غير مسجل"}</p>
+                            <p id={reasonId} className="tp-closures__reason">{displayReasonText(student.dismissalReason) || "سبب الفصل غير مسجل"}</p>
                           )}
                         </section>
 

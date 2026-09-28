@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BadgeCheck,
   CalendarClock,
   FileClock,
   Hourglass,
@@ -10,7 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { resolveGradeNoteBanner } from "@/lib/grade-note-banners";
+import { resolveGradeNoteBanner, visibleGradeNote } from "@/lib/grade-note-banners";
 
 // Full class strings (Tailwind only sees literal class names).
 const SIGNAL = {
@@ -50,6 +51,7 @@ const TONES: Record<
   grace: { Icon: Hourglass, ...SIGNAL.grace },
   excused: { Icon: Leaf, ...SIGNAL.success },
   deferred: { Icon: FileClock, ...SIGNAL.info },
+  promoted: { Icon: BadgeCheck, ...SIGNAL.success },
 };
 
 const CUSTOM = {
@@ -70,7 +72,8 @@ export function GradeNoteBanner({
   notes: string | null | undefined;
   className?: string;
 }) {
-  const raw = (notes ?? "").trim();
+  // البادئات الداخلية التي يعتمد عليها الحساب لا تُعرض.
+  const raw = visibleGradeNote(notes);
   if (!raw) return null;
 
   const banner = resolveGradeNoteBanner(raw);

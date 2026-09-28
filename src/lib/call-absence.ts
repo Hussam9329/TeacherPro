@@ -107,7 +107,7 @@ export function buildImplicitCallAbsenceGrade(args: {
     examId: args.examId,
     status: "غائب" as const,
     score: null,
-    notes: "لا توجد درجة مسجلة لهذا الامتحان؛ غياب مشتق للمتابعة فقط.",
+    notes: "لم تُسجّل له درجة",
     academicAccountingChecked: false,
     academicEffectExcluded: false,
     academicEffectExclusionReason: null,

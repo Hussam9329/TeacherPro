@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import { buildDismissedStudentWhere } from "@/lib/dismissed-student-filters-server";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
+import { displayReasonText } from "@/lib/reason-display";
 import { withStudentMutationToken } from "@/lib/student-mutation-token";
 
 function positiveInteger(
@@ -121,8 +122,9 @@ export async function GET(req: NextRequest) {
           {
             ...(student as unknown as Record<string, unknown>),
             wasDismissed: true,
-            lastDismissalReason:
+            lastDismissalReason: displayReasonText(
               student.dismissalReason || lastDismissal?.reason || "",
+            ),
             lastDismissalAt: lastDismissal?.date || "",
           },
           sourceStudentsById.get(student.id) as unknown as Record<string, unknown>,

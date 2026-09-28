@@ -27,6 +27,7 @@ import { classifyGradeAcademicImpact, type GradeClassificationKind } from "@/lib
 import { ArrowRightIcon, XIcon } from "lucide-react";
 
 import { GradeNoteBanner } from "@/components/teacher-pro/grade-note-banner";
+import { displayReasonText } from "@/lib/reason-display";
 import { shortGradeNoteText } from "@/lib/grade-note-banners";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
@@ -1138,7 +1139,7 @@ export function StudentProfileDialog({
                 {hasAuthoritativeProfile && profileStudent.status === "مفصول" && (
                   <div className="rounded-2xl p-4 text-sm sm:rounded-3xl" data-dismissed="true">
                     <p className="font-black text-danger">بيانات الفصل</p>
-                    <p className="mt-2 break-words">مفصول - {profileStudent.dismissalReason || "—"}</p>
+                    <p className="mt-2 break-words">مفصول - {displayReasonText(profileStudent.dismissalReason) || "—"}</p>
                     {profileStudent.dismissalNotes && <p className="mt-1 break-words text-muted-foreground">{profileStudent.dismissalNotes}</p>}
                   </div>
                 )}

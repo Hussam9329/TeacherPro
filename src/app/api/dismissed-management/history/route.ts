@@ -2,6 +2,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+import { displayReasonText } from "@/lib/reason-display";
+import { shortGradeNoteText } from "@/lib/grade-note-banners";
 import { db } from "@/lib/db";
 import { requirePermissionPrincipal } from "@/lib/server-auth";
 import { routeErrorResponse } from "@/lib/route-helpers";
@@ -269,7 +271,7 @@ function pushGradeEvents(
           ? `تاريخ الامتحان: ${detailDate(exam.date)}`
           : "",
         gradeLabel(grade.status, grade.score, exam.fullMark),
-        text(grade.notes) ? `الملاحظات: ${text(grade.notes)}` : "",
+        shortGradeNoteText(text(grade.notes)) ? `الملاحظات: ${shortGradeNoteText(text(grade.notes))}` : "",
         bool(grade.academicEffectExcluded)
           ? `الأثر الأكاديمي مستبعد${text(grade.academicEffectExclusionReason) ? `: ${text(grade.academicEffectExclusionReason)}` : ""}`
           : "",
@@ -424,7 +426,7 @@ function pushStudentNoteEvents(
         sourceCourseDetail(courseName),
         text(note.text),
         text(note.dismissalReason)
-          ? `سبب الفصل المرتبط: ${text(note.dismissalReason)}`
+          ? `سبب الفصل المرتبط: ${displayReasonText(note.dismissalReason)}`
           : "",
       ].filter(Boolean),
       tone: "neutral",
@@ -711,8 +713,9 @@ export async function GET(req: NextRequest) {
         { status: 404 },
       );
     }
-    const displayedDismissalReason =
-      student.dismissalReason || historicalDismissalReason;
+    const displayedDismissalReason = displayReasonText(
+      student.dismissalReason || historicalDismissalReason,
+    );
 
     const parsedArchives = archives.map((archive) => ({
       archive,

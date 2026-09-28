@@ -152,6 +152,7 @@ function harness() {
     './student-registry-helpers': registryHelpers,
     '@/lib/baghdad-time': loadHelper('@/lib/baghdad-time'),
     '@/lib/format': loadHelper('@/lib/format'),
+    '@/lib/reason-display': loadHelper('@/lib/reason-display'),
   };
   const context = {
     exports: {},

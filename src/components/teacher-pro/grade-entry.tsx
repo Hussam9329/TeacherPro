@@ -69,7 +69,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { isAutomaticGradeNote } from "@/lib/grade-note-banners";
+import { editableGradeNote, isAutomaticGradeNote, withInternalGradeNotePrefix } from "@/lib/grade-note-banners";
 import { toast } from "@/lib/user-toast";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { normalizeForSearch } from "@/lib/validation";
@@ -2949,10 +2949,12 @@ export function GradeEntryView() {
                       </Select>
 
                       <Input
-                        value={draft.notes}
+                        value={editableGradeNote(draft.notes)}
                         disabled={notesInputDisabled}
                         onChange={(e) =>
-                          updateDraft(student.id, { notes: e.target.value })
+                          updateDraft(student.id, {
+                            notes: withInternalGradeNotePrefix(draft.notes, e.target.value),
+                          })
                         }
                         onBlur={() => {
                           if (

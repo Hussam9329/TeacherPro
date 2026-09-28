@@ -1,5 +1,6 @@
 "use client";
 
+import { displayReasonText } from "@/lib/reason-display";
 import {
   useCallback,
   useEffect,
@@ -300,7 +301,7 @@ function buildHtmlReport(history: StudentHistory) {
     ["الكورس المطلوب", s.courseTerm || "—"],
     ["نظام الدراسة", s.studyType || "—"],
     ["الموقع", [s.locationScope, s.mainSite, s.subSite].filter(Boolean).join(" / ") || "—"],
-    ["سبب الفصل", s.dismissalReason || "غير مسجل"],
+    ["سبب الفصل", displayReasonText(s.dismissalReason) || "غير مسجل"],
     ["ملاحظات الفصل", s.dismissalNotes || "—"],
     ["تاريخ التسجيل", formatBaghdadDateTime(s.createdAt)],
     ["تاريخ الفصل", formatBaghdadDateTime(s.dismissalAt)],
@@ -667,7 +668,7 @@ export function DismissedManagementView() {
         status: String(profileStudent.status ?? student.status ?? ""),
         dismissalDate:
           dismissalDateTime === "—" ? "" : dismissalDateTime.split(" ")[0],
-        dismissalReason: String(
+        dismissalReason: displayReasonText(
           profileStudent.dismissalReason ??
             managed.lastDismissalReason ??
             student.dismissalReason ??
@@ -1085,7 +1086,7 @@ export function DismissedManagementView() {
                       {student.status === "مفصول" ? "سبب الفصل" : "سبب آخر فصل"}
                     </b>
                     <span>
-                      {student.dismissalReason || student.lastDismissalReason || "لا يوجد سبب مسجل"}
+                      {displayReasonText(student.dismissalReason || student.lastDismissalReason) || "لا يوجد سبب مسجل"}
                     </span>
                     {student.dismissalNotes ? (
                       <span className="mt-1 block border-t border-danger-line/50 pt-1 text-[11px] text-muted-foreground">

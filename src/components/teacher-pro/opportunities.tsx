@@ -49,6 +49,7 @@ import {
   displayOpportunityAction,
   displayOpportunityReason,
 } from "@/lib/retired-followup-compat";
+import { displayReasonText } from "@/lib/reason-display";
 
 const opportunityExportColumns: ExportColumn<any>[] = [
   { key: "student", label: "الطالب", value: (s) => s.name || "", defaultSelected: true },
@@ -1143,7 +1144,7 @@ export function OpportunitiesView() {
                       {student.status === "مفصول" &&
                         student.dismissalReason && (
                           <p className="mt-1 text-xs font-semibold text-danger">
-                            {student.dismissalReason}
+                            {displayReasonText(student.dismissalReason)}
                           </p>
                         )}
                       {!hasChapter && (

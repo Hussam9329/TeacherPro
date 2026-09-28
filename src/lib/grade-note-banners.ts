@@ -16,7 +16,8 @@ export type GradeNoteBannerKey =
   | "before-registration"
   | "grace"
   | "excused"
-  | "deferred";
+  | "deferred"
+  | "promoted";
 
 export interface GradeNoteBannerInfo {
   key: GradeNoteBannerKey;
@@ -63,7 +64,65 @@ const containsAny = (notes: string, patterns: readonly string[]): boolean =>
   patterns.some((p) => notes.includes(p));
 
 const PREFIX_EXCUSED_REASON = "إجازة: ";
+const PREFIX_EXCUSED_TEACHER_NOTE = "إجازة — ";
 const PREFIX_LEGACY_EXCUSED_REASON = "الطالب مجاز من هذا الامتحان: ";
+
+/** ملاحظة اعتماد درجة امتحان سابق لتسجيل الطالب (أداة الصيانة). */
+const PREFIX_PROMOTED_PRE_REGISTRATION = "درجة مدخلة يدوياً لامتحان سابق لتسجيل الطالب";
+
+/**
+ * بادئات داخلية يعتمد عليها الحساب (grade-settlement.ts): تبقى محفوظة في
+ * الدرجة كما هي، ولا تُعرض للمستخدم. يُعرض ما بعدها فقط، ويعيدها الحفظ.
+ */
+export const INTERNAL_GRADE_NOTE_PREFIXES = [
+  "تسوية تاريخية بلا أثر:",
+  "أثر أكاديمي فعّال بعد التسوية:",
+] as const;
+
+/** النص الافتراضي الذي تضعه أداة الإصلاح بعد البادئة حين لا توجد ملاحظة. */
+const INTERNAL_PREFIX_FILLER = "غياب امتحان حالي";
+
+/**
+ * يفصل البادئة الداخلية عن الجزء الذي يراه المستخدم. الجزء الظاهر لا يُقصّ
+ * من نهايته، حتى تبقى الكتابة داخل خانة الملاحظات طبيعية.
+ */
+export function splitInternalGradeNote(notes: string | null | undefined): {
+  prefix: string;
+  visible: string;
+} {
+  const raw = notes ?? "";
+  const start = raw.trimStart();
+  const prefix = INTERNAL_GRADE_NOTE_PREFIXES.find((item) => start.startsWith(item));
+  if (!prefix) return { prefix: "", visible: raw };
+  const rest = start.slice(prefix.length).replace(/^\s+/, "");
+  return { prefix, visible: rest.trim() === INTERNAL_PREFIX_FILLER ? "" : rest };
+}
+
+/** الملاحظة كما يراها المستخدم: بلا البادئات الداخلية. */
+export function visibleGradeNote(notes: string | null | undefined): string {
+  return splitInternalGradeNote(notes).visible.trim();
+}
+
+/** قيمة خانة تعديل الملاحظة: الجزء الظاهر فقط. */
+export function editableGradeNote(notes: string | null | undefined): string {
+  return splitInternalGradeNote(notes).visible;
+}
+
+/**
+ * يعيد البادئة الداخلية للملاحظة الأصلية بعد تعديلها من الخانة، فتعديل
+ * الملاحظة من الواجهة لا يمسح أبداً ما يعتمد عليه الحساب.
+ */
+export function withInternalGradeNotePrefix(
+  original: string | null | undefined,
+  edited: string | null | undefined,
+): string {
+  const { prefix, visible } = splitInternalGradeNote(original);
+  const next = edited ?? "";
+  if (!prefix) return next;
+  // لم يتغيّر شيء: تبقى الملاحظة الأصلية حرفياً.
+  if (next === visible) return original ?? "";
+  return next.trim() ? `${prefix} ${next}` : prefix;
+}
 
 /**
  * يطابق ملاحظة الدرجة مع قاموس البانرات.
@@ -88,6 +147,14 @@ export function resolveGradeNoteBanner(
       key: "excused",
       label: "إجازة",
       detail: raw.slice(PREFIX_EXCUSED_REASON.length).trim() || undefined,
+      title: "الطالب مُجاز من هذا الامتحان بإجازة رسمية",
+    };
+  }
+  if (raw.startsWith(PREFIX_EXCUSED_TEACHER_NOTE)) {
+    return {
+      key: "excused",
+      label: "إجازة",
+      detail: raw.slice(PREFIX_EXCUSED_TEACHER_NOTE.length).trim() || undefined,
       title: "الطالب مُجاز من هذا الامتحان بإجازة رسمية",
     };
   }
@@ -149,6 +216,15 @@ export function resolveGradeNoteBanner(
     };
   }
 
+  if (raw.startsWith(PREFIX_PROMOTED_PRE_REGISTRATION)) {
+    return {
+      key: "promoted",
+      label: "درجة قبل التسجيل (معتمدة)",
+      title:
+        "درجة امتحان سابق لتسجيل الطالب؛ قُدّم تاريخ تسجيله إلى تاريخ الامتحان واعتُمدت الدرجة محتسبة",
+    };
+  }
+
   // ملاحظة مخصصة كتبها المستخدم — تبقى كما هي
   return null;
 }
@@ -164,7 +240,53 @@ export function isAutomaticGradeNote(
 export function shortGradeNoteText(
   notes: string | null | undefined,
 ): string {
-  const banner = resolveGradeNoteBanner(notes);
-  if (!banner) return notes ?? "";
+  const visible = visibleGradeNote(notes);
+  const banner = resolveGradeNoteBanner(visible);
+  if (!banner) return visible;
   return banner.detail ? `${banner.label}: ${banner.detail}` : banner.label;
+}
+
+const EXCUSED_NOTE = "إجازة";
+const EXCUSED_NOTE_SEPARATOR = " — ";
+
+/**
+ * الجزء الذي كتبه الأستاذ من ملاحظة الدرجة. الملاحظات الآلية تعطي ""، وملاحظة
+ * «إجازة: السبب — ملاحظة» سابقة تعطي «ملاحظة» فقط، فإعادة الحفظ لا تضيّع ما
+ * كتبه الأستاذ ولا تكرّره.
+ */
+export function teacherPartOfGradeNote(
+  notes: string | null | undefined,
+  isOtherAutomatic: (note: string) => boolean = () => false,
+): string {
+  const raw = (notes ?? "").trim();
+  if (!raw) return "";
+  if (
+    raw === EXCUSED_NOTE ||
+    raw.startsWith(PREFIX_EXCUSED_REASON) ||
+    raw.startsWith(PREFIX_EXCUSED_TEACHER_NOTE)
+  ) {
+    const separator = raw.indexOf(EXCUSED_NOTE_SEPARATOR);
+    return separator >= 0 ? raw.slice(separator + EXCUSED_NOTE_SEPARATOR.length).trim() : "";
+  }
+  if (isAutomaticGradeNote(raw) || isOtherAutomatic(raw)) return "";
+  return raw;
+}
+
+/**
+ * ملاحظة الدرجة لطالب مُجاز سُجّل له غياب أو غش: سبب الإجازة التي تغطي
+ * الامتحان، ثم ما كتبه الأستاذ إن وُجد — «إجازة: السبب — ملاحظة».
+ */
+export function composeExcusedGradeNote(
+  reason: string | null | undefined,
+  teacherSource: string | null | undefined,
+  isOtherAutomatic?: (note: string) => boolean,
+): string {
+  const leaveReason = (reason ?? "").trim();
+  const teacherNote = teacherPartOfGradeNote(teacherSource, isOtherAutomatic);
+  if (leaveReason) {
+    return teacherNote
+      ? `${PREFIX_EXCUSED_REASON}${leaveReason}${EXCUSED_NOTE_SEPARATOR}${teacherNote}`
+      : `${PREFIX_EXCUSED_REASON}${leaveReason}`;
+  }
+  return teacherNote ? `${PREFIX_EXCUSED_TEACHER_NOTE}${teacherNote}` : EXCUSED_NOTE;
 }

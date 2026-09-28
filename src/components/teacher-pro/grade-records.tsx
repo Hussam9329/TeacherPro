@@ -68,7 +68,7 @@ import {
 } from "lucide-react";
 
 import { GradeNoteBanner } from "@/components/teacher-pro/grade-note-banner";
-import { resolveGradeNoteBanner } from "@/lib/grade-note-banners";
+import { editableGradeNote, resolveGradeNoteBanner, visibleGradeNote, withInternalGradeNotePrefix } from "@/lib/grade-note-banners";
 import { CountScopeSummary } from "./ui-kit";
 import {
   examMatchesAcademicFilters,
@@ -144,8 +144,9 @@ const HIDDEN_BANNER_KEYS = new Set([
 ]);
 
 function bannerVisibleInCard(notes: string | null | undefined): boolean {
-  const raw = (notes ?? "").trim();
-  if (!raw || raw.startsWith(SETTLEMENT_NOTES_PREFIX)) return false;
+  if ((notes ?? "").trim().startsWith(SETTLEMENT_NOTES_PREFIX)) return false;
+  const raw = visibleGradeNote(notes);
+  if (!raw) return false;
   const banner = resolveGradeNoteBanner(raw);
   if (banner && HIDDEN_BANNER_KEYS.has(banner.key)) return false;
   return true;
@@ -199,7 +200,7 @@ const gradeExportColumns: ExportColumn<GradeExportRow>[] = [
     label: "الإجراء الحالي / المتوقع",
     value: ({ classificationText }) => classificationText,
   },
-  { key: "notes", label: "ملاحظات", value: ({ grade }) => grade?.notes || "" },
+  { key: "notes", label: "ملاحظات", value: ({ grade }) => visibleGradeNote(grade?.notes) },
 ];
 
 /** One student in the grade records: counts over the whole record. */
@@ -1612,9 +1613,12 @@ export function GradeRecordsView() {
             <div className="space-y-1 sm:col-span-2">
               <Label>الملاحظات</Label>
               <Input
-                value={editDialog.notes}
+                value={editableGradeNote(editDialog.notes)}
                 onChange={(e) =>
-                  setEditDialog((prev) => ({ ...prev, notes: e.target.value }))
+                  setEditDialog((prev) => ({
+                    ...prev,
+                    notes: withInternalGradeNotePrefix(prev.notes, e.target.value),
+                  }))
                 }
                 placeholder="سبب الإجازة أو ملاحظة التصحيح"
               />
