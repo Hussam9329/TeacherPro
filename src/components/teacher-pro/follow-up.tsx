@@ -16,7 +16,33 @@ import {
   studentCallApi,
   type CallStatsResponse,
 } from "@/lib/api";
-import { ChevronLeft, MessageCircle, PencilLine, PhoneCall, RotateCcw, Search, Send, StickyNote } from "lucide-react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  Ban,
+  CheckCircle2,
+  ChartColumn,
+  ChevronLeft,
+  FileText,
+  HelpCircle,
+  Info,
+  PencilLine,
+  Phone,
+  PhoneCall,
+  RotateCcw,
+  Search,
+  Send,
+  ShieldAlert,
+  ShieldCheck,
+  SlidersHorizontal,
+  Star,
+  StickyNote,
+  User,
+  Users,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
+import { callPhoneQrValue } from "@/lib/call-phone-qr";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -147,6 +173,41 @@ const callContactActions: Array<{ value: Exclude<ContactStatus, "">; tone: CallC
   { value: "لم يرد", tone: "warning" },
   { value: "الرقم خاطئ", tone: "danger" },
 ];
+
+/** WhatsApp's glyph (the icon set has none). */
+function WhatsAppIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z" />
+    </svg>
+  );
+}
+
+const callContactActionIcons: Record<Exclude<ContactStatus, "">, LucideIcon> = {
+  "تم الاتصال": CheckCircle2,
+  "لم يرد": AlertCircle,
+  "الرقم خاطئ": XCircle,
+};
+
+/** The result badge's icon: star for a full mark, a tick for a pass, and so on. */
+function callResultIcon(category?: CallCategory): LucideIcon {
+  if (category === "full") return Star;
+  if (category === "passed") return CheckCircle2;
+  if (category === "absent") return XCircle;
+  if (category === "cheating") return ShieldAlert;
+  if (category === "discounted" || category === "failed" || category === "academic-accounting") return AlertTriangle;
+  if (category === "protected") return ShieldCheck;
+  return HelpCircle;
+}
+
+/** Colour of an impact badge on the card. */
+function callBadgeTone(tone: CallBadgeTone): "danger" | "warning" | "info" | "success" | "muted" {
+  if (tone === "deducted") return "danger";
+  if (tone === "warning") return "warning";
+  if (tone === "safe") return "info";
+  if (tone === "success") return "success";
+  return "muted";
+}
 
 function contactTone(status: ContactStatus): CallContactTone {
   return callContactActions.find((action) => action.value === status)?.tone || "muted";
@@ -1026,11 +1087,11 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           rel="noreferrer"
           title={`${label}: ${phone}`}
         >
-          <MessageCircle aria-hidden="true" />{label}
+          <WhatsAppIcon />{label}
         </a>
       ) : (
         <span className="tp-call-card__contact-btn" data-kind="whatsapp" aria-disabled="true" title={`${label}: لا يوجد رقم`}>
-          <MessageCircle aria-hidden="true" />{label}
+          <WhatsAppIcon />{label}
         </span>
       );
     return (
@@ -1046,7 +1107,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             rel="noreferrer"
             title={`تيليجرام: @${telegramHandle}`}
           >
-            <Send aria-hidden="true" />تيليجرام
+            <Send aria-hidden="true" fill="currentColor" />تيليجرام
           </a>
         ) : (
           <span
@@ -1055,7 +1116,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             aria-disabled="true"
             title={telegramHandle ? `المعرف ${telegramHandle} (لا يوجد يوزر)` : "لا يوجد معرف تيليجرام"}
           >
-            <Send aria-hidden="true" />تيليجرام
+            <Send aria-hidden="true" fill="currentColor" />تيليجرام
           </span>
         )}
       </div>
@@ -1285,6 +1346,23 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   );
 
   // ── The short student card ──────────────────────────────────────────────
+  const renderQrTile = (row: CallStudentRow, label: string, phone: string | null | undefined, icon: React.ReactNode) =>
+    callPhoneQrValue(phone) ? (
+      <CallPhoneQr
+        studentName={row.student.name}
+        phoneLabel={label}
+        phone={phone}
+        icon={icon}
+        className="tp-qr-tile"
+      />
+    ) : (
+      <div className="tp-qr-tile" data-empty="true">
+        <span data-part="label">{icon}{label}</span>
+        <span className="tp-qr-tile__placeholder" aria-hidden="true" />
+        <span data-part="phone">لا يوجد رقم</span>
+      </div>
+    );
+
   const renderCallRow = (row: CallStudentRow) => {
     const item = row.focusItem;
     const call = callLogForRow(row);
@@ -1294,97 +1372,126 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       : "";
     const statusSaving = Boolean(callSavingKeys[statusSavingKey]);
     const focusValue = item ? callValueText(item) : "—";
-    const hasPhone = Boolean(row.student.phone || row.student.parentPhone);
+    const resultTone = callResultTone(item?.category);
+    const ResultIcon = callResultIcon(item?.category);
+    const studentTone = row.student.status === "نشط" ? "success" : row.student.status === "مفصول" ? "danger" : "muted";
+    const course = courseName(row.student.courseId);
     return (
       <article
         key={row.id}
         className="teacherpro-heavy-row tp-call-card"
         data-contact={contactTone(contactStatus)}
-        data-has-qr={hasPhone || undefined}
         aria-label={row.student.name}
       >
         <header className="tp-call-card__head">
           <div className="tp-call-card__who">
             <b className="tp-call-card__name">{row.student.name}</b>
-            <span className="tp-call-card__code" dir="ltr">{row.student.code}</span>
-            <Badge variant={row.student.status === "نشط" ? "success" : "destructive"}>
-              {row.student.status}
-            </Badge>
-            <span className="tp-call-card__opps" data-tone={opportunityTone(row.student)}>
-              الفرص: {studentOpportunityText(row.student)}
+            <span className="tp-call-card__sep" aria-hidden="true" />
+            <span className="tp-call-card__id">
+              <span className="tp-call-card__code" dir="ltr">{row.student.code}</span>
+              {course && <span className="tp-call-card__course">{course}</span>}
+            </span>
+            <span className="tp-call-card__sep" aria-hidden="true" />
+            <span className="tp-call-card__pill" data-tone={studentTone}>
+              <span className="tp-call-card__dot" aria-hidden="true" />{row.student.status}
+            </span>
+            <span className="tp-call-card__pill" data-tone={opportunityTone(row.student)}>
+              <ChartColumn aria-hidden="true" />الفرص: {studentOpportunityText(row.student)}
             </span>
           </div>
-          <Button type="button" variant="outline" size="sm" className="tp-call-card__details" onClick={() => setDetailsRow(row)}>
-            التفاصيل
+          <Button type="button" variant="outline" className="tp-call-card__details" onClick={() => setDetailsRow(row)}>
+            <FileText aria-hidden="true" />التفاصيل
           </Button>
         </header>
 
         <div className="tp-call-card__body">
-          <dl className="tp-call-card__rows">
-            <div className="tp-call-card__row">
-              <dt>الامتحان</dt>
-              <dd className="tp-call-card__focus">
-                <span className="tp-call-card__result" data-tone={callResultTone(item?.category)}>
-                  {item ? `${item.exam.name} — ${focusValue}` : "—"}
+          <div className="tp-call-card__main">
+            <section className="tp-call-hero" data-tone={resultTone} aria-label="الامتحان">
+              <div className="tp-call-hero__exam">
+                <span className="tp-call-hero__icon" aria-hidden="true"><FileText /></span>
+                <span className="tp-call-hero__text">
+                  <span className="tp-call-hero__eyebrow">الامتحان</span>
+                  <b className="tp-call-hero__name">{item?.exam.name || "—"}</b>
+                  {item && <span className="tp-call-hero__date">{formatAppDate(item.exam.date)}</span>}
                 </span>
-                {item?.label && item.label !== focusValue && (
-                  <span className="tp-call-card__label">{item.label}</span>
+              </div>
+              <div className="tp-call-hero__score">
+                <b className="tp-call-hero__value" dir="auto">{focusValue}</b>
+                <div className="tp-call-hero__badges">
+                  {item?.label && item.label !== focusValue && (
+                    <span className="tp-call-hero__label" data-tone={resultTone}>
+                      <ResultIcon aria-hidden="true" />{item.label}
+                    </span>
+                  )}
+                  {(item?.badges || []).slice(0, 1).map((badge) => (
+                    <span
+                      key={badge.label}
+                      className="tp-call-hero__impact"
+                      data-tone={callBadgeTone(badge.tone)}
+                      title={badge.detail || badge.label}
+                    >
+                      <Info aria-hidden="true" />{badge.label}
+                    </span>
+                  ))}
+                  {(item?.badges?.length || 0) > 1 && (
+                    <span className="tp-call-badges__more">+{(item?.badges?.length || 0) - 1}</span>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <div className="tp-call-card__row">
+              <span className="tp-call-card__row-label"><Phone aria-hidden="true" />التواصل</span>
+              <div className="tp-call-card__row-content">{renderContactButtons(row.student)}</div>
+            </div>
+
+            <div className="tp-call-card__row">
+              <span className="tp-call-card__row-label">
+                <SlidersHorizontal aria-hidden="true" />الإجراء
+                {(statusSaving || call?.completedAt) && (
+                  <small className="tp-call-card__last">
+                    {statusSaving ? "جاري الحفظ…" : `آخر تواصل: ${formatAppDate(call?.completedAt)}`}
+                  </small>
                 )}
-                {renderCallImpactBadges(item, 1)}
-              </dd>
+              </span>
+              <div className="tp-call-card__actions" role="group" aria-label={`إجراء التواصل مع ${row.student.name}`}>
+                {callContactActions.map((action) => {
+                  const ActionIcon = callContactActionIcons[action.value];
+                  return (
+                    <button
+                      key={action.value}
+                      type="button"
+                      className="tp-call-card__action"
+                      data-tone={action.tone}
+                      aria-pressed={contactStatus === action.value}
+                      disabled={!row.focusItem || statusSaving}
+                      onClick={() => void saveCallStatus(row, contactStatus === action.value ? "" : action.value)}
+                    >
+                      <ActionIcon aria-hidden="true" />{action.value}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  className="tp-call-card__action"
+                  data-tone="muted"
+                  aria-pressed={!contactStatus}
+                  disabled={!row.focusItem || statusSaving}
+                  onClick={() => void saveCallStatus(row, "")}
+                >
+                  <Ban aria-hidden="true" />بدون إجراء
+                </button>
+              </div>
             </div>
-            <div className="tp-call-card__row">
-              <dt>التواصل</dt>
-              <dd>{renderContactButtons(row.student)}</dd>
-            </div>
-            <div className="tp-call-card__row">
-              <dt>الإجراء</dt>
-              <dd className="tp-call-card__actions" role="group" aria-label={`إجراء التواصل مع ${row.student.name}`}>
-                {callContactActions.map((action) => (
-                  <button
-                    key={action.value}
-                    type="button"
-                    className="tp-call-card__action"
-                    data-tone={action.tone}
-                    aria-pressed={contactStatus === action.value}
-                    disabled={!row.focusItem || statusSaving}
-                    onClick={() => void saveCallStatus(row, contactStatus === action.value ? "" : action.value)}
-                  >
-                    {action.value}
-                  </button>
-                ))}
-                <span className="tp-call-card__last">
-                  {statusSaving
-                    ? "جاري حفظ إجراء التواصل..."
-                    : call?.completedAt
-                      ? `آخر تواصل: ${formatAppDate(call.completedAt)}`
-                      : contactStatus
-                        ? ""
-                        : "بدون إجراء"}
-                </span>
-              </dd>
-            </div>
-            <div className="tp-call-card__row">
-              <dt>الملاحظة</dt>
-              <dd>{renderNoteArea(row, "card")}</dd>
-            </div>
-          </dl>
+
+            <div className="tp-call-card__note-row">{renderNoteArea(row, "card")}</div>
+          </div>
 
           {/* Scan a code with another phone to dial the number directly. */}
-          {hasPhone && (
-            <div className="tp-call-card__qr" aria-label="نقل الرقم إلى هاتف آخر عبر QR">
-              <CallPhoneQr
-                studentName={row.student.name}
-                phoneLabel="الطالب"
-                phone={row.student.phone}
-              />
-              <CallPhoneQr
-                studentName={row.student.name}
-                phoneLabel="ولي الأمر"
-                phone={row.student.parentPhone}
-              />
-            </div>
-          )}
+          <aside className="tp-call-card__qr" aria-label="نقل الرقم إلى هاتف آخر عبر QR">
+            {renderQrTile(row, "الطالب", row.student.phone, <User aria-hidden="true" />)}
+            {renderQrTile(row, "ولي الأمر", row.student.parentPhone, <Users aria-hidden="true" />)}
+          </aside>
         </div>
       </article>
     );

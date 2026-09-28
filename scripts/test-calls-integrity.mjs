@@ -137,8 +137,9 @@ assert(
 );
 assert(
   followUp.includes('CallPhoneQr') &&
-    followUp.includes('phoneLabel="الطالب"') &&
-    followUp.includes('phoneLabel="ولي الأمر"'),
+    followUp.includes('renderQrTile(row, "الطالب", row.student.phone') &&
+    followUp.includes('renderQrTile(row, "ولي الأمر", row.student.parentPhone') &&
+    followUp.includes('<CallPhoneQr'),
   'كل رقم متوفر في بطاقة المكالمات يملك QR مستقل للطالب أو ولي الأمر',
 );
 assert(
@@ -383,10 +384,11 @@ assert(
   'حقل بحث واحد: كل الكلمات المكتوبة لازم تنطبق بالقائمة والإحصائيات والتصدير',
 );
 assert(
-  followUp.includes('callContactActions.map((action) => (') &&
+  followUp.includes('callContactActions.map((action) => {') &&
+    followUp.includes('aria-pressed={!contactStatus}') &&
     followUp.includes('saveCallStatus(row, contactStatus === action.value ? "" : action.value)') &&
     followUp.includes('aria-pressed={contactStatus === action.value}'),
-  'إجراء التواصل ثلاث أزرار بضغطة وحدة، والضغط على المفعّل يرجعه «بدون إجراء»',
+  'إجراء التواصل أزرار بضغطة وحدة مع زر «بدون إجراء»، والضغط على المفعّل يرجعه «بدون إجراء»',
 );
 assert(
   followUp.includes('renderDetailsWindow') &&
@@ -409,11 +411,12 @@ assert(
 );
 assert(
   followUp.includes('className="tp-call-card__qr"') &&
-    followUp.includes('<dt>الامتحان</dt>') &&
-    followUp.includes('<dt>التواصل</dt>') &&
-    followUp.includes('<dt>الإجراء</dt>') &&
-    followUp.includes('<dt>الملاحظة</dt>'),
-  'كارت الطالب مرتب بصفوف معنونة ورموز QR ظاهرة عليه مباشرة',
+    followUp.includes('className="tp-call-hero"') &&
+    followUp.includes('<Phone aria-hidden="true" />التواصل') &&
+    followUp.includes('<SlidersHorizontal aria-hidden="true" />الإجراء') &&
+    followUp.includes('onClick={() => void saveCallStatus(row, "")}') &&
+    followUp.includes('className="tp-call-card__note-row"'),
+  'كارت الطالب: رأس، لوحة الامتحان والنتيجة، صفا التواصل والإجراء (مع بدون إجراء)، الملاحظة، ورموز QR ظاهرة مباشرة',
 );
 
 if (process.exitCode) {

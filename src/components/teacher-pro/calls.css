@@ -165,162 +165,241 @@
 .tp-calls__pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.6rem 1rem; font-size: 0.85rem; color: var(--muted-foreground); }
 .tp-calls__pager b { color: var(--foreground); font-variant-numeric: tabular-nums; }
 
-/* The student card: a header line, then labelled rows beside the QR codes */
+/* The student card: a header line; the exam, contact, action and note rows;
+   and the two QR codes beside them (below them on phones). */
 .tp-call-card {
-  --accent: var(--border);
   display: grid;
-  align-content: start;
-  gap: 0;
+  gap: 0.9rem;
   min-inline-size: 0;
+  padding: 1rem 1.1rem 1.1rem;
   border: 1px solid var(--border);
-  border-inline-start: 4px solid var(--accent);
-  border-radius: var(--calls-radius);
+  border-radius: 1.25rem;
   background: var(--card);
-  overflow: hidden;
+  box-shadow: 0 14px 34px -28px color-mix(in srgb, var(--foreground) 55%, transparent);
 }
-.tp-call-card[data-contact="success"] { --accent: var(--status-success-vivid); }
-.tp-call-card[data-contact="warning"] { --accent: var(--status-warning-vivid); }
-.tp-call-card[data-contact="danger"] { --accent: var(--status-danger-vivid); }
 
-.tp-call-card__head {
-  display: flex;
-  flex-wrap: wrap;
+.tp-call-card__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; }
+.tp-call-card__who { display: flex; flex: 1 1 20rem; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.85rem; min-inline-size: 0; }
+.tp-call-card__name { font-size: 1.15rem; font-weight: 850; line-height: 1.5; }
+.tp-call-card__sep { align-self: stretch; inline-size: 1px; min-block-size: 1.75rem; background: var(--border); }
+.tp-call-card__id { display: grid; gap: 0.05rem; line-height: 1.35; }
+.tp-call-card__code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.85rem; font-weight: 700; }
+.tp-call-card__course { color: var(--muted-foreground); font-size: 0.74rem; font-weight: 650; }
+.tp-call-card__pill {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 0.75rem;
-  padding: 0.7rem 1rem;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--muted) 55%, transparent);
-}
-.tp-call-card__who { display: flex; flex: 1 1 18rem; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; min-inline-size: 0; }
-.tp-call-card__name { font-size: 1rem; font-weight: 800; line-height: 1.5; }
-.tp-call-card__code { color: var(--muted-foreground); font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.78rem; font-weight: 600; }
-.tp-call-card__opps {
-  padding: 0.1rem 0.6rem;
+  gap: 0.4rem;
+  padding: 0.3rem 0.85rem;
   border: 1px solid var(--tone-line, var(--border));
   border-radius: 999px;
   background: var(--tone-tint, var(--muted));
   color: var(--tone-ink, var(--foreground));
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.tp-call-card__pill svg { inline-size: 1rem; block-size: 1rem; }
+.tp-call-card__dot { inline-size: 0.55rem; block-size: 0.55rem; border-radius: 50%; background: var(--tone, var(--muted-foreground)); }
+.tp-calls .tp-call-card__details,
+.tp-call-card__details { flex-shrink: 0; gap: 0.45rem; min-block-size: 2.6rem; padding-inline: 1rem; border-radius: 0.9rem; font-weight: 750; }
+.tp-call-card__details svg { inline-size: 1.1rem; block-size: 1.1rem; }
+
+.tp-call-card__body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.9rem; }
+.tp-call-card__main { display: grid; align-content: start; gap: 0.7rem; min-inline-size: 0; }
+
+/* The exam: name on one side, the result large on the other */
+.tp-call-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  padding: 0.95rem 1.2rem;
+  border: 1px solid var(--tone-line);
+  border-radius: 1rem;
+  background: linear-gradient(to left, var(--tone-tint), color-mix(in srgb, var(--tone-tint) 35%, var(--card)));
+}
+.tp-call-hero__exam { display: flex; flex: 1 1 12rem; align-items: center; gap: 0.75rem; min-inline-size: 0; }
+.tp-call-hero__icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--tone) 16%, var(--card));
+  color: var(--tone-ink);
+}
+.tp-call-hero__icon svg { inline-size: 1.3rem; block-size: 1.3rem; }
+.tp-call-hero__text { display: grid; gap: 0.1rem; min-inline-size: 0; }
+.tp-call-hero__eyebrow { color: var(--muted-foreground); font-size: 0.74rem; font-weight: 700; }
+.tp-call-hero__name { font-size: 1.2rem; font-weight: 850; line-height: 1.45; }
+.tp-call-hero__date { color: var(--muted-foreground); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.tp-call-hero__score {
+  display: grid;
+  flex: 0 1 auto;
+  justify-items: center;
+  gap: 0.45rem;
+  min-inline-size: 0;
+  max-inline-size: min(100%, 22rem);
+  padding-inline-start: 1.25rem;
+  border-inline-start: 1px solid var(--tone-line);
+}
+.tp-call-hero__value { color: var(--tone-ink); font-size: 2.6rem; font-weight: 900; line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.tp-call-hero__badges { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.4rem; }
+.tp-call-hero__label,
+.tp-call-hero__impact {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
   font-size: 0.78rem;
   font-weight: 800;
   white-space: nowrap;
 }
-.tp-call-card__details { flex-shrink: 0; min-block-size: 2.25rem; }
-
-.tp-call-card__body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.75rem 1rem;
-  padding: 0.8rem 1rem 0.9rem;
-}
-
-/* Every row: a fixed label column, then its content. */
-.tp-call-card__rows { display: grid; align-content: start; gap: 0.55rem; margin: 0; min-inline-size: 0; }
-.tp-call-card__row {
-  display: grid;
-  grid-template-columns: 4.75rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.25rem 0.75rem;
-  min-inline-size: 0;
-}
-.tp-call-card__row + .tp-call-card__row { padding-block-start: 0.55rem; border-top: 1px dashed var(--border); }
-.tp-call-card__row > dt { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 800; }
-.tp-call-card__row > dd { margin: 0; min-inline-size: 0; }
-
-.tp-call-card__focus { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.5rem; }
-.tp-call-card__result {
-  padding: 0.2rem 0.7rem;
-  border: 1px solid var(--tone-line);
-  border-radius: 0.7rem;
-  background: var(--tone-tint);
-  color: var(--tone-ink);
-  font-size: 0.9rem;
-  font-weight: 800;
-}
-.tp-call-card__label { color: var(--muted-foreground); font-size: 0.8rem; font-weight: 700; }
+.tp-call-hero__impact { white-space: normal; text-align: center; line-height: 1.6; }
+.tp-call-hero__label { background: var(--tone-solid); color: var(--tone-on); box-shadow: 0 6px 14px -10px var(--tone); }
+.tp-call-hero__impact { border: 1px solid var(--tone-line, var(--border)); background: var(--card); color: var(--tone-ink, var(--muted-foreground)); }
+.tp-call-hero__label svg,
+.tp-call-hero__impact svg { flex-shrink: 0; inline-size: 0.95rem; block-size: 0.95rem; }
 .tp-call-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
 .tp-call-badges__more { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 700; }
 
-.tp-call-card__contact { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+/* Labelled rows */
+.tp-call-card__row {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  min-inline-size: 0;
+}
+.tp-call-card__row-label { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 0.4rem; color: var(--foreground); font-size: 0.86rem; font-weight: 800; }
+.tp-call-card__row-label > svg { inline-size: 1.05rem; block-size: 1.05rem; color: var(--muted-foreground); }
+.tp-call-card__last { grid-column: 1 / -1; margin-block-start: 0.15rem; color: var(--muted-foreground); font-size: 0.72rem; font-weight: 650; }
+.tp-call-card__row-content { min-inline-size: 0; }
+
+.tp-call-card__contact { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .tp-call-card__contact-btn {
   display: inline-flex;
+  flex: 1 1 auto;
   align-items: center;
-  gap: 0.35rem;
-  min-block-size: 2.4rem;
-  padding: 0.3rem 0.75rem;
+  justify-content: center;
+  gap: 0.5rem;
+  min-block-size: 2.75rem;
+  padding: 0.35rem 0.85rem;
   border: 1px solid var(--status-success-border);
-  border-radius: 0.75rem;
-  background: var(--status-success-bg);
+  white-space: nowrap;
+  border-radius: 0.9rem;
+  background: var(--card);
   color: var(--status-success-fg);
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: 0.88rem;
+  font-weight: 750;
   text-decoration: none;
   touch-action: manipulation;
 }
 .tp-call-card__contact-btn[data-kind="telegram"] { border-color: var(--status-info-border); background: var(--status-info-bg); color: var(--status-info-fg); }
-.tp-call-card__contact-btn svg { flex-shrink: 0; inline-size: 1rem; block-size: 1rem; }
+.tp-call-card__contact-btn svg { flex-shrink: 0; inline-size: 1.2rem; block-size: 1.2rem; }
 a.tp-call-card__contact-btn:hover { border-color: transparent; background: var(--status-success-solid); color: var(--status-success-on); }
 a.tp-call-card__contact-btn[data-kind="telegram"]:hover { background: var(--status-info-solid); color: var(--status-info-on); }
 a.tp-call-card__contact-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 45%, transparent); }
 .tp-call-card__contact-btn[aria-disabled="true"] { border-color: var(--border); background: transparent; color: var(--muted-foreground); opacity: 0.55; cursor: not-allowed; }
 
-.tp-call-card__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.tp-call-card__actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr)); gap: 0.45rem; }
 .tp-call-card__action {
-  min-block-size: 2.4rem;
-  padding: 0.3rem 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-block-size: 2.75rem;
+  padding: 0.35rem 0.55rem;
   border: 1px solid var(--tone-line);
-  border-radius: 0.75rem;
-  background: var(--background);
+  border-radius: 0.9rem;
+  background: var(--tone-tint);
   color: var(--tone-ink);
+  white-space: nowrap;
   font-size: 0.84rem;
-  font-weight: 750;
+  font-weight: 800;
   cursor: pointer;
   touch-action: manipulation;
 }
-.tp-call-card__action:hover:not(:disabled):not([aria-pressed="true"]) { background: var(--tone-tint); }
-.tp-call-card__action[aria-pressed="true"] { border-color: transparent; background: var(--tone-solid); color: var(--tone-on); box-shadow: 0 6px 16px -10px var(--tone); }
+.tp-call-card__action svg { flex-shrink: 0; inline-size: 1.1rem; block-size: 1.1rem; }
+.tp-call-card__action:hover:not(:disabled):not([aria-pressed="true"]) { border-color: var(--tone); }
+.tp-call-card__action[aria-pressed="true"] { border-color: transparent; background: var(--tone-solid); color: var(--tone-on); box-shadow: 0 8px 18px -12px var(--tone); }
 .tp-call-card__action:disabled { cursor: not-allowed; opacity: 0.6; }
-.tp-call-card__last { color: var(--muted-foreground); font-size: 0.78rem; font-weight: 650; }
+/* «بدون إجراء» is most students' state: marked, but calm. */
+.tp-call-card__action[data-tone="muted"][aria-pressed="true"] {
+  border-color: var(--muted-foreground);
+  background: var(--muted);
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px var(--muted-foreground);
+}
 
+/* Note: one line inside a field-like box; opens the editor in place */
+.tp-call-card__note-row { min-inline-size: 0; }
 .tp-call-card__note { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; min-inline-size: 0; }
 .tp-call-card__note-line,
 .tp-call-card__note-add {
   display: flex;
+  flex: 1 1 14rem;
   align-items: center;
-  gap: 0.45rem;
-  min-block-size: 2.4rem;
+  gap: 0.55rem;
+  min-block-size: 3rem;
   min-inline-size: 0;
   margin: 0;
-  padding: 0.35rem 0.75rem;
+  padding: 0.45rem 1rem;
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  background: var(--muted);
+  border-radius: 0.9rem;
+  background: var(--card);
   color: var(--foreground);
-  font-size: 0.84rem;
+  font-size: 0.88rem;
   text-align: start;
+  cursor: pointer;
 }
-.tp-call-card__note-line { flex: 1 1 14rem; cursor: pointer; }
+.tp-call-card__note-add { color: var(--muted-foreground); font-weight: 750; }
 .tp-call-card__note-line[data-readonly="true"] { cursor: default; }
 .tp-call-card__note-line > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
-.tp-call-card__note-add { border-style: dashed; background: transparent; color: var(--muted-foreground); font-weight: 700; cursor: pointer; }
+.tp-call-card__note-line:hover,
+.tp-call-card__note-add:hover { border-color: var(--ring); }
 .tp-call-card__note-line svg,
-.tp-call-card__note-add svg { flex-shrink: 0; inline-size: 0.95rem; block-size: 0.95rem; }
+.tp-call-card__note-add svg { flex-shrink: 0; inline-size: 1.05rem; block-size: 1.05rem; }
 .tp-call-card__general { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 700; }
 
-/* QR codes: on the card, beside the rows on wide screens, below them on phones. */
+/* QR codes: two tiles in a soft panel */
 .tp-call-card__qr {
   display: flex;
   flex-wrap: wrap;
   align-content: start;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.6rem;
-  border: 1px dashed var(--border);
-  border-radius: 0.9rem;
-  background: color-mix(in srgb, var(--muted) 40%, transparent);
+  gap: 0.7rem;
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 1.1rem;
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
 }
-.tp-call-card__qr > a { inline-size: 7.5rem; padding: 0.4rem; gap: 0.3rem; }
-.tp-call-card__qr svg { max-inline-size: 6rem; }
+.tp-qr-tile {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 0.45rem;
+  inline-size: 8rem;
+  padding: 0.65rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--card);
+  box-shadow: 0 8px 20px -18px color-mix(in srgb, var(--foreground) 60%, transparent);
+  color: var(--foreground);
+  text-decoration: none;
+}
+a.tp-qr-tile:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 45%, transparent); }
+.tp-qr-tile [data-part="label"] { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.86rem; font-weight: 800; }
+.tp-qr-tile [data-part="label"] svg { inline-size: 1.05rem; block-size: 1.05rem; }
+.tp-qr-tile svg[role="img"],
+.tp-qr-tile > svg { inline-size: 6.25rem; max-inline-size: 6.25rem; block-size: auto; }
+.tp-qr-tile [data-part="phone"] { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.8rem; font-weight: 650; }
+.tp-qr-tile[data-empty] { opacity: 0.6; }
+.tp-qr-tile[data-empty] [data-part="phone"] { font-family: inherit; color: var(--muted-foreground); }
+.tp-qr-tile__placeholder { inline-size: 6.25rem; block-size: 6.25rem; border: 1px dashed var(--border); border-radius: 0.6rem; }
 
 /* Note editor (card and window) */
 .tp-call-note { display: grid; gap: 0.5rem; min-inline-size: 0; }
@@ -398,10 +477,14 @@ a.tp-call-card__contact-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px
 .tp-calls-window .tp-calls__setup,
 .tp-calls-window .tp-calls__filters { background: var(--tp-panel); border-color: var(--tp-border); }
 .tp-calls-window .tp-call-card { background: var(--tp-surface); border-color: var(--tp-border); }
+.tp-calls-window .tp-call-card__contact-btn,
+.tp-calls-window .tp-call-card__note-line,
+.tp-calls-window .tp-call-card__note-add,
+.tp-calls-window .tp-qr-tile { background: var(--tp-surface); }
 
-@container (min-width: 46rem) {
-  .tp-call-card[data-has-qr] .tp-call-card__body { grid-template-columns: minmax(0, 1fr) auto; }
-  .tp-call-card__qr { flex-wrap: nowrap; align-self: start; }
+@container (min-width: 50rem) {
+  .tp-call-card__body { grid-template-columns: minmax(0, 1fr) auto; }
+  .tp-call-card__qr { flex-wrap: nowrap; align-self: stretch; align-items: center; }
 }
 
 @container (max-width: 30rem) {
@@ -410,7 +493,14 @@ a.tp-call-card__contact-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px
   .tp-calls__export [data-slot="button"] { inline-size: 100%; }
   .tp-calls__status,
   .tp-calls__toggle { flex: 1 1 100%; }
-  .tp-call-card__action { flex: 1 1 auto; }
+  .tp-call-card { padding: 0.85rem; }
+  .tp-call-card__sep { display: none; }
   .tp-call-card__row { grid-template-columns: minmax(0, 1fr); }
+  .tp-call-card__actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tp-call-card__details { inline-size: 100%; }
+  .tp-call-hero__score { padding-inline-start: 0; border-inline-start: 0; inline-size: 100%; }
+  .tp-call-hero__value { font-size: 2.2rem; }
+  .tp-qr-tile { inline-size: 8rem; }
+  .tp-qr-tile > svg, .tp-qr-tile__placeholder { inline-size: 6rem; max-inline-size: 6rem; }
+  .tp-qr-tile__placeholder { block-size: 6rem; }
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+import { Phone } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { callPhoneQrValue } from "@/lib/call-phone-qr";
 
@@ -7,12 +9,18 @@ type CallPhoneQrProps = {
   studentName: string;
   phoneLabel: string;
   phone: string | null | undefined;
+  /** Optional icon before the label (the calls card's tiles use one). */
+  icon?: ReactNode;
+  /** Replaces the default look; the calls card styles its own tiles. */
+  className?: string;
 };
 
 export function CallPhoneQr({
   studentName,
   phoneLabel,
   phone,
+  icon,
+  className,
 }: CallPhoneQrProps) {
   const qrValue = callPhoneQrValue(phone);
   if (!qrValue) return null;
@@ -23,9 +31,9 @@ export function CallPhoneQr({
     <a
       href={qrValue}
       aria-label={accessibleTitle}
-      className="flex min-w-0 flex-col items-center gap-2 rounded-xl border bg-background p-2 text-center outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={className || "flex min-w-0 flex-col items-center gap-2 rounded-xl border bg-background p-2 text-center outline-none focus-visible:ring-2 focus-visible:ring-ring"}
     >
-      <span className="text-xs font-semibold">{phoneLabel}</span>
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold" data-part="label">{icon}{phoneLabel}</span>
       <QRCodeSVG
         value={qrValue}
         size={128}
@@ -36,7 +44,10 @@ export function CallPhoneQr({
         title={accessibleTitle}
         className="h-auto w-full max-w-32 rounded-lg bg-tp-bg"
       />
-      <span className="max-w-full break-all font-mono text-xs" dir="ltr">{phone}</span>
+      <span className="inline-flex max-w-full items-center gap-1 break-all font-mono text-xs" data-part="phone" dir="ltr">
+        {className ? <Phone aria-hidden="true" className="size-3.5 shrink-0" /> : null}
+        {phone}
+      </span>
     </a>
   );
 }
