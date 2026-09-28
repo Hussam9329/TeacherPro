@@ -136,6 +136,7 @@ function harness() {
   const jsx = (type, elementProps) => ({ type, props: elementProps });
   const dependencies = {
     react,
+    './tp-modal.css': {},
     './code-closures-dialog.css': {},
     'react/jsx-runtime': { jsx, jsxs: jsx },
     'lucide-react': named(['AlertCircle', 'BookOpen', 'CalendarDays', 'CheckCheck', 'ChevronDown', 'LockKeyhole', 'Loader2', 'MessageCircle', 'RefreshCw', 'Search', 'UserRound', 'X']),

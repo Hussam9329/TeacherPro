@@ -14,6 +14,7 @@ import { normalizeForSearch } from "@/lib/validation";
 import { describeTelegramHandle } from "./student-registry-helpers";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { formatAppDate } from "@/lib/format";
+import "./tp-modal.css";
 import "./code-closures-dialog.css";
 
 type Props = {
@@ -278,82 +279,109 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
               </div>
             ) : (
               <div className="tp-modal__cards" data-columns="1">
-                {visibleStudents.length > 0 && <div aria-hidden="true" className="tp-closures__headings"><span>الطالب والكود</span><span>اسم الدورة</span><span>تاريخ الفصل</span><span>اغلاق كود</span></div>}
                 {visibleStudents.map((student) => {
                   const telegram = describeTelegramHandle(student);
                   const reasonExpanded = expandedReasonIds.has(student.id);
                   const reasonId = `${filterId}-dismissal-reason-${student.id}`;
+                  const busy = !canManage || pendingIds.has(student.id);
                   return (
-                  <article key={student.id} className="tp-closures__row" data-checked={student.dismissedChecked}>
-                    <div className="tp-modal__identity tp-closures__identity">
-                      <p className="tp-modal__name">
-                        <span className="tp-modal__light" data-tone={student.dismissedChecked ? "success" : "warning"} aria-hidden="true" />
-                        <span className="tp-modal__name-text">{student.name}</span>
-                      </p>
-                      <div className="tp-modal__meta">
-                        <span className="tp-modal__chip" data-tone="outline"><span dir="ltr" className="tp-modal__code">{student.code}</span></span>
-                        {telegram.href ? (
-                          <a
-                            href={telegram.href}
-                            className="tp-modal__chip tp-closures__telegram"
-                            data-tone="info"
-                            aria-label={`فتح محادثة ${student.name} في تطبيق تليگرام`}
-                            title="فتح المحادثة في تطبيق تليگرام"
-                          >
-                            <MessageCircle aria-hidden="true" />
-                            <span dir="ltr">@{telegram.value}</span>
-                          </a>
-                        ) : (
-                          <span className="tp-modal__meta-item" title={telegram.value ? "معرّف رقمي — لا يوجد يوزر تليگرام لفتح المحادثة" : undefined}>
-                            <MessageCircle aria-hidden="true" />
-                            <span dir={telegram.value ? "ltr" : undefined}>{telegram.value || "لا يوجد معرّف"}</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <p className="tp-modal__meta-item tp-closures__course"><BookOpen aria-hidden="true" /><span>{student.course?.name || "—"}</span></p>
-                    <div className="tp-closures__dismissal">
-                      <span className="tp-closures__date-label">تاريخ الفصل</span>
-                      <span className="tp-closures__date">
-                        <CalendarDays aria-hidden="true" />
-                        {student.lastDismissalAt ? (
-                          <time dateTime={student.lastDismissalAt} dir="ltr">
-                            {formatAppDate(baghdadDateKey(student.lastDismissalAt), "غير مسجل")}
-                          </time>
-                        ) : <span>غير مسجل</span>}
+                  <article key={student.id} className="tp-closure-card" data-checked={student.dismissedChecked}>
+                    <header className="tp-closure-card__head">
+                      <b className="tp-closure-card__name">{student.name}</b>
+                      <span className="tp-closure-card__sep" aria-hidden="true" />
+                      <span className="tp-closure-card__id">
+                        <span className="tp-closure-card__code" dir="ltr">{student.code}</span>
+                        <span className="tp-closure-card__course"><BookOpen aria-hidden="true" />{student.course?.name || "—"}</span>
                       </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="tp-closures__reason-toggle"
-                        aria-expanded={reasonExpanded}
-                        aria-controls={reasonId}
-                        aria-label={`${reasonExpanded ? "إخفاء" : "إظهار"} سبب فصل ${student.name}`}
-                        onClick={() => setExpandedReasonIds((current) => {
-                          const next = new Set(current);
-                          if (next.has(student.id)) next.delete(student.id);
-                          else next.add(student.id);
-                          return next;
-                        })}
-                      >
-                        {reasonExpanded ? "إخفاء السبب" : "إظهار السبب"}
-                        <ChevronDown aria-hidden="true" className={`size-4 ${reasonExpanded ? "rotate-180" : ""}`} />
-                      </Button>
-                      {reasonExpanded && (
-                        <p id={reasonId} className="tp-closures__reason">{student.dismissalReason || "سبب الفصل غير مسجل"}</p>
-                      )}
+                      <span className="tp-closure-card__sep" aria-hidden="true" />
+                      <span className="tp-closure-card__pill" data-tone="danger">
+                        <span className="tp-closure-card__dot" aria-hidden="true" />{student.status}
+                      </span>
+                      <span className="tp-closure-card__pill" data-tone={student.dismissedChecked ? "success" : "warning"}>
+                        {student.dismissedChecked ? <CheckCheck aria-hidden="true" /> : <LockKeyhole aria-hidden="true" />}
+                        {student.dismissedChecked ? "الكود مغلق" : "بانتظار الإغلاق"}
+                      </span>
+                    </header>
+
+                    <div className="tp-closure-card__body">
+                      <div className="tp-closure-card__main">
+                        <section className="tp-closure-card__dismissal" aria-label="الفصل">
+                          <span className="tp-closure-card__icon" aria-hidden="true"><CalendarDays /></span>
+                          <span className="tp-closure-card__when">
+                            <span className="tp-closure-card__eyebrow">تاريخ الفصل</span>
+                            {student.lastDismissalAt ? (
+                              <time className="tp-closure-card__date" dateTime={student.lastDismissalAt} dir="ltr">
+                                {formatAppDate(baghdadDateKey(student.lastDismissalAt), "غير مسجل")}
+                              </time>
+                            ) : <span className="tp-closure-card__date" data-missing="true">غير مسجل</span>}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="tp-closures__reason-toggle"
+                            aria-expanded={reasonExpanded}
+                            aria-controls={reasonId}
+                            aria-label={`${reasonExpanded ? "إخفاء" : "إظهار"} سبب فصل ${student.name}`}
+                            onClick={() => setExpandedReasonIds((current) => {
+                              const next = new Set(current);
+                              if (next.has(student.id)) next.delete(student.id);
+                              else next.add(student.id);
+                              return next;
+                            })}
+                          >
+                            {reasonExpanded ? "إخفاء سبب الفصل" : "إظهار سبب الفصل"}
+                            <ChevronDown aria-hidden="true" className={`size-4 ${reasonExpanded ? "rotate-180" : ""}`} />
+                          </Button>
+                          {reasonExpanded && (
+                            <p id={reasonId} className="tp-closures__reason">{student.dismissalReason || "سبب الفصل غير مسجل"}</p>
+                          )}
+                        </section>
+
+                        <div className="tp-closure-card__row">
+                          <span className="tp-closure-card__row-label"><MessageCircle aria-hidden="true" />التواصل</span>
+                          {telegram.href ? (
+                            <a
+                              href={telegram.href}
+                              className="tp-closure-card__telegram"
+                              aria-label={`فتح محادثة ${student.name} في تطبيق تليگرام`}
+                              title="فتح المحادثة في تطبيق تليگرام"
+                            >
+                              <MessageCircle aria-hidden="true" />
+                              <span dir="ltr">@{telegram.value}</span>
+                            </a>
+                          ) : (
+                            <span
+                              className="tp-closure-card__telegram"
+                              aria-disabled="true"
+                              title={telegram.value ? "معرّف رقمي — لا يوجد يوزر تليگرام لفتح المحادثة" : undefined}
+                            >
+                              <MessageCircle aria-hidden="true" />
+                              <span dir={telegram.value ? "ltr" : undefined}>{telegram.value || "لا يوجد معرّف"}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <label className="tp-closure-card__toggle" data-checked={student.dismissedChecked} data-disabled={busy}>
+                        <span className="tp-closure-card__toggle-icon" aria-hidden="true">
+                          {student.dismissedChecked ? <CheckCheck /> : <LockKeyhole />}
+                        </span>
+                        <span className="tp-closure-card__toggle-text">
+                          {student.dismissedChecked ? "الكود مغلق" : "اغلاق الكود"}
+                        </span>
+                        <Checkbox
+                          checked={student.dismissedChecked}
+                          disabled={busy}
+                          onCheckedChange={(checked) => { if (typeof checked === "boolean") void setChecked(student, checked); }}
+                          aria-label={`اغلاق كود ${student.name}`}
+                          className="size-6"
+                        />
+                        <small className="tp-closure-card__toggle-hint">
+                          {pendingIds.has(student.id) ? "جاري الحفظ…" : student.dismissedChecked ? "ألغِ العلامة للتراجع" : "علّم بعد إغلاق الكود"}
+                        </small>
+                      </label>
                     </div>
-                    <label className="tp-closures__action" data-disabled={!canManage || pendingIds.has(student.id)}>
-                      <Checkbox
-                        checked={student.dismissedChecked}
-                        disabled={!canManage || pendingIds.has(student.id)}
-                        onCheckedChange={(checked) => { if (typeof checked === "boolean") void setChecked(student, checked); }}
-                        aria-label={`اغلاق كود ${student.name}`}
-                        className="size-6"
-                      />
-                      <span>{student.dismissedChecked ? "الكود مغلق" : "اغلاق كود"}</span>
-                    </label>
                   </article>
                   );
                 })}
