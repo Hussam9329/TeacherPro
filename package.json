@@ -51,7 +51,7 @@
     "test:student-leaves-integrity": "node scripts/test-student-leaves-integrity.mjs && node scripts/test-student-leave-preview.mjs && node --test scripts/test-student-leave-status.mjs && node --test scripts/test-student-leave-context-behavior.mjs && node scripts/test-leave-grade-safety-integrity.mjs && node --experimental-strip-types --test scripts/test-grade-leave-safety-behavior.mjs && node scripts/test-leave-recovery.cjs",
     "test:accounts-permissions-integrity": "node scripts/test-accounts-permissions-integrity.mjs",
     "test:logs-integrity": "node scripts/test-logs-integrity.mjs",
-    "test:dashboard-behavior": "node --test scripts/test-dashboard-behavior.mjs",
+    "test:dashboard-behavior": "node --test scripts/test-dashboard-behavior.mjs && node scripts/test-shortcut-alerts.cjs",
     "test:admin-log-reset-integrity": "node scripts/test-admin-log-reset-integrity.mjs",
     "test:smart-sync-integrity": "node scripts/test-smart-sync-integrity.mjs",
     "test:language-ux-integrity": "node scripts/test-language-ux-integrity.mjs",

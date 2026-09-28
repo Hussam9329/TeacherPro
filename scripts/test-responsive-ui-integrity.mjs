@@ -207,11 +207,13 @@ for (const file of teacherProFiles.filter((file) => !file.endsWith("export-dialo
 
 // Raw interactive controls that bypass the shared Button still need explicit mobile ergonomics.
 includesAll(layout, ["group flex min-h-11 w-full touch-manipulation", "tp-sidebar-overlay"], "Sidebar raw controls");
+// Sidebar numbers show only what waits for someone (no item counts).
 includesAll(layout, [
-  "inline-grid size-7 shrink-0 place-items-center",
-  "p-0 text-center text-[11px] font-black leading-none",
-  "whitespace-nowrap tabular-nums",
-], "Sidebar family count alignment");
+  "inline-grid h-6 min-w-6 shrink-0 place-items-center",
+  "text-[11px] font-black leading-none tabular-nums",
+  "<SidebarAlertBadge",
+], "Sidebar alert badge alignment");
+if (layout.includes("{family.items.length}")) failures.push("Sidebar must not show the number of pages in a group as a badge");
 includesAll(profileDialog, ["min-h-11 max-w-full touch-manipulation", "tp-student-profile__control", "tp-student-profile__stat"], "Student profile raw controls");
 const profileControlCss = profileCss.match(/\.tp-student-profile__control\s*\{([^}]*)\}/)?.[1] || "";
 includesAll(profileControlCss, ["min-height: 2.75rem", "max-width: 100%", "touch-action: manipulation"], "Student profile control ergonomics");

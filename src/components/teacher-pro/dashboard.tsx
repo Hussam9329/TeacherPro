@@ -25,6 +25,7 @@ import {
   useTeacherProSyncKey,
 } from "@/hooks/use-teacherpro-sync";
 import { useLatestRequest } from "@/hooks/use-latest-request";
+import { refreshShortcutAlerts, useShortcutAlerts } from "@/hooks/use-shortcut-alerts";
 import { CallNotesManagementDialog } from "./call-notes-management-dialog";
 import { CallsDialog } from "./calls-dialog";
 import { CodeClosuresDialog } from "./code-closures-dialog";
@@ -50,6 +51,21 @@ const dashboardShortcuts = [
   { section: "grade-records", title: "سجل الدرجات", icon: ChartColumn, tone: "info" },
   { section: "exam-new", title: "إضافة امتحان", icon: FilePlus2, tone: "success" },
 ] as const;
+
+type AlertTone = "danger" | "warning" | "info";
+
+/** A notification number on a shortcut; the design of the shortcut stays. */
+function ShortcutAlert({ count, tone, label }: { count: number | null | undefined; tone: AlertTone; label: string }) {
+  if (!count) return null;
+  return (
+    <>
+      <span className="tp-dashboard__alert" data-alert-tone={tone} aria-hidden="true">
+        {count > 99 ? "99+" : count}
+      </span>
+      <span className="sr-only">، {count} {label}</span>
+    </>
+  );
+}
 
 function formatStatsTime(value?: string) {
   if (!value) return "—";
@@ -122,6 +138,16 @@ export function DashboardView({
     window.addEventListener(LEAVES_DIALOG_OPEN_EVENT, openFromLink);
     return () => window.removeEventListener(LEAVES_DIALOG_OPEN_EVENT, openFromLink);
   }, [canViewLeaves]);
+  const alerts = useShortcutAlerts();
+  const sectionAlert: Partial<Record<string, { count: number | null | undefined; tone: AlertTone; label: string }>> = {
+    "dismissed-management": { count: alerts?.dismissedStudents, tone: "danger", label: "طالب مفصول" },
+    "grade-entry": { count: alerts?.gradeReviewsPending, tone: "warning", label: "درجة تنتظر المراجعة" },
+  };
+  // A window that changes these numbers refreshes them when it closes.
+  const closeAndRefresh = (setOpen: (open: boolean) => void) => (open: boolean) => {
+    setOpen(open);
+    if (!open) void refreshShortcutAlerts();
+  };
   const syncKey = useTeacherProSyncKey(["dashboard", "students", "grades", "opportunities", "exams"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const beginStatsRequest = useLatestRequest();
@@ -299,7 +325,10 @@ export function DashboardView({
                 <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
                   <Icon />
                 </span>
-                <span className="tp-dashboard__shortcut-label">{title}</span>
+                <span className="tp-dashboard__shortcut-label">
+                  {title}
+                  <ShortcutAlert count={sectionAlert[section]?.count} tone={sectionAlert[section]?.tone || "info"} label={sectionAlert[section]?.label || ""} />
+                </span>
               </a>
             ))}
             {canViewCallNotes && (
@@ -327,7 +356,10 @@ export function DashboardView({
                 <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
                   <ListChecks />
                 </span>
-                <span className="tp-dashboard__shortcut-label">إدارة ملاحظات المكالمات</span>
+                <span className="tp-dashboard__shortcut-label">
+                  إدارة ملاحظات المكالمات
+                  <ShortcutAlert count={alerts?.callNotesPending} tone="danger" label="ملاحظة بانتظار الإنجاز" />
+                </span>
               </button>
             )}
             {canViewCodeClosures && (
@@ -341,7 +373,10 @@ export function DashboardView({
                 <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
                   <LockKeyhole />
                 </span>
-                <span className="tp-dashboard__shortcut-label">اغلاق الكودات</span>
+                <span className="tp-dashboard__shortcut-label">
+                  اغلاق الكودات
+                  <ShortcutAlert count={alerts?.codeClosuresPending} tone="danger" label="كود بانتظار الإغلاق" />
+                </span>
               </button>
             )}
             {canViewGracePeriods && (
@@ -355,7 +390,10 @@ export function DashboardView({
                 <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
                   <CalendarClock />
                 </span>
-                <span className="tp-dashboard__shortcut-label">إدارة فترة السماح</span>
+                <span className="tp-dashboard__shortcut-label">
+                  إدارة فترة السماح
+                  <ShortcutAlert count={alerts?.currentGracePeriods} tone="info" label="فترة سماح حالية أو قادمة" />
+                </span>
               </button>
             )}
             {canViewLeaves && (
@@ -369,19 +407,22 @@ export function DashboardView({
                 <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
                   <CalendarCheck />
                 </span>
-                <span className="tp-dashboard__shortcut-label">إدارة الإجازات</span>
+                <span className="tp-dashboard__shortcut-label">
+                  إدارة الإجازات
+                  <ShortcutAlert count={alerts?.currentLeaves} tone="info" label="طالب مجاز حالياً أو قريباً" />
+                </span>
               </button>
             )}
           </div>
         </nav>
       )}
       {canViewCallNotes && (
-        <CallsDialog open={callsOpen} onOpenChange={setCallsOpen} />
+        <CallsDialog open={callsOpen} onOpenChange={closeAndRefresh(setCallsOpen)} />
       )}
       {canViewCallNotes && (
         <CallNotesManagementDialog
           open={callNotesOpen}
-          onOpenChange={setCallNotesOpen}
+          onOpenChange={closeAndRefresh(setCallNotesOpen)}
           canManage={canManageCallNotes}
         />
       )}
@@ -389,7 +430,7 @@ export function DashboardView({
         <GracePeriodsDialog
           key={`grace-${actor?.id || ""}`}
           open={gracePeriodsOpen}
-          onOpenChange={setGracePeriodsOpen}
+          onOpenChange={closeAndRefresh(setGracePeriodsOpen)}
           canManage={canManageGracePeriods}
         />
       )}
@@ -397,7 +438,7 @@ export function DashboardView({
         <LeavesDialog
           key={`leaves-${actor?.id || ""}`}
           open={leavesOpen}
-          onOpenChange={setLeavesOpen}
+          onOpenChange={closeAndRefresh(setLeavesOpen)}
           canManage={canManageLeaves}
         />
       )}
@@ -405,7 +446,7 @@ export function DashboardView({
         <CodeClosuresDialog
           key={actor?.id}
           open={codeClosuresOpen}
-          onOpenChange={setCodeClosuresOpen}
+          onOpenChange={closeAndRefresh(setCodeClosuresOpen)}
           canManage={canManageCodeClosures}
         />
       )}

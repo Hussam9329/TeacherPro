@@ -329,6 +329,7 @@ function readSectionFromLocation(): SectionId | null {
   return sectionIds.has(value as SectionId) ? (value as SectionId) : null;
 }
 
+import { useShortcutAlerts } from "@/hooks/use-shortcut-alerts";
 import { DashboardView } from "./dashboard";
 import { CoursesView } from "./courses";
 import { ChaptersView } from "./chapters";
@@ -459,6 +460,20 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
   );
 }
 
+/** A red count beside a page: only for things waiting for someone. */
+function SidebarAlertBadge({ count, label }: { count: number; label?: string }) {
+  if (!count) return null;
+  return (
+    <span
+      className="inline-grid h-6 min-w-6 shrink-0 place-items-center rounded-full bg-danger-vivid px-1.5 text-[11px] font-black leading-none tabular-nums text-white"
+      title={label}
+      aria-label={label}
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 export function TeacherProLayout() {
   const {
     currentSection,
@@ -479,6 +494,7 @@ export function TeacherProLayout() {
     loadSectionDataFromServer,
     restoreSession,
   } = useTeacherStore();
+  const shortcutAlerts = useShortcutAlerts(isAuthenticated);
 
   const lazyLoadedSectionsRef = useRef<Set<SectionId>>(new Set());
   const [syncStatus, setSyncStatus] = useState<TeacherProSyncStatusDetail>({
@@ -1098,6 +1114,15 @@ export function TeacherProLayout() {
     family.itemIds.includes(currentSection),
   );
   const CurrentMenuIcon = currentMenu?.icon || LayoutDashboard;
+  // Numbers beside a page only when something there waits for someone.
+  const sectionAlerts: Partial<Record<SectionId, { count: number; label: string }>> = {
+    ...(shortcutAlerts?.callNotesPending
+      ? { "follow-up-calls": { count: shortcutAlerts.callNotesPending, label: `${shortcutAlerts.callNotesPending} ملاحظة مكالمة بانتظار الإنجاز` } }
+      : {}),
+    ...(shortcutAlerts?.gradeReviewsPending
+      ? { "grade-entry": { count: shortcutAlerts.gradeReviewsPending, label: `${shortcutAlerts.gradeReviewsPending} درجة تنتظر المراجعة` } }
+      : {}),
+  };
   const connectionVisualStatus = dbLoading
     ? "loading"
     : !dbConnected
@@ -1309,14 +1334,10 @@ export function TeacherProLayout() {
                     <span className="flex-1 text-right font-bold">
                       {family.title}
                     </span>
-                    <Badge
-                      variant="secondary"
-                      className="inline-grid size-7 shrink-0 place-items-center flex-nowrap border-sidebar-border bg-sidebar-foreground/10 p-0 text-center text-[11px] font-black leading-none whitespace-nowrap tabular-nums text-sidebar-foreground"
-                    >
-                      <span className="block leading-none">
-                        {family.items.length}
-                      </span>
-                    </Badge>
+                    <SidebarAlertBadge
+                      count={family.items.reduce((sum, item) => sum + (sectionAlerts[item.id]?.count || 0), 0)}
+                      label={family.items.map((item) => sectionAlerts[item.id]?.label).filter(Boolean).join("، ")}
+                    />
                     <ChevronDown
                       className={cn(
                         "size-4 shrink-0 transition-transform duration-200 text-sidebar-foreground/60",
@@ -1367,6 +1388,7 @@ export function TeacherProLayout() {
                                 {item.title}
                               </div>
                             </div>
+                            <SidebarAlertBadge count={sectionAlerts[item.id]?.count || 0} label={sectionAlerts[item.id]?.label} />
                           </a>
                         );
                       })}
@@ -1486,17 +1508,21 @@ export function TeacherProLayout() {
             </div>
 
             <div className="tp-app-header__actions flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-              <div
-                className={cn(
-                  "tp-connection-badge",
-                  `tp-connection-badge--${connectionVisualStatus}`,
-                )}
-                role="status"
-                aria-live="polite"
-                title={connectionVisualDescription}
-              >
-                <span className="tp-connection-badge__dot" aria-hidden="true" />
-                <span className="hidden lg:inline">{connectionVisualLabel}</span>
+              {/* Connection shows only when it needs attention; the sidebar
+                  dot keeps the everyday state. */}
+              <div role="status" aria-live="polite" className="contents">
+                {connectionVisualStatus === "offline" || connectionVisualStatus === "error" ? (
+                  <div
+                    className={cn(
+                      "tp-connection-badge",
+                      `tp-connection-badge--${connectionVisualStatus}`,
+                    )}
+                    title={connectionVisualDescription}
+                  >
+                    <span className="tp-connection-badge__dot" aria-hidden="true" />
+                    <span>{connectionVisualLabel}</span>
+                  </div>
+                ) : null}
               </div>
               {actionStatus.status !== "idle" ? (
                 <Badge
@@ -1562,12 +1588,6 @@ export function TeacherProLayout() {
                   <Moon className="h-4 w-4" />
                 )}
               </Button>
-              <Badge
-                variant="secondary"
-                className="hidden max-w-44 shrink-0 truncate px-3 xl:flex"
-              >
-                {user?.name || "غير مسجل"}
-              </Badge>
             </div>
           </div>
         </header>

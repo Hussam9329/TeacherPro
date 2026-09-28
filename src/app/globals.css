@@ -2728,6 +2728,31 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
 }
 .tp-dashboard__stat[data-tone] .tp-dashboard__stat-value { color: var(--tone-ink); }
 
+/* Dashboard shortcuts: a notification number in the corner when something
+   there waits for someone. */
+.tp-dashboard__shortcut { position: relative; }
+.tp-dashboard__alert {
+  position: absolute;
+  inset-block-start: -0.5rem;
+  inset-inline-end: -0.4rem;
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: 1.5rem;
+  block-size: 1.5rem;
+  padding-inline: 0.4rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: var(--sig-danger-fill);
+  box-shadow: 0 0 0 2px var(--background), 0 6px 14px -6px var(--sig-danger);
+}
+.tp-dashboard__alert[data-alert-tone="warning"] { background: var(--sig-warning-ink); box-shadow: 0 0 0 2px var(--background), 0 6px 14px -6px var(--sig-warning); }
+.tp-dashboard__alert[data-alert-tone="info"] { background: var(--sig-info-fill); box-shadow: 0 0 0 2px var(--background), 0 6px 14px -6px var(--sig-info); }
+.dark .tp-dashboard__alert { color: var(--tp-deep); }
+
 /* Dashboard shortcuts: tinted icon that fills with colour on hover. */
 .tp-dashboard__shortcut[data-tone] .tp-dashboard__shortcut-icon {
   background: var(--tone-tint);

@@ -109,7 +109,7 @@ for (const file of ["src/lib/academic-engine.ts", "src/lib/grade-classification.
 // 6. Single management entry point, next to «اغلاق الكودات».
 const dashboard = read("src/components/teacher-pro/dashboard.tsx");
 const closeCodes = dashboard.indexOf("اغلاق الكودات");
-const manageGrace = dashboard.indexOf("إدارة فترة السماح</span>");
+const manageGrace = dashboard.search(/tp-dashboard__shortcut-label">\s*إدارة فترة السماح/);
 check(closeCodes > 0 && manageGrace > closeCodes, "زر «إدارة فترة السماح» بجانب «اغلاق الكودات» في لوحة التحكم");
 check(exists("src/components/teacher-pro/grace-periods-dialog.tsx"), "نافذة إدارة فترة السماح موجودة");
 const dialogImporters = filesMatching(/grace-periods-dialog["']/);
