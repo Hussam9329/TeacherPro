@@ -2975,3 +2975,110 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
   color: var(--muted-foreground);
   padding-inline: 0.25rem;
 }
+
+/* Grade entry row (proposal 7): name, score, غائب / مجاز / غش, then short
+   badges. One line on wide screens; name on top, the controls under it on
+   narrow ones. */
+.tp-grade-row {
+  display: grid;
+  grid-template-columns: minmax(11rem, 1.5fr) 7rem auto minmax(0, 1fr) auto;
+  grid-template-areas: "who score status end note";
+  align-items: center;
+  gap: 0.55rem 0.85rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--card);
+}
+.tp-grade-row__who { grid-area: who; }
+.tp-grade-row__score { grid-area: score; font-variant-numeric: tabular-nums; text-align: center; }
+.tp-grade-row__status {
+  grid-area: status;
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: var(--background);
+}
+.tp-grade-row__seg {
+  min-block-size: 2.5rem;
+  min-inline-size: 3.2rem;
+  padding: 0 0.7rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.tp-grade-row__seg + .tp-grade-row__seg { border-inline-start: 1px solid var(--border); }
+.tp-grade-row__seg:hover:not(:disabled) { background: color-mix(in srgb, var(--muted-foreground) 10%, transparent); color: var(--foreground); }
+.tp-grade-row__seg:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.tp-grade-row__seg[aria-pressed="true"] { background: var(--status-danger-solid); color: var(--status-danger-on); }
+.tp-grade-row__seg[data-tone="leave"][aria-pressed="true"] { background: var(--status-success-solid); color: var(--status-success-on); }
+.tp-grade-row__seg:disabled { cursor: not-allowed; opacity: 0.45; }
+.tp-grade-row__seg[aria-pressed="true"]:disabled { opacity: 1; }
+.tp-grade-row__end { grid-area: end; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.4rem; min-inline-size: 0; }
+.tp-grade-row__note-btn {
+  grid-area: note;
+  justify-self: end;
+  padding: 0.2rem 0.3rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tp-grade-row__note-btn[data-has-note] { color: var(--primary); }
+.tp-grade-row__note-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 0.4rem; }
+.tp-grade-row__note { grid-column: 1 / -1; }
+.tp-count-chip {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: 1.4rem;
+  block-size: 1.4rem;
+  margin-inline-start: 0.4rem;
+  padding-inline: 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 12%, transparent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 1100px) {
+  .tp-grade-row {
+    grid-template-columns: 6.5rem auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "who who who who"
+      "score status end note";
+  }
+}
+@media (max-width: 560px) {
+  .tp-grade-row {
+    grid-template-columns: minmax(5.5rem, 1fr) auto;
+    grid-template-areas:
+      "who who"
+      "score status"
+      "end note";
+  }
+  .tp-grade-row__end { justify-content: flex-start; }
+}
+
+.tp-grade-smart-alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--status-warning-border);
+  border-radius: 0.9rem;
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
+  font-size: 0.875rem;
+  font-weight: 700;
+}

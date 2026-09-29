@@ -19,6 +19,7 @@ import {
   gradeApi,
   gradeEntrySheetApi,
   gradeSmartNotesApi,
+  studentLeaveApi,
   type ApiResult,
   type GradeSmartNoteCategory,
   type GradeSmartNoteRecord,
@@ -73,6 +74,7 @@ import { editableGradeNote, isAutomaticGradeNote, withInternalGradeNotePrefix } 
 import { toast } from "@/lib/user-toast";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { normalizeForSearch } from "@/lib/validation";
+import { baghdadTodayKey } from "@/lib/baghdad-time";
 import { GradeSmartNotesPanel } from "@/components/teacher-pro/grade-smart-notes-panel";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { studentMatchesListFilters } from "@/lib/student-list-filters";
@@ -312,6 +314,21 @@ export function GradeEntryView() {
   const [entrySheetError, setEntrySheetError] = useState<string | null>(null);
   const [entrySheetRefreshKey, setEntrySheetRefreshKey] = useState(0);
   const [markingAllMissingAbsent, setMarkingAllMissingAbsent] = useState(false);
+  // A row's note opens on demand; «مجاز» asks for the leave reason first.
+  const [openNoteRows, setOpenNoteRows] = useState<Record<string, boolean>>({});
+  const [smartPanelOpen, setSmartPanelOpen] = useState(false);
+  const [leaveRequest, setLeaveRequest] = useState<{ studentId: string; reason: string } | null>(null);
+  const [leaveSaving, setLeaveSaving] = useState(false);
+  const canManageLeaves = useTeacherStore((state) => {
+    const user = state.currentUser();
+    return Boolean(
+      user &&
+        (user.roleId === "role_admin" ||
+          user.username.trim().toLowerCase() === "admin" ||
+          user.permissions.includes("follow-up.leaves.manage") ||
+          user.permissions.includes("follow-up.manage")),
+    );
+  });
   const draftsRef = useRef<Record<string, DraftGrade>>({});
   const gradeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const selectedExamIdRef = useRef("");
@@ -2264,6 +2281,81 @@ export function GradeEntryView() {
     return unsubscribe;
   }, [showGradeEntryNotice]);
 
+  // غائب / غش buttons: the same rules the status list had. A status clears
+  // the score and saves at once; pressing the lit one again goes back to a
+  // score and puts the cursor in the score field.
+  const applyRowStatus = (
+    studentId: string,
+    draft: DraftGrade,
+    pressed: "غائب" | "غش",
+  ) => {
+    const nextStatus: DraftGrade["status"] =
+      draft.status === pressed ? "درجة" : pressed;
+    const hadNumericScore =
+      draft.status === "درجة" && toLatinDigits(draft.score).trim() !== "";
+    const nextDraft = {
+      ...draft,
+      status: nextStatus,
+      score: nextStatus === "درجة" ? draft.score : "",
+    };
+    updateDraft(studentId, nextDraft);
+    if (nextStatus !== "درجة") {
+      if (hadNumericScore) {
+        showGradeEntryNotice(
+          "info",
+          `تم تبديل الحالة إلى «${nextStatus}» ومسح الدرجة السابقة. لا يمكن لطالب غائب أو غاش أن يحمل درجة رقمية.`,
+        );
+      }
+      autoSaveGrade(studentId, nextDraft);
+      return;
+    }
+    window.requestAnimationFrame(() => gradeInputRefs.current[studentId]?.focus());
+  };
+
+  // مجاز: an exam leave recorded through the leaves system, which also keeps
+  // a backup of any grade the student already had for this exam.
+  const saveExamLeave = async () => {
+    if (!leaveRequest || !selectedExam) return;
+    const student = studentById.get(leaveRequest.studentId);
+    const reason = leaveRequest.reason.trim();
+    if (!student) return;
+    if (!reason) {
+      showGradeEntryNotice("error", "اكتب سبب الإجازة.");
+      return;
+    }
+    setLeaveSaving(true);
+    try {
+      const today = baghdadTodayKey();
+      const result = await studentLeaveApi.add({
+        studentId: student.id,
+        examId: selectedExam.id,
+        leaveType: "exam",
+        reason,
+        studyType: student.studyType || "",
+        date: today,
+        dateFrom: today,
+        dateTo: today,
+        notes: "",
+      });
+      if (!result.ok || result.queued) {
+        showGradeEntryNotice("error", result.error || "ما انحفظت الإجازة. أعد المحاولة.");
+        return;
+      }
+      setLeaveRequest(null);
+      showGradeEntryNotice("success", `${student.name}: مجاز لهذا الامتحان.`);
+      setEntrySheetRefreshKey((key) => key + 1);
+      emitTeacherProDataChanged({
+        source: "local-mutation",
+        reason: "grade-entry-exam-leave",
+        scopes: ["follow-up", "grades", "students", "opportunities", "dashboard"],
+      });
+    } finally {
+      setLeaveSaving(false);
+    }
+  };
+  const leaveRequestStudent = leaveRequest ? studentById.get(leaveRequest.studentId) : undefined;
+  const smartPendingCount = gradeSmartNotes.filter((note) => note.status === "PENDING").length;
+
   return (
     <div className="tp-grade-entry-page space-y-6">
       {gradeEntryNotice && (
@@ -2330,6 +2422,46 @@ export function GradeEntryView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={Boolean(leaveRequest)}
+        onOpenChange={(open) => {
+          if (!open && !leaveSaving) setLeaveRequest(null);
+        }}
+      >
+        <DialogContent dir="rtl">
+          <DialogHeader>
+            <DialogTitle>مجاز: {leaveRequestStudent?.name}</DialogTitle>
+            <DialogDescription>
+              تنسجل إجازة لهذا الامتحان بس ({selectedExam?.name}). إذا عنده درجة
+              عليه تنحفظ نسخة منها وترجع إذا انشالت الإجازة.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="grade-entry-leave-reason">سبب الإجازة</Label>
+            <Input
+              id="grade-entry-leave-reason"
+              autoFocus
+              value={leaveRequest?.reason || ""}
+              onChange={(event) =>
+                setLeaveRequest((prev) => (prev ? { ...prev, reason: event.target.value } : prev))
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void saveExamLeave();
+              }}
+              placeholder="مثلاً: مراجعة طبية"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setLeaveRequest(null)} disabled={leaveSaving}>
+              إلغاء
+            </Button>
+            <Button type="button" onClick={() => void saveExamLeave()} disabled={leaveSaving}>
+              {leaveSaving ? "جارٍ الحفظ..." : "تسجيل مجاز"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={quickScanOpen} onOpenChange={setQuickScanOpen}>
         <DialogContent dir="rtl">
@@ -2497,92 +2629,10 @@ export function GradeEntryView() {
             </div>
           )}
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleQuickScan}>
-              بحث / مسح QR
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleMarkAllMissingAsAbsent}
-              disabled={
-                !selectedExam ||
-                missingExamStudentsBeforeProtection.length === 0 ||
-                markingAllMissingAbsent
-              }
-              title="يسجل الغائبين (ومنهم المجازون بفترة السماح)، ومن كان الامتحان قبل تسجيلهم تلقائياً"
-            >
-              {markingAllMissingAbsent
-                ? "جارٍ تسجيل الحالات..."
-                : missingExamStudentsBeforeProtection.length > 0
-                  ? `تسجيل الكل (${missingExamStudents.length} غائب${graceAbsentMissingStudents.length ? ` منهم ${graceAbsentMissingStudents.length} فترة سماح` : ""}، ${preRegistrationMissingStudents.length} قبل التسجيل)`
-                  : "لا يوجد طلاب غير مسجلين"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleClearAbsentGrades}
-              disabled={
-                !selectedExam ||
-                absentGradesForSelectedExam.length === 0 ||
-                clearingAbsentGrades
-              }
-              title="يلغي غياب الطلاب النشطين فقط؛ تبقى سجلات المفصولين والمؤرشفين محفوظة"
-              className="border-warning-line text-warning hover:bg-warning-soft"
-            >
-              {clearingAbsentGrades
-                ? "جاري الإلغاء..."
-                : `إلغاء حالة غائب (${absentGradesForSelectedExam.length})`}
-            </Button>
-          </div>
-
-          {missingChapterCourses.length > 0 && (
-            <div className="mt-4 rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 text-sm text-warning">
-              الدورات التالية غير مربوطة بفصل نشط ولن تظهر ضمن إدخال الدرجات:{" "}
-              {missingChapterCourses.join("، ")}
-            </div>
-          )}
-
-        </CardContent>
-      </Card>
-
-      {/* The smart board only when it holds something to review; otherwise
-          one quiet line so the entry sheet comes first. */}
-      {selectedExam &&
-        (gradeSmartNotesTotal > 0 || gradeSmartNotesError ? (
-          <GradeSmartNotesPanel
-            key={selectedExam.id}
-            notes={gradeSmartNotes}
-            totalCount={gradeSmartNotesTotal}
-            categoryCounts={gradeSmartNoteCategoryCounts}
-            loading={gradeSmartNotesLoading}
-            error={gradeSmartNotesError}
-            onRetry={() => setGradeSmartNotesRefreshKey((key) => key + 1)}
-          />
-        ) : !gradeSmartNotesLoading ? (
-          <p className="tp-grade-smart-empty" data-grade-smart-empty="true">
-            ماكو درجات تحتاج مراجعة لهذا الامتحان.
-          </p>
-        ) : null)}
-
-      {!selectedExam && (
-        <Card>
-          <CardHeader>
-            <CardTitle>ورقة إدخال الدرجة</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="empty-state">
-              اختر امتحاناً لإدخال درجاته.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {selectedExam && (
-        <Card>
-          <CardHeader className="gap-3">
-            <div className="flex flex-col gap-4 xl:flex-row-reverse xl:items-end xl:justify-between">
-              <div className="grid w-full gap-3 lg:grid-cols-[minmax(14rem,1fr)_minmax(18rem,1fr)] lg:items-stretch xl:max-w-3xl">
+          {/* The search and the counters sit on top, with the exam, like the
+              proposal: type a name, see how many sheets are in. */}
+          {selectedExam && (
+              <div className="mt-4 grid w-full gap-3 lg:grid-cols-[minmax(14rem,1fr)_minmax(18rem,1fr)] lg:items-stretch" data-grade-entry-top="true">
                 <div className="space-y-2 text-right">
                   <Label htmlFor="grade-entry-search">
                     بحث الطالب داخل الإدخال
@@ -2678,12 +2728,118 @@ export function GradeEntryView() {
                   </div>
                 </div>
               </div>
-              <div className="text-right">
-                <CardTitle>
-                  ورقة إدخال الدرجة - {examStudents.length} طالب
-                </CardTitle>
-              </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleQuickScan} title="بحث / مسح QR" aria-label="بحث / مسح QR">
+              QR
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleMarkAllMissingAsAbsent}
+              disabled={
+                !selectedExam ||
+                missingExamStudentsBeforeProtection.length === 0 ||
+                markingAllMissingAbsent
+              }
+              title={`يسجل ${missingExamStudents.length} غائب${graceAbsentMissingStudents.length ? ` (منهم ${graceAbsentMissingStudents.length} فترة سماح)` : ""}${preRegistrationMissingStudents.length ? `، و${preRegistrationMissingStudents.length} «قبل التسجيل»` : ""}. الدرجات المسجلة ما تتغير.`}
+            >
+              {markingAllMissingAbsent ? (
+                "جارٍ تسجيل الحالات..."
+              ) : missingExamStudentsBeforeProtection.length > 0 ? (
+                <>
+                  تسجيل الباقين غائب
+                  <span className="tp-count-chip">{missingExamStudentsBeforeProtection.length}</span>
+                </>
+              ) : (
+                "ماكو طلاب باقين"
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearAbsentGrades}
+              disabled={
+                !selectedExam ||
+                absentGradesForSelectedExam.length === 0 ||
+                clearingAbsentGrades
+              }
+              title="يلغي غياب الطلاب النشطين فقط؛ تبقى سجلات المفصولين والمؤرشفين محفوظة"
+              className="border-warning-line text-warning hover:bg-warning-soft"
+            >
+              {clearingAbsentGrades
+                ? "جاري الإلغاء..."
+                : `إلغاء حالة غائب (${absentGradesForSelectedExam.length})`}
+            </Button>
+          </div>
+
+          {missingChapterCourses.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 text-sm text-warning">
+              الدورات التالية غير مربوطة بفصل نشط ولن تظهر ضمن إدخال الدرجات:{" "}
+              {missingChapterCourses.join("، ")}
             </div>
+          )}
+
+        </CardContent>
+      </Card>
+
+      {/* The smart board only when it holds something to review; otherwise
+          one quiet line so the entry sheet comes first. */}
+      {selectedExam && gradeSmartNotesTotal > 0 && !gradeSmartNotesError ? (
+        <div className="tp-grade-smart-alert" role="status">
+          <span>
+            {smartPendingCount > 0
+              ? `${smartPendingCount} درجة تحتاج مراجعة لهذا الامتحان`
+              : `${gradeSmartNotesTotal} حالة بالسجل الذكي لهذا الامتحان`}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-expanded={smartPanelOpen}
+            onClick={() => setSmartPanelOpen((open) => !open)}
+          >
+            {smartPanelOpen ? "إخفاء" : "عرض"}
+          </Button>
+        </div>
+      ) : null}
+      {selectedExam &&
+        ((gradeSmartNotesTotal > 0 && smartPanelOpen) || gradeSmartNotesError ? (
+          <GradeSmartNotesPanel
+            key={selectedExam.id}
+            notes={gradeSmartNotes}
+            totalCount={gradeSmartNotesTotal}
+            categoryCounts={gradeSmartNoteCategoryCounts}
+            loading={gradeSmartNotesLoading}
+            error={gradeSmartNotesError}
+            onRetry={() => setGradeSmartNotesRefreshKey((key) => key + 1)}
+          />
+        ) : !gradeSmartNotesLoading && gradeSmartNotesTotal === 0 ? (
+          <p className="tp-grade-smart-empty" data-grade-smart-empty="true">
+            ماكو درجات تحتاج مراجعة لهذا الامتحان.
+          </p>
+        ) : null)}
+
+      {!selectedExam && (
+        <Card>
+          <CardHeader>
+            <CardTitle>ورقة إدخال الدرجة</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="empty-state">
+              اختر امتحاناً لإدخال درجاته.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {selectedExam && (
+        <Card>
+          <CardHeader className="gap-3">
+            <CardTitle>
+              ورقة إدخال الدرجة - {examStudents.length} طالب
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {entrySheetLoading && (
@@ -2830,21 +2986,29 @@ export function GradeEntryView() {
                   const structuredControlsDisabled = !canEditPersistedGrade;
                   const notesInputDisabled =
                     !canEditPersistedGrade && !protectedNumericCapture;
+                  const leaveBlocked =
+                    student.status === "مفصول" || student.status === "مؤرشف";
+                  const noteOpen = Boolean(openNoteRows[student.id]);
+                  const hasNote = Boolean(editableGradeNote(draft.notes).trim());
                   return (
                     <div
                       key={student.id}
-                      className="teacherpro-heavy-row tp-save-row grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm xl:grid-cols-[1.5fr_130px_130px_1fr_170px]"
+                      className="teacherpro-heavy-row tp-save-row tp-grade-row"
                       data-save-state={savePhase}
                       data-dismissed={student.status === "مفصول" || undefined}
                     >
-                      <div className="min-w-0">
+                      <div className="tp-grade-row__who min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="min-w-0 break-words text-sm font-bold [overflow-wrap:anywhere]">
                             {student.name}
                           </p>
-                          {leave && (
-                            <Badge variant="success" className="text-[10px]">
-                              الطالب مجاز
+                          {examBeforeRegistration && (
+                            <Badge
+                              variant="outline"
+                              className="border-info-line bg-info-soft text-[10px] text-info"
+                              title="هذا الامتحان يسبق تسجيل الطالب؛ عند إدخال درجة تُقدَّم نهاية تسجيله إلى تاريخ الامتحان وتُحتسب رسمياً في سجله. الغياب والغش غير متاحين هنا."
+                            >
+                              قبل تسجيله
                             </Badge>
                           )}
                           {gracePeriod && (
@@ -2885,25 +3049,9 @@ export function GradeEntryView() {
                           )}
                         </div>
                         <p className="truncate text-xs text-muted-foreground">
-                          {student.code} - {courseName(student.courseId)}
-                          {siteLabel ? ` • ${siteLabel}` : ""}
+                          <bdi>{student.code}</bdi> · {courseName(student.courseId)}
+                          {siteLabel ? ` · ${siteLabel}` : ""}
                         </p>
-                        {grade && (
-                          <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                            {grade.status === "درجة"
-                              ? "درجة مسجلة"
-                              : grade.status === LEGACY_GRACE_PLACEHOLDER_STATUS
-                                ? "لا توجد نتيجة مسجلة"
-                                : `الحالة: ${grade.status}`}
-                            {" • "}
-                            وقت الإدخال: {formatGradeEntryTimestamp(grade.createdAt)}
-                            {grade.updatedAt &&
-                              grade.createdAt &&
-                              String(grade.updatedAt) !== String(grade.createdAt)
-                              ? ` • آخر تعديل: ${formatGradeEntryTimestamp(grade.updatedAt)}`
-                              : ""}
-                          </p>
-                        )}
                         {normalizedSearch &&
                           grade &&
                           (!selectedExam.courseIds.includes(student.courseId) ||
@@ -2918,20 +3066,6 @@ export function GradeEntryView() {
                               لم يعد مطابقاً للدورة أو الموقع أو الفصل الحالي.
                             </p>
                           )}
-                        {examBeforeRegistration && (
-                          <p className="mt-1 text-[11px] text-info">
-                            هذا الامتحان يسبق تسجيل الطالب؛ عند إدخال درجة
-                            تُقدَّم نهاية تسجيله إلى تاريخ الامتحان وتُحتسب
-                            رسمياً في سجله. الغياب والغش غير متاحين هنا.
-                          </p>
-                        )}
-                        {leave && (
-                          <p className="mt-1 text-[11px] text-success">
-                            الطالب مجاز لهذا الامتحان — إدخال درجة ينهي
-                            الإجازة وتُحتسب الدرجة في سجله
-                            {leave.reason ? `: ${leave.reason}` : ""}
-                          </p>
-                        )}
                       </div>
 
                       <Input
@@ -3003,81 +3137,72 @@ export function GradeEntryView() {
                             ? `0 - ${selectedExam.fullMark}`
                             : draft.status
                         }
-                        className="h-10"
+                        className="tp-grade-row__score h-10"
                       />
 
-                      <Select
-                        value={draft.status}
-                        disabled={structuredControlsDisabled}
-                        onValueChange={(value) => {
-                          const nextStatus = value as DraftGrade["status"];
-                          // ROOT-CAUSE FIX: When switching to a non-"درجة"
-                          // status (غائب / غش), the score MUST be cleared.
-                          // We do this client-side too so the user immediately
-                          // sees the empty input and the saved draft sent to
-                          // the API never carries a stale numeric score.
-                          const hadNumericScore =
-                            draft.status === "درجة" &&
-                            toLatinDigits(draft.score).trim() !== "";
-                          const nextDraft = {
-                            ...draft,
-                            status: nextStatus,
-                            score: nextStatus === "درجة" ? draft.score : "",
-                          };
-                          updateDraft(student.id, nextDraft);
-                          if (nextStatus !== "درجة") {
-                            // If the row previously had a real numeric score,
-                            // explicitly inform the user that switching to
-                            // غائب/غش will erase it. The save still proceeds
-                            // automatically — this is informational only.
-                            if (hadNumericScore) {
+                      {/* غائب / مجاز / غش: one tap. The same rules as before:
+                          a status clears the score and saves at once; مجاز
+                          records an exam leave through the leaves system. */}
+                      <div
+                        className="tp-grade-row__status"
+                        role="group"
+                        aria-label={`حالة ${student.name} بهذا الامتحان`}
+                      >
+                        <button
+                          type="button"
+                          className="tp-grade-row__seg"
+                          aria-pressed={!leave && draft.status === "غائب"}
+                          disabled={structuredControlsDisabled}
+                          onClick={() => applyRowStatus(student.id, draft, "غائب")}
+                        >
+                          غائب
+                        </button>
+                        <button
+                          type="button"
+                          className="tp-grade-row__seg"
+                          data-tone="leave"
+                          aria-pressed={Boolean(leave)}
+                          disabled={!leave && (leaveBlocked || !canManageLeaves)}
+                          title={
+                            leave
+                              ? "مجاز لهذا الامتحان. كتابة الدرجة تنهي الإجازة وتُحتسب الدرجة."
+                              : !canManageLeaves
+                                ? "تسجيل الإجازة يحتاج صلاحية إدارة الإجازات."
+                                : leaveBlocked
+                                  ? "ما تنسجل إجازة لطالب مفصول أو مؤرشف."
+                                  : "تسجيل الطالب مجاز لهذا الامتحان"
+                          }
+                          onClick={() => {
+                            if (leave) {
                               showGradeEntryNotice(
                                 "info",
-                                `تم تبديل الحالة إلى «${nextStatus}» ومسح الدرجة السابقة. لا يمكن لطالب غائب أو غاش أن يحمل درجة رقمية.`,
+                                "الطالب مجاز لهذا الامتحان. لإنهاء الإجازة اكتب درجته، أو عدّلها من نافذة الإجازات.",
                               );
+                              return;
                             }
-                            autoSaveGrade(student.id, nextDraft);
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="h-10">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {statusOptions.map((status) => (
-                            <SelectItem key={status} value={status}>
-                              {status}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                            setLeaveRequest({ studentId: student.id, reason: "" });
+                          }}
+                        >
+                          مجاز
+                        </button>
+                        <button
+                          type="button"
+                          className="tp-grade-row__seg"
+                          aria-pressed={!leave && draft.status === "غش"}
+                          disabled={structuredControlsDisabled}
+                          onClick={() => applyRowStatus(student.id, draft, "غش")}
+                        >
+                          غش
+                        </button>
+                      </div>
 
-                      <Input
-                        value={editableGradeNote(draft.notes)}
-                        disabled={notesInputDisabled}
-                        onChange={(e) =>
-                          updateDraft(student.id, {
-                            notes: withInternalGradeNotePrefix(draft.notes, e.target.value),
-                          })
-                        }
-                        onBlur={() => {
-                          if (
-                            entered ||
-                            isScoreInsideExamRange(
-                              toLatinDigits(getDraft(student.id).score).trim(),
-                              selectedExam.fullMark,
-                            )
-                          )
-                            autoSaveGrade(student.id);
-                        }}
-                        placeholder="ملاحظات"
-                        className="h-10"
-                      />
-
-                      <div className="flex flex-wrap items-center justify-end gap-2">
+                      <div className="tp-grade-row__end">
                         {cls &&
                           !(gracePeriod && cls.kind === "grace") &&
-                          cls.kind !== "leave" && (
+                          cls.kind !== "leave" &&
+                          // The lit button already says غائب / غش.
+                          cls.text !== "غائب" &&
+                          cls.text !== "غش" && (
                             <Badge
                               variant={
                                 cls.type === "ok"
@@ -3095,9 +3220,18 @@ export function GradeEntryView() {
                         <Badge
                           variant="outline"
                           title={
-                            isAutoSaveCaptureRow
-                              ? "تُحفظ الدرجة تلقائياً عند الخروج من الخلية."
-                              : undefined
+                            [
+                              leave
+                                ? `الطالب مجاز لهذا الامتحان — إدخال درجة ينهي الإجازة وتُحتسب الدرجة في سجله${leave.reason ? `: ${leave.reason}` : ""}`
+                                : "",
+                              isAutoSaveCaptureRow ? "تُحفظ الدرجة تلقائياً عند الخروج من الخلية." : "",
+                              grade?.createdAt ? `وقت الإدخال: ${formatGradeEntryTimestamp(grade.createdAt)}` : "",
+                              grade?.updatedAt && grade?.createdAt && String(grade.updatedAt) !== String(grade.createdAt)
+                                ? `آخر تعديل: ${formatGradeEntryTimestamp(grade.updatedAt)}`
+                                : "",
+                            ]
+                              .filter(Boolean)
+                              .join("\n") || undefined
                           }
                           className={`tp-save-indicator ${
                             savePhase === "saving"
@@ -3125,17 +3259,53 @@ export function GradeEntryView() {
                                   ? effectiveSaveState?.message ||
                                     "تعديل غير محفوظ"
                                   : leave
-                                    ? "مجاز — الإدخال ينهي الإجازة وتُحتسب الدرجة"
+                                    ? "مجاز"
                                     : savePhase === "idle" && entered
-                                      ? "جاهز للتعديل"
+                                      ? "✓ محفوظ"
                                       : savedRows[student.id] ||
                                         (savePhase === "saved"
-                                          ? "محفوظ"
-                                          : isAutoSaveCaptureRow
-                                            ? "غير مدخل — يُحفظ تلقائياً"
-                                            : "غير مدخل")}
+                                          ? "✓ محفوظ"
+                                          : "اكتب الدرجة أو اختر حالة")}
                         </Badge>
                       </div>
+
+                      <button
+                        type="button"
+                        className="tp-grade-row__note-btn"
+                        aria-expanded={noteOpen}
+                        data-has-note={hasNote || undefined}
+                        title={hasNote ? editableGradeNote(draft.notes) : "إضافة ملاحظة"}
+                        onClick={() =>
+                          setOpenNoteRows((prev) => ({ ...prev, [student.id]: !noteOpen }))
+                        }
+                      >
+                        {hasNote ? "ملاحظة ✎" : "ملاحظة"}
+                      </button>
+                      {noteOpen ? (
+                        <div className="tp-grade-row__note">
+                      <Input
+                        value={editableGradeNote(draft.notes)}
+                        disabled={notesInputDisabled}
+                        onChange={(e) =>
+                          updateDraft(student.id, {
+                            notes: withInternalGradeNotePrefix(draft.notes, e.target.value),
+                          })
+                        }
+                        onBlur={() => {
+                          if (
+                            entered ||
+                            isScoreInsideExamRange(
+                              toLatinDigits(getDraft(student.id).score).trim(),
+                              selectedExam.fullMark,
+                            )
+                          )
+                            autoSaveGrade(student.id);
+                        }}
+                        placeholder="ملاحظات"
+                        className="h-9"
+                      />
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })
