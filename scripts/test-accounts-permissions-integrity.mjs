@@ -10,7 +10,9 @@ const pass = (message) => console.log(`✅ ${message}`);
 const fail = (message) => { failed = true; console.error(`❌ ${message}`); };
 const must = (condition, ok, bad = ok) => condition ? pass(ok) : fail(bad);
 
-const store = read("src/lib/teacher-store.ts");
+// The catalog and the default roles moved to a plain module the server can
+// read; the store re-exports them.
+const store = read("src/lib/teacher-store.ts") + "\n" + read("src/lib/permission-catalog.ts");
 const accounts = read("src/components/teacher-pro/accounts.tsx");
 const usersRoute = read("src/app/api/users/route.ts");
 const rolesRoute = read("src/app/api/roles/route.ts");

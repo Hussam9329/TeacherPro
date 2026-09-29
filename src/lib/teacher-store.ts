@@ -1,10 +1,18 @@
 "use client";
 import { gradeSettlementExclusion } from "./grade-settlement";
 import { setOutboxOwner } from "./outbox-session";
+import { accountsApi } from "./accounts-client";
+import {
+  ALL_PERMISSION_IDS,
+
+  DEFAULT_ROLE_DEFINITIONS,
+  PERMISSION_CATALOG,
+  type PermissionEntry,
+} from "./permission-catalog";
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { courseApi, courseChapterApi, gradeApi, opportunityLogApi, studentLeaveApi, studentCallApi, studentNoteApi, userApi, roleApi, logApi, authApi, loadAllFromServer, type ApiResult, type AuthApiUser } from "./api";
+import { courseApi, courseChapterApi, gradeApi, opportunityLogApi, studentLeaveApi, studentCallApi, studentNoteApi, logApi, authApi, loadAllFromServer, type ApiResult, type AuthApiUser } from "./api";
 import { type CourseLocationConfig, type StudyTypesByProgram, getAvailablePrograms, getAvailableStudyTypes, getStudyTypesByProgram, parseJsonArray, parseJsonRecord } from "./course-config";
 import { getExamEntryAvailability, isExamOnOrAfterStudentRegistration, isGradeEntered } from "./exam-utils";
 import { baghdadDateKey, baghdadTodayKey, toBaghdadDateTimeLocal } from "./baghdad-time";
@@ -224,13 +232,20 @@ export interface StudentNote {
   dismissalDate?: string;
 }
 
+export type AccountActionResult =
+  | { ok: true; updatedUsers?: number }
+  | { ok: false; error: string };
+
 export interface User {
   id: string;
   username: string;
   name: string;
   roleId: string;
   role: string;
+  /** What the server grants: the role's permissions plus the account's own. */
   permissions: string[];
+  /** The account's own list, on top of its role (what the editor saves). */
+  ownPermissions?: string[];
   active: boolean;
   password?: string;
 }
@@ -290,376 +305,11 @@ export type SectionId =
   | "admin-log-reset";
 
 // ─── Permissions Catalog ────────────────────────────────────────────────────
+// The catalog and the default roles live in ./permission-catalog so the server
+// reads the same list.
 
-export interface PermissionEntry {
-  id: string;
-  label: string;
-  category: string;
-  level: "read" | "write" | "delete" | "manage";
-  description: string;
-}
-
-export const PERMISSION_CATALOG: PermissionEntry[] = [
-  // النظام
-  {
-    id: "system.dashboard",
-    label: "لوحة النظام",
-    category: "النظام",
-    level: "read",
-    description: "عرض لوحة النظام والنظرة العامة",
-  },
-  {
-    id: "system.settings",
-    label: "إعدادات النظام",
-    category: "النظام",
-    level: "manage",
-    description: "تعديل إعدادات النظام",
-  },
-  {
-    id: "backup.view",
-    label: "تصدير النسخ الاحتياطي",
-    category: "النظام",
-    level: "manage",
-    description: "تحميل نسخة احتياطية كاملة من بيانات النظام",
-  },
-  {
-    id: "backup.restore",
-    label: "استعادة النسخة الاحتياطية",
-    category: "النظام",
-    level: "manage",
-    description: "استعادة بيانات النظام من نسخة احتياطية (عملية حساسة تستبدل أو تدمج البيانات)",
-  },
-  {
-    id: "system.maintenance",
-    label: "صيانة النظام الشاملة",
-    category: "النظام",
-    level: "manage",
-    description: "تشغيل أدوات الصيانة الجماعية (إعادة الاحتساب الأكاديمي الشامل، إصلاح الفرص، ضبط السقوف)",
-  },
-  // الدورات
-  {
-    id: "courses.view",
-    label: "عرض الدورات",
-    category: "الدورات",
-    level: "read",
-    description: "عرض قائمة الدورات",
-  },
-  {
-    id: "courses.add",
-    label: "إضافة دورة",
-    category: "الدورات",
-    level: "write",
-    description: "إنشاء دورة جديدة",
-  },
-  {
-    id: "courses.edit",
-    label: "تعديل دورة",
-    category: "الدورات",
-    level: "write",
-    description: "تعديل بيانات دورة",
-  },
-  {
-    id: "courses.delete",
-    label: "حذف دورة",
-    category: "الدورات",
-    level: "delete",
-    description: "حذف دورة من النظام",
-  },
-  // الفصول
-  {
-    id: "chapters.view",
-    label: "عرض الفصول",
-    category: "الفصول",
-    level: "read",
-    description: "عرض قائمة الفصول",
-  },
-  {
-    id: "chapters.add",
-    label: "إضافة فصل",
-    category: "الفصول",
-    level: "write",
-    description: "إنشاء فصل جديد",
-  },
-  {
-    id: "chapters.edit",
-    label: "تعديل فصل",
-    category: "الفصول",
-    level: "write",
-    description: "تعديل بيانات فصل",
-  },
-  {
-    id: "chapters.delete",
-    label: "حذف فصل",
-    category: "الفصول",
-    level: "delete",
-    description: "حذف فصل من النظام",
-  },
-  // الطلاب
-  {
-    id: "students.view",
-    label: "عرض الطلاب",
-    category: "الطلاب",
-    level: "read",
-    description: "عرض سجل الطلاب",
-  },
-  {
-    id: "students.add",
-    label: "تسجيل طالب",
-    category: "الطلاب",
-    level: "write",
-    description: "تسجيل طالب جديد",
-  },
-  {
-    id: "students.edit",
-    label: "تعديل بيانات طالب",
-    category: "الطلاب",
-    level: "write",
-    description: "تعديل بيانات طالب",
-  },
-  {
-    id: "students.delete",
-    label: "حذف طالب",
-    category: "الطلاب",
-    level: "delete",
-    description: "حذف طالب من النظام",
-  },
-  // الامتحانات
-  {
-    id: "exams.view",
-    label: "عرض الامتحانات",
-    category: "الامتحانات",
-    level: "read",
-    description: "عرض قائمة الامتحانات",
-  },
-  {
-    id: "exams.add",
-    label: "إضافة امتحان",
-    category: "الامتحانات",
-    level: "write",
-    description: "إنشاء امتحان جديد",
-  },
-  {
-    id: "exams.edit",
-    label: "تعديل امتحان",
-    category: "الامتحانات",
-    level: "write",
-    description: "تعديل بيانات امتحان",
-  },
-  {
-    id: "exams.delete",
-    label: "حذف امتحان",
-    category: "الامتحانات",
-    level: "delete",
-    description: "حذف امتحان من النظام",
-  },
-  // الدرجات
-  {
-    id: "grades.view",
-    label: "عرض الدرجات",
-    category: "الدرجات",
-    level: "read",
-    description: "عرض سجل الدرجات",
-  },
-  {
-    id: "grades.add",
-    label: "إدخال درجات",
-    category: "الدرجات",
-    level: "write",
-    description: "إدخال درجات الطلاب",
-  },
-  {
-    id: "grades.edit",
-    label: "تعديل درجة",
-    category: "الدرجات",
-    level: "write",
-    description: "تعديل درجة طالب",
-  },
-  {
-    id: "grades.delete",
-    label: "حذف درجة",
-    category: "الدرجات",
-    level: "delete",
-    description: "حذف درجة من السجل",
-  },
-  // الفرص
-  {
-    id: "opportunities.view",
-    label: "عرض الفرص",
-    category: "الفرص",
-    level: "read",
-    description: "عرض وإدارة فرص الطلاب",
-  },
-  {
-    id: "opportunities.manage",
-    label: "إدارة الفرص",
-    category: "الفرص",
-    level: "manage",
-    description: "إضافة وخصم فرص الطلاب",
-  },
-  {
-    id: "follow-up.view",
-    label: "عرض المتابعة",
-    category: "المتابعة",
-    level: "read",
-    description: "عرض الإجازات والمكالمات وملف الطالب",
-  },
-  {
-    id: "follow-up.manage",
-    label: "إدارة المتابعة",
-    category: "المتابعة",
-    level: "manage",
-    description: "إضافة الإجازات والمكالمات والملاحظات",
-  },
-  {
-    id: "follow-up.calls.view",
-    label: "عرض المكالمات",
-    category: "المتابعة / المكالمات",
-    level: "read",
-    description: "عرض صفحة المكالمات ومرشحي الاتصال.",
-  },
-  {
-    id: "follow-up.calls.manage",
-    label: "إدارة المكالمات",
-    category: "المتابعة / المكالمات",
-    level: "manage",
-    description: "حفظ وتحديث حالات المكالمات.",
-  },
-  {
-    id: "follow-up.leaves.view",
-    label: "عرض الإجازات",
-    category: "المتابعة / الإجازات",
-    level: "read",
-    description: "عرض إجازات الطلاب وتأثيرها على الدرجات.",
-  },
-  {
-    id: "follow-up.leaves.manage",
-    label: "إدارة الإجازات",
-    category: "المتابعة / الإجازات",
-    level: "manage",
-    description: "إضافة وحذف إجازات الطلاب مع الأثر الأكاديمي.",
-  },
-  // الحسابات
-  {
-    id: "accounts.view",
-    label: "عرض الحسابات",
-    category: "الحسابات",
-    level: "read",
-    description: "عرض قائمة الحسابات",
-  },
-  {
-    id: "accounts.manage",
-    label: "إدارة الحسابات",
-    category: "الحسابات",
-    level: "manage",
-    description: "إضافة وتعديل وحذف الحسابات",
-  },
-  {
-    id: "accounts.users.view",
-    label: "عرض المستخدمين",
-    category: "إدارة الحسابات / المستخدمين",
-    level: "read",
-    description: "عرض حسابات المستخدمين وبياناتهم الأساسية.",
-  },
-  {
-    id: "accounts.users.add",
-    label: "إضافة مستخدم",
-    category: "إدارة الحسابات / المستخدمين",
-    level: "write",
-    description: "إنشاء حساب مستخدم جديد مع دور وصلاحيات محددة.",
-  },
-  {
-    id: "accounts.users.edit",
-    label: "تعديل مستخدم",
-    category: "إدارة الحسابات / المستخدمين",
-    level: "write",
-    description: "تعديل اسم المستخدم أو كلمة المرور أو حالة الحساب.",
-  },
-  {
-    id: "accounts.users.delete",
-    label: "حذف مستخدم",
-    category: "إدارة الحسابات / المستخدمين",
-    level: "delete",
-    description: "حذف حساب مستخدم غير محمي بعد فحص الأثر.",
-  },
-  {
-    id: "accounts.roles.view",
-    label: "عرض الأدوار",
-    category: "إدارة الحسابات / الأدوار",
-    level: "read",
-    description: "عرض الأدوار وعدد المستخدمين المرتبطين بها.",
-  },
-  {
-    id: "accounts.roles.add",
-    label: "إضافة دور",
-    category: "إدارة الحسابات / الأدوار",
-    level: "write",
-    description: "إنشاء دور جديد وتحديد صلاحياته.",
-  },
-  {
-    id: "accounts.roles.edit",
-    label: "تعديل دور",
-    category: "إدارة الحسابات / الأدوار",
-    level: "write",
-    description: "تعديل اسم الدور أو صلاحياته ومزامنة المستخدمين المرتبطين.",
-  },
-  {
-    id: "accounts.roles.delete",
-    label: "حذف دور",
-    category: "إدارة الحسابات / الأدوار",
-    level: "delete",
-    description: "حذف دور غير افتراضي وغير مستخدم.",
-  },
-  {
-    id: "accounts.permissions.view",
-    label: "عرض كتالوج الصلاحيات",
-    category: "إدارة الحسابات / الصلاحيات",
-    level: "read",
-    description: "عرض كل الصلاحيات المتاحة وتفصيلها حسب الصفحة والإجراء.",
-  },
-  {
-    id: "accounts.permissions.assign",
-    label: "منح الصلاحيات",
-    category: "إدارة الحسابات / الصلاحيات",
-    level: "manage",
-    description: "تعديل صلاحيات المستخدمين أو الأدوار.",
-  },
-  {
-    id: "accounts.security.view",
-    label: "عرض فحص أمان الحسابات",
-    category: "إدارة الحسابات / الأمان",
-    level: "read",
-    description: "عرض لوحة فحص الأمان ومخاطر الصلاحيات الحساسة.",
-  },
-  {
-    id: "logs.delete",
-    label: "حذف سجل مفرد",
-    category: "السجلات",
-    level: "delete",
-    description: "حذف سجل تدقيق مفرد. يبقى محصوراً بالمدير مع تدقيق أمني.",
-  },
-  {
-    id: "logs.clear",
-    label: "تصفير السجلات",
-    category: "تصفير الـ Log",
-    level: "manage",
-    description: "تصفير نطاقات محددة من السجلات بعد كلمة مرور الأدمن ونسخة استعادة.",
-  },
-  {
-    id: "logs.restore",
-    label: "استعادة آخر تصفير",
-    category: "تصفير الـ Log",
-    level: "manage",
-    description: "استعادة آخر نسخة احتياطية أنشئت قبل تصفير السجلات.",
-  },
-  // السجلات
-  {
-    id: "logs.view",
-    label: "عرض السجلات",
-    category: "السجلات",
-    level: "read",
-    description: "عرض سجلات العمليات والتدقيق",
-  },
-];
+export { PERMISSION_CATALOG };
+export type { PermissionEntry };
 
 // ─── Section-to-Permission Mapping ──────────────────────────────────────────
 
@@ -692,12 +342,6 @@ const SECTION_PERMISSION_EQUIVALENTS: Partial<Record<SectionId, string[]>> = {
 
 // ─── Default Roles ──────────────────────────────────────────────────────────
 
-const ALL_PERMISSION_IDS = Array.from(
-  new Set(PERMISSION_CATALOG.map((p) => p.id)),
-);
-const ALL_VIEW_PERMISSION_IDS = PERMISSION_CATALOG.filter(
-  (p) => p.level === "read",
-).map((p) => p.id);
 
 const ADMIN_USERNAME = "admin";
 const ADMIN_ROLE_ID = "role_admin";
@@ -788,63 +432,10 @@ function normalizeAdminAccessUser(user: User): User {
   };
 }
 
-const DEFAULT_ROLES: Role[] = [
-  {
-    id: "role_admin",
-    name: "مدير عام",
-    isDefault: true,
-    permissions: [...ADMIN_FULL_PERMISSIONS],
-  },
-  {
-    id: "role_supervisor",
-    name: "مشرف",
-    isDefault: true,
-    permissions: ALL_PERMISSION_IDS.filter(
-      (p) =>
-        p !== "accounts.manage" &&
-        p !== "accounts.users.add" &&
-        p !== "accounts.users.edit" &&
-        p !== "accounts.users.delete" &&
-        p !== "accounts.roles.add" &&
-        p !== "accounts.roles.edit" &&
-        p !== "accounts.roles.delete" &&
-        p !== "accounts.permissions.assign" &&
-        p !== "logs.delete" &&
-        p !== "logs.clear" &&
-        p !== "logs.restore" &&
-        p !== "backup.view" &&
-        p !== "backup.restore" &&
-        p !== "system.settings",
-    ),
-  },
-  {
-    id: "role_registrar",
-    name: "مسؤول تسجيل",
-    isDefault: true,
-    permissions: [
-      "students.view",
-      "students.add",
-      "students.edit",
-      "students.delete",
-      "courses.view",
-      "chapters.view",
-      "exams.view",
-      "grades.view",
-    ],
-  },
-  {
-    id: "role_checker",
-    name: "مصحح",
-    isDefault: true,
-    permissions: ["grades.view", "students.view", "exams.view"],
-  },
-  {
-    id: "role_viewer",
-    name: "مشاهدة فقط",
-    isDefault: true,
-    permissions: [...ALL_VIEW_PERMISSION_IDS],
-  },
-];
+const DEFAULT_ROLES: Role[] = DEFAULT_ROLE_DEFINITIONS.map((role) => ({
+  ...role,
+  permissions: [...role.permissions],
+}));
 
 // ─── Backup Shape ───────────────────────────────────────────────────────────
 
@@ -921,15 +512,29 @@ interface TeacherState {
     student?: Student,
   ) => { text: string; type: string; kind: string; baseText?: string };
 
-  addUser: (user: Omit<User, "id">) => void;
-  updateUser: (id: string, updates: Partial<Omit<User, "id">>) => void;
-  toggleUser: (id: string) => void;
-  updateUserPermissions: (id: string, permissions: string[]) => void;
-  deleteUser: (id: string) => boolean;
+  // Account changes wait for the server and report its answer.
+  refreshAccounts: () => Promise<AccountActionResult>;
+  addUser: (user: {
+    username: string;
+    name: string;
+    roleId: string;
+    permissions: string[];
+    password: string;
+  }) => Promise<AccountActionResult>;
+  updateUser: (
+    id: string,
+    updates: { name?: string; password?: string; roleId?: string; permissions?: string[] },
+  ) => Promise<AccountActionResult>;
+  toggleUser: (id: string) => Promise<AccountActionResult>;
+  updateUserPermissions: (id: string, permissions: string[]) => Promise<AccountActionResult>;
+  deleteUser: (id: string) => Promise<AccountActionResult>;
 
-  addRole: (role: Omit<Role, "id">) => void;
-  updateRole: (id: string, updates: Partial<Omit<Role, "id">>) => void;
-  deleteRole: (id: string) => boolean;
+  addRole: (role: { name: string; permissions: string[] }) => Promise<AccountActionResult>;
+  updateRole: (
+    id: string,
+    updates: { name?: string; permissions?: string[] },
+  ) => Promise<AccountActionResult>;
+  deleteRole: (id: string) => Promise<AccountActionResult>;
 
   logAction: (module: string, action: string, details?: string) => void;
 }
@@ -1167,14 +772,13 @@ function mergeDefaultRoles(roles: Role[]): Role[] {
         permissions: [...ADMIN_FULL_PERMISSIONS],
       };
     }
+    // The role as saved: adding the default list on top made a permission
+    // taken off a default role look like it was still there.
     return {
       ...role,
       name: role.name || defaultRole.name,
       isDefault: role.isDefault || defaultRole.isDefault,
-      permissions: sanitizePermissionIds([
-        ...(defaultRole.permissions || []),
-        ...(role.permissions || []),
-      ]),
+      permissions: sanitizePermissionIds(role.permissions || []),
     };
   });
 
@@ -1188,6 +792,43 @@ function mergeDefaultRoles(roles: Role[]): Role[] {
       }),
     ),
   ];
+}
+
+/** Roles as the server lists them. */
+function parseServerRoles(rawRoles: Record<string, unknown>[]): Role[] {
+  return rawRoles.map((r) => ({
+    ...(r as unknown as Role),
+    permissions: sanitizePermissionIds(parseArrayField<string>(r.permissions)),
+    isDefault: Boolean(r.isDefault),
+  }));
+}
+
+/**
+ * Users as the server lists them. The server grants a user their role's
+ * permissions plus their own, so `permissions` shows exactly that and
+ * `ownPermissions` keeps the account's own list for the editor.
+ */
+function parseServerUsers(rawUsers: Record<string, unknown>[], roles: Role[]): User[] {
+  const rolePermissions = new Map(roles.map((role) => [role.id, role.permissions]));
+  return rawUsers.map((u) => {
+    const own = sanitizePermissionIds(parseArrayField<string>(u.permissions));
+    const roleRef = u.roleRef as { permissions?: unknown } | null | undefined;
+    const fromRole = roleRef
+      ? sanitizePermissionIds(parseArrayField<string>(roleRef.permissions))
+      : rolePermissions.get(String(u.roleId || "")) || [];
+    return {
+      id: String(u.id || ""),
+      username: String(u.username || ""),
+      name: String(u.name || ""),
+      roleId: String(u.roleId || ""),
+      role: String(u.role || ""),
+      // Passwords never come back from the API.
+      password: undefined,
+      permissions: sanitizePermissionIds([...fromRole, ...own]),
+      ownPermissions: own,
+      active: u.active !== undefined ? Boolean(u.active) : true,
+    };
+  });
 }
 
 function sanitizeGradeStatus(value: unknown): Grade["status"] {
@@ -1923,18 +1564,11 @@ export const useTeacherStore = create<TeacherState>()(
               })) as StudentNote[])
             : get().studentNotes;
 
-          const parsedUsers = (serverData.users || []).map(
-            (u: Record<string, unknown>) => ({
-              ...u,
-              // Passwords are no longer returned by the API. Keep this field empty
-              // in client state unless the user explicitly enters a new password.
-              password: undefined,
-              permissions: sanitizePermissionIds(
-                parseArrayField<string>(u.permissions),
-              ),
-              active: u.active !== undefined ? Boolean(u.active) : true,
-            }),
-          ) as User[];
+          const parsedRoles = parseServerRoles(serverData.roles || []);
+          const parsedUsers = parseServerUsers(
+            serverData.users || [],
+            serverData.roles ? mergeDefaultRoles(parsedRoles) : get().roles,
+          );
           const seedUsers = seedData().users;
           const adminSeed = seedUsers.find(
             (u: User) => u.username === ADMIN_USERNAME,
@@ -1955,15 +1589,6 @@ export const useTeacherStore = create<TeacherState>()(
             : [...users, { ...adminSeed }];
           users = users.map((u: User) => normalizeAdminAccessUser(u));
 
-          const parsedRoles = (serverData.roles || []).map(
-            (r: Record<string, unknown>) => ({
-              ...r,
-              permissions: sanitizePermissionIds(
-                parseArrayField<string>(r.permissions),
-              ),
-              isDefault: Boolean(r.isDefault),
-            }),
-          ) as Role[];
           const roles = serverData.roles ? mergeDefaultRoles(parsedRoles) : get().roles;
           const loadedAdmin =
             users.find((u) => isPrimaryAdminUser(u) && u.active) ||
@@ -2495,151 +2120,104 @@ export const useTeacherStore = create<TeacherState>()(
         );
       },
 
-      addUser: (userData) => {
-        const user: User = {
-          ...userData,
-          id: uid("u"),
-          password: userData.password || "123456",
-        };
-        set((s) => ({ users: [...s.users, user] }));
-        get().logAction("الحسابات", "إضافة مستخدم", user.name);
-        syncToServer(get, () =>
-          userApi.add({ ...user, permissions: user.permissions }),
-        );
-      },
-      updateUser: (id, updates) => {
-        const existingUser = get().users.find((u) => u.id === id);
-        const safeUpdates =
-          existingUser && isPrimaryAdminUser(existingUser)
-            ? {
-                ...updates,
-                active: true,
-                roleId: ADMIN_ROLE_ID,
-                role: ADMIN_ROLE_NAME,
-                permissions: ADMIN_FULL_PERMISSIONS,
-              }
-            : updates;
+      refreshAccounts: async () => {
+        const [usersResult, rolesResult] = await Promise.all([
+          accountsApi.listUsers(),
+          accountsApi.listRoles(),
+        ]);
+        if (!usersResult.ok) return { ok: false, error: usersResult.error };
+        const roles = rolesResult.ok
+          ? mergeDefaultRoles(parseServerRoles(rolesResult.data.roles || []))
+          : get().roles;
+        const users = parseServerUsers(usersResult.data.users || [], roles);
         set((s) => ({
-          users: s.users.map((u) =>
-            u.id === id
-              ? normalizeAdminAccessUser({ ...u, ...safeUpdates })
-              : u,
-          ),
+          roles,
+          users: users.length
+            ? users.map((u) => normalizeAdminAccessUser(u))
+            : s.users,
         }));
-        get().logAction("الحسابات", "تعديل مستخدم", get().userName(id));
-        syncToServer(get, () =>
-          userApi.update(id, safeUpdates as Record<string, unknown>),
-        );
+        return { ok: true };
       },
-      toggleUser: (id) => {
+      addUser: async (userData) => {
+        const result = await accountsApi.createUser({
+          username: userData.username.trim(),
+          name: userData.name.trim(),
+          roleId: userData.roleId,
+          permissions: sanitizePermissionIds(userData.permissions),
+          password: userData.password,
+          active: true,
+        });
+        if (!result.ok) return { ok: false, error: result.error };
+        await get().refreshAccounts();
+        return { ok: true };
+      },
+      updateUser: async (id, updates) => {
+        // Only what changed: the server keeps the main admin's role, rights
+        // and active state by itself.
+        const payload: Record<string, unknown> = {};
+        if (updates.name !== undefined) payload.name = updates.name.trim();
+        if (updates.password) payload.password = updates.password;
+        if (updates.roleId !== undefined) payload.roleId = updates.roleId;
+        if (updates.permissions !== undefined)
+          payload.permissions = sanitizePermissionIds(updates.permissions);
+        const result = await accountsApi.updateUser(id, payload);
+        if (!result.ok) return { ok: false, error: result.error };
+        await get().refreshAccounts();
+        return { ok: true };
+      },
+      toggleUser: async (id) => {
         const user = get().users.find((u) => u.id === id);
-        if (!user || isPrimaryAdminUser(user)) {
-          get().logAction("الحسابات", "منع تعطيل المدير", user?.name || id);
-          return;
-        }
-        set((s) => ({
-          users: s.users.map((u) =>
-            u.id === id ? { ...u, active: !u.active } : u,
-          ),
-        }));
-        get().logAction(
-          "الحسابات",
-          user.active ? "تعطيل مستخدم" : "تفعيل مستخدم",
-          user.name || id,
-        );
-        syncToServer(get, () => userApi.update(id, { active: !user.active }));
+        if (!user) return { ok: false, error: "الحساب غير موجود. حدّث الصفحة." };
+        if (isPrimaryAdminUser(user))
+          return { ok: false, error: "حساب admin يبقى فعّال دائماً." };
+        const result = await accountsApi.updateUser(id, { active: !user.active });
+        if (!result.ok) return { ok: false, error: result.error };
+        await get().refreshAccounts();
+        return { ok: true };
       },
-      updateUserPermissions: (id, permissions) => {
-        const user = get().users.find((u) => u.id === id);
-        const nextPermissions =
-          user && hasFullAdminAccess(user)
-            ? [...ADMIN_FULL_PERMISSIONS]
-            : sanitizePermissionIds(permissions);
-        set((s) => ({
-          users: s.users.map((u) =>
-            u.id === id
-              ? normalizeAdminAccessUser({ ...u, permissions: nextPermissions })
-              : u,
-          ),
-        }));
-        get().logAction("الحسابات", "تحديث صلاحيات", get().userName(id));
-        syncToServer(get, () =>
-          userApi.update(id, { permissions: nextPermissions }),
-        );
+      updateUserPermissions: async (id, permissions) => {
+        const result = await accountsApi.updateUser(id, {
+          permissions: sanitizePermissionIds(permissions),
+        });
+        if (!result.ok) return { ok: false, error: result.error };
+        await get().refreshAccounts();
+        return { ok: true };
       },
-      deleteUser: (id) => {
-        const state = get();
-        const user = state.users.find((u) => u.id === id);
-        if (!user || user.roleId === "role_admin" || state.currentUserId === id)
-          return false;
-        set((s) => ({ users: s.users.filter((u) => u.id !== id) }));
-        get().logAction("الحسابات", "حذف مستخدم", user.name);
-        syncToServer(get, () => userApi.remove(id));
-        return true;
+      deleteUser: async (id) => {
+        const result = await accountsApi.deleteUser(id);
+        if (!result.ok) return { ok: false, error: result.error };
+        await get().refreshAccounts();
+        return { ok: true };
       },
 
-      addRole: (roleData) => {
-        const role: Role = { ...roleData, id: uid("role") };
-        set((s) => ({ roles: [...s.roles, role] }));
-        get().logAction("الحسابات", "إضافة دور", role.name);
-        syncToServer(get, () =>
-          roleApi.add(role as unknown as Record<string, unknown>),
-        );
+      addRole: async (roleData) => {
+        const result = await accountsApi.createRole({
+          name: roleData.name.trim(),
+          isDefault: false,
+          permissions: sanitizePermissionIds(roleData.permissions),
+        });
+        if (!result.ok) return { ok: false, error: result.error };
+        await get().refreshAccounts();
+        return { ok: true };
       },
-      updateRole: (id, updates) => {
-        const safeUpdates =
-          id === ADMIN_ROLE_ID
-            ? {
-                ...updates,
-                name: ADMIN_ROLE_NAME,
-                isDefault: true,
-                permissions: ADMIN_FULL_PERMISSIONS,
-              }
-            : updates;
-        set((s) => ({
-          roles: mergeDefaultRoles(
-            s.roles.map((r) => (r.id === id ? { ...r, ...safeUpdates } : r)),
-          ),
-        }));
-        get().logAction("الحسابات", "تعديل دور", id);
-        syncToServer(get, () =>
-          roleApi.update(id, safeUpdates as Record<string, unknown>),
-        );
+      updateRole: async (id, updates) => {
+        const payload: Record<string, unknown> = {};
+        if (updates.name !== undefined) payload.name = updates.name.trim();
+        if (updates.permissions !== undefined)
+          payload.permissions = sanitizePermissionIds(updates.permissions);
+        const result = await accountsApi.updateRole(id, payload);
+        if (!result.ok) return { ok: false, error: result.error };
+        await get().refreshAccounts();
+        return {
+          ok: true,
+          updatedUsers: Number(result.data.updatedUserPermissions || 0),
+        };
       },
-      deleteRole: (id) => {
-        const state = get();
-        const role = state.roles.find((r) => r.id === id);
-        if (!role || role.isDefault) return false;
-        // Reassign users with this role to viewer
-        const users = state.users.map((u) =>
-          u.roleId === id
-            ? {
-                ...u,
-                roleId: "role_viewer",
-                role: "مشاهدة فقط",
-                permissions: [...ALL_VIEW_PERMISSION_IDS],
-              }
-            : u,
-        );
-        set((s) => ({ roles: s.roles.filter((r) => r.id !== id), users }));
-        get().logAction("الحسابات", "حذف دور", role.name);
-        // Sync updated users to DB
-        users
-          .filter(
-            (u) =>
-              u.roleId === "role_viewer" &&
-              state.users.find((su) => su.id === u.id && su.roleId === id),
-          )
-          .forEach((u) =>
-            syncToServer(get, () =>
-              userApi.update(u.id, {
-                roleId: "role_viewer",
-                permissions: u.permissions,
-              }),
-            ),
-          );
-        syncToServer(get, () => roleApi.remove(id));
-        return true;
+      deleteRole: async (id) => {
+        const result = await accountsApi.deleteRole(id);
+        if (!result.ok) return { ok: false, error: result.error };
+        await get().refreshAccounts();
+        return { ok: true };
       },
     }),
     {

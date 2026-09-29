@@ -24,6 +24,7 @@ import {
 import { baghdadTodayKey } from '@/lib/baghdad-time';
 import { Lock, UserPlus } from 'lucide-react';
 import { RowActionsMenu, type RowAction } from './row-actions-menu';
+import { validatePasswordPolicy } from '@/lib/password-policy';
 import './tp-list.css';
 
 // ─── Permission categories for grouping ──────────────────────────────────────
@@ -58,6 +59,32 @@ const PERMISSION_CATEGORIES: string[] = [
 ];
 
 const PERMISSION_IDS = new Set(PERMISSION_CATALOG.map(permission => permission.id));
+
+/** A sign-in code the server accepts: 10 characters, letters and digits. */
+function generatePasscode(): string {
+  const letters = 'abcdefghjkmnpqrstuvwxyz';
+  const digits = '23456789';
+  const pick = (set: string) => {
+    const values = new Uint32Array(1);
+    crypto.getRandomValues(values);
+    return set[values[0] % set.length];
+  };
+  const chars = [pick(letters), pick(digits)];
+  while (chars.length < 10) chars.push(pick(letters + digits));
+  for (let i = chars.length - 1; i > 0; i -= 1) {
+    const values = new Uint32Array(1);
+    crypto.getRandomValues(values);
+    const j = values[0] % (i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+}
+
+/** The same password rule the server applies, said before sending. */
+function passwordProblem(password: string): string {
+  const check = validatePasswordPolicy(password);
+  return check.ok ? '' : check.reason;
+}
 
 const ACCOUNT_DIALOG_CONTENT_CLASS = 'flex max-h-[calc(100dvh-1rem)] max-w-3xl flex-col overflow-hidden p-0 sm:max-h-[calc(100dvh-2rem)]';
 const ACCOUNT_DIALOG_HEADER_CLASS = 'shrink-0 px-4 pb-3 pt-4 sm:px-6 sm:pt-6';
@@ -200,21 +227,27 @@ function PermissionChecklist({
   perms,
   onChange,
   readOnly = false,
+  lockedPerms = [],
 }: {
   perms: string[];
   onChange: (permissions: string[]) => void;
   readOnly?: boolean;
+  /** Given by the account's role: shown ticked and locked, «من الدور». */
+  lockedPerms?: string[];
 }) {
   const catalogByCategory = useMemo(() => getPermissionsByCategory(PERMISSION_CATALOG), []);
+  const locked = useMemo(() => new Set(lockedPerms), [lockedPerms]);
+  const isOn = (permId: string) => locked.has(permId) || perms.includes(permId);
 
   const togglePermission = (permId: string) => {
-    if (readOnly) return;
+    if (readOnly || locked.has(permId)) return;
     onChange(perms.includes(permId) ? perms.filter(p => p !== permId) : [...perms, permId]);
   };
 
   const toggleCategory = (category: string) => {
     if (readOnly) return;
-    const catPerms = PERMISSION_CATALOG.filter(p => p.category === category).map(p => p.id);
+    const catPerms = PERMISSION_CATALOG.filter(p => p.category === category && !locked.has(p.id)).map(p => p.id);
+    if (!catPerms.length) return;
     const allChecked = catPerms.every(p => perms.includes(p));
     onChange(allChecked ? perms.filter(p => !catPerms.includes(p)) : [...new Set([...perms, ...catPerms])]);
   };
@@ -226,8 +259,8 @@ function PermissionChecklist({
           const catPerms = catalogByCategory.get(cat);
           if (!catPerms || catPerms.length === 0) return null;
           const catIds = catPerms.map(p => p.id);
-          const allChecked = catIds.every(p => perms.includes(p));
-          const someChecked = catIds.some(p => perms.includes(p));
+          const allChecked = catIds.every(p => isOn(p));
+          const someChecked = catIds.some(p => isOn(p));
 
           return (
             <div key={cat} className="space-y-2 rounded-xl border bg-background p-3">
@@ -242,7 +275,7 @@ function PermissionChecklist({
                   />
                   <Label htmlFor={`perm-cat-${cat}`} className="font-semibold text-sm">{cat}</Label>
                 </div>
-                <Badge variant="outline" className="text-[10px]">{catIds.filter(p => perms.includes(p)).length}/{catIds.length}</Badge>
+                <Badge variant="outline" className="text-[10px]">{catIds.filter(p => isOn(p)).length}/{catIds.length}</Badge>
               </div>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 {catPerms.map(perm => (
@@ -250,15 +283,16 @@ function PermissionChecklist({
                     <Checkbox
                       id={`perm-${perm.id}`}
                       name={`perm-${perm.id}`}
-                      checked={perms.includes(perm.id)}
+                      checked={isOn(perm.id)}
                       onCheckedChange={() => togglePermission(perm.id)}
-                      disabled={readOnly}
+                      disabled={readOnly || locked.has(perm.id)}
                       className="mt-1 h-3.5 w-3.5"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <Label htmlFor={`perm-${perm.id}`} className="text-xs font-semibold">{perm.label}</Label>
                         <Badge variant="secondary" className="text-[9px]">{PERMISSION_LEVEL_LABELS[perm.level]}</Badge>
+                        {locked.has(perm.id) ? <Badge variant="outline" className="text-[9px]">من الدور</Badge> : null}
                       </div>
                       <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{perm.description}</p>
                     </div>
@@ -368,6 +402,7 @@ function RolesTab() {
 
   const [editRoleId, setEditRoleId] = useState<string | null>(null);
   const [editRolePerms, setEditRolePerms] = useState<string[]>([]);
+  const [editRoleName, setEditRoleName] = useState('');
 
   const [deleteRoleDialog, setDeleteRoleDialog] = useState({ open: false, id: '', name: '' });
   const { locked: isAddingRole, runLocked: runAddRoleLocked } = useActionLock();
@@ -380,7 +415,11 @@ function RolesTab() {
       toast.error('يرجى إدخال اسم الدور');
       return;
     }
-    addRole({ name: newRoleName.trim(), isDefault: false, permissions: newRolePerms });
+    const result = await addRole({ name: newRoleName.trim(), permissions: newRolePerms });
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
     setShowAddRoleDialog(false);
     setNewRoleName('');
     setNewRolePerms([]);
@@ -391,29 +430,44 @@ function RolesTab() {
     const role = roles.find(r => r.id === roleId);
     if (!role) return;
     setEditRoleId(roleId);
+    setEditRoleName(role.name);
     setEditRolePerms(role.id === 'role_admin' ? PERMISSION_CATALOG.map(p => p.id) : [...role.permissions]);
   };
 
+  // The server applies a role change to its users itself (a permission
+  // taken off the role is taken off them too); nothing is rewritten here.
   const handleSaveRole = runSaveRoleLocked(async () => {
     if (!editRoleId) return;
-    updateRole(editRoleId, { permissions: editRolePerms });
-    // Also update all users with this role
-    const roleName = roles.find(r => r.id === editRoleId)?.name;
-    if (roleName) {
-      users.forEach(u => {
-        if (u.roleId === editRoleId) {
-          useTeacherStore.getState().updateUserPermissions(u.id, [...editRolePerms]);
-        }
-      });
+    const role = roles.find(r => r.id === editRoleId);
+    if (!editRoleName.trim()) {
+      toast.error('يرجى إدخال اسم الدور');
+      return;
+    }
+    const result = await updateRole(editRoleId, {
+      permissions: editRolePerms,
+      ...(role && editRoleName.trim() !== role.name ? { name: editRoleName.trim() } : {}),
+    });
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
     }
     setEditRoleId(null);
     setEditRolePerms([]);
-    toast.success('تم تحديث صلاحيات الدور');
+    const roleUsers = users.filter(u => u.roleId === editRoleId).length;
+    toast.success(
+      roleUsers
+        ? `تم تحديث الدور، وينطبق على ${roleUsers} حساب`
+        : 'تم تحديث الدور',
+    );
   });
 
   const handleDeleteRole = runDeleteRoleLocked(async () => {
-    const ok = deleteRole(deleteRoleDialog.id);
-    if (ok) { toast.success('تم حذف الدور'); } else { toast.error('لا يمكن حذف هذا الدور'); }
+    const result = await deleteRole(deleteRoleDialog.id);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success('تم حذف الدور');
     setDeleteRoleDialog({ open: false, id: '', name: '' });
   });
 
@@ -497,11 +551,17 @@ function RolesTab() {
             <DialogTitle>تعديل صلاحيات الدور - {roles.find(r => r.id === editRoleId)?.name}</DialogTitle>
             <DialogDescription>
               {roles.find(r => r.id === editRoleId)?.isDefault
-                ? 'هذا دور افتراضي. تعديل الصلاحيات سيؤثر على جميع المستخدمين المرتبطين.'
-                : 'حدد الصلاحيات المطلوبة لهذا الدور'}
+                ? 'دور افتراضي: التعديل ينطبق على كل الحسابات المرتبطة بيه.'
+                : 'التعديل ينطبق على كل الحسابات المرتبطة بهذا الدور.'}
             </DialogDescription>
           </DialogHeader>
           <div className={ACCOUNT_DIALOG_BODY_CLASS}>
+            {editRoleId !== 'role_admin' ? (
+              <div className="space-y-2">
+                <Label htmlFor="role-edit-name">اسم الدور</Label>
+                <Input id="role-edit-name" autoComplete="off" value={editRoleName} onChange={e => setEditRoleName(e.target.value)} />
+              </div>
+            ) : null}
             <PermissionChecklist perms={editRolePerms} onChange={setEditRolePerms} readOnly={editRoleId === 'role_admin'} />
           </div>
           <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
@@ -517,7 +577,7 @@ function RolesTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد حذف الدور</AlertDialogTitle>
             <AlertDialogDescription>
-              هل تريد حذف الدور &quot;{deleteRoleDialog.name}&quot;؟ سيتم نقل المستخدمين المرتبطين إلى دور &quot;مشاهدة فقط&quot;. لا يمكن حذف الأدوار الافتراضية.
+              ينحذف الدور &quot;{deleteRoleDialog.name}&quot; نهائياً. إذا بيه حسابات مرتبطة، انقلها لدور ثاني أولاً (من «تعديل» بكل حساب)؛ الحذف ما يصير وهي مرتبطة.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -535,17 +595,23 @@ function RolesTab() {
 // ─── Users Tab Component ─────────────────────────────────────────────────────
 
 function UsersTab() {
-  const { users, roles, addUser, updateUser, toggleUser, updateUserPermissions, deleteUser } = useTeacherStore();
+  const { users, roles, addUser, updateUser, toggleUser, updateUserPermissions, deleteUser, currentUserId } = useTeacherStore();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
+  // A new account starts on the least powerful role the database has.
+  const defaultNewUserRoleId =
+    roles.find(r => r.id === 'role_checker')?.id ||
+    roles.find(r => r.id === 'role_viewer')?.id ||
+    roles.find(r => r.id !== 'role_admin')?.id ||
+    '';
   const [newUser, setNewUser] = useState({
-    username: '', name: '', password: '', roleId: 'role_checker', permissions: [] as string[],
+    username: '', name: '', password: '', roleId: defaultNewUserRoleId, permissions: [] as string[],
   });
 
   const [editPermsId, setEditPermsId] = useState('');
   const [editPerms, setEditPerms] = useState<string[]>([]);
 
-  const [editUserDialog, setEditUserDialog] = useState({ open: false, id: '', name: '', password: '' });
+  const [editUserDialog, setEditUserDialog] = useState({ open: false, id: '', name: '', password: '', roleId: '' });
   const [deleteUserDialog, setDeleteUserDialog] = useState({ open: false, id: '', userName: '' });
   const [detailsUserId, setDetailsUserId] = useState('');
   const [userSearch, setUserSearch] = useState('');
@@ -554,56 +620,99 @@ function UsersTab() {
   const { locked: isSavingPermissions, runLocked: runSavePermissionsLocked } = useActionLock();
   const { locked: isDeletingUser, runLocked: runDeleteUserLocked } = useActionLock();
 
+  const rolePermissionsOf = (roleId: string) => roles.find(r => r.id === roleId)?.permissions || [];
+
   const handleAddUser = runAddUserLocked(async () => {
-    if (!newUser.username.trim() || !newUser.name.trim()) {
+    const username = newUser.username.trim();
+    const name = newUser.name.trim();
+    if (!username || !name) {
       toast.error('يرجى إدخال اسم المستخدم والاسم');
       return;
     }
-    if (!newUser.password.trim()) {
-      toast.error('يرجى إدخال رمز المرور');
+    const passwordError = passwordProblem(newUser.password.trim());
+    if (passwordError) {
+      toast.error(passwordError);
       return;
     }
-    if (users.some(u => u.username.trim().toLowerCase() === newUser.username.trim().toLowerCase())) {
+    if (users.some(u => u.username.trim().toLowerCase() === username.toLowerCase())) {
       toast.error('اسم المستخدم موجود مسبقاً');
       return;
     }
-    const role = roles.find(r => r.id === newUser.roleId);
-    const perms = newUser.permissions.length > 0 ? newUser.permissions : (role?.permissions || []);
-    addUser({
-      username: newUser.username.trim(),
-      name: newUser.name.trim(),
+    // The account's own permissions, on top of its role.
+    const rolePerms = rolePermissionsOf(newUser.roleId);
+    const result = await addUser({
+      username,
+      name,
       roleId: newUser.roleId,
-      role: role?.name || 'مشاهدة فقط',
-      permissions: perms,
+      permissions: newUser.permissions.filter(p => !rolePerms.includes(p)),
       password: newUser.password.trim(),
-      active: true,
     });
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
     setShowAddDialog(false);
-    setNewUser({ username: '', name: '', password: '', roleId: 'role_checker', permissions: [] });
-    toast.success('تمت إضافة المستخدم');
+    setNewUser({ username: '', name: '', password: '', roleId: defaultNewUserRoleId, permissions: [] });
+    toast.success(`تمت إضافة الحساب. رمز الدخول: ${newUser.password.trim()}`);
   });
 
   const openEditUserDialog = (userId: string) => {
     const user = users.find(u => u.id === userId);
     if (!user) return;
-    setEditUserDialog({ open: true, id: userId, name: user.name, password: '' });
+    setEditUserDialog({ open: true, id: userId, name: user.name, password: '', roleId: user.roleId });
   };
   const handleEditUserSave = runSaveUserLocked(async () => {
+    const user = users.find(u => u.id === editUserDialog.id);
+    if (!user) { toast.error('الحساب غير موجود. حدّث الصفحة.'); return; }
     if (!editUserDialog.name.trim()) { toast.error('يرجى إدخال الاسم'); return; }
-    const updates: { name: string; password?: string } = { name: editUserDialog.name.trim() };
-    if (editUserDialog.password.trim()) updates.password = editUserDialog.password.trim();
-    updateUser(editUserDialog.id, updates);
-    setEditUserDialog({ open: false, id: '', name: '', password: '' });
-    toast.success('تم تعديل المستخدم');
+    const password = editUserDialog.password.trim();
+    if (password) {
+      const passwordError = passwordProblem(password);
+      if (passwordError) { toast.error(passwordError); return; }
+    }
+    const updates: { name?: string; password?: string; roleId?: string; permissions?: string[] } = {};
+    if (editUserDialog.name.trim() !== user.name) updates.name = editUserDialog.name.trim();
+    if (password) updates.password = password;
+    if (editUserDialog.roleId && editUserDialog.roleId !== user.roleId) {
+      // New role: keep only what the account had on top of its old role.
+      const oldRolePerms = rolePermissionsOf(user.roleId);
+      updates.roleId = editUserDialog.roleId;
+      updates.permissions = (user.ownPermissions ?? user.permissions).filter(p => !oldRolePerms.includes(p));
+    }
+    if (!Object.keys(updates).length) {
+      setEditUserDialog({ open: false, id: '', name: '', password: '', roleId: '' });
+      return;
+    }
+    const result = await updateUser(editUserDialog.id, updates);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    setEditUserDialog({ open: false, id: '', name: '', password: '', roleId: '' });
+    toast.success(password ? `تم حفظ التعديل. رمز الدخول الجديد: ${password}` : 'تم حفظ التعديل');
   });
+
+  const handleToggleUser = async (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    const result = await toggleUser(userId);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(user?.active ? 'تم تعطيل الحساب' : 'تم تفعيل الحساب');
+  };
 
   const openDeleteUserDialog = (userId: string) => {
     const user = users.find(u => u.id === userId);
     setDeleteUserDialog({ open: true, id: userId, userName: user?.name || '' });
   };
   const handleDeleteUserConfirm = runDeleteUserLocked(async () => {
-    const ok = deleteUser(deleteUserDialog.id);
-    if (ok) { toast.success('تم حذف المستخدم'); } else { toast.error('لا يمكن حذف هذا المستخدم'); }
+    const result = await deleteUser(deleteUserDialog.id);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success('تم حذف الحساب');
     setDeleteUserDialog({ open: false, id: '', userName: '' });
   });
 
@@ -618,24 +727,28 @@ function UsersTab() {
   const handleSavePermissions = runSavePermissionsLocked(async () => {
     const editedUser = users.find(u => u.id === editPermsId);
     const isAdminUser = editedUser?.username.trim().toLowerCase() === 'admin' || editedUser?.roleId === 'role_admin';
-    updateUserPermissions(editPermsId, isAdminUser ? PERMISSION_CATALOG.map(p => p.id) : editPerms);
+    if (!editedUser || isAdminUser) {
+      setEditPermsId('');
+      setEditPerms([]);
+      return;
+    }
+    // Saved: only what the account has on top of its role.
+    const rolePerms = rolePermissionsOf(editedUser.roleId);
+    const result = await updateUserPermissions(editPermsId, editPerms.filter(p => !rolePerms.includes(p)));
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
     setEditPermsId('');
     setEditPerms([]);
-    toast.success(isAdminUser ? 'صلاحيات المدير كاملة دائماً' : 'تم تحديث الصلاحيات');
+    toast.success('تم حفظ الصلاحيات');
   });
 
-
   const handleRoleChange = (roleId: string) => {
-    const role = roles.find(r => r.id === roleId);
-    setNewUser(p => ({
-      ...p,
-      roleId,
-      permissions: [...(role?.permissions || [])],
-    }));
+    setNewUser(p => ({ ...p, roleId, permissions: [] }));
   };
 
   const getRoleName = (roleId: string) => roles.find(r => r.id === roleId)?.name || 'غير محدد';
-  const generatePasscode = () => String(Math.floor(100000 + Math.random() * 900000));
 
   const detailsUser = users.find(u => u.id === detailsUserId) || null;
   const detailsUserRole = detailsUser ? roles.find(r => r.id === detailsUser.roleId) : null;
@@ -670,7 +783,7 @@ function UsersTab() {
           />
         </div>
         <Button onClick={() => {
-          setNewUser({ username: '', name: '', password: generatePasscode(), roleId: 'role_checker', permissions: [] });
+          setNewUser({ username: '', name: '', password: generatePasscode(), roleId: defaultNewUserRoleId, permissions: [] });
           setShowAddDialog(true);
         }}>
           <UserPlus aria-hidden="true" />
@@ -696,10 +809,7 @@ function UsersTab() {
             menuActions.push({
               key: 'toggle',
               label: user.active ? 'تعطيل الحساب' : 'تفعيل الحساب',
-              onSelect: () => {
-                toggleUser(user.id);
-                toast.success(user.active ? 'تم تعطيل المستخدم' : 'تم تفعيل المستخدم');
-              },
+              onSelect: () => void handleToggleUser(user.id),
             });
           }
           if (!isAdminUser) {
@@ -841,7 +951,31 @@ function UsersTab() {
                 <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditUserDialog(prev => ({ ...prev, password: generatePasscode() }))}>توليد رمز</Button>
               </div>
               <Input id="user-edit-password" name="password" autoComplete="new-password" value={editUserDialog.password} onChange={e => setEditUserDialog(prev => ({ ...prev, password: e.target.value }))} placeholder="اتركه فارغاً للإبقاء على الرمز الحالي" />
+              <p className="text-xs text-muted-foreground">8 أحرف على الأقل، بيها حرف ورقم.</p>
             </div>
+            {(() => {
+              const editedUser = users.find(u => u.id === editUserDialog.id);
+              if (!editedUser) return null;
+              const isAdminUser = editedUser.username.trim().toLowerCase() === 'admin' || editedUser.roleId === 'role_admin';
+              if (isAdminUser) return <p className="text-xs text-muted-foreground">حساب المدير: دوره وصلاحياته ثابتة.</p>;
+              if (editedUser.id === currentUserId) return <p className="text-xs text-muted-foreground">ما تگدر تغيّر دور حسابك من نفس الجلسة.</p>;
+              return (
+                <div className="space-y-2">
+                  <Label htmlFor="user-edit-role">الدور</Label>
+                  <Select value={editUserDialog.roleId} onValueChange={roleId => setEditUserDialog(prev => ({ ...prev, roleId }))}>
+                    <SelectTrigger id="user-edit-role"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {roles.filter(role => role.id !== 'role_admin').map(role => (
+                        <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {editUserDialog.roleId !== editedUser.roleId ? (
+                    <p className="text-xs text-muted-foreground">يأخذ صلاحيات الدور الجديد، وتبقى صلاحياته الإضافية.</p>
+                  ) : null}
+                </div>
+              );
+            })()}
           </div>
           <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
             <Button variant="outline" onClick={() => setEditUserDialog(prev => ({ ...prev, open: false }))}>إلغاء</Button>
@@ -890,13 +1024,14 @@ function UsersTab() {
                 <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setNewUser(p => ({ ...p, password: generatePasscode() }))}>توليد رمز</Button>
               </div>
               <Input id="new-password" name="password" autoComplete="new-password" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="أدخل رمزاً أو اضغط توليد رمز" />
+              <p className="text-xs text-muted-foreground">8 أحرف على الأقل، بيها حرف ورقم. انسخه وسلّمه لصاحب الحساب.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-role">الدور</Label>
               <Select name="roleId" value={newUser.roleId} onValueChange={handleRoleChange}>
                 <SelectTrigger id="new-role"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {roles.map(role => (
+                  {roles.filter(role => role.id !== 'role_admin').map(role => (
                     <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -905,7 +1040,12 @@ function UsersTab() {
             <Separator />
             <div className="space-y-2">
               <span className="text-sm font-medium leading-none">الصلاحيات</span>
-              <PermissionChecklist perms={newUser.permissions} onChange={(permissions) => setNewUser(prev => ({ ...prev, permissions }))} />
+              <p className="text-xs text-muted-foreground">صلاحيات الدور مؤشّرة ومقفولة؛ أشّر على أي صلاحية إضافية تريدها لهذا الحساب.</p>
+              <PermissionChecklist
+                perms={newUser.permissions}
+                lockedPerms={rolePermissionsOf(newUser.roleId)}
+                onChange={(permissions) => setNewUser(prev => ({ ...prev, permissions }))}
+              />
             </div>
           </div>
           <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
@@ -920,12 +1060,13 @@ function UsersTab() {
         <DialogContent dir="rtl" className={ACCOUNT_DIALOG_CONTENT_CLASS}>
           <DialogHeader className={ACCOUNT_DIALOG_HEADER_CLASS}>
             <DialogTitle>تحديث الصلاحيات - {users.find(u => u.id === editPermsId)?.name}</DialogTitle>
-            <DialogDescription>فعّل الصلاحيات التي تريد السماح بها فقط، ثم اضغط حفظ لتطبيقها.</DialogDescription>
+            <DialogDescription>صلاحيات الدور مقفولة (تتغيّر من تبويب الأدوار أو بتغيير دور الحساب). أشّر على الصلاحيات الإضافية لهذا الحساب ثم احفظ.</DialogDescription>
           </DialogHeader>
           <div className={ACCOUNT_DIALOG_BODY_CLASS}>
             <PermissionChecklist
               perms={editPerms}
               onChange={setEditPerms}
+              lockedPerms={rolePermissionsOf(users.find(u => u.id === editPermsId)?.roleId || '')}
               readOnly={users.find(u => u.id === editPermsId)?.username.trim().toLowerCase() === 'admin' || users.find(u => u.id === editPermsId)?.roleId === 'role_admin'}
             />
           </div>
@@ -1519,6 +1660,11 @@ function BackupTab() {
 // ─── Main Accounts View ──────────────────────────────────────────────────────
 
 export function AccountsView() {
+  const refreshAccounts = useTeacherStore((state) => state.refreshAccounts);
+  // The page shows the accounts and roles as the database has them now.
+  useEffect(() => {
+    void refreshAccounts();
+  }, [refreshAccounts]);
   return (
     <div className="space-y-6 tp-accounts-page">
       <Tabs defaultValue="users" dir="rtl">

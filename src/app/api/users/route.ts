@@ -8,6 +8,7 @@ import { normalizePasswordForStorage } from '@/lib/passwords';
 import { validatePasswordPolicy } from '@/lib/password-policy';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { writeSecurityAudit } from '@/lib/security-audit';
+import { ensureDefaultRoles } from '@/lib/default-roles-server';
 
 const ADMIN_USERNAME = 'admin';
 const ADMIN_ROLE_ID = 'role_admin';
@@ -108,6 +109,7 @@ function validateSensitiveUserChanges(principal: AuthPrincipal, payload: Record<
 async function readAssignableRole(principal: AuthPrincipal, roleId: unknown) {
   const id = String(roleId ?? '').trim();
   if (!id) return { role: null, error: validationError('الدور مطلوب') };
+  await ensureDefaultRoles();
   const role = await db.role.findUnique({
     where: { id },
     select: { id: true, name: true, permissions: true },
@@ -233,8 +235,13 @@ export async function PUT(req: NextRequest) {
     const roleAssignment = data.roleId !== undefined ? await readAssignableRole(principal, data.roleId) : { role: null, error: null };
     if (roleAssignment.error) return roleAssignment.error;
 
-    const updateData: Record<string, unknown> = { ...data };
-    delete updateData.role;
+    // Only the account's own fields; anything else the screen sends (the
+    // role's name, timestamps, relations) is ignored instead of failing.
+    const updateData: Record<string, unknown> = {};
+    for (const key of ['name', 'username', 'roleId', 'permissions', 'active'] as const) {
+      if (data[key] !== undefined) updateData[key] = data[key];
+    }
+    if (updateData.active !== undefined) updateData.active = Boolean(updateData.active);
     if (isPrimaryAdminUser(existingUser)) {
       delete updateData.username;
       delete updateData.roleId;

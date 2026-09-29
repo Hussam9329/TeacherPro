@@ -6,6 +6,7 @@ import { requireAnyPermission, requirePermissionPrincipal, type AuthPrincipal } 
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { writeSecurityAudit } from '@/lib/security-audit';
+import { ensureDefaultRoles } from '@/lib/default-roles-server';
 
 const ADMIN_USERNAME = 'admin';
 const ADMIN_ROLE_ID = 'role_admin';
@@ -69,6 +70,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    await ensureDefaultRoles();
     const roles = await db.role.findMany({
       orderBy: { name: 'asc' },
       include: { users: { select: { id: true, name: true } } },
@@ -118,6 +120,7 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const { id, ...data } = body;
     if (!id) return validationError('تعذر تحديد الدور المطلوب');
+    await ensureDefaultRoles();
     const roleBeforeUpdate = await db.role.findUnique({ where: { id } });
     if (!roleBeforeUpdate) return validationError('الدور غير موجود', 404);
     const securityError = validateRoleSecurity(principal, { id, ...data }, roleBeforeUpdate);
@@ -128,17 +131,49 @@ export async function PUT(req: NextRequest) {
       data.name = String(data.name ?? '').trim();
     }
     if (data.permissions !== undefined) data.permissions = normalizePermissions(data.permissions);
-    const role = await db.role.update({ where: { id }, data });
-    const syncedUsers = data.name !== undefined
-      ? await db.appUser.updateMany({ where: { roleId: role.id }, data: { role: role.name } })
-      : { count: 0 };
+    const roleData: Record<string, unknown> = {};
+    for (const key of ['name', 'permissions'] as const) {
+      if (data[key] !== undefined) roleData[key] = data[key];
+    }
+    // A user's permissions are the role's plus their own. A permission taken
+    // off the role is also taken off its users' own lists, or they would keep
+    // it and the edit would look saved but change nothing.
+    const removedPermissions = data.permissions !== undefined
+      ? parsePermissionIds(roleBeforeUpdate.permissions).filter(
+          (permission) => !parsePermissionIds(data.permissions).includes(permission),
+        )
+      : [];
+    const { role, syncedUsers, updatedUserPermissions } = await db.$transaction(async (tx) => {
+      const role = await tx.role.update({ where: { id }, data: roleData });
+      const syncedUsers = roleData.name !== undefined
+        ? await tx.appUser.updateMany({ where: { roleId: role.id }, data: { role: role.name } })
+        : { count: 0 };
+      let updatedUserPermissions = 0;
+      if (removedPermissions.length) {
+        const roleUsers = await tx.appUser.findMany({
+          where: { roleId: role.id },
+          select: { id: true, username: true, permissions: true },
+        });
+        for (const user of roleUsers) {
+          if (user.username.trim().toLowerCase() === ADMIN_USERNAME) continue;
+          const own = parsePermissionIds(user.permissions);
+          const kept = own.filter((permission) => !removedPermissions.includes(permission));
+          if (kept.length === own.length) continue;
+          await tx.appUser.update({ where: { id: user.id }, data: { permissions: JSON.stringify(kept) } });
+          updatedUserPermissions += 1;
+        }
+      }
+      return { role, syncedUsers, updatedUserPermissions };
+    });
     await writeSecurityAudit(principal, 'تعديل دور', {
       roleId: role.id,
       before: roleBeforeUpdate,
       after: role,
       syncedUsers: syncedUsers.count,
+      removedPermissions,
+      updatedUserPermissions,
     });
-    return NextResponse.json({ role, syncedUsers: syncedUsers.count });
+    return NextResponse.json({ role, syncedUsers: syncedUsers.count, updatedUserPermissions });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحديث الدور حالياً.');
   }
