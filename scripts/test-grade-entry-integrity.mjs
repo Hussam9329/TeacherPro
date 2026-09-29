@@ -300,7 +300,7 @@ must(
 
 must(
   profileDialog.includes('tab === "timeline"') &&
-    profileDialog.includes("اللوغ الكامل للطالب") &&
+    profileDialog.includes('{ tab: "timeline", label: "السجل"') &&
     profileDialog.includes("fullStudentLog"),
   "ملف الطالب يحتوي السجل الزمني الكامل داخل تبويب مستقل",
   "السجل الزمني الكامل يجب أن يكون مساراً مستقلاً داخل ملف الطالب.",

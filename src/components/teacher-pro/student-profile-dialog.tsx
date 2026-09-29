@@ -214,18 +214,18 @@ type StudentLogRow = {
   tone: "default" | "danger" | "success" | "secondary" | "info";
 };
 
+/** The Baghdad calendar day of a stored date or timestamp, e.g. 2026/9/27. */
+function profileDay(value?: string | null): string {
+  if (!value) return "—";
+  return formatAppDate(baghdadDateKey(value) || compactDate(value) || value);
+}
+
 function opportunityActionTone(action: string): StudentActionRow["tone"] {
   if (action.includes("فصل") || action === "خصم" || action === "خصم تلقائي") return "danger";
   if (action.includes("إعادة تفعيل") || action.includes("فرصة") || action === "إضافة") return "success";
   return "default";
 }
 
-function logToneVariant(tone: StudentLogRow["tone"]): "default" | "destructive" | "secondary" | "outline" {
-  if (tone === "danger") return "destructive";
-  if (tone === "success") return "default";
-  if (tone === "info") return "outline";
-  return "secondary";
-}
 
 function gradeLogDetails(grade: Grade, exam?: Exam) {
   const examName = exam?.name || "امتحان محذوف";
@@ -392,7 +392,7 @@ export function StudentProfileDialog({
   const setSection = useTeacherStore((state) => state.setSection);
   const canAccessSection = useTeacherStore((state) => state.canAccess);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
-  const [tab, setTab] = useState<StudentFileTab>("details");
+  const [tab, setTab] = useState<StudentFileTab>("timeline");
   const [gradeViewFilter, setGradeViewFilter] = useState<StudentProfileGradeFilter>("all");
   const [profileAnchor, setProfileAnchor] = useState<StudentProfileAnchor>(null);
   const [databaseStats, setDatabaseStats] = useState<StudentProfileStatsResponse | null>(null);
@@ -416,6 +416,9 @@ export function StudentProfileDialog({
   const [databaseStatsSnapshotVersion, setDatabaseStatsSnapshotVersion] = useState("");
   const [databaseProfileSnapshotVersion, setDatabaseProfileSnapshotVersion] = useState("");
   const [timelineVisibleCount, setTimelineVisibleCount] = useState(100);
+  // The technical system log repeats what the timeline already says; it
+  // stays one tap away instead of mixed in.
+  const [showSystemLog, setShowSystemLog] = useState(false);
   const [manualRefreshKey, setManualRefreshKey] = useState(0);
   const [profileNavigationVersion, setProfileNavigationVersion] = useState(0);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
@@ -514,10 +517,6 @@ export function StudentProfileDialog({
     return [...source].sort((a, b) => String(b.time || "").localeCompare(String(a.time || "")));
   }, [hasAuthoritativeProfile, databaseLogs, student]);
 
-  const studentActionNotes = useMemo(
-    () => allStudentNotes.filter((note) => note.kind === "إجراء"),
-    [allStudentNotes],
-  );
   const studentGeneralNotes = useMemo(
     () => allStudentNotes.filter((note) => !isRetiredFollowupNote(note) && note.kind !== "إجراء"),
     [allStudentNotes],
@@ -539,28 +538,6 @@ export function StudentProfileDialog({
     () => buildDeductionLogByExamId(studentOpportunities),
     [studentOpportunities],
   );
-
-  const studentActions = useMemo<StudentActionRow[]>(() => {
-    if (!effectiveStudent) return [];
-    const noteRows = studentActionNotes.map((note) => ({
-      id: `note-${note.id}`,
-      date: note.date,
-      title: note.kind || "إجراء",
-      details: note.text,
-      tone: note.text.includes("فصل") ? "danger" as const : note.text.includes("إعادة تفعيل") ? "success" as const : "secondary" as const,
-    }));
-    const opportunityRows = studentOpportunities.map((log) => {
-      const trace = opportunityTraceByLogId.get(log.id);
-      return {
-        id: `opp-${log.id}`,
-        date: log.date,
-        title: `${displayOpportunityAction(log.action)}${log.amount ? ` ${log.amount}` : ""}`,
-        details: trace?.details || displayOpportunityReason(log.reason) || "—",
-        tone: opportunityActionTone(log.action),
-      };
-    });
-    return [...noteRows, ...opportunityRows].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-  }, [effectiveStudent, studentActionNotes, studentOpportunities, opportunityTraceByLogId]);
 
   const fullStudentLog = useMemo<StudentLogRow[]>(() => {
     if (!effectiveStudent) return [];
@@ -614,14 +591,19 @@ export function StudentProfileDialog({
       })),
       ...allStudentNotes
         .filter((note) => !isRetiredFollowupNote(note))
-        .map((note) => ({
-          id: `note-${note.id}`,
-          date: note.date,
-          source: "الملاحظات",
-          title: note.kind || "ملاحظة",
-          details: note.text,
-          tone: note.kind === "إجراء" ? "secondary" as const : "info" as const,
-        })),
+        .map((note) => {
+          // «فصل الطالب: غياب متكرر…» reads as its own title and reason.
+          const [head, ...rest] = note.kind === "إجراء" ? note.text.split(":") : [];
+          const titled = note.kind === "إجراء" && head && rest.length && head.length <= 40;
+          return {
+            id: `note-${note.id}`,
+            date: note.date,
+            source: note.kind === "إجراء" ? "قرار" : "الملاحظات",
+            title: titled ? head.trim() : note.kind || "ملاحظة",
+            details: titled ? rest.join(":").trim() : note.text,
+            tone: note.kind === "إجراء" ? (note.text.includes("فصل") ? "danger" as const : "secondary" as const) : "info" as const,
+          };
+        }),
       ...profileSystemLogs.map((log) => {
         const display = formatAuditLogDisplay(log, auditLabels);
         return {
@@ -640,9 +622,17 @@ export function StudentProfileDialog({
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   }, [effectiveStudent, profileExams, profileExamById, studentGrades, studentOpportunities, studentLeavesForProfile, studentCallsForProfile, allStudentNotes, profileSystemLogs, courseName, opportunityTraceByLogId]);
 
+  const systemLogCount = useMemo(
+    () => fullStudentLog.filter((row) => row.id.startsWith("sys-")).length,
+    [fullStudentLog],
+  );
+  const timelineRows = useMemo(
+    () => (showSystemLog ? fullStudentLog : fullStudentLog.filter((row) => !row.id.startsWith("sys-"))),
+    [fullStudentLog, showSystemLog],
+  );
   const visibleStudentLog = useMemo(
-    () => fullStudentLog.slice(0, timelineVisibleCount),
-    [fullStudentLog, timelineVisibleCount],
+    () => timelineRows.slice(0, timelineVisibleCount),
+    [timelineRows, timelineVisibleCount],
   );
 
   useEffect(() => {
@@ -651,7 +641,8 @@ export function StudentProfileDialog({
   }, [open, student?.id]);
 
   useEffect(() => {
-    setTab("details");
+    setTab("timeline");
+    setShowSystemLog(false);
     setGradeViewFilter("all");
     setProfileAnchor(null);
     setProfileNavigationVersion(0);
@@ -888,8 +879,6 @@ export function StudentProfileDialog({
   const graceGradeCount = profileStatValue(statsForStudent?.graceGrades);
   const noDiscountGradeCount = profileStatValue(statsForStudent?.noDiscountGrades);
   const examCount = profileStatValue(statsForStudent?.exams);
-  const deductedCount = profileStatValue(statsForStudent?.deductedMovements);
-  const addedCount = profileStatValue(statsForStudent?.addedMovements);
   const callsCount = profileStatValue(statsForStudent?.calls);
   const leavesCount = profileStatValue(statsForStudent?.leaves);
   const notesCount = profileStatValue(statsForStudent?.notes);
@@ -976,15 +965,12 @@ export function StudentProfileDialog({
   const visibleCardKeys = new Set(cards.map((card) => card.key));
   // A few tabs, each with its count; the finer filters live inside the tab.
   type ProfileTabItem = { tab: StudentFileTab; label: string; value?: string | number; card?: StudentProfileCardKey };
+  // Four tabs: what happened, the grades, the follow-up, the data.
   const allProfileTabs: ProfileTabItem[] = [
-    { tab: "details", label: "نظرة عامة" },
-    { tab: "grades", label: "الدرجات", value: statValue("grades"), card: "grades" },
-    { tab: "exams", label: "الامتحانات", value: statValue("exams"), card: "exams" },
-    { tab: "opportunities", label: "الفرص", value: statValue("opportunities"), card: "opportunities" },
+    { tab: "timeline", label: "السجل", card: "timeline" },
+    { tab: "grades", label: "الدرجات", card: "grades" },
     { tab: "followup", label: "المتابعة", value: followUpTotal, card: "calls" },
-    { tab: "actions", label: "الفصل والإرجاع", value: statValue("status-actions"), card: "status-actions" },
-    { tab: "archives", label: "الملفات السابقة", value: statValue("archives"), card: "archives" },
-    { tab: "timeline", label: "السجل الزمني", value: statValue("timeline"), card: "timeline" },
+    { tab: "details", label: "البيانات" },
   ];
   const profileTabs = allProfileTabs.filter((item) => !item.card || visibleCardKeys.has(item.card));
   // «الوضع هسه»: since when the student is dismissed and what this chapter took.
@@ -1082,7 +1068,9 @@ export function StudentProfileDialog({
             <div className="min-w-0">
               <h2 id="student-profile-title" className="font-black">{profileStudent.name}</h2>
               <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
-                <Badge variant={profileStudent.status === "نشط" ? "success" : profileStudent.status === "مفصول" ? "destructive" : "secondary"}>{profileStudent.status}</Badge>
+                {hasAuthoritativeProfile ? (
+                  <Badge variant={profileStudent.status === "نشط" ? "success" : profileStudent.status === "مفصول" ? "destructive" : "secondary"}>{profileStudent.status}</Badge>
+                ) : null}
                 <Badge variant="outline" className="max-w-full whitespace-normal [overflow-wrap:anywhere]">{profileStudent.code}</Badge>
               </div>
               <p id="student-profile-description" className="sr-only">ملف الطالب: المعلومات والإحصائيات والمتابعة</p>
@@ -1134,46 +1122,68 @@ export function StudentProfileDialog({
                   </p>
                   {profileStudent.dismissalNotes && <p className="mt-1 break-words text-muted-foreground">ملاحظة: {profileStudent.dismissalNotes}</p>}
                 </>
+              ) : hasAuthoritativeProfile ? (
+                <p className="mt-1 text-base font-black">
+                  {profileStudent.status === "نشط"
+                    ? `نشط${activeChapterText && activeChapterText !== "لا يوجد فصل نشط" ? ` · ${activeChapterText}` : ""}`
+                    : profileStudent.status}
+                </p>
               ) : (
-                <p className="mt-1 text-base font-black">{profileStudent.status}</p>
+                <p className="mt-1 text-sm text-muted-foreground">جاري قراءة ملف الطالب من النظام…</p>
               )}
-              <p className="mt-1 font-bold">
-                الفرص: <span dir="ltr">{opportunityText}</span>
-                {currentChapterDeducted > 0 ? (
-                  <span className="font-medium text-muted-foreground"> · انخصمت {currentChapterDeducted} بهذا الفصل</span>
-                ) : null}
-              </p>
+              {currentChapterDeducted > 0 ? (
+                <p className="mt-1 font-bold">انخصمت {currentChapterDeducted} {currentChapterDeducted === 1 ? "فرصة" : "فرص"} بهذا الفصل</p>
+              ) : null}
               {currentGraceText && <p className="mt-1 text-xs leading-6 text-muted-foreground">{currentGraceText}</p>}
-              {isDismissedNow && (canReturnStudent || profileTabs.some((item) => item.tab === "actions")) ? (
+              {isDismissedNow && (canReturnStudent || profileTabs.some((item) => item.tab === "timeline")) ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {canReturnStudent ? (
                     <Button type="button" size="sm" onClick={openReturnStudent}>
                       إرجاع الطالب…
                     </Button>
                   ) : null}
-                  {profileTabs.some((item) => item.tab === "actions") ? (
-                    <Button type="button" variant="outline" size="sm" onClick={() => openProfileTab("actions")}>
-                      سجل الفصل والإرجاع
+                  {profileTabs.some((item) => item.tab === "timeline") ? (
+                    <Button type="button" variant="outline" size="sm" onClick={() => openProfileTab("timeline")}>
+                      شنو صار بالتسلسل
                     </Button>
                   ) : null}
                 </div>
               ) : null}
             </div>
 
-            <nav className="tp-student-profile__nav" aria-label="أقسام ملف الطالب">
+            {/* Four figures from the database profile; «…» until it answers. */}
+            <dl className="tp-student-profile__figures" aria-label="أرقام الطالب">
+              <div>
+                <dt>الفرص</dt>
+                <dd dir="ltr">{hasAuthoritativeProfile ? opportunityText : "…"}</dd>
+              </div>
+              <div>
+                <dt>الامتحانات</dt>
+                <dd>{statValue("exams")}</dd>
+              </div>
+              <div>
+                <dt>الغيابات</dt>
+                <dd>{statValue("absences")}</dd>
+              </div>
+              <div>
+                <dt>المكالمات</dt>
+                <dd>{callsCount}</dd>
+              </div>
+            </dl>
+
+            <nav className="tp-student-profile__nav tp-student-profile__nav--tabs" role="tablist" aria-label="أقسام ملف الطالب">
               {profileTabs.map((item) => (
                 <button
                   key={item.tab}
                   type="button"
+                  role="tab"
                   onClick={() => (item.tab === "details" ? showOverview() : openProfileTab(item.tab))}
+                  aria-selected={tab === item.tab}
                   aria-pressed={tab === item.tab}
                   aria-controls="student-profile-panel"
-                  className={`tp-student-profile__stat ${
-                    tab === item.tab ? "border-primary/50 bg-primary/10 text-primary" : "border-border bg-card hover:border-primary/35 hover:bg-primary/5"
-                  }`}
+                  className="tp-student-profile__stat"
                 >
                   <span className="tp-student-profile__stat-label">{item.label}</span>
-                  {item.value !== undefined ? <span dir="ltr" className="tp-student-profile__stat-value">{item.value}</span> : null}
                 </button>
               ))}
             </nav>
@@ -1230,60 +1240,33 @@ export function StudentProfileDialog({
                   </div>
                 </div>
 
-                {/* Current chapter deductions only; complete historical
-                    movements remain available in the opportunities tab. */}
-                {(() => {
-                  const deductionLogs = studentOpportunities.filter((log) => {
-                    const action = String(log.action || "");
-                    return (action === "خصم" || action === "خصم تلقائي" || action === "خصم يدوي") &&
-                      isCurrentChapterOpportunityLog(log, profileStudent, log.examId ? profileExamById.get(log.examId) : undefined);
-                  });
-                  if (deductionLogs.length === 0) return null;
-                  return (
-                    <div className="rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-4 text-sm sm:rounded-3xl">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="font-black text-danger">خصومات الفصل الحالي ({deductionLogs.length})</p>
-                      </div>
-                      <Button variant="link" size="sm" className="mt-1 h-auto px-0" onClick={() => setTab("opportunities")}>
-                        عرض سجل الفرص الكامل والفصول السابقة
-                      </Button>
-                      <div className="mt-3 space-y-2">
-                        {deductionLogs.map((log) => {
-                          const exam = log.examId ? profileExamById.get(log.examId) : undefined;
-                          const grade = exam ? studentGrades.find((g) => g.examId === exam.id) : undefined;
-                          const reason = humanizeProfileText(log.reason) || "خصم";
-                          const isAuto = String(log.action || "").includes("تلقائي");
-                          return (
-                            <div key={log.id} className="rounded-xl border border-destructive/20 bg-background/60 p-3">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge variant="destructive">خصم {log.amount} فرصة</Badge>
-                                <Badge variant={isAuto ? "outline" : "secondary"} className="text-[10px]">{isAuto ? "تلقائي" : "يدوي"}</Badge>
-                                <span className="text-xs text-muted-foreground">{formatAppDate(log.date)}</span>
-                              </div>
-                              <p className="mt-2 break-words font-bold">
-                                {exam?.name || (log.examId ? "امتحان محذوف" : "بدون امتحان مرتبط")}
-                              </p>
-                              <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                                {exam && (
-                                  <span>تاريخ الامتحان: {formatAppDate(exam.date)}</span>
-                                )}
-                                {grade && exam && (
-                                  <span>درجة الطالب: {formatGradeScore(grade, exam, "—")} من {exam.fullMark}</span>
-                                )}
-                                {exam && (
-                                  <span>حد الخصم: {exam.discountMark}</span>
-                                )}
-                              </div>
-                              <p className="mt-2 break-words text-xs leading-6 text-muted-foreground">
-                                {reason}
-                              </p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })()}
+                <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-base font-black">حركات الفرص</h4>
+                    <span className="text-xs text-muted-foreground">الفرص الآن: <b dir="ltr">{opportunityText}</b></span>
+                  </div>
+                  <div className="space-y-2">
+                    {opportunityTraceRows.length === 0 ? (
+                      <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="ما صارت حركة على فرصه" />
+                    ) : (
+                      [...opportunityTraceRows].reverse().map((row) => (
+                        <div key={row.log.id} className="grid min-w-0 gap-1.5 rounded-xl bg-muted/45 px-3 py-2 text-sm sm:grid-cols-[6.5rem_auto_minmax(0,1fr)] sm:items-center">
+                          <span className="text-xs text-muted-foreground">{profileDay(row.log.date)}</span>
+                          <Badge className="w-fit" variant={row.log.action === "خصم" || row.log.action === "خصم تلقائي" || row.log.action === "خصم يدوي" ? "destructive" : "default"}>
+                            {displayOpportunityAction(row.log.action)} {row.log.amount}
+                          </Badge>
+                          <span className="min-w-0 break-words text-muted-foreground">{row.details}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {visibleCardKeys.has("archives") && databaseEnrollmentArchives.length > 0 ? (
+                  <Button type="button" variant="outline" onClick={() => openProfileTab("archives")}>
+                    الملفات السابقة ({databaseEnrollmentArchives.length})
+                  </Button>
+                ) : null}
               </div>
             )}
 
@@ -1323,55 +1306,11 @@ export function StudentProfileDialog({
                             </Badge>
                           )}
                           <Badge className="w-fit" variant={withinGrace || withoutDiscount ? "outline" : grade.status === "درجة" ? "default" : grade.status === "غائب" ? "destructive" : grade.status === "مجاز" ? "warning" : "secondary"}>{profileGradeStatus(grade.status)}</Badge>
-                          {opportunityText !== "0/0" && <Badge variant="outline" className="text-[10px]">فرص: {opportunityText}</Badge>}
                         </div>
                         <span className="font-black">{formatScore(grade, exam)}</span>
                       </div>
                     );
                   })}
-                </div>
-              </div>
-            )}
-
-            {tab === "exams" && (
-              <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                <h4 className="mb-4 text-base font-black sm:text-lg">امتحانات الطالب</h4>
-                <div className="grid gap-3 lg:grid-cols-2">
-                  {studentGrades.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText={gradesEmptyMessage} /> : studentGrades.map((grade) => {
-                    const exam = profileExamById.get(grade.examId);
-                    if (!exam) return null;
-                    const impactKind = classifyGradeAcademicImpact(grade, exam, {
-                      student: profileStudent,
-                      leaves: studentLeavesForProfile,
-                      opportunityLogs: studentOpportunities,
-                      chapterId: profileStudent.activeChapter?.id,
-                    });
-                    const withinGrace = impactKind === "grace-period";
-                    const withoutDiscount = Boolean(
-                      exam.noDiscount &&
-                        ["no-discount-protected", "passed", "full-mark"].includes(impactKind),
-                    );
-                    const deductionLog = deductionLogByExamId.get(exam.id);
-                    return (
-                      <div key={grade.id} className="min-w-0 rounded-2xl border bg-background/60 p-4">
-                        <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><div className="flex flex-wrap gap-1">{withinGrace && <Badge variant="warning">{GRACE_PERIOD_EXCUSE_LABEL}</Badge>}{!withinGrace && withoutDiscount && <Badge variant="info">بدون خصم</Badge>}{deductionLog && <Badge variant="destructive" title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>خصم {deductionLog.amount} فرصة</Badge>}<Badge variant={grade.status === "مجاز" ? "warning" : undefined}>{profileGradeStatus(grade.status)}</Badge></div></div>
-                        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{formatGradeScore(grade, exam, "—")}</b><p>درجة الطالب</p></div></div>
-                        {grade.notes ? <div className="mt-3"><GradeNoteBanner notes={grade.notes} /></div> : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {tab === "opportunities" && (
-              <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                <h4 className="mb-4 text-base font-black sm:text-lg">سجل الفرص</h4>
-                <div className="mb-4 grid gap-2 sm:grid-cols-3 sm:gap-3"><div className="rounded-2xl bg-primary/10 p-3 text-center"><p className="text-xl font-black text-primary sm:text-2xl">{opportunityText}</p><p className="text-xs text-muted-foreground">الفرص</p></div><div className="rounded-2xl bg-danger-soft p-3 text-center"><p className="text-xl font-black text-danger sm:text-2xl">{deductedCount}</p><p className="text-xs text-muted-foreground">حركات خصم</p></div><div className="rounded-2xl bg-success-soft p-3 text-center"><p className="text-xl font-black text-success sm:text-2xl">{addedCount}</p><p className="text-xs text-muted-foreground">حركات إضافة/تعديل</p></div></div>
-                <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                  {opportunityTraceRows.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="لا توجد حركات فرص" /> : [...opportunityTraceRows].reverse().map((row) => (
-                    <div key={row.log.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-center"><span>{formatAppDate(row.log.date)}</span><Badge className="w-fit" variant={row.log.action === "خصم" || row.log.action === "خصم تلقائي" ? "destructive" : "default"}>{displayOpportunityAction(row.log.action)} {row.log.amount}</Badge><span className="break-words text-muted-foreground">{row.details}</span></div>
-                  ))}
                 </div>
               </div>
             )}
@@ -1447,23 +1386,9 @@ export function StudentProfileDialog({
               </div>
             )}
 
-            {tab === "actions" && (
-              <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                <h4 className="mb-4 text-base font-black sm:text-lg">إجراءات ملف الطالب</h4>
-                <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
-                  {studentActions.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="لا توجد إجراءات مسجلة لهذا الطالب" /> : studentActions.map((row) => (
-                    <div key={row.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-center">
-                      <span className="font-bold text-muted-foreground">{formatAppDate(row.date)}</span>
-                      <Badge className="w-fit" variant={row.tone === "danger" ? "destructive" : row.tone === "secondary" ? "secondary" : "default"}>{row.title}</Badge>
-                      <span className="break-words text-muted-foreground">{row.details}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {tab === "archives" && (
               <div className="space-y-4">
+                <Button type="button" variant="ghost" size="sm" onClick={showOverview}>رجوع للبيانات</Button>
                 <div className="rounded-2xl border border-info-line border-s-4 border-s-info-vivid bg-info-soft p-4 text-sm shadow-sm sm:rounded-3xl sm:p-5">
                   <h4 className="font-black text-info">الملفات السابقة — للقراءة فقط</h4>
                   <p className="mt-1 leading-6 text-muted-foreground">
@@ -1611,34 +1536,55 @@ export function StudentProfileDialog({
             )}
 
             {tab === "timeline" && (
-            <div className="rounded-2xl border bg-card/90 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h4 className="text-base font-black sm:text-lg">اللوغ الكامل للطالب</h4>
-                </div>
-                <Badge variant="outline">{fullStudentLog.length} سجل</Badge>
-              </div>
-              <div className="max-h-[32rem] space-y-2 overflow-y-auto pr-1">
-                {fullStudentLog.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="لا يوجد لوغ لهذا الطالب" /> : visibleStudentLog.map((row) => (
-                  <div key={row.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/50 p-3 text-sm lg:grid-cols-[8rem_7rem_9rem_minmax(0,1fr)] lg:items-start">
-                    <span className="font-bold text-muted-foreground">{formatAppDate(compactDate(row.date) || row.date)}</span>
-                    <Badge className="w-fit" variant={logToneVariant(row.tone)}>{row.source}</Badge>
-                    <span className="font-black">{row.title}</span>
-                    <span className="min-w-0 break-words text-muted-foreground">{row.details}</span>
-                  </div>
-                ))}
-              </div>
-              {visibleStudentLog.length < fullStudentLog.length && (
-                <button
-                  type="button"
-                  onClick={() => setTimelineVisibleCount((value) => value + 100)}
-                  className="mx-auto mt-4 block min-h-11 max-w-full touch-manipulation rounded-xl border px-4 py-2 text-sm font-black text-primary [overflow-wrap:anywhere] hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                >
-                  عرض المزيد ({fullStudentLog.length - visibleStudentLog.length} متبقٍ)
-                </button>
+            <div className="tp-profile-timeline">
+              {timelineRows.length === 0 ? (
+                <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="ما صار شي لهذا الطالب بعد" />
+              ) : (
+                <ol className="tp-profile-timeline__list">
+                  {visibleStudentLog.map((row, index) => {
+                    const day = profileDay(row.date);
+                    const previous = index > 0 ? visibleStudentLog[index - 1] : null;
+                    const newDay = !previous || profileDay(previous.date) !== day;
+                    return (
+                      <li key={row.id} className="tp-profile-timeline__row" data-tone={row.tone}>
+                        {newDay ? <p className="tp-profile-timeline__day">{day}</p> : null}
+                        <div className="tp-profile-timeline__event">
+                          <span className="tp-profile-timeline__dot" aria-hidden="true" />
+                          <div className="min-w-0">
+                            <p className="tp-profile-timeline__title">
+                              <span className="tp-profile-timeline__source">{row.source}</span>
+                              {row.title}
+                            </p>
+                            {row.details ? <p className="tp-profile-timeline__details">{row.details}</p> : null}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
               )}
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {visibleStudentLog.length < timelineRows.length && (
+                  <button
+                    type="button"
+                    onClick={() => setTimelineVisibleCount((value) => value + 100)}
+                    className="min-h-11 max-w-full touch-manipulation rounded-xl border px-4 py-2 text-sm font-black text-primary [overflow-wrap:anywhere] hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    عرض الأقدم ({timelineRows.length - visibleStudentLog.length})
+                  </button>
+                )}
+                {systemLogCount > 0 && (
+                  <button
+                    type="button"
+                    aria-pressed={showSystemLog}
+                    onClick={() => setShowSystemLog((value) => !value)}
+                    className="min-h-11 max-w-full touch-manipulation rounded-xl px-3 py-2 text-xs font-bold text-muted-foreground hover:bg-muted"
+                  >
+                    {showSystemLog ? "إخفاء سجل النظام التقني" : `إظهار سجل النظام التقني (${systemLogCount})`}
+                  </button>
+                )}
+              </div>
             </div>
-
             )}
             </div>
           </div>
