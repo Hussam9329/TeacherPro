@@ -9,7 +9,7 @@ import type { ReportGradePresentation } from "@/lib/student-report-presentation"
 import type { GracePeriodRange } from "@/lib/grace-periods";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
-import { routeErrorResponse } from "@/lib/route-helpers";
+import { normalizeArabicText, routeErrorResponse } from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import {
@@ -370,9 +370,10 @@ function gradeMatchesStatusFilter(
 
 function includesSearch(query: string, values: Array<unknown>): boolean {
   // One search box: every word must appear in one of the student's fields.
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  // Both sides are normalized like سجل الطلاب (ة/ه، أ/إ/آ/ا، ى/ي، التشكيل).
+  const words = normalizeArabicText(query).split(" ").filter(Boolean);
   if (!words.length) return true;
-  const haystack = values.map((value) => String(value ?? "").toLowerCase());
+  const haystack = values.map((value) => normalizeArabicText(value));
   return words.every((word) => haystack.some((value) => value.includes(word)));
 }
 

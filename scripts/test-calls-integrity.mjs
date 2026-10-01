@@ -377,6 +377,9 @@ assert(
   'أزرار حالة التواصل تعرض أعدادها محسوبة بكل الفلاتر عدا فلتر التواصل نفسه',
 );
 assert(
+  [candidates, stats].every((source) =>
+    source.includes('const words = normalizeArabicText(query).split(" ").filter(Boolean);') &&
+    source.includes('const haystack = values.map((value) => normalizeArabicText(value));')) &&
   candidates.includes('words.every((word) => haystack.some((value) => value.includes(word)))') &&
     stats.includes('words.every((word) => haystack.some((value) => value.includes(word)))') &&
     !followUp.includes('بحث داخل الفرز'),
