@@ -468,7 +468,7 @@ assert(
   const courseExams = read('src/app/api/student-calls/course-exams/route.ts');
   assert(
     catalog.includes('id: "role_caller",') &&
-      catalog.includes('permissions: ["system.dashboard", "follow-up.calls.view", "follow-up.calls.manage"],') &&
+      catalog.includes('permissions: ["system.dashboard", "follow-up.calls.view", "follow-up.calls.manage", "students.registry.view"],') &&
       [candidates, stats, courseExams, callsRoute].every((source) =>
         source.includes('await requireAnyPermission(req, CALLS_VIEW_PERMISSIONS);') &&
         !source.includes('requirePermission(req, "follow-up.view")')) &&
@@ -480,6 +480,24 @@ assert(
     followUp.includes('<h3 id="tp-call-student" className="tp-modal__title">معلومات الطالب</h3>') &&
       followUp.includes('["هاتف ولي الأمر", student.parentPhone || "لا يوجد"],'),
     'نافذة التفاصيل في المكالمات تعرض معلومات الطالب كاملة',
+  );
+}
+
+{
+  const serverAuth = read('src/lib/server-auth.ts');
+  const store = read('src/lib/teacher-store.ts');
+  const dashboard = read('src/components/teacher-pro/dashboard.tsx');
+  const registryHelpers = read('src/components/teacher-pro/student-registry-helpers.ts');
+  assert(
+    read('src/lib/permission-catalog.ts').includes('id: "students.registry.view",') &&
+      serverAuth.includes('"students.view": ["page.student-registry.view", "page.dismissed-students.view", "students.registry.view"],') &&
+      store.includes('"student-registry": ["students.registry.view"],') &&
+      !store.includes('"dismissed-management": ["page.dismissed-students.view", "students.registry.view"') &&
+      dashboard.includes('const canViewCodeClosures = hasFullStudentsView;') &&
+      dashboard.includes('const canViewGracePeriods = canAccess("student-registry") && hasFullStudentsView;') &&
+      registryHelpers.includes('canEditStudents: isAdmin || permissions.has("students.edit"),') &&
+      registryHelpers.includes('canArchiveStudents: isAdmin || permissions.has("students.delete"),'),
+    '«عرض سجل الطلاب فقط» يفتح سجل الطلاب للقراءة فقط، بدون المفصولين وإغلاق الكودات وفترات السماح وبدون تعديل أو أرشفة',
   );
 }
 

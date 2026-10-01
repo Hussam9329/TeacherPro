@@ -338,6 +338,9 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
 // إجراءات الاسترجاع والتعديل تبقى محمية منفصلاً بـ students.edit على الخادم.
 const SECTION_PERMISSION_EQUIVALENTS: Partial<Record<SectionId, string[]>> = {
   "dismissed-management": ["page.dismissed-students.view"],
+  // Read-only registry (e.g. «موظف مكالمات»): edit, archive and add stay
+  // behind students.edit / students.delete / students.add.
+  "student-registry": ["students.registry.view"],
 };
 
 // ─── Default Roles ──────────────────────────────────────────────────────────

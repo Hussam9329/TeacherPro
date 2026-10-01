@@ -20,5 +20,18 @@ export async function ensureDefaultRoles(): Promise<void> {
     })),
     skipDuplicates: true,
   });
+  // «موظف مكالمات» first shipped without the read-only registry. Add it to a
+  // role still holding exactly that first set; an edited role is left alone.
+  const caller = DEFAULT_ROLE_DEFINITIONS.find((role) => role.id === 'role_caller');
+  if (caller) {
+    const existing = await db.role.findUnique({ where: { id: caller.id }, select: { permissions: true } });
+    const first = ['system.dashboard', 'follow-up.calls.view', 'follow-up.calls.manage'];
+    let current: unknown = [];
+    try { current = JSON.parse(existing?.permissions || '[]'); } catch { current = []; }
+    const held = Array.isArray(current) ? current.map(String).sort() : [];
+    if (existing && held.join('|') === [...first].sort().join('|')) {
+      await db.role.update({ where: { id: caller.id }, data: { permissions: JSON.stringify(caller.permissions) } });
+    }
+  }
   ensured = true;
 }
