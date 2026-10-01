@@ -19,14 +19,11 @@ import {
   gradeKindForCalls,
   parseCourseIds,
 } from "@/lib/grade-classification";
-import {
-  STUDENT_STATUS_DISMISSED,
-  studentCourseScopeWhere,
-} from "@/lib/student-scope";
+import { studentCourseScopeWhere } from "@/lib/student-scope";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import {
-  callGradeMatchesRangeForStatus,
+  callGradeMatchesRange,
   parseCallGradeRange,
 } from "@/lib/call-grade-range";
 import {
@@ -46,16 +43,7 @@ import {
 } from "@/lib/call-absence";
 import { isStudentExamCall } from "@/lib/call-identity";
 
-export type CallStatusFilter =
-  | "all"
-  | "absent"
-  | "discounted"
-  | "failed"
-  | "cheating"
-  | "passed"
-  | "full"
-  | "protected"
-  | "dismissed";
+export type CallStatusFilter = "all" | "discounted" | "full";
 
 type CallKind =
   | "absent"
@@ -146,21 +134,9 @@ const NON_DISPLAY_CALL_KINDS = new Set<CallKind>(["missing"]);
 
 function normalizeCallStatusFilter(value: string | null): CallStatusFilter {
   const normalized = normalizeListFilter(value);
-  // لم يعد "طلاب المحاسبة" فلتر مستقل في تبويبة المكالمات.
-  // أي رابط/كاش قديم يطلبه يُعامل كـ "راسب غير مخصوم" حتى لا تظهر نتائج فارغة.
-  if (normalized === "academic-accounting") return "failed";
-  if (
-    normalized === "absent" ||
-    normalized === "discounted" ||
-    normalized === "failed" ||
-    normalized === "cheating" ||
-    normalized === "passed" ||
-    normalized === "full" ||
-    normalized === "protected" ||
-    normalized === "dismissed"
-  ) {
-    return normalized;
-  }
+  // The calls tab offers only «المخصومين» and «الدرجات الكاملة». A retired
+  // filter from an old tab or link reads as «كل الحالات», never an empty list.
+  if (normalized === "discounted" || normalized === "full") return normalized;
   return "all";
 }
 
@@ -380,27 +356,17 @@ function gradeMatchesStatusFilter(
   kind: CallKind,
   impactKind: GradeClassificationKind,
   absenceSource?: CallAbsenceSource | null,
-  studentStatus?: string,
   /** From the opportunities ledger when known; the rule is only a fallback. */
   recordedCharge?: boolean,
 ): boolean {
-  const deducted = recordedCharge ?? isDeductedImpact(impactKind);
-  if (filter === "dismissed") {
-    return studentStatus === STUDENT_STATUS_DISMISSED;
-  }
   if (filter === "all") {
     // ROOT-CAUSE FIX: شمل المحميين (مجاز، ضمن السماح، قبل التسجيل) في
     // فلتر "كل الحالات" ليطابق عددي سجل الدرجات. فقط missing مستثنى.
     return Boolean(absenceSource) || !NON_DISPLAY_CALL_KINDS.has(kind);
   }
-  if (filter === "absent") return Boolean(absenceSource);
+  const deducted = recordedCharge ?? isDeductedImpact(impactKind);
   if (filter === "discounted") return deducted;
-  if (filter === "passed") return kind === "passed" || kind === "full";
-  if (filter === "failed") {
-    return !deducted && (kind === "failed" || kind === "academic-accounting");
-  }
-  if (filter === "protected") return kind === "protected";
-  return kind === filter;
+  return kind === "full";
 }
 
 function includesSearch(query: string, values: Array<unknown>): boolean {
@@ -758,11 +724,11 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // «المخصومين» and «راسب غير مخصوم» follow what the ledger recorded, the
-    // same evidence the card's badge shows. A derived absence has no stored
-    // grade, so no deduction was ever recorded for it.
+    // «المخصومين» follows what the ledger recorded, the same evidence the
+    // card's badge shows. A derived absence has no stored grade, so no
+    // deduction was ever recorded for it.
     const recordedChargeByGradeId =
-      statusFilter === "discounted" || statusFilter === "failed"
+      statusFilter === "discounted"
         ? await loadRecordedChargeByGradeId(
             selectedGrades.map((grade) => ({
               ...grade,
@@ -779,7 +745,7 @@ export async function GET(req: NextRequest) {
           )
         : new Map<string, boolean>();
     const recordedChargeFor = (grade: DbGradeLite): boolean | undefined =>
-      statusFilter !== "discounted" && statusFilter !== "failed"
+      statusFilter !== "discounted"
         ? undefined
         : grade.id.startsWith("implicit-absence:")
           ? false
@@ -813,12 +779,11 @@ export async function GET(req: NextRequest) {
           kind,
           impactKind,
           absenceSource,
-          student.status,
           recordedChargeFor(grade),
         )
       )
         return [];
-      if (!callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)) return [];
+      if (!callGradeMatchesRange(grade, gradeRange)) return [];
       const contactStatus = normalizeContactStatus(bestCallByStudentId.get(student.id));
       if (!contactStatusMatchesFilter(contactStatusFilter, contactStatus)) return [];
       if (notesFilter === "with-notes" && !studentIdsWithNotes.has(student.id)) return [];

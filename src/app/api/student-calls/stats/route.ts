@@ -17,12 +17,9 @@ import {
   gradeKindForCalls,
   parseCourseIds,
 } from "@/lib/grade-classification";
+import { studentCourseScopeWhere } from "@/lib/student-scope";
 import {
-  STUDENT_STATUS_DISMISSED,
-  studentCourseScopeWhere,
-} from "@/lib/student-scope";
-import {
-  callGradeMatchesRangeForStatus,
+  callGradeMatchesRange,
   parseCallGradeRange,
 } from "@/lib/call-grade-range";
 import {
@@ -42,16 +39,7 @@ import {
 } from "@/lib/call-absence";
 import { isStudentExamCall } from "@/lib/call-identity";
 
-type CallStatusFilter =
-  | "all"
-  | "absent"
-  | "discounted"
-  | "failed"
-  | "cheating"
-  | "passed"
-  | "full"
-  | "protected"
-  | "dismissed";
+type CallStatusFilter = "all" | "discounted" | "full";
 
 type DbStudentLite = {
   id: string;
@@ -123,20 +111,8 @@ const zeroStats = {
 
 function normalizeCallStatusFilter(value: string | null): CallStatusFilter {
   const normalized = normalizeListFilter(value);
-  // توافق مع روابط/تبويبات قديمة: المحاسبة صارت ضمن الراسبين غير المخصومين.
-  if (normalized === "academic-accounting") return "failed";
-  if (
-    normalized === "absent" ||
-    normalized === "discounted" ||
-    normalized === "failed" ||
-    normalized === "cheating" ||
-    normalized === "passed" ||
-    normalized === "full" ||
-    normalized === "protected" ||
-    normalized === "dismissed"
-  ) {
-    return normalized;
-  }
+  // Same as the calls list: a retired filter from an old tab reads as «كل الحالات».
+  if (normalized === "discounted" || normalized === "full") return normalized;
   return "all";
 }
 
@@ -201,29 +177,19 @@ function gradeMatchesStatusFilter(
   recordedCharge?: boolean,
 ): boolean {
   if (!grade && !absenceSource) return false;
-  if (filter === "dismissed") {
-    return student?.status === STUDENT_STATUS_DISMISSED;
-  }
   const impactKind = classifyCallImpact(grade, exam, student, leaves);
   const kind = absenceSource ? "absent" : gradeKindForCalls(impactKind);
   // ROOT-CAUSE FIX (الإصلاح السابع — شمل المحميين في فلتر "كل الحالات"):
   // سابقاً: فلتر "all" كان يستثني kind === "missing" و kind === "protected".
   // الآن: يستثني فقط "missing" (لا توجد درجة). أما المحميون (مجاز، ضمن
   // السماح، قبل التسجيل، no-discount-protected، academic-effect-excluded)
-  // فيُعرضون في "كل الحالات" ليطابق عددي سجل الدرجات. يمكن للمستخدم
-  // استخدام فلتر "protected" لعرضهم منفصلين، أو الفلاتر الأخرى لاستثنائهم.
+  // فيُعرضون في "كل الحالات" ليطابق عددي سجل الدرجات.
   if (filter === "all") {
     return Boolean(absenceSource) || kind !== "missing";
   }
-  if (filter === "absent") return Boolean(absenceSource);
   const deducted = recordedCharge ?? isDeductedImpact(impactKind);
   if (filter === "discounted") return deducted;
-  if (filter === "passed") return kind === "passed" || kind === "full";
-  if (filter === "failed") {
-    return !deducted && (kind === "failed" || kind === "academic-accounting");
-  }
-  if (filter === "protected") return kind === "protected";
-  return kind === filter;
+  return kind === "full";
 }
 
 function includesSearch(query: string, values: Array<unknown>): boolean {
@@ -464,7 +430,7 @@ export async function GET(req: NextRequest) {
     // Same ledger evidence as the calls list and the card's badge.
     const studentById = new Map(students.map((student) => [student.id, student]));
     const recordedChargeByGradeId =
-      statusFilter === "discounted" || statusFilter === "failed"
+      statusFilter === "discounted"
         ? await loadRecordedChargeByGradeId(
             grades.flatMap((grade) => {
               const owner = studentById.get(grade.studentId);
@@ -487,7 +453,7 @@ export async function GET(req: NextRequest) {
           )
         : new Map<string, boolean>();
     const recordedChargeFor = (grade: DbGradeLite | undefined): boolean | undefined =>
-      !grade || (statusFilter !== "discounted" && statusFilter !== "failed")
+      !grade || statusFilter !== "discounted"
         ? undefined
         : grade.id.startsWith("implicit-absence:")
           ? false
@@ -525,7 +491,7 @@ export async function GET(req: NextRequest) {
       ) {
         return false;
       }
-      if (!callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)) return false;
+      if (!callGradeMatchesRange(grade, gradeRange)) return false;
       if (notesFilter === "with-notes" && !studentIdsWithNotes.has(student.id)) return false;
       if (
         generalSearch &&
