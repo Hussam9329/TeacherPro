@@ -2,7 +2,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermission } from "@/lib/server-auth";
+import { requireAnyPermission } from "@/lib/server-auth";
+import { CALLS_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
 import { db } from "@/lib/db";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { parseCourseIds } from "@/lib/grade-classification";
@@ -18,7 +19,7 @@ function toClientExam<T extends { courseIds: string }>(exam: T) {
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, "follow-up.view");
+  const authError = await requireAnyPermission(req, CALLS_VIEW_PERMISSIONS);
   if (authError) return authError;
 
   try {
