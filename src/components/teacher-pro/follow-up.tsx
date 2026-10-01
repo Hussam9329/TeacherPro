@@ -74,6 +74,7 @@ import {
   studentExamCallIdentityMatches,
 } from "@/lib/call-identity";
 import { shortGradeNoteText } from "@/lib/grade-note-banners";
+import { refreshShortcutAlerts } from "@/hooks/use-shortcut-alerts";
 import "./tp-modal.css";
 import "./calls.css";
 
@@ -950,7 +951,17 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
         scopes: ["follow-up", "students", "dashboard", "logs"],
         dispatchLocal: false,
       });
-      toast.success(notes.trim() ? "تم حفظ ملاحظة المكالمات" : "تم حذف ملاحظة المكالمات");
+      // A changed note goes back to «إدارة ملاحظات المكالمات» even if it was
+      // marked done; its count beside the shortcut updates now, not minutes later.
+      void refreshShortcutAlerts();
+      const reopened = Boolean(existing?.noteResolved && data?.studentCall && !data.studentCall.noteResolved);
+      toast.success(
+        !notes.trim()
+          ? "تم حذف ملاحظة المكالمات"
+          : reopened
+            ? "تم حفظ الملاحظة وأُعيدت إلى إدارة ملاحظات المكالمات"
+            : "تم حفظ ملاحظة المكالمات",
+      );
     } finally {
       callNoteSavingRef.current.delete(draftKey);
       setCallSaving(savingKey, false);

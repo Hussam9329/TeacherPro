@@ -439,6 +439,13 @@ assert(
   'تغييرات المستخدمين أو الصفحات الأخرى لا تعيد تحميل القائمة والأعداد وحدها؛ تظهر «تحديث» ويختار المستخدم متى',
 );
 
+assert(
+  followUp.includes('void refreshShortcutAlerts();') &&
+    followUp.includes('تم حفظ الملاحظة وأُعيدت إلى إدارة ملاحظات المكالمات') &&
+    read('src/lib/call-note-management-server.ts').includes('notes, noteResolved: false, noteRevision: { increment: 1 },'),
+  'تعديل ملاحظة من المكالمات يعيدها لإدارة ملاحظات المكالمات حتى لو كانت منجزة، ويحدّث عددها فوراً',
+);
+
 if (process.exitCode) {
   console.error('\nفشل اختبار سلامة تبويبة المكالمات. راجع الرسائل أعلاه.');
   process.exit(process.exitCode);
