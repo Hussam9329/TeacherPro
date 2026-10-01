@@ -341,6 +341,17 @@ must(
   "يجب أن يشمل test:side-effects اختبار تسجيل الدرجات.",
 );
 
+{
+  const outbox = read("src/lib/grade-entry-offline-outbox.ts");
+  must(
+    gradeEntry.includes("result.status === 401 || isSessionExpiredMessage(result.error)") &&
+      gradeEntry.includes("محفوظ محلياً — سجّل الدخول وتُرسل تلقائياً") &&
+      outbox.includes('const authOnly = storedState === "rejected" && isSessionExpiredMessage(lastError);') &&
+      outbox.includes("result.status === 401) return \"pending\";"),
+    "الدرجة المرفوضة فقط لانتهاء الجلسة تبقى بانتظار الإرسال وتُرسل بعد تسجيل الدخول، والقديمة المعلقة ترجع للانتظار",
+  );
+}
+
 if (failed) {
   console.error("\nفشل اختبار سلامة صفحة تسجيل الدرجات وملف الطالب.");
   process.exit(1);
