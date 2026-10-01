@@ -68,6 +68,7 @@ import {
   useTeacherProBackgroundSyncDetector,
   useTeacherProSyncKey,
 } from "@/hooks/use-teacherpro-sync";
+import { normalizeForSearch } from "@/lib/validation";
 
 type CourseFilter =
   | "all"
@@ -158,17 +159,6 @@ const chapterFilterLabels: Record<ChapterFilter, string> = {
   deletable: "قابلة للحذف",
   protected: "محمية من الحذف",
 };
-
-function normalizeSearch(value: string): string {
-  return value
-    .toLocaleLowerCase("ar-IQ")
-    .replace(/[أإآٱ]/g, "ا")
-    .replace(/ؤ/g, "و")
-    .replace(/ئ/g, "ي")
-    .replace(/ى/g, "ي")
-    .replace(/ة/g, "ه")
-    .trim();
-}
 
 function statCard(
   label: string,
@@ -355,9 +345,9 @@ export function ChaptersView() {
   };
 
   const filteredCourses = useMemo(() => {
-    const query = normalizeSearch(searchText);
+    const query = normalizeForSearch(searchText);
     return (overview?.courseRows || []).filter((row) => {
-      const haystack = normalizeSearch(
+      const haystack = normalizeForSearch(
         [
           row.course.name,
           row.activeLink?.chapter.name || "",
@@ -379,10 +369,10 @@ export function ChaptersView() {
 
   // Each course-status button counts what it would show with the search.
   const courseChipCounts = useMemo(() => {
-    const query = normalizeSearch(searchText);
+    const query = normalizeForSearch(searchText);
     const counts = { all: 0, hasActive: 0, noActive: 0, multiple: 0, review: 0 };
     for (const row of overview?.courseRows || []) {
-      const haystack = normalizeSearch(
+      const haystack = normalizeForSearch(
         [
           row.course.name,
           row.activeLink?.chapter.name || "",
@@ -400,9 +390,9 @@ export function ChaptersView() {
   }, [overview, searchText]);
 
   const filteredChapters = useMemo(() => {
-    const query = normalizeSearch(searchText);
+    const query = normalizeForSearch(searchText);
     return (overview?.chapterRows || []).filter((row) => {
-      const haystack = normalizeSearch(row.chapter.name);
+      const haystack = normalizeForSearch(row.chapter.name);
       if (query && !haystack.includes(query)) return false;
       if (chapterFilter === "active" && row.counts.activeLinks === 0)
         return false;

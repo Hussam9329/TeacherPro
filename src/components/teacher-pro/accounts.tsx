@@ -25,6 +25,7 @@ import { baghdadTodayKey } from '@/lib/baghdad-time';
 import { Lock, UserPlus } from 'lucide-react';
 import { RowActionsMenu, type RowAction } from './row-actions-menu';
 import { validatePasswordPolicy } from '@/lib/password-policy';
+import { searchAny } from '@/lib/validation';
 import './tp-list.css';
 
 // ─── Permission categories for grouping ──────────────────────────────────────
@@ -763,9 +764,8 @@ function UsersTab() {
   const detailsMissingRolePermissions = selectedPermissions(detailsRolePermissions.filter(permission => !detailsPermissions.includes(permission)));
 
 
-  const userSearchKey = userSearch.trim().toLowerCase();
-  const shownUsers = userSearchKey
-    ? users.filter(u => `${u.name} ${u.username} ${getRoleName(u.roleId)}`.toLowerCase().includes(userSearchKey))
+  const shownUsers = userSearch.trim()
+    ? users.filter(u => searchAny(userSearch, [u.name, u.username, getRoleName(u.roleId)]))
     : users;
 
   return (

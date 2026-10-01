@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { normalizeArabicText } from "@/lib/route-helpers";
 
 export const DISMISSED_STUDENT_STATUS = "مفصول";
 
@@ -37,6 +38,9 @@ export function dismissedHistoryWhere(): Prisma.StudentWhereInput {
 function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
   const q = cleanText(rawQuery);
   if (!q) return null;
+  // Same as سجل الطلاب: the name is also matched through its normalized key,
+  // so ة/ه, أ/إ/آ/ا, ى/ي and tashkeel never decide whether a student is found.
+  const normalized = normalizeArabicText(q);
   return {
     OR: [
       { name: { contains: q, mode: "insensitive" } },
@@ -47,6 +51,7 @@ function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
       { username: { contains: q, mode: "insensitive" } },
       { dismissalReason: { contains: q, mode: "insensitive" } },
       { dismissalNotes: { contains: q, mode: "insensitive" } },
+      ...(normalized ? [{ nameKey: { contains: normalized, mode: "insensitive" as const } }] : []),
     ],
   };
 }
