@@ -67,6 +67,7 @@ import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { formatOpportunityBalance, getOpportunityLimit } from "@/lib/opportunity-balance";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
 import { CALL_STUDENT_NOTE_CATEGORY } from "@/lib/call-notes-filter";
+import { contactStatusMatchesFilter } from "@/lib/call-contact-status";
 import {
   isStudentExamCall,
   studentExamCallIdentityKey,
@@ -374,6 +375,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   const callCandidatesRequestSequenceRef = useRef(0);
   const callRowsRef = useRef<CallStudentRow[]>([]);
   const [callFilterRefreshKey, setCallFilterRefreshKey] = useState(0);
+  // Refreshes the counts only: a contact action must not reload the cards.
+  const [callStatsRefreshKey, setCallStatsRefreshKey] = useState(0);
   const [callNoteDrafts, setCallNoteDrafts] = useState<Record<string, string>>({});
   const callNoteDraftRevisionsRef = useRef<Record<string, number>>({});
   const callNoteDraftIdsRef = useRef<Record<string, string | null>>({});
@@ -618,6 +621,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     debouncedCallGradeTo,
     debouncedCallGeneralSearch,
     callFilterRefreshKey,
+    callStatsRefreshKey,
     syncKey,
     isBackgroundSync,
   ]);
@@ -703,6 +707,14 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   const callTotalPages = Math.max(1, callServerPageInfo.totalPages);
   const callSafePage = Math.min(callGradePage, callTotalPages);
   const visibleCallRows = callRows;
+  // Students on this page whose new action took them out of the contact
+  // filter. They stay visible until the page is reloaded.
+  const callDepartedCount =
+    callContactStatusFilter === "all"
+      ? 0
+      : visibleCallRows.filter(
+          (row) => !contactStatusMatchesFilter(callContactStatusFilter, callStatusForLog(callLogForRow(row))),
+        ).length;
 
   const callStatValue = (value: number | undefined) => {
     if (callDatabaseStatsLoading && !callDatabaseStats) return "…";
@@ -843,8 +855,9 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
         // يعيد هذا التبويب تحميل نفسه ويستبدل النتيجة بطلب Sync أقدم.
         dispatchLocal: false,
       });
-      setCallFilterRefreshKey((current) => current + 1);
-      if (callContactStatusFilter !== "all") setCallGradePage(1);
+      // The cards stay where they are (the action is already on the card), so
+      // the list never jumps or goes back to page one; only the counts reload.
+      setCallStatsRefreshKey((current) => current + 1);
       toast.success("تم حفظ إجراء التواصل");
     } finally {
       setCallSaving(savingKey, false);
@@ -1786,6 +1799,11 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           <p className="tp-calls__count" data-count-scope="filtered" aria-live="polite">
             المطابقون للفلاتر: <b>{callStatValue(callDatabaseStats?.total)}</b>
             {callLoading && visibleCallRows.length > 0 ? " · جاري التحديث…" : ""}
+            {callDepartedCount > 0 && (
+              <span className="tp-calls__departed">
+                {" "}· {callDepartedCount} تم إجراؤهم في هذه الصفحة ويبقون ظاهرين حتى «التالي»
+              </span>
+            )}
           </p>
 
           <div className="tp-calls__list">
@@ -1815,7 +1833,13 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                 variant="outline"
                 size="sm"
                 disabled={callSafePage >= callTotalPages}
-                onClick={() => setCallGradePage((page) => Math.min(callTotalPages, page + 1))}
+                onClick={() => {
+                  // Students who left the contact filter shrank the list, so the
+                  // same page number now holds the next students: reload it
+                  // instead of skipping them.
+                  if (callDepartedCount > 0) setCallFilterRefreshKey((current) => current + 1);
+                  else setCallGradePage((page) => Math.min(callTotalPages, page + 1));
+                }}
               >
                 التالي
               </Button>
