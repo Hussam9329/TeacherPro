@@ -312,8 +312,15 @@ assert(
   'اختيار أحدث حالة تواصل حتمي ومتطابق بين القائمة والإحصائيات',
 );
 assert(
-  /setCallFilterRefreshKey\(\(current\) => current \+ 1\);\s*if \(callContactStatusFilter !== "all"\) setCallGradePage\(1\);/.test(followUp),
-  'حفظ حالة الاتصال يحدّث القائمة والإحصائيات دائماً، ويعيد الصفحة الأولى فقط عند فلتر تواصل نشط',
+  /setCallStatsRefreshKey\(\(current\) => current \+ 1\);\s*toast\.success\("تم حفظ إجراء التواصل"\);/.test(followUp) &&
+    !/if \(callContactStatusFilter !== "all"\) setCallGradePage\(1\);/.test(followUp) &&
+    followUp.includes('callStatsRefreshKey,\n    syncKey,'),
+  'حفظ حالة الاتصال يحدّث الأعداد فقط: البطاقات تبقى بمكانها ولا ترجع الصفحة الأولى',
+);
+assert(
+  followUp.includes('contactStatusMatchesFilter(callContactStatusFilter, callStatusForLog(callLogForRow(row)))') &&
+    followUp.includes('if (callDepartedCount > 0) setCallFilterRefreshKey((current) => current + 1);'),
+  'من خرج من فلتر التواصل يبقى ظاهراً، و«التالي» يعيد تحميل الصفحة نفسها حتى لا يُتخطى أي طالب',
 );
 assert(
   followUp.includes('if (!result.ok && !result.queued)') &&
