@@ -1,5 +1,5 @@
 "use client";
-import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -326,8 +326,13 @@ function visibleCallGradeItems(
 }
 
 export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "window" }) {
+  // Changes made elsewhere (another user, tab or page) never reload this work
+  // list on their own: names would move and numbers change under the
+  // teacher's hand. They only light the «تحديث» button; the list and the
+  // counts reload when it is pressed or when a filter or the page changes.
   const syncKey = useTeacherProSyncKey(["follow-up", "students", "grades", "exams", "opportunities", "dashboard"]);
-  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
+  const latestSyncKeyRef = useRef(syncKey);
+  const [callLoadedSyncKey, setCallLoadedSyncKey] = useState(syncKey);
   const {
     courses,
     students,
@@ -476,10 +481,10 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     const controller = new AbortController();
     const requestSequence = ++callCandidatesRequestSequenceRef.current;
     const mutationVersionAtRequestStart = callMutationVersionRef.current;
-    const silent = isBackgroundSync();
-    // لا نستبدل الجدول الموجود بحالة تحميل عند أي مزامنة أو إعادة جلب.
+    setCallLoadedSyncKey(latestSyncKeyRef.current);
+    // لا نستبدل الجدول الموجود بحالة تحميل عند أي إعادة جلب.
     // الـSkeleton يظهر فقط في أول تحميل عندما لا توجد صفوف معروضة أصلاً.
-    const shouldBlockTable = !silent && callRowsRef.current.length === 0;
+    const shouldBlockTable = callRowsRef.current.length === 0;
     setCallLoading(shouldBlockTable);
 
     callCandidatesApi
@@ -534,8 +539,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
         if (
           !cancelled &&
           !controller.signal.aborted &&
-          requestSequence === callCandidatesRequestSequenceRef.current &&
-          !silent
+          requestSequence === callCandidatesRequestSequenceRef.current
         ) {
           // نحافظ على آخر جدول ناجح بدلاً من مسحه وإرباك المستخدم.
           toast.error("تعذر تحديث طلاب المكالمات. بقيت آخر بيانات ناجحة ظاهرة.");
@@ -565,8 +569,6 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     debouncedCallGeneralSearch,
     callGradePage,
     callFilterRefreshKey,
-    syncKey,
-    isBackgroundSync,
   ]);
 
   useEffect(() => {
@@ -578,9 +580,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
 
     let cancelled = false;
     const controller = new AbortController();
-    const silent = isBackgroundSync();
     const timer = window.setTimeout(() => {
-      if (!silent) setCallDatabaseStatsLoading(true);
+      setCallDatabaseStatsLoading(true);
       callStatsApi
         .get(
           {
@@ -622,9 +623,12 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     debouncedCallGeneralSearch,
     callFilterRefreshKey,
     callStatsRefreshKey,
-    syncKey,
-    isBackgroundSync,
   ]);
+
+  useEffect(() => {
+    latestSyncKeyRef.current = syncKey;
+  }, [syncKey]);
+  const callUpdatesPending = syncKey !== callLoadedSyncKey;
 
   const selectedProfileStudent =
     callRowsFromDb.find((row) => row.student.id === profileStudentId)?.student ||
@@ -1799,6 +1803,19 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           <p className="tp-calls__count" data-count-scope="filtered" aria-live="polite">
             المطابقون للفلاتر: <b>{callStatValue(callDatabaseStats?.total)}</b>
             {callLoading && visibleCallRows.length > 0 ? " · جاري التحديث…" : ""}
+            {callUpdatesPending && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  className="tp-calls__refresh"
+                  title="توجد تغييرات جديدة من مستخدم أو صفحة أخرى"
+                  onClick={() => setCallFilterRefreshKey((current) => current + 1)}
+                >
+                  تغييرات جديدة — تحديث
+                </button>
+              </>
+            )}
             {callDepartedCount > 0 && (
               <span className="tp-calls__departed">
                 {" "}· {callDepartedCount} تم إجراؤهم في هذه الصفحة ويبقون ظاهرين حتى «التالي»

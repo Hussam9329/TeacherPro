@@ -314,7 +314,7 @@ assert(
 assert(
   /setCallStatsRefreshKey\(\(current\) => current \+ 1\);\s*toast\.success\("تم حفظ إجراء التواصل"\);/.test(followUp) &&
     !/if \(callContactStatusFilter !== "all"\) setCallGradePage\(1\);/.test(followUp) &&
-    followUp.includes('callStatsRefreshKey,\n    syncKey,'),
+    followUp.includes('callFilterRefreshKey,\n    callStatsRefreshKey,\n  ]);'),
   'حفظ حالة الاتصال يحدّث الأعداد فقط: البطاقات تبقى بمكانها ولا ترجع الصفحة الأولى',
 );
 assert(
@@ -425,6 +425,15 @@ assert(
       !source.includes('recordedCharge') &&
       !source.includes('loadRecordedChargeByGradeId')),
   'فلتر «المخصومين» وعدده بقواعد الامتحان: الغياب بلا إجازة أو سماح (حتى غير المدخلة درجته والمفصول)، الغش، والراسب بدرجة الخصم أو الفصل',
+);
+
+assert(
+  !followUp.includes('isBackgroundSync') &&
+    !followUp.includes('    syncKey,\n') &&
+    followUp.includes('setCallLoadedSyncKey(latestSyncKeyRef.current);') &&
+    followUp.includes('const callUpdatesPending = syncKey !== callLoadedSyncKey;') &&
+    followUp.includes('تغييرات جديدة — تحديث'),
+  'تغييرات المستخدمين أو الصفحات الأخرى لا تعيد تحميل القائمة والأعداد وحدها؛ تظهر «تحديث» ويختار المستخدم متى',
 );
 
 if (process.exitCode) {
