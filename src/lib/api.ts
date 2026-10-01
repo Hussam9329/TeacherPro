@@ -911,6 +911,8 @@ export interface CallStatsQuery {
   gradeTo?: string;
   q?: string;
   filterQ?: string;
+  /** «تقسيم العمل», e.g. "2/3". */
+  share?: string;
 }
 
 export interface CallStatsResponse {
@@ -1928,6 +1930,7 @@ export const callStatsApi = {
       gradeTo: query.gradeTo,
       q: query.q,
       filterQ: query.filterQ,
+      share: query.share,
     });
     return apiGet<CallStatsResponse>(
       `student-calls/stats${queryString ? `?${queryString}` : ""}`,
@@ -1948,6 +1951,7 @@ export const callCandidatesApi = {
       gradeTo: query.gradeTo,
       q: query.q,
       filterQ: query.filterQ,
+      share: query.share,
       page: query.page ?? 1,
       pageSize: query.pageSize ?? 120,
     });

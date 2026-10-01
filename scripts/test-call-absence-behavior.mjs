@@ -63,6 +63,7 @@ const contact = loadTypeScriptModule("src/lib/call-contact-status.ts");
 const notes = loadTypeScriptModule("src/lib/call-notes-filter.ts");
 const phoneQr = loadTypeScriptModule("src/lib/call-phone-qr.ts");
 const classification = loadTypeScriptModule("src/lib/grade-classification.ts");
+const workShare = loadTypeScriptModule("src/lib/call-work-share.ts");
 const candidatesSource = fs.readFileSync(
   path.join(root, "src/app/api/student-calls/candidates/route.ts"),
   "utf8",
@@ -519,4 +520,32 @@ test("«المخصومين» leaves out leave, grace, passes and fails above the
   assert.equal(isDeducted({ grade: { status: "درجة", score: 35 } }), false, "fail above the deduction mark");
   assert.equal(isDeducted({ grade: { status: "درجة", score: 80 } }), false, "pass");
   assert.equal(isDeducted({ grade: { status: "مجاز", score: null } }), false, "excused");
+});
+
+test("«تقسيم العمل» puts every student in exactly one share and never moves them", () => {
+  const ids = Array.from({ length: 600 }, (_, i) => `c${(i * 7919).toString(36)}x${i}`);
+  for (let parts = 2; parts <= 5; parts += 1) {
+    const sizes = [];
+    for (const id of ids) {
+      const owners = [];
+      for (let part = 1; part <= parts; part += 1) {
+        if (workShare.studentInCallWorkShare(id, workShare.parseCallWorkShare(`${part}/${parts}`))) owners.push(part);
+      }
+      assert.equal(owners.length, 1, `${id} in ${parts} parts`);
+      sizes[owners[0]] = (sizes[owners[0]] || 0) + 1;
+    }
+    // Shares stay roughly even, so no laptop gets most of the list.
+    for (let part = 1; part <= parts; part += 1) {
+      assert.ok(sizes[part] > (ids.length / parts) * 0.7, `share ${part}/${parts} too small: ${sizes[part]}`);
+    }
+  }
+  const share = workShare.parseCallWorkShare("2/3");
+  assert.equal(
+    workShare.studentInCallWorkShare("same-student", share),
+    workShare.studentInCallWorkShare("same-student", workShare.parseCallWorkShare("2/3")),
+  );
+  assert.equal(workShare.parseCallWorkShare("4/3"), null);
+  assert.equal(workShare.parseCallWorkShare("1/1"), null);
+  assert.equal(workShare.parseCallWorkShare(""), null);
+  assert.equal(workShare.studentInCallWorkShare("anyone", null), true);
 });

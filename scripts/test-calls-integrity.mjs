@@ -446,6 +446,21 @@ assert(
   'تعديل ملاحظة من المكالمات يعيدها لإدارة ملاحظات المكالمات حتى لو كانت منجزة، ويحدّث عددها فوراً',
 );
 
+assert(
+  [candidates, stats].every((source) =>
+    source.includes('const workShare = parseCallWorkShare(searchParams.get("share"));') &&
+    source.includes('if (!studentInCallWorkShare(student.id, workShare))')) &&
+    (followUp.match(/share: callWorkShare \|\| undefined,/g) || []).length === 3 &&
+    followUp.includes('<Label htmlFor={`calls-share-${variant}`}>تقسيم العمل</Label>') &&
+    api.includes('share: query.share,'),
+  '«تقسيم العمل» يطبق نفس القسم على القائمة والأعداد والتصدير، ويحفظه كل جهاز لنفسه',
+);
+assert(
+  read('src/components/teacher-pro/layout.tsx').includes('  "follow-up-calls",\n  "accounts",') &&
+    !read('src/app/api/auth/logout/route.ts').includes('increment'),
+  'تغيير من جهاز آخر لا يعيد تحميل كل مكالمات النظام، وتسجيل الخروج من جهاز لا يخرج الأجهزة الأخرى',
+);
+
 if (process.exitCode) {
   console.error('\nفشل اختبار سلامة تبويبة المكالمات. راجع الرسائل أعلاه.');
   process.exit(process.exitCode);

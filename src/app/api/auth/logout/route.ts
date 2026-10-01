@@ -1,11 +1,13 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-import { NextRequest, NextResponse } from 'next/server';
-import { clearAuthCookie, getAuthPrincipal } from '@/lib/server-auth';
-import { db } from '@/lib/db';
-export async function POST(req: NextRequest) {
-  const principal = await getAuthPrincipal(req);
-  if (principal) await db.appUser.update({ where: { id: principal.id }, data: { sessionVersion: { increment: 1 } } });
+import { NextResponse } from 'next/server';
+import { clearAuthCookie } from '@/lib/server-auth';
+
+// Signing out ends this device's session only. Several people may share one
+// account on different laptops; one of them signing out must not sign the
+// others out mid-work. A password change still ends every session (the
+// database bumps sessionVersion whenever passwordHash changes).
+export async function POST() {
   const res = NextResponse.json({ ok: true });
   clearAuthCookie(res);
   return res;
