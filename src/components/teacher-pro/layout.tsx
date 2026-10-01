@@ -178,6 +178,10 @@ const PAGE_OWNED_SYNC_SECTIONS = new Set<SectionId>([
   "dismissed-management",
   "exam-new",
   "grade-records",
+  // The calls workspace loads its own list from the server and only reloads
+  // when the user asks; refetching every call, note and leave in the system
+  // on each change from another laptop froze the page for everyone.
+  "follow-up-calls",
   "accounts",
   "logs",
 ]);

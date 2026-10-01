@@ -35,6 +35,7 @@ import {
   hasManualCallNote,
   normalizeCallNotesFilter,
 } from "@/lib/call-notes-filter";
+import { parseCallWorkShare, studentInCallWorkShare } from "@/lib/call-work-share";
 import {
   buildImplicitCallAbsenceGrade,
   resolveCallAbsenceSource,
@@ -475,6 +476,8 @@ export async function GET(req: NextRequest) {
       searchParams.get("contactStatusFilter"),
     );
     const notesFilter = normalizeCallNotesFilter(searchParams.get("notesFilter"));
+    // «تقسيم العمل»: this person's fixed slice of the students, if chosen.
+    const workShare = parseCallWorkShare(searchParams.get("share"));
     const gradeRange = parseCallGradeRange(
       searchParams.get("gradeFrom"),
       searchParams.get("gradeTo"),
@@ -725,6 +728,7 @@ export async function GET(req: NextRequest) {
     }
 
     const matching = selectedStudents.flatMap((student) => {
+      if (!studentInCallWorkShare(student.id, workShare)) return [];
       const storedGrade = selectedGradeByStudentId.get(student.id);
       const leaves = leavesForExam(selectedLeavesByStudentId, student.id, exam);
       const absenceSource = resolveCallAbsenceSource({

@@ -68,6 +68,7 @@ import { formatOpportunityBalance, getOpportunityLimit } from "@/lib/opportunity
 import { baghdadTodayKey } from "@/lib/baghdad-time";
 import { CALL_STUDENT_NOTE_CATEGORY } from "@/lib/call-notes-filter";
 import { contactStatusMatchesFilter } from "@/lib/call-contact-status";
+import { callWorkShareOptions, parseCallWorkShare } from "@/lib/call-work-share";
 import {
   isStudentExamCall,
   studentExamCallIdentityKey,
@@ -134,6 +135,14 @@ const callStatusFilterLabels: Record<CallStatusFilter, string> = {
   discounted: "المخصومين",
   full: "الدرجات الكاملة",
 };
+
+/** Each laptop remembers its own «تقسيم العمل» slice. */
+const CALL_WORK_SHARE_STORAGE_KEY = "teacherpro-calls-work-share";
+const callWorkShareChoices = callWorkShareOptions();
+function callWorkShareLabel(value: string): string {
+  const share = parseCallWorkShare(value);
+  return share ? `القسم ${share.part} من ${share.parts}` : "كل الطلاب";
+}
 
 const callStatusFilterOptions = Object.keys(
   callStatusFilterLabels,
@@ -368,6 +377,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   const [callGradeFrom, setCallGradeFrom] = useState("");
   const [callGradeTo, setCallGradeTo] = useState("");
   const [callGeneralSearch, setCallGeneralSearch] = useState("");
+  // «تقسيم العمل»: "" for the whole list, or "k/n" for this laptop's fixed slice.
+  const [callWorkShare, setCallWorkShare] = useState("");
   const [callGradePage, setCallGradePage] = useState(1);
   const [callLoading, setCallLoading] = useState(false);
   const [callCourseExamsLoading, setCallCourseExamsLoading] = useState(false);
@@ -499,6 +510,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           gradeFrom: debouncedCallGradeFrom,
           gradeTo: debouncedCallGradeTo,
           q: debouncedCallGeneralSearch,
+          share: callWorkShare || undefined,
           page: callGradePage,
           pageSize: CALL_PAGE_SIZE,
         },
@@ -568,6 +580,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     debouncedCallGradeFrom,
     debouncedCallGradeTo,
     debouncedCallGeneralSearch,
+    callWorkShare,
     callGradePage,
     callFilterRefreshKey,
   ]);
@@ -594,6 +607,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             gradeFrom: debouncedCallGradeFrom,
             gradeTo: debouncedCallGradeTo,
             q: debouncedCallGeneralSearch,
+            share: callWorkShare || undefined,
             },
           { signal: controller.signal, quietAbort: true },
         )
@@ -622,6 +636,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     debouncedCallGradeFrom,
     debouncedCallGradeTo,
     debouncedCallGeneralSearch,
+    callWorkShare,
     callFilterRefreshKey,
     callStatsRefreshKey,
   ]);
@@ -629,6 +644,27 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   useEffect(() => {
     latestSyncKeyRef.current = syncKey;
   }, [syncKey]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(CALL_WORK_SHARE_STORAGE_KEY) || "";
+      if (parseCallWorkShare(stored)) setCallWorkShare(stored);
+    } catch {
+      // Private windows may refuse storage; the whole list is then shown.
+    }
+  }, []);
+
+  const chooseCallWorkShare = (value: string) => {
+    const next = parseCallWorkShare(value) ? value : "";
+    setCallWorkShare(next);
+    setCallGradePage(1);
+    try {
+      if (next) window.localStorage.setItem(CALL_WORK_SHARE_STORAGE_KEY, next);
+      else window.localStorage.removeItem(CALL_WORK_SHARE_STORAGE_KEY);
+    } catch {
+      // The choice still applies for this visit.
+    }
+  };
   const callUpdatesPending = syncKey !== callLoadedSyncKey;
 
   const selectedProfileStudent =
@@ -744,6 +780,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       gradeFrom: debouncedCallGradeFrom,
       gradeTo: debouncedCallGradeTo,
       q: debouncedCallGeneralSearch,
+      share: callWorkShare || undefined,
       pageSize: 200,
     });
     if (!result) throw new Error("call candidates export failed");
@@ -1716,6 +1753,25 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                     {callStatusFilterOptions.map((option) => (
                       <SelectItem key={option} value={option}>
                         {callStatusFilterLabels[option]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="tp-calls__field tp-calls__status">
+                <Label htmlFor={`calls-share-${variant}`}>تقسيم العمل</Label>
+                <Select value={callWorkShare || "all"} onValueChange={chooseCallWorkShare}>
+                  <SelectTrigger
+                    id={`calls-share-${variant}`}
+                    title="لكل جهاز قسم ثابت من الطلاب لا يتداخل مع الأجهزة الأخرى"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل الطلاب</SelectItem>
+                    {callWorkShareChoices.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {callWorkShareLabel(option)}
                       </SelectItem>
                     ))}
                   </SelectContent>
