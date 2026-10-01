@@ -134,7 +134,7 @@ assert(
 assert(
   [candidates, stats].every((source) =>
     source.includes('type CallStatusFilter = "all" | "discounted" | "full";') &&
-    source.includes('if (normalized === "discounted" || normalized === "full") return normalized;') &&
+    /function normalizeCallStatusFilter\(value: string \| null\): CallStatusFilter \{[^}]*if \(normalized === "discounted" \|\| normalized === "full"\) return normalized;\s*return "all";\s*\}/.test(source) &&
     source.includes('return kind === "full";') &&
     !source.includes('filter === "absent"') &&
     !source.includes('filter === "failed"') &&
