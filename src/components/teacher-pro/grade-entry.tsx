@@ -32,6 +32,7 @@ import {
   confirmGradeEntryOfflineAttempt,
   flushGradeEntryOfflineSaves,
   getGradeEntryOfflineSaves,
+  isSessionExpiredMessage,
   markGradeEntryOfflineAttempted,
   markGradeEntryOfflineAttention,
   stageGradeEntryOfflineSave,
@@ -1635,6 +1636,25 @@ export function GradeEntryView() {
                 "تم حفظ الدرجة.",
               );
             }
+            return;
+          }
+
+          // An expired session keeps the grade waiting on this device, like a
+          // lost connection: it is sent by itself once the teacher signs in.
+          const sessionExpired =
+            result.status === 401 || isSessionExpiredMessage(result.error);
+          if (offlineAttempt && sessionExpired) {
+            setRowSaveStates((prev) => ({
+              ...prev,
+              [studentId]: {
+                phase: "queued",
+                message: "محفوظ محلياً — سجّل الدخول وتُرسل تلقائياً",
+              },
+            }));
+            showGradeEntryNotice(
+              "info",
+              "انتهت جلسة الدخول. الدرجة محفوظة على هذا الجهاز وستُرسل تلقائياً بعد تسجيل الدخول.",
+            );
             return;
           }
 
