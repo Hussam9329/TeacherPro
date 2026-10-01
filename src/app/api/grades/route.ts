@@ -51,9 +51,21 @@ function parsePositiveInt(
   return Math.min(Math.floor(parsed), max);
 }
 
-function buildGradeSearchWhere(
+// Up to this many matching students the search is an id list; a broader
+// match (a single common letter) keeps the relation filter to stay within the
+// database's parameter limit.
+const SEARCH_ID_LIST_LIMIT = 5000;
+
+/**
+ * The search box. It is matched once against the students and exams tables
+ * (small) and the grades are then filtered by those ids through their indexes.
+ * Matching the student's name, code, phones and Telegram through a join on
+ * every grade row, in each of the five queries of a grade-records page, made
+ * every keystroke wait seconds.
+ */
+async function buildGradeSearchWhere(
   rawQuery: string,
-): Prisma.GradeWhereInput | null {
+): Promise<Prisma.GradeWhereInput | null> {
   const query = rawQuery.trim();
   if (!query) return null;
 
@@ -83,13 +95,28 @@ function buildGradeSearchWhere(
     );
   }
 
-  return {
-    OR: [
-      { notes: { contains: query, mode: "insensitive" } },
-      { student: { is: { OR: studentSearch } } },
-      { exam: { is: { name: { contains: query, mode: "insensitive" } } } },
-    ],
-  };
+  const [students, exams] = await Promise.all([
+    db.student.findMany({
+      where: { OR: studentSearch },
+      select: { id: true },
+      take: SEARCH_ID_LIST_LIMIT + 1,
+    }),
+    db.exam.findMany({
+      where: { name: { contains: query, mode: "insensitive" } },
+      select: { id: true },
+    }),
+  ]);
+  const studentClause: Prisma.GradeWhereInput =
+    students.length > SEARCH_ID_LIST_LIMIT
+      ? { student: { is: { OR: studentSearch } } }
+      : { studentId: { in: students.map((student) => student.id) } };
+
+  const or: Prisma.GradeWhereInput[] = [
+    { notes: { contains: query, mode: "insensitive" } },
+  ];
+  if (students.length > 0) or.push(studentClause);
+  if (exams.length > 0) or.push({ examId: { in: exams.map((exam) => exam.id) } });
+  return { OR: or };
 }
 
 function buildNameLetterWhere(letter: string): Prisma.GradeWhereInput | null {
@@ -109,9 +136,9 @@ function buildNameLetterWhere(letter: string): Prisma.GradeWhereInput | null {
   return { student: { is: { OR: studentWhere } } };
 }
 
-function buildGradeWhere(
+async function buildGradeWhere(
   searchParams: URLSearchParams,
-): Prisma.GradeWhereInput {
+): Promise<Prisma.GradeWhereInput> {
   const and: Prisma.GradeWhereInput[] = [];
   const examId = normalizeListFilter(searchParams.get("examId"));
   const studentId = normalizeListFilter(searchParams.get("studentId"));
@@ -145,7 +172,7 @@ function buildGradeWhere(
   const letterWhere = buildNameLetterWhere(nameLetter);
   if (letterWhere) and.push(letterWhere);
 
-  const searchWhere = buildGradeSearchWhere(search);
+  const searchWhere = await buildGradeSearchWhere(search);
   if (searchWhere) and.push(searchWhere);
 
   return and.length > 0 ? { AND: and } : {};
@@ -166,7 +193,7 @@ function buildGradeWhere(
 async function buildGradeWhereWithExamCourseFilter(
   searchParams: URLSearchParams,
 ): Promise<Prisma.GradeWhereInput> {
-  const where = buildGradeWhere(searchParams);
+  const where = await buildGradeWhere(searchParams);
 
   const examId = normalizeListFilter(searchParams.get("examId"));
   // An explicit course filter is already part of `where`; keep it, but still

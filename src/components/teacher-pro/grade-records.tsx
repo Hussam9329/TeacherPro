@@ -290,7 +290,8 @@ export function GradeRecordsView() {
   } = useTeacherStore();
 
   const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(search, 180);
+  // Wait for a pause in typing so a name is one request, not one per letter.
+  const debouncedSearch = useDebouncedValue(search, 350);
   const [filterExamId, setFilterExamId] = useState("");
   const [filterStatus, setFilterStatus] = useState<GradeStatusFilter>("all");
   const [filterCourseId, setFilterCourseId] = useState("");
