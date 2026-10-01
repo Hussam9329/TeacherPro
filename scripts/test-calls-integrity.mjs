@@ -122,10 +122,27 @@ assert(
   'خيار طلاب المحاسبة محذوف من فلاتر تبويبة المكالمات',
 );
 assert(
-  candidates.includes('filter === "failed"') &&
-    candidates.includes('kind === "failed" || kind === "academic-accounting"') &&
-    stats.includes('kind === "failed" || kind === "academic-accounting"'),
-  'فلتر الراسبين غير المخصومين يشمل طلاب المحاسبة ويستثني المخصومين',
+  followUp.includes('type CallStatusFilter = "all" | "discounted" | "full";') &&
+    followUp.includes('all: "كل الحالات",') &&
+    followUp.includes('discounted: "المخصومين",') &&
+    followUp.includes('full: "الدرجات الكاملة",') &&
+    ['الغائبين', 'الراسبين غير المخصومين', 'طلاب الغش', 'الطلاب الناجحين', 'المحميون', 'dismissed: "المفصولين"'].every(
+      (label) => !followUp.includes(label),
+    ),
+  'قائمة «حالة الطالب في الامتحان» فيها كل الحالات والمخصومين والدرجات الكاملة فقط',
+);
+assert(
+  [candidates, stats].every((source) =>
+    source.includes('type CallStatusFilter = "all" | "discounted" | "full";') &&
+    source.includes('if (normalized === "discounted" || normalized === "full") return normalized;') &&
+    source.includes('return kind === "full";') &&
+    !source.includes('filter === "absent"') &&
+    !source.includes('filter === "failed"') &&
+    !source.includes('filter === "passed"') &&
+    !source.includes('filter === "protected"') &&
+    !source.includes('filter === "dismissed"') &&
+    !source.includes('STUDENT_STATUS_DISMISSED')),
+  'القائمة والإحصائيات تطبقان الفلاتر الثلاثة نفسها، وأي فلتر قديم من رابط أو تبويبة قديمة يُقرأ «كل الحالات»',
 );
 assert(
   followUp.includes('https://wa.me/') || followUp.includes('whatsappLink(phone || "")'),
@@ -151,15 +168,6 @@ assert(
     !callPhoneQrDialog.includes('api.qrserver') &&
     !callPhoneQrDialog.includes('chart.googleapis'),
   'رمز الاتصال ظاهر مباشرة ويُولد محلياً بهامش قابل للمسح ويحوّل الهاتف إلى tel: بلا خدمة خارجية',
-);
-assert(
-  followUp.includes('| "dismissed";') &&
-    followUp.includes('dismissed: "المفصولين"') &&
-    candidates.includes('normalized === "dismissed"') &&
-    stats.includes('normalized === "dismissed"') &&
-    candidates.includes('studentStatus === STUDENT_STATUS_DISMISSED') &&
-    stats.includes('student?.status === STUDENT_STATUS_DISMISSED'),
-  'فلتر المفصولين موجود في الواجهة وتطبقه القائمة والإحصائيات على الحالة الحالية نفسها',
 );
 
 
@@ -218,13 +226,6 @@ assert(
   'فلتر المخصومين يعتمد على الأثر الأكاديمي الحقيقي ويشمل الغياب المخصوم لا الدرجات فقط',
 );
 assert(
-  candidates.includes('filter === "absent"') &&
-    candidates.includes('return Boolean(absenceSource)') &&
-    stats.includes('filter === "absent"') &&
-    stats.includes('return Boolean(absenceSource)'),
-  'فلتر الغائبين يوحّد الغياب المسجل والمشتق ويستبعد الحالات المحمية',
-);
-assert(
   candidates.includes('loadActiveGracePeriodsByStudent') &&
     stats.includes('loadActiveGracePeriodsByStudent') &&
     !candidates.includes('gracePeriodStartDate') &&
@@ -274,8 +275,9 @@ assert(
 assert(
   api.includes('gradeFrom: query.gradeFrom') &&
     api.includes('gradeTo: query.gradeTo') &&
-    candidates.includes('callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)') &&
-    stats.includes('callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)'),
+    candidates.includes('callGradeMatchesRange(grade, gradeRange)') &&
+    stats.includes('callGradeMatchesRange(grade, gradeRange)') &&
+    !gradeRange.includes('callGradeMatchesRangeForStatus'),
   'نطاق الدرجة ينتقل إلى القائمة والتصدير والإحصائيات بنفس المنطق',
 );
 assert(
@@ -285,17 +287,12 @@ assert(
   'نطاق الدرجة شامل للحدين ويستبعد الحالات غير الرقمية عند تفعيله',
 );
 assert(
-  followUp.includes('callStatusSupportsGradeRange') &&
-    followUp.includes('setCallGradeFrom("");') &&
-    followUp.includes('setCallGradeTo("");') &&
-    followUp.includes('{callGradeRangeEnabled && (') &&
-    followUp.includes('<summary>فلاتر إضافية</summary>'),
-  'اختيار الغائبين أو الغش يمسح نطاق الدرجة ويخفي حقليه للحالات غير الرقمية',
-);
-assert(
-  followUp.includes('gradeFrom: effectiveCallGradeFrom') &&
-    followUp.includes('gradeTo: effectiveCallGradeTo'),
-  'طلبات القائمة والإحصائيات والتصدير لا ترسل نطاقاً رقمياً متأخراً مع الغائبين أو الغش',
+  followUp.includes('<summary>فلاتر إضافية</summary>') &&
+    !followUp.includes('callStatusSupportsGradeRange') &&
+    !followUp.includes('callGradeRangeEnabled') &&
+    followUp.includes('gradeFrom: debouncedCallGradeFrom') &&
+    followUp.includes('gradeTo: debouncedCallGradeTo'),
+  'نطاق الدرجة متاح مع كل خيارات الحالة الثلاثة وينتقل للقائمة والإحصائيات والتصدير بعد التأجيل',
 );
 assert(
   followUp.includes('حالة التواصل') &&
@@ -350,11 +347,6 @@ assert(
   followUp.includes('data?.deleted && callNotesFilter === "with-notes"') &&
     followUp.includes('setCallFilterRefreshKey((current) => current + 1)'),
   'حذف آخر ملاحظة يزيل الطالب من نتائج فلتر أصحاب الملاحظات مباشرة',
-);
-assert(
-  followUp.includes('الطلاب الذين لم تُدخل') &&
-    followUp.includes('درجاتهم بعد انتهاء الامتحان'),
-  'الواجهة توضح أن الغائبين تشمل أيضاً غير المدخلة درجاتهم بعد انتهاء الامتحان',
 );
 
 // ── Simplified calls: short cards, filter buttons, details window ──────────
@@ -428,7 +420,6 @@ assert(
       source.includes('loadRecordedChargeByGradeId(') &&
       source.includes('const deducted = recordedCharge ?? isDeductedImpact(impactKind);') &&
       source.includes('if (filter === "discounted") return deducted;') &&
-      source.includes('!deducted && (kind === "failed" || kind === "academic-accounting")') &&
       source.includes('grade.id.startsWith("implicit-absence:")') &&
       source.includes('recordedChargeFor(grade)')),
   'فلتر «المخصومين» وعدده يعتمدان سجل الفرص الفعلي (نفس دليل شارة الكارت)، والغياب المشتق بلا خصم',

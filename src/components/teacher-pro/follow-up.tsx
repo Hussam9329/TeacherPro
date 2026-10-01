@@ -87,16 +87,7 @@ type CallCategory =
   | "cheating"
   | "protected"
   | "missing";
-type CallStatusFilter =
-  | "all"
-  | "absent"
-  | "discounted"
-  | "failed"
-  | "cheating"
-  | "passed"
-  | "full"
-  | "protected"
-  | "dismissed";
+type CallStatusFilter = "all" | "discounted" | "full";
 type CallGradeDisplayMode = "latest" | "latest-two" | "all";
 type CallContactStatusFilter =
   | "all"
@@ -138,14 +129,8 @@ type CallExportRow = {
 
 const callStatusFilterLabels: Record<CallStatusFilter, string> = {
   all: "كل الحالات",
-  absent: "الغائبين",
   discounted: "المخصومين",
-  failed: "الراسبين غير المخصومين",
-  cheating: "طلاب الغش",
-  passed: "الطلاب الناجحين",
   full: "الدرجات الكاملة",
-  protected: "المحميون (مجاز/سماح/قبل التسجيل)",
-  dismissed: "المفصولين",
 };
 
 const callStatusFilterOptions = Object.keys(
@@ -220,12 +205,6 @@ function callResultTone(category?: CallCategory): "danger" | "warning" | "succes
   if (category === "discounted" || category === "failed" || category === "academic-accounting") return "warning";
   if (category === "passed" || category === "full") return "success";
   return "info";
-}
-
-function callStatusSupportsGradeRange(status: CallStatusFilter): boolean {
-  // "absent" و "cheating" ليس لديهما درجة رقمية. "protected" قد يحمل
-  // درجة فعلية (مثل درجات ما قبل التسجيل) لذا ندعم نطاق الدرجة لها.
-  return status !== "absent" && status !== "cheating";
 }
 
 const callGradeDisplayModeLabels: Record<CallGradeDisplayMode, string> = {
@@ -415,13 +394,6 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   const debouncedCallGeneralSearch = useDebouncedValue(callGeneralSearch, 300);
   const debouncedCallGradeFrom = useDebouncedValue(callGradeFrom, 300);
   const debouncedCallGradeTo = useDebouncedValue(callGradeTo, 300);
-  const callGradeRangeEnabled = callStatusSupportsGradeRange(callStatusFilter);
-  const effectiveCallGradeFrom = callGradeRangeEnabled
-    ? debouncedCallGradeFrom
-    : "";
-  const effectiveCallGradeTo = callGradeRangeEnabled
-    ? debouncedCallGradeTo
-    : "";
 
   const [profileStudentId, setProfileStudentId] = useState("");
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
@@ -515,8 +487,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           statusFilter: callStatusFilter,
           contactStatusFilter: callContactStatusFilter,
           notesFilter: callNotesFilter,
-          gradeFrom: effectiveCallGradeFrom,
-          gradeTo: effectiveCallGradeTo,
+          gradeFrom: debouncedCallGradeFrom,
+          gradeTo: debouncedCallGradeTo,
           q: debouncedCallGeneralSearch,
           page: callGradePage,
           pageSize: CALL_PAGE_SIZE,
@@ -585,8 +557,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     callStatusFilter,
     callContactStatusFilter,
     callNotesFilter,
-    effectiveCallGradeFrom,
-    effectiveCallGradeTo,
+    debouncedCallGradeFrom,
+    debouncedCallGradeTo,
     debouncedCallGeneralSearch,
     callGradePage,
     callFilterRefreshKey,
@@ -614,8 +586,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             statusFilter: callStatusFilter,
             contactStatusFilter: callContactStatusFilter,
             notesFilter: callNotesFilter,
-            gradeFrom: effectiveCallGradeFrom,
-            gradeTo: effectiveCallGradeTo,
+            gradeFrom: debouncedCallGradeFrom,
+            gradeTo: debouncedCallGradeTo,
             q: debouncedCallGeneralSearch,
             },
           { signal: controller.signal, quietAbort: true },
@@ -642,8 +614,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     callStatusFilter,
     callContactStatusFilter,
     callNotesFilter,
-    effectiveCallGradeFrom,
-    effectiveCallGradeTo,
+    debouncedCallGradeFrom,
+    debouncedCallGradeTo,
     debouncedCallGeneralSearch,
     callFilterRefreshKey,
     syncKey,
@@ -752,8 +724,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       statusFilter: callStatusFilter,
       contactStatusFilter: callContactStatusFilter,
       notesFilter: callNotesFilter,
-      gradeFrom: effectiveCallGradeFrom,
-      gradeTo: effectiveCallGradeTo,
+      gradeFrom: debouncedCallGradeFrom,
+      gradeTo: debouncedCallGradeTo,
       q: debouncedCallGeneralSearch,
       pageSize: 200,
     });
@@ -1705,12 +1677,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                 <Select
                   value={callStatusFilter}
                   onValueChange={(value) => {
-                    const nextStatus = value as CallStatusFilter;
-                    setCallStatusFilter(nextStatus);
-                    if (!callStatusSupportsGradeRange(nextStatus)) {
-                      setCallGradeFrom("");
-                      setCallGradeTo("");
-                    }
+                    setCallStatusFilter(value as CallStatusFilter);
                     setCallGradePage(1);
                   }}
                 >
@@ -1765,64 +1732,51 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
               ))}
             </div>
 
-            {callGradeRangeEnabled && (
-              <details className="tp-calls__more" open={Boolean(callGradeFrom || callGradeTo) || undefined}>
-                <summary>فلاتر إضافية</summary>
-                <div className="tp-calls__range">
-                  <div className="tp-calls__field">
-                    <Label htmlFor={`follow-up-calls-grade-from-${variant}`}>الدرجة من</Label>
-                    <Input
-                      id={`follow-up-calls-grade-from-${variant}`}
-                      name="calls-grade-from"
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      max={selectedCallExam?.fullMark}
-                      step="any"
-                      value={callGradeFrom}
-                      onChange={(event) => {
-                        setCallGradeFrom(event.target.value);
-                        setCallGradePage(1);
-                      }}
-                      placeholder="مثال: 20"
-                    />
-                  </div>
-                  <div className="tp-calls__field">
-                    <Label htmlFor={`follow-up-calls-grade-to-${variant}`}>الدرجة إلى</Label>
-                    <Input
-                      id={`follow-up-calls-grade-to-${variant}`}
-                      name="calls-grade-to"
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      max={selectedCallExam?.fullMark}
-                      step="any"
-                      value={callGradeTo}
-                      onChange={(event) => {
-                        setCallGradeTo(event.target.value);
-                        setCallGradePage(1);
-                      }}
-                      placeholder={`حتى ${selectedCallExam?.fullMark ?? "الدرجة الكاملة"}`}
-                    />
-                  </div>
+            <details className="tp-calls__more" open={Boolean(callGradeFrom || callGradeTo) || undefined}>
+              <summary>فلاتر إضافية</summary>
+              <div className="tp-calls__range">
+                <div className="tp-calls__field">
+                  <Label htmlFor={`follow-up-calls-grade-from-${variant}`}>الدرجة من</Label>
+                  <Input
+                    id={`follow-up-calls-grade-from-${variant}`}
+                    name="calls-grade-from"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={selectedCallExam?.fullMark}
+                    step="any"
+                    value={callGradeFrom}
+                    onChange={(event) => {
+                      setCallGradeFrom(event.target.value);
+                      setCallGradePage(1);
+                    }}
+                    placeholder="مثال: 20"
+                  />
                 </div>
-              </details>
-            )}
+                <div className="tp-calls__field">
+                  <Label htmlFor={`follow-up-calls-grade-to-${variant}`}>الدرجة إلى</Label>
+                  <Input
+                    id={`follow-up-calls-grade-to-${variant}`}
+                    name="calls-grade-to"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={selectedCallExam?.fullMark}
+                    step="any"
+                    value={callGradeTo}
+                    onChange={(event) => {
+                      setCallGradeTo(event.target.value);
+                      setCallGradePage(1);
+                    }}
+                    placeholder={`حتى ${selectedCallExam?.fullMark ?? "الدرجة الكاملة"}`}
+                  />
+                </div>
+              </div>
+            </details>
 
-            {callStatusFilter === "absent" ? (
-              <p className="tp-calls__hint" data-tone="warning">
-                الغائبون يشملون المسجلين بحالة «غائب» والطلاب الذين لم تُدخل
-                درجاتهم بعد انتهاء الامتحان.
-              </p>
-            ) : callStatusFilter === "cheating" ? (
-              <p className="tp-calls__hint">حالة الغش غير رقمية، لذلك لا يوجد نطاق درجة لهذا الفلتر.</p>
-            ) : callGradeRangeInvalid ? (
+            {callGradeRangeInvalid ? (
               <p className="tp-calls__hint" data-tone="danger" role="alert">
                 درجة «من» يجب ألا تكون أكبر من درجة «إلى».
-              </p>
-            ) : callStatusFilter === "dismissed" && !callGradeFrom && !callGradeTo ? (
-              <p className="tp-calls__hint" data-tone="danger">
-                يعرض هذا الفلتر الطلاب الذين حالتهم الحالية «مفصول» ضمن الدورة والامتحان المحددين.
               </p>
             ) : callGradeFrom || callGradeTo ? (
               <p className="tp-calls__hint">نطاق الدرجة شامل للحدّين، وعند استخدامه تظهر الدرجات الرقمية فقط.</p>

@@ -350,30 +350,23 @@ test("students outside the exam site are not implicit absences", () => {
   );
 });
 
-test("absence filter ignores stale numeric range while numeric filters keep it", () => {
+test("an active grade range keeps numeric grades inside it only", () => {
   const parsed = range.parseCallGradeRange("10", "30");
+  assert.equal(range.callGradeMatchesRange(absentGrade, parsed), false);
   assert.equal(
-    range.callGradeMatchesRangeForStatus(absentGrade, parsed, "absent"),
-    true,
-  );
-  assert.equal(
-    range.callGradeMatchesRangeForStatus(
-      { status: "غش", score: null },
-      parsed,
-      "cheating",
-    ),
-    true,
-  );
-  assert.equal(
-    range.callGradeMatchesRangeForStatus(absentGrade, parsed, "all"),
+    range.callGradeMatchesRange({ status: "غش", score: null }, parsed),
     false,
   );
   assert.equal(
-    range.callGradeMatchesRangeForStatus(
-      { status: "درجة", score: 20 },
-      parsed,
-      "all",
-    ),
+    range.callGradeMatchesRange({ status: "درجة", score: 20 }, parsed),
+    true,
+  );
+  assert.equal(
+    range.callGradeMatchesRange({ status: "درجة", score: 31 }, parsed),
+    false,
+  );
+  assert.equal(
+    range.callGradeMatchesRange(absentGrade, range.parseCallGradeRange("", "")),
     true,
   );
 });
