@@ -387,7 +387,6 @@ export function DashboardView({
                 </span>
                 <span className="tp-dashboard__shortcut-label">
                   إدارة فترة السماح
-                  <ShortcutAlert count={alerts?.currentGracePeriods} tone="info" label="فترة سماح حالية أو قادمة" />
                 </span>
               </button>
             )}
@@ -404,7 +403,6 @@ export function DashboardView({
                 </span>
                 <span className="tp-dashboard__shortcut-label">
                   إدارة الإجازات
-                  <ShortcutAlert count={alerts?.currentLeaves} tone="info" label="طالب مجاز حالياً أو قريباً" />
                 </span>
               </button>
             )}
