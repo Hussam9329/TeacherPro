@@ -139,7 +139,8 @@ check(!/\bDROP\b/i.test(migration), "لا حذف لحقول النظام الق�
 const schema = read("prisma/schema.prisma");
 check(/model GracePeriod \{/.test(schema) && /cancelledAt\s+DateTime\?/.test(schema), "نموذج GracePeriod يحفظ الإلغاء بدل الحذف");
 check(!/model GracePeriod \{[\s\S]*?\bstatus\b[\s\S]*?\n\}/.test(schema), "حالة الفترة تُحسب ولا تُخزَّن");
-check(read("src/lib/schema-readiness.ts").includes("20260925120000_grace_period_table"), "التطبيق ينتظر ترحيل جدول السماح");
+const readinessGate = read("src/lib/schema-readiness.ts").match(/REQUIRED_DATABASE_MIGRATION =\s*'([^']+)'/)?.[1] || "";
+check(readinessGate >= "20260925120000_grace_period_table", "التطبيق ينتظر ترحيل جدول السماح (أو ترحيلاً أحدث منه)");
 const policy = JSON.parse(read("prisma/deployment-migration-policy.json"));
 check(
   JSON.stringify(policy).includes("20260925120000_grace_period_table"),

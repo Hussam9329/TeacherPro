@@ -1,12 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { AlertCircle, BookOpen, CalendarDays, CheckCheck, ChevronDown, Loader2, LockKeyhole, MessageCircle, RefreshCw, Search, X } from "lucide-react";
+import { AlertCircle, BookOpen, CalendarDays, CheckCheck, ChevronDown, Loader2, LockKeyhole, MessageCircle, Radiation, RefreshCw, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { codeClosuresApi, type CodeClosureStudent } from "@/lib/code-closures-client";
+import {
+  MZ_ACTIVE_USERS_URL,
+  buildDismissalNotice,
+  copyTextNow,
+  mzPlatformPhone,
+  telegramNoticeHref,
+  type ClosureContactStep,
+} from "@/lib/code-closure-contact";
 import { saveDismissedCheck } from "@/lib/dismissed-check-api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
@@ -38,6 +46,8 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [selectedCourseName, setSelectedCourseName] = useState("");
   const [expandedReasonIds, setExpandedReasonIds] = useState<Set<string>>(new Set());
+  // Contact steps clicked here, shown at once while the shared mark is saved.
+  const [clickedSteps, setClickedSteps] = useState<Record<string, number>>({});
   const pendingRef = useRef(new Set<string>());
   const openRef = useRef(open);
   const generationRef = useRef(0);
@@ -152,6 +162,43 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
       // In-flight writes deliberately survive closing/reopening the dialog.
       void refresh();
     }
+  }
+
+  function stepDone(student: CodeClosureStudent, step: ClosureContactStep): boolean {
+    const saved = step === "platform" ? student.closurePlatformEpoch : student.closureTelegramEpoch;
+    return saved === student.dismissedCheckEpoch || clickedSteps[`${student.id}:${step}`] === student.dismissedCheckEpoch;
+  }
+
+  // Highlights the step for everyone: it is saved for this dismissal only, so a
+  // later dismissal of the same student starts unmarked again.
+  function markStep(student: CodeClosureStudent, step: ClosureContactStep) {
+    if (stepDone(student, step)) return;
+    const key = `${student.id}:${step}`;
+    const epoch = student.dismissedCheckEpoch;
+    setClickedSteps((current) => ({ ...current, [key]: epoch }));
+    if (!canManage) return;
+    codeClosuresApi.markContact(student.id, step, epoch).then(
+      () => void refresh(),
+      (cause) => {
+        setClickedSteps((current) => {
+          const next = { ...current };
+          delete next[key];
+          return next;
+        });
+        toast.error(cause instanceof Error ? cause.message : "تعذر حفظ علامة التواصل مع الطالب.");
+      },
+    );
+  }
+
+  function openPlatform(student: CodeClosureStudent) {
+    const phone = mzPlatformPhone(student.phone);
+    // Copy first: the new tab takes the focus the clipboard needs.
+    const copied = phone ? copyTextNow(phone) : false;
+    window.open(MZ_ACTIVE_USERS_URL, "_blank", "noopener,noreferrer");
+    markStep(student, "platform");
+    if (!phone) toast.error(`لا يوجد رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه في المنصة يدوياً.`);
+    else if (!copied) toast.error(`تعذر النسخ تلقائياً. رقم الطالب: ${phone}`);
+    else toast.success(`نُسخ رقم الطالب ${phone}`);
   }
 
   const courses = useMemo(() => {
@@ -282,6 +329,12 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
               <div className="tp-modal__cards" data-columns="1">
                 {visibleStudents.map((student) => {
                   const telegram = describeTelegramHandle(student);
+                  const telegramHref = telegramNoticeHref(
+                    telegram.href,
+                    buildDismissalNotice(student.dismissalExamName, student.dismissalOutcome),
+                  );
+                  const platformDone = stepDone(student, "platform");
+                  const telegramDone = stepDone(student, "telegram");
                   const reasonExpanded = expandedReasonIds.has(student.id);
                   const reasonId = `${filterId}-dismissal-reason-${student.id}`;
                   const busy = !canManage || pendingIds.has(student.id);
@@ -341,12 +394,25 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
 
                         <div className="tp-closure-card__row">
                           <span className="tp-closure-card__row-label"><MessageCircle aria-hidden="true" />التواصل</span>
-                          {telegram.href ? (
+                          <span className="tp-closure-card__actions">
+                          <button
+                            type="button"
+                            className="tp-closure-card__danger"
+                            data-done={platformDone || undefined}
+                            onClick={() => openPlatform(student)}
+                            aria-label={`فتح المنصة ونسخ رقم هاتف ${student.name}${platformDone ? " — تم" : ""}`}
+                            title={platformDone ? "تم فتح المنصة ونسخ الرقم" : "فتح المنصة ونسخ رقم هاتف الطالب"}
+                          >
+                            <Radiation aria-hidden="true" />
+                          </button>
+                          {telegramHref ? (
                             <a
-                              href={telegram.href}
+                              href={telegramHref}
                               className="tp-closure-card__telegram"
-                              aria-label={`فتح محادثة ${student.name} في تطبيق تليگرام`}
-                              title="فتح المحادثة في تطبيق تليگرام"
+                              data-done={telegramDone || undefined}
+                              onClick={() => markStep(student, "telegram")}
+                              aria-label={`فتح محادثة ${student.name} في تطبيق تليگرام مع تبليغ الفصل جاهزاً${telegramDone ? " — تم" : ""}`}
+                              title={telegramDone ? "تم فتح التبليغ" : "فتح المحادثة في تطبيق تليگرام مع تبليغ الفصل جاهزاً للإرسال"}
                             >
                               <MessageCircle aria-hidden="true" />
                               <span dir="ltr">@{telegram.value}</span>
@@ -361,6 +427,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
                               <span dir={telegram.value ? "ltr" : undefined}>{telegram.value || "لا يوجد معرّف"}</span>
                             </span>
                           )}
+                          </span>
                         </div>
                       </div>
 

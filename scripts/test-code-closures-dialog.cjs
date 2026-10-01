@@ -40,6 +40,7 @@ function loadHelper(specifier, parentFile = path.join(root, 'src/index.ts')) {
   return module.exports;
 }
 const registryHelpers = loadHelper('@/components/teacher-pro/student-registry-helpers');
+const contactHelpers = loadHelper('@/lib/code-closure-contact');
 
 function deferred() {
   let resolve;
@@ -63,6 +64,10 @@ function harness() {
   const slots = [];
   const reads = [];
   const writes = [];
+  const contacts = [];
+  const copies = [];
+  const opened = [];
+  const successes = [];
   const errors = [];
   const intervals = new Map();
   const windowListeners = new Map();
@@ -131,6 +136,11 @@ function harness() {
       writes.push({ ...request, args });
       return request.promise;
     },
+    markContact(...args) {
+      const request = deferred();
+      contacts.push({ ...request, args });
+      return request.promise;
+    },
   };
   const named = (names) => Object.fromEntries(names.map((name) => [name, name]));
   const jsx = (type, elementProps) => ({ type, props: elementProps });
@@ -139,15 +149,17 @@ function harness() {
     './tp-modal.css': {},
     './code-closures-dialog.css': {},
     'react/jsx-runtime': { jsx, jsxs: jsx },
-    'lucide-react': named(['AlertCircle', 'BookOpen', 'CalendarDays', 'CheckCheck', 'ChevronDown', 'LockKeyhole', 'Loader2', 'MessageCircle', 'RefreshCw', 'Search', 'UserRound', 'X']),
+    'lucide-react': named(['AlertCircle', 'BookOpen', 'CalendarDays', 'CheckCheck', 'ChevronDown', 'LockKeyhole', 'Loader2', 'MessageCircle', 'Radiation', 'RefreshCw', 'Search', 'UserRound', 'X']),
     '@/components/ui/button': named(['Button']),
     '@/components/ui/checkbox': named(['Checkbox']),
     '@/components/ui/dialog': named(['Dialog', 'DialogContent', 'DialogHeader', 'DialogTitle']),
     '@/components/ui/input': named(['Input']),
     '@/lib/code-closures-client': { codeClosuresApi: api },
+    // The real phone/notice/link helpers; only the clipboard is recorded.
+    '@/lib/code-closure-contact': { ...contactHelpers, copyTextNow: (text) => { copies.push(text); return true; } },
     '@/lib/dismissed-check-api': { saveDismissedCheck: (...args) => api.save(...args) },
     '@/lib/teacherpro-sync': { emitTeacherProDataChanged() {} },
-    '@/lib/user-toast': { toast: { error: (error) => errors.push(error) } },
+    '@/lib/user-toast': { toast: { error: (error) => errors.push(error), success: (message) => successes.push(message) } },
     '@/lib/validation': validationContext.exports,
     './student-registry-helpers': registryHelpers,
     '@/lib/baghdad-time': loadHelper('@/lib/baghdad-time'),
@@ -165,6 +177,7 @@ function harness() {
     Set,
     Map,
     window: {
+      open(...args) { opened.push(args); return null; },
       setInterval(callback) { intervals.set(++timer, callback); return timer; },
       clearInterval(id) { intervals.delete(id); },
       addEventListener(name, callback) { windowListeners.set(name, callback); },
@@ -204,7 +217,7 @@ function harness() {
   }
 
   return {
-    reads, writes, errors, render,
+    reads, writes, contacts, copies, opened, successes, errors, render,
     async flush() {
       // Drain promises originating in the VM realm before applying state updates.
       await new Promise((resolve) => setImmediate(resolve));
@@ -279,11 +292,11 @@ function selectCourse(view, value) {
   assert.deepEqual(checkedValues(view), [false, false]);
   assert(!view.text().includes('طالب saved'));
   assert(view.text().includes('المعروض 2 من 3 طالب مفصول'));
-  assert.deepEqual(view.nodes('a').map((node) => node.props.href), [
+  assert.deepEqual(view.nodes('a').map((node) => node.props.href.split('&text=')[0]), [
     'tg://resolve?domain=student_first',
     'tg://resolve?domain=legacy_student',
   ], 'prefer the saved username over numeric Telegram ID, with a legacy username fallback');
-  assert(view.nodes('a').every((node) => !node.props.target && !node.props.onClick), 'native links do not redirect through a web page or trigger a closure action');
+  assert(view.nodes('a').every((node) => !node.props.target), 'native links open the Telegram app directly, never through a web page');
   assert.equal(view.nodes('time')[0].props.children, '2026/9/26', 'dismissal dates use the Baghdad calendar day');
   assert(view.text().includes('غير مسجل'), 'missing dates are explicit rather than invented');
   assert(!view.text().includes(first.dismissalReason), 'dismissal reasons start hidden');
@@ -489,6 +502,65 @@ function selectCourse(view, value) {
   await view.flush();
   assert.equal(view.reads.length, 3, 'Settling a write after unmount must not start a new read');
   console.log('PASS: hidden windows pause polling, focus restores freshness, and unmount prevents follow-up requests.');
+
+  // Contact steps: the platform button copies the phone and opens the platform;
+  // the Telegram link carries the notice; both stay highlighted once done.
+  const dangerous = { ...first, phone: '07705550679', dismissalExamName: 'يومي 3', dismissalOutcome: 'غياب', closurePlatformEpoch: null, closureTelegramEpoch: 2 };
+  const doneBefore = { ...second, phone: null, dismissalExamName: null, dismissalOutcome: null, closurePlatformEpoch: 3, closureTelegramEpoch: 3 };
+  view = harness();
+  view.render();
+  view.reads[0].resolve(response([dangerous, doneBefore]));
+  await view.flush();
+  const dangerButtons = () => view.nodes('button').filter((node) => node.props.className === 'tp-closure-card__danger');
+  const links = () => view.nodes('a');
+  assert.equal(dangerButtons().length, 2, 'every card has the platform button beside the Telegram handle');
+  assert(dangerButtons().every((node) => node.props.children.type === 'Radiation' && !node.props.children.props.children), 'the platform button is a symbol only, with no visible text');
+  assert.deepEqual(dangerButtons().map((node) => Boolean(node.props['data-done'])), [false, true], 'a step saved for this dismissal is highlighted on open');
+  assert.deepEqual(links().map((node) => Boolean(node.props['data-done'])), [false, true], 'a Telegram mark from an older dismissal does not count');
+  const notice = decodeURIComponent(links()[0].props.href.split('&text=')[1]);
+  assert.equal(notice, contactHelpers.buildDismissalNotice('يومي 3', 'غياب'));
+  assert(notice.includes('**الامتحان:** يومي 3') && notice.includes('**الحالة:** غياب') && notice.includes('**@hf_chances**'));
+  assert(decodeURIComponent(links()[1].props.href.split('&text=')[1]).includes('**الامتحان:** [اسم الامتحان]'), 'an unknown exam keeps its placeholder to be filled before sending');
+
+  dangerButtons()[0].props.onClick();
+  view.render();
+  assert.deepEqual(view.copies, ['009647705550679'], 'the phone is copied in the platform search form');
+  assert.deepEqual(view.opened, [['https://www.mz-academy.com/ar/teachers/users/active', '_blank', 'noopener,noreferrer']]);
+  assert.deepEqual(view.contacts[0].args, [dangerous.id, 'platform', 3], 'the mark is saved for this dismissal episode');
+  assert.equal(dangerButtons()[0].props['data-done'], true, 'highlighted at once, before the save returns');
+  assert.equal(view.writes.length, 0, 'contact steps never change the closed-code flag');
+  view.contacts[0].resolve();
+  await view.flush();
+  assert.equal(view.reads.length, 2, 'a saved mark refreshes the shared list');
+  view.reads[1].resolve(response([{ ...dangerous, closurePlatformEpoch: 3 }, doneBefore]));
+  await view.flush();
+  assert.equal(dangerButtons()[0].props['data-done'], true);
+  dangerButtons()[0].props.onClick();
+  view.render();
+  assert.equal(view.contacts.length, 1, 'an already done step is not saved twice');
+
+  links()[0].props.onClick();
+  view.render();
+  assert.deepEqual(view.contacts[1].args, [dangerous.id, 'telegram', 3]);
+  assert.equal(links()[0].props['data-done'], true);
+  view.contacts[1].reject(new Error('تعذر الحفظ'));
+  await view.flush();
+  assert.equal(links()[0].props['data-done'], undefined, 'a mark the server refused is not shown as done');
+  assert(view.errors.includes('تعذر الحفظ'));
+
+  dangerButtons()[1].props.onClick();
+  view.render();
+  assert.equal(view.copies.length, 2, 'nothing is copied without a usable phone');
+  assert.equal(view.opened.length, 3, 'the platform still opens');
+  assert(view.errors.some((error) => error.includes('لا يوجد رقم هاتف صالح')));
+
+  view.setProps({ canManage: false });
+  const before = view.contacts.length;
+  links()[0].props.onClick();
+  view.render();
+  assert.equal(view.contacts.length, before, 'read-only users do not save shared marks');
+  assert.equal(links()[0].props['data-done'], true, 'but still see what they clicked');
+  console.log('PASS: platform button copies 00964 phone and opens the platform; Telegram link carries the filled notice; both highlight per dismissal and only managers save the shared mark.');
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

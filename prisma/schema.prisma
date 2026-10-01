@@ -77,6 +77,10 @@ model Student {
   dismissalNotes  String?
   dismissedChecked Boolean @default(false)
   dismissedCheckEpoch Int @default(0)
+  // Code-closure contact steps (platform opened with the phone copied,
+  // Telegram notice opened): the dismissedCheckEpoch they were done in.
+  closurePlatformEpoch Int?
+  closureTelegramEpoch Int?
   opportunities   Int      @default(0)
   baseOpportunities Int    @default(0)
   accountingGraceDays Int   @default(0)

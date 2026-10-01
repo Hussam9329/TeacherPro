@@ -23,7 +23,8 @@ new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/di
         username text, telegram text,
         status text NOT NULL, "dismissedChecked" boolean NOT NULL,
         "dismissedCheckEpoch" integer NOT NULL, "courseId" text REFERENCES "Course"(id),
-        "dismissalReason" text, opportunities integer NOT NULL
+        "dismissalReason" text, opportunities integer NOT NULL,
+        phone text, "closurePlatformEpoch" integer, "closureTelegramEpoch" integer
       );
       INSERT INTO "Course" VALUES ('course-a','الدورة الأولى'),('course-b','الدورة الثانية');
       INSERT INTO "Student"
@@ -38,9 +39,16 @@ new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/di
       INSERT INTO "Student" VALUES
         ('active','طالب نشط','ACTIVE',NULL,NULL,'نشط',true,1,'course-a',NULL,2),
         ('archived','طالب مؤرشف','ARCHIVED',NULL,NULL,'مؤرشف',true,0,'course-b',NULL,0);
+      UPDATE "Student" SET phone='07705550679', "closurePlatformEpoch"=3, "closureTelegramEpoch"=2 WHERE id='student-0003';
+      UPDATE "Student" SET "dismissalReason"='درجة فصل (4): يومي 4' WHERE id='student-0008';
+      CREATE TABLE "Exam" (id text PRIMARY KEY, name text NOT NULL, "fullMark" integer NOT NULL);
+      INSERT INTO "Exam" VALUES ('exam-3','يومي 3',100),('exam-4','يومي 4',20),('exam-5','يومي 5',100),('exam-6','يومي 6',100);
+      CREATE TABLE "Grade" ("studentId" text, "examId" text, status text NOT NULL, score integer);
+      INSERT INTO "Grade" VALUES ('student-0007','exam-3','غائب',NULL),('student-0008','exam-4','درجة',4),
+        ('student-0008','exam-5','غائب',NULL),('student-0007','exam-4','درجة',19);
       CREATE TABLE "OpportunityLog" (
         id text PRIMARY KEY, "studentId" text REFERENCES "Student"(id),
-        action text NOT NULL, reason text, date timestamptz NOT NULL
+        action text NOT NULL, reason text, date timestamptz NOT NULL, "examId" text
       );
       CREATE TABLE "StudentNote" (
         id text PRIMARY KEY, "studentId" text REFERENCES "Student"(id),
@@ -52,6 +60,12 @@ new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/di
         ('log-3-reactivation','student-0003','إعادة تفعيل','إعادة تفعيل بعد فصل الطالب','2026-09-25T12:00:00Z'),
         ('log-5','student-0005','خصم','فصل الطالب: يدوي','2026-09-24T12:00:00Z'),
         ('log-6','student-0006','إضافة','فصل الطالب: نص في حركة غير فصل','2026-09-25T12:00:00Z');
+      INSERT INTO "OpportunityLog" (id,"studentId",action,reason,date,"examId") VALUES
+        ('log-7','student-0007','فصل تلقائي','تلقائي: غياب في امتحان يومي: يومي 3','2026-09-20T12:00:00Z','exam-3'),
+        ('log-8-reason','student-0008','فصل تلقائي','تلقائي: درجة فصل (4): يومي 4','2026-09-20T12:00:00Z','exam-4'),
+        ('log-8-later','student-0008','فصل تلقائي','تلقائي: مخالفة بعد انتهاء الفرص - غياب في امتحان يومي: يومي 5','2026-09-22T12:00:00Z','exam-5'),
+        ('log-9','student-0009','فصل تلقائي','تلقائي: غش في امتحان: يومي 6','2026-09-20T12:00:00Z','exam-6'),
+        ('log-10','student-0010','فصل تلقائي','تلقائي: غياب','2026-09-20T12:00:00Z',NULL);
       INSERT INTO "StudentNote" VALUES
         ('note-1','student-0001','إجراء','فصل الطالب: يدوي','2026-09-21T12:00:00Z','2026-09-24T12:00:00Z'),
         ('note-2','student-0002','إجراء','تم فصل الطالب: يدوي',NULL,'2026-09-22T12:00:00Z'),
@@ -63,17 +77,18 @@ new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/di
     const snapshot = () => pg.query('SELECT row_to_json(s) AS row FROM "Student" s ORDER BY id').then(({ rows }) => rows);
     const before = await snapshot();
     let reads = 0;
+    let gradeReads = 0;
     let denied = false;
     let failRead = false;
     const authCalls = [];
     const schemaChecks = [];
     const expectedSelect = {
-      id: true, name: true, code: true, username: true, telegram: true, status: true,
-      dismissedChecked: true, dismissedCheckEpoch: true,
+      id: true, name: true, code: true, phone: true, username: true, telegram: true, status: true,
+      dismissedChecked: true, dismissedCheckEpoch: true, closurePlatformEpoch: true, closureTelegramEpoch: true,
       courseId: true, course: { select: { id: true, name: true } }, dismissalReason: true,
       opportunityLogs: {
         where: { OR: [{ action: "فصل تلقائي" }, { action: "خصم", reason: { startsWith: "فصل الطالب" } }] },
-        select: { action: true, reason: true, date: true },
+        select: { action: true, reason: true, date: true, examId: true, exam: { select: { name: true, fullMark: true } } },
       },
       studentNotes: {
         where: { kind: "إجراء", OR: [{ text: { startsWith: "فصل الطالب" } }, { text: { startsWith: "تم فصل الطالب" } }] },
@@ -100,10 +115,11 @@ new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/di
         if (failRead) throw new Error("simulated database outage");
         return pg.transaction(async (sql) => {
           await sql.exec("SET TRANSACTION READ ONLY");
-          const rows = (await sql.query(`SELECT s.id,s.name,s.code,s.username,s.telegram,s.status,
-            s."dismissedChecked",s."dismissedCheckEpoch",s."courseId",s."dismissalReason",
+          const rows = (await sql.query(`SELECT s.id,s.name,s.code,s.phone,s.username,s.telegram,s.status,
+            s."dismissedChecked",s."dismissedCheckEpoch",s."closurePlatformEpoch",s."closureTelegramEpoch",s."courseId",s."dismissalReason",
             json_build_object('id',c.id,'name',c.name) AS course,
-            COALESCE((SELECT json_agg(json_build_object('action',l.action,'reason',l.reason,'date',l.date))
+            COALESCE((SELECT json_agg(json_build_object('action',l.action,'reason',l.reason,'date',l.date,'examId',l."examId",
+              'exam',(SELECT json_build_object('name',e.name,'fullMark',e."fullMark") FROM "Exam" e WHERE e.id=l."examId")))
               FROM "OpportunityLog" l WHERE l."studentId"=s.id
               AND (l.action='فصل تلقائي' OR (l.action='خصم' AND l.reason LIKE 'فصل الطالب%'))), '[]') AS "opportunityLogs",
             COALESCE((SELECT json_agg(json_build_object('kind',n.kind,'text',n.text,'dismissalDate',n."dismissalDate",'date',n.date))
@@ -116,6 +132,16 @@ new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/di
             opportunityLogs: student.opportunityLogs.map((log) => ({ ...log, date: new Date(log.date) })),
             studentNotes: student.studentNotes.map((note) => ({ ...note, date: new Date(note.date), dismissalDate: note.dismissalDate ? new Date(note.dismissalDate) : null })),
           }));
+        });
+      } }, grade: { findMany: async (args) => {
+        gradeReads += 1;
+        assert.deepEqual(args.select, { studentId: true, examId: true, status: true, score: true }, "only the result shown in the notice is read");
+        const pairs = args.where.OR;
+        assert(pairs.length > 0 && pairs.every((pair) => Object.keys(pair).sort().join() === "examId,studentId"), "grades are read only for each student's dismissing exam");
+        return pg.transaction(async (sql) => {
+          await sql.exec("SET TRANSACTION READ ONLY");
+          const rows = (await sql.query('SELECT "studentId","examId",status,score FROM "Grade"')).rows;
+          return rows.filter((row) => pairs.some((pair) => pair.studentId === row.studentId && pair.examId === row.examId));
         });
       } } } },
       "@/lib/schema-readiness": { withDatabaseSchema: async (read, model) => { schemaChecks.push(model); return read(); } },
@@ -170,6 +196,16 @@ new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/di
     assert.equal(data.students.find((student) => student.id === "student-0005").lastDismissalAt, "2026-09-24T12:00:00.000Z", "a newer manual dismissal movement supersedes an older action note");
     assert.equal(data.students.find((student) => student.id === "student-0006").lastDismissalAt, null, "unrelated notes and movements are not dismissal evidence");
     assert(data.students.every((student) => !("studentNotes" in student) && !("opportunityLogs" in student)), "internal dismissal history is not exposed in the response");
+    assert.equal(gradeReads, 1, "one grade read covers every dismissing exam");
+    assert.equal(checkedStudent.phone, "07705550679", "the stored phone is returned as is for the platform copy");
+    assert.equal(checkedStudent.closurePlatformEpoch, 3);
+    assert.equal(checkedStudent.closureTelegramEpoch, 2, "a mark from an older dismissal is returned, not rewritten");
+    const outcome = (id) => { const row = data.students.find((student) => student.id === id); return [row.dismissalExamName, row.dismissalOutcome]; };
+    assert.deepEqual(outcome("student-0007"), ["يومي 3", "غياب"], "the dismissing exam's absence, not another exam's grade");
+    assert.deepEqual(outcome("student-0008"), ["يومي 4", "4 من 20"], "the dismissal behind the recorded reason wins over a later one");
+    assert.deepEqual(outcome("student-0009"), ["يومي 6", "غش"], "without a grade row the recorded reason still names the result");
+    assert.deepEqual(outcome("student-0010"), [null, null], "a dismissal without an exam leaves the notice placeholders");
+    assert.deepEqual(outcome("student-0001"), [null, null], "an automatic log without an exam is not guessed into an exam");
     const checkedIds = data.students.filter((student) => student.dismissedChecked).map((student) => student.id);
     const originalCheckedIds = before.map(({ row }) => row).filter((student) => student.status === "مفصول" && student.dismissedChecked).map((student) => student.id);
     assert.deepEqual(checkedIds.sort(), originalCheckedIds.sort(), "the read preserves every previously checked student");

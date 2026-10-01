@@ -81,7 +81,7 @@
     "test:loading": "node scripts/test-read-loading.cjs && node scripts/test-bootstrap-behavior.cjs",
     "test:manual-restoration": "node scripts/test-manual-student-restoration.cjs",
     "test:retained-dismissals": "node scripts/test-automatic-log-chapter-guard.cjs && node scripts/test-retained-dismissals-planner.cjs && node scripts/test-retained-dismissals-repair.cjs",
-    "test:shared-followup": "node scripts/test-shared-followup-migration.cjs && node --experimental-strip-types scripts/test-shared-followup-replay.mjs && node scripts/test-call-note-management.cjs && node scripts/test-dismissed-check.cjs && node scripts/test-call-notes-dialog.cjs && node scripts/test-call-notes-global-query.cjs && node scripts/test-dismissed-check-lifecycle-db.cjs && node scripts/test-code-closures-query.cjs && node scripts/test-code-closures-dialog.cjs && node scripts/test-code-closures-save.cjs",
+    "test:shared-followup": "node scripts/test-shared-followup-migration.cjs && node --experimental-strip-types scripts/test-shared-followup-replay.mjs && node scripts/test-call-note-management.cjs && node scripts/test-dismissed-check.cjs && node scripts/test-call-notes-dialog.cjs && node scripts/test-call-notes-global-query.cjs && node scripts/test-dismissed-check-lifecycle-db.cjs && node scripts/test-code-closures-query.cjs && node scripts/test-code-closures-dialog.cjs && node scripts/test-code-closures-save.cjs && node scripts/test-code-closure-contact.cjs",
     "test:grade-records-behavior": "node scripts/test-grade-records-presentation.cjs && node --test scripts/test-grade-recorded-impact.mjs",
     "test:automatic-notes-tidy": "node --test scripts/test-automatic-notes-tidy.mjs"
   },
