@@ -71,6 +71,7 @@ import { EmptyState } from "./ui-kit";
 import { ListToolbar } from "./list-toolbar";
 import { RowActionsMenu } from "./row-actions-menu";
 import { formatAppDate } from "@/lib/format";
+import { normalizeForSearch } from "@/lib/validation";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -337,7 +338,7 @@ export function CoursesView() {
   );
 
   const filteredRows = useMemo(() => {
-    const q = debouncedSearchText.trim().toLowerCase();
+    const q = normalizeForSearch(debouncedSearchText);
     return rows.filter((row) => {
       if (statusFilter === "active" && !row.course.active) return false;
       if (statusFilter === "inactive" && row.course.active) return false;
@@ -356,8 +357,8 @@ export function CoursesView() {
         ...row.deleteSafety.blockers,
         ...row.configWarnings,
       ]
-        .join(" ")
-        .toLowerCase();
+        .map(normalizeForSearch)
+        .join(" ");
       return haystack.includes(q);
     });
   }, [debouncedSearchText, deleteFilter, rows, statusFilter]);
@@ -365,7 +366,7 @@ export function CoursesView() {
   const filteredStats = { total: filteredRows.length };
   // The status buttons count what each would show with the other filters.
   const statusChipCounts = useMemo(() => {
-    const q = debouncedSearchText.trim().toLowerCase();
+    const q = normalizeForSearch(debouncedSearchText);
     const counts = { all: 0, active: 0, inactive: 0, noChapter: 0 };
     for (const row of rows) {
       if (deleteFilter === "deletable" && !row.deleteSafety.canDelete) continue;
@@ -380,8 +381,8 @@ export function CoursesView() {
           ...row.deleteSafety.blockers,
           ...row.configWarnings,
         ]
-          .join(" ")
-          .toLowerCase();
+          .map(normalizeForSearch)
+          .join(" ");
         if (!haystack.includes(q)) continue;
       }
       counts.all += 1;

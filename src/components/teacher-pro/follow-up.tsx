@@ -1,5 +1,5 @@
 "use client";
-import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -67,12 +67,15 @@ import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { formatOpportunityBalance, getOpportunityLimit } from "@/lib/opportunity-balance";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
 import { CALL_STUDENT_NOTE_CATEGORY } from "@/lib/call-notes-filter";
+import { contactStatusMatchesFilter } from "@/lib/call-contact-status";
+import { callWorkShareOptions, parseCallWorkShare } from "@/lib/call-work-share";
 import {
   isStudentExamCall,
   studentExamCallIdentityKey,
   studentExamCallIdentityMatches,
 } from "@/lib/call-identity";
 import { shortGradeNoteText } from "@/lib/grade-note-banners";
+import { refreshShortcutAlerts } from "@/hooks/use-shortcut-alerts";
 import "./tp-modal.css";
 import "./calls.css";
 
@@ -87,16 +90,7 @@ type CallCategory =
   | "cheating"
   | "protected"
   | "missing";
-type CallStatusFilter =
-  | "all"
-  | "absent"
-  | "discounted"
-  | "failed"
-  | "cheating"
-  | "passed"
-  | "full"
-  | "protected"
-  | "dismissed";
+type CallStatusFilter = "all" | "discounted" | "full";
 type CallGradeDisplayMode = "latest" | "latest-two" | "all";
 type CallContactStatusFilter =
   | "all"
@@ -138,15 +132,17 @@ type CallExportRow = {
 
 const callStatusFilterLabels: Record<CallStatusFilter, string> = {
   all: "كل الحالات",
-  absent: "الغائبين",
   discounted: "المخصومين",
-  failed: "الراسبين غير المخصومين",
-  cheating: "طلاب الغش",
-  passed: "الطلاب الناجحين",
   full: "الدرجات الكاملة",
-  protected: "المحميون (مجاز/سماح/قبل التسجيل)",
-  dismissed: "المفصولين",
 };
+
+/** Each laptop remembers its own «تقسيم العمل» slice. */
+const CALL_WORK_SHARE_STORAGE_KEY = "teacherpro-calls-work-share";
+const callWorkShareChoices = callWorkShareOptions();
+function callWorkShareLabel(value: string): string {
+  const share = parseCallWorkShare(value);
+  return share ? `القسم ${share.part} من ${share.parts}` : "كل الطلاب";
+}
 
 const callStatusFilterOptions = Object.keys(
   callStatusFilterLabels,
@@ -220,12 +216,6 @@ function callResultTone(category?: CallCategory): "danger" | "warning" | "succes
   if (category === "discounted" || category === "failed" || category === "academic-accounting") return "warning";
   if (category === "passed" || category === "full") return "success";
   return "info";
-}
-
-function callStatusSupportsGradeRange(status: CallStatusFilter): boolean {
-  // "absent" و "cheating" ليس لديهما درجة رقمية. "protected" قد يحمل
-  // درجة فعلية (مثل درجات ما قبل التسجيل) لذا ندعم نطاق الدرجة لها.
-  return status !== "absent" && status !== "cheating";
 }
 
 const callGradeDisplayModeLabels: Record<CallGradeDisplayMode, string> = {
@@ -346,8 +336,13 @@ function visibleCallGradeItems(
 }
 
 export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "window" }) {
+  // Changes made elsewhere (another user, tab or page) never reload this work
+  // list on their own: names would move and numbers change under the
+  // teacher's hand. They only light the «تحديث» button; the list and the
+  // counts reload when it is pressed or when a filter or the page changes.
   const syncKey = useTeacherProSyncKey(["follow-up", "students", "grades", "exams", "opportunities", "dashboard"]);
-  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
+  const latestSyncKeyRef = useRef(syncKey);
+  const [callLoadedSyncKey, setCallLoadedSyncKey] = useState(syncKey);
   const {
     courses,
     students,
@@ -382,6 +377,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   const [callGradeFrom, setCallGradeFrom] = useState("");
   const [callGradeTo, setCallGradeTo] = useState("");
   const [callGeneralSearch, setCallGeneralSearch] = useState("");
+  // «تقسيم العمل»: "" for the whole list, or "k/n" for this laptop's fixed slice.
+  const [callWorkShare, setCallWorkShare] = useState("");
   const [callGradePage, setCallGradePage] = useState(1);
   const [callLoading, setCallLoading] = useState(false);
   const [callCourseExamsLoading, setCallCourseExamsLoading] = useState(false);
@@ -395,6 +392,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   const callCandidatesRequestSequenceRef = useRef(0);
   const callRowsRef = useRef<CallStudentRow[]>([]);
   const [callFilterRefreshKey, setCallFilterRefreshKey] = useState(0);
+  // Refreshes the counts only: a contact action must not reload the cards.
+  const [callStatsRefreshKey, setCallStatsRefreshKey] = useState(0);
   const [callNoteDrafts, setCallNoteDrafts] = useState<Record<string, string>>({});
   const callNoteDraftRevisionsRef = useRef<Record<string, number>>({});
   const callNoteDraftIdsRef = useRef<Record<string, string | null>>({});
@@ -412,16 +411,9 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   const [callGradeDisplayModes, setCallGradeDisplayModes] = useState<
     Record<string, CallGradeDisplayMode>
   >({});
-  const debouncedCallGeneralSearch = useDebouncedValue(callGeneralSearch, 300);
+  const debouncedCallGeneralSearch = useDebouncedValue(callGeneralSearch, 350);
   const debouncedCallGradeFrom = useDebouncedValue(callGradeFrom, 300);
   const debouncedCallGradeTo = useDebouncedValue(callGradeTo, 300);
-  const callGradeRangeEnabled = callStatusSupportsGradeRange(callStatusFilter);
-  const effectiveCallGradeFrom = callGradeRangeEnabled
-    ? debouncedCallGradeFrom
-    : "";
-  const effectiveCallGradeTo = callGradeRangeEnabled
-    ? debouncedCallGradeTo
-    : "";
 
   const [profileStudentId, setProfileStudentId] = useState("");
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
@@ -501,10 +493,10 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     const controller = new AbortController();
     const requestSequence = ++callCandidatesRequestSequenceRef.current;
     const mutationVersionAtRequestStart = callMutationVersionRef.current;
-    const silent = isBackgroundSync();
-    // لا نستبدل الجدول الموجود بحالة تحميل عند أي مزامنة أو إعادة جلب.
+    setCallLoadedSyncKey(latestSyncKeyRef.current);
+    // لا نستبدل الجدول الموجود بحالة تحميل عند أي إعادة جلب.
     // الـSkeleton يظهر فقط في أول تحميل عندما لا توجد صفوف معروضة أصلاً.
-    const shouldBlockTable = !silent && callRowsRef.current.length === 0;
+    const shouldBlockTable = callRowsRef.current.length === 0;
     setCallLoading(shouldBlockTable);
 
     callCandidatesApi
@@ -515,9 +507,10 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           statusFilter: callStatusFilter,
           contactStatusFilter: callContactStatusFilter,
           notesFilter: callNotesFilter,
-          gradeFrom: effectiveCallGradeFrom,
-          gradeTo: effectiveCallGradeTo,
+          gradeFrom: debouncedCallGradeFrom,
+          gradeTo: debouncedCallGradeTo,
           q: debouncedCallGeneralSearch,
+          share: callWorkShare || undefined,
           page: callGradePage,
           pageSize: CALL_PAGE_SIZE,
         },
@@ -559,8 +552,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
         if (
           !cancelled &&
           !controller.signal.aborted &&
-          requestSequence === callCandidatesRequestSequenceRef.current &&
-          !silent
+          requestSequence === callCandidatesRequestSequenceRef.current
         ) {
           // نحافظ على آخر جدول ناجح بدلاً من مسحه وإرباك المستخدم.
           toast.error("تعذر تحديث طلاب المكالمات. بقيت آخر بيانات ناجحة ظاهرة.");
@@ -585,13 +577,12 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     callStatusFilter,
     callContactStatusFilter,
     callNotesFilter,
-    effectiveCallGradeFrom,
-    effectiveCallGradeTo,
+    debouncedCallGradeFrom,
+    debouncedCallGradeTo,
     debouncedCallGeneralSearch,
+    callWorkShare,
     callGradePage,
     callFilterRefreshKey,
-    syncKey,
-    isBackgroundSync,
   ]);
 
   useEffect(() => {
@@ -603,9 +594,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
 
     let cancelled = false;
     const controller = new AbortController();
-    const silent = isBackgroundSync();
     const timer = window.setTimeout(() => {
-      if (!silent) setCallDatabaseStatsLoading(true);
+      setCallDatabaseStatsLoading(true);
       callStatsApi
         .get(
           {
@@ -614,9 +604,10 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             statusFilter: callStatusFilter,
             contactStatusFilter: callContactStatusFilter,
             notesFilter: callNotesFilter,
-            gradeFrom: effectiveCallGradeFrom,
-            gradeTo: effectiveCallGradeTo,
+            gradeFrom: debouncedCallGradeFrom,
+            gradeTo: debouncedCallGradeTo,
             q: debouncedCallGeneralSearch,
+            share: callWorkShare || undefined,
             },
           { signal: controller.signal, quietAbort: true },
         )
@@ -642,13 +633,39 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     callStatusFilter,
     callContactStatusFilter,
     callNotesFilter,
-    effectiveCallGradeFrom,
-    effectiveCallGradeTo,
+    debouncedCallGradeFrom,
+    debouncedCallGradeTo,
     debouncedCallGeneralSearch,
+    callWorkShare,
     callFilterRefreshKey,
-    syncKey,
-    isBackgroundSync,
+    callStatsRefreshKey,
   ]);
+
+  useEffect(() => {
+    latestSyncKeyRef.current = syncKey;
+  }, [syncKey]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(CALL_WORK_SHARE_STORAGE_KEY) || "";
+      if (parseCallWorkShare(stored)) setCallWorkShare(stored);
+    } catch {
+      // Private windows may refuse storage; the whole list is then shown.
+    }
+  }, []);
+
+  const chooseCallWorkShare = (value: string) => {
+    const next = parseCallWorkShare(value) ? value : "";
+    setCallWorkShare(next);
+    setCallGradePage(1);
+    try {
+      if (next) window.localStorage.setItem(CALL_WORK_SHARE_STORAGE_KEY, next);
+      else window.localStorage.removeItem(CALL_WORK_SHARE_STORAGE_KEY);
+    } catch {
+      // The choice still applies for this visit.
+    }
+  };
+  const callUpdatesPending = syncKey !== callLoadedSyncKey;
 
   const selectedProfileStudent =
     callRowsFromDb.find((row) => row.student.id === profileStudentId)?.student ||
@@ -731,6 +748,14 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   const callTotalPages = Math.max(1, callServerPageInfo.totalPages);
   const callSafePage = Math.min(callGradePage, callTotalPages);
   const visibleCallRows = callRows;
+  // Students on this page whose new action took them out of the contact
+  // filter. They stay visible until the page is reloaded.
+  const callDepartedCount =
+    callContactStatusFilter === "all"
+      ? 0
+      : visibleCallRows.filter(
+          (row) => !contactStatusMatchesFilter(callContactStatusFilter, callStatusForLog(callLogForRow(row))),
+        ).length;
 
   const callStatValue = (value: number | undefined) => {
     if (callDatabaseStatsLoading && !callDatabaseStats) return "…";
@@ -752,9 +777,10 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       statusFilter: callStatusFilter,
       contactStatusFilter: callContactStatusFilter,
       notesFilter: callNotesFilter,
-      gradeFrom: effectiveCallGradeFrom,
-      gradeTo: effectiveCallGradeTo,
+      gradeFrom: debouncedCallGradeFrom,
+      gradeTo: debouncedCallGradeTo,
       q: debouncedCallGeneralSearch,
+      share: callWorkShare || undefined,
       pageSize: 200,
     });
     if (!result) throw new Error("call candidates export failed");
@@ -871,8 +897,9 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
         // يعيد هذا التبويب تحميل نفسه ويستبدل النتيجة بطلب Sync أقدم.
         dispatchLocal: false,
       });
-      setCallFilterRefreshKey((current) => current + 1);
-      if (callContactStatusFilter !== "all") setCallGradePage(1);
+      // The cards stay where they are (the action is already on the card), so
+      // the list never jumps or goes back to page one; only the counts reload.
+      setCallStatsRefreshKey((current) => current + 1);
       toast.success("تم حفظ إجراء التواصل");
     } finally {
       setCallSaving(savingKey, false);
@@ -961,7 +988,17 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
         scopes: ["follow-up", "students", "dashboard", "logs"],
         dispatchLocal: false,
       });
-      toast.success(notes.trim() ? "تم حفظ ملاحظة المكالمات" : "تم حذف ملاحظة المكالمات");
+      // A changed note goes back to «إدارة ملاحظات المكالمات» even if it was
+      // marked done; its count beside the shortcut updates now, not minutes later.
+      void refreshShortcutAlerts();
+      const reopened = Boolean(existing?.noteResolved && data?.studentCall && !data.studentCall.noteResolved);
+      toast.success(
+        !notes.trim()
+          ? "تم حذف ملاحظة المكالمات"
+          : reopened
+            ? "تم حفظ الملاحظة وأُعيدت إلى إدارة ملاحظات المكالمات"
+            : "تم حفظ ملاحظة المكالمات",
+      );
     } finally {
       callNoteSavingRef.current.delete(draftKey);
       setCallSaving(savingKey, false);
@@ -1498,6 +1535,28 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     );
   };
 
+  /** The student's facts for the details window; empty ones are left out. */
+  const callStudentFacts = (student: Student): Array<[string, string]> => {
+    const program = [student.courseProgram, student.courseTerm].filter(Boolean).join(" — ");
+    const place = [student.mainSite, student.subSite].filter(Boolean).join(" / ");
+    const facts: Array<[string, string]> = [
+      ["الكود", student.code],
+      ["الدورة", courseName(student.courseId)],
+      ["البرنامج", program],
+      ["نظام الدراسة", student.studyType],
+      ["الموقع", place],
+      ["المدرسة", student.school],
+      ["الجنس", student.gender],
+      ["الحالة", student.status],
+      ["سبب الفصل", student.status === "مفصول" ? student.dismissalReason : ""],
+      ["الفرص", studentOpportunityText(student)],
+      ["هاتف الطالب", student.phone || "لا يوجد"],
+      ["هاتف ولي الأمر", student.parentPhone || "لا يوجد"],
+      ["تاريخ التسجيل", student.createdAt ? formatAppDate(student.createdAt) : ""],
+    ];
+    return facts.filter(([, value]) => String(value || "").trim());
+  };
+
   // ── The details window ──────────────────────────────────────────────────
   const renderDetailsWindow = () => {
     const row = detailsLiveRow;
@@ -1520,6 +1579,19 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
               </DialogHeader>
             </div>
             <div className="tp-modal__body">
+              <section className="tp-modal__section" aria-labelledby="tp-call-student">
+                <h3 id="tp-call-student" className="tp-modal__title">معلومات الطالب</h3>
+                {/* Everything a call may need, without leaving the calls page. */}
+                <dl className="tp-call-info">
+                  {callStudentFacts(row.student).map(([label, value]) => (
+                    <div key={label} className="tp-call-info__item">
+                      <dt>{label}</dt>
+                      <dd dir="auto">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+
               <section className="tp-modal__section" aria-labelledby="tp-call-focus">
                 <h3 id="tp-call-focus" className="tp-modal__title">الامتحان المختار</h3>
                 {item ? (
@@ -1705,12 +1777,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                 <Select
                   value={callStatusFilter}
                   onValueChange={(value) => {
-                    const nextStatus = value as CallStatusFilter;
-                    setCallStatusFilter(nextStatus);
-                    if (!callStatusSupportsGradeRange(nextStatus)) {
-                      setCallGradeFrom("");
-                      setCallGradeTo("");
-                    }
+                    setCallStatusFilter(value as CallStatusFilter);
                     setCallGradePage(1);
                   }}
                 >
@@ -1721,6 +1788,25 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                     {callStatusFilterOptions.map((option) => (
                       <SelectItem key={option} value={option}>
                         {callStatusFilterLabels[option]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="tp-calls__field tp-calls__status">
+                <Label htmlFor={`calls-share-${variant}`}>تقسيم العمل</Label>
+                <Select value={callWorkShare || "all"} onValueChange={chooseCallWorkShare}>
+                  <SelectTrigger
+                    id={`calls-share-${variant}`}
+                    title="لكل جهاز قسم ثابت من الطلاب لا يتداخل مع الأجهزة الأخرى"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل الطلاب</SelectItem>
+                    {callWorkShareChoices.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {callWorkShareLabel(option)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1765,64 +1851,51 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
               ))}
             </div>
 
-            {callGradeRangeEnabled && (
-              <details className="tp-calls__more" open={Boolean(callGradeFrom || callGradeTo) || undefined}>
-                <summary>فلاتر إضافية</summary>
-                <div className="tp-calls__range">
-                  <div className="tp-calls__field">
-                    <Label htmlFor={`follow-up-calls-grade-from-${variant}`}>الدرجة من</Label>
-                    <Input
-                      id={`follow-up-calls-grade-from-${variant}`}
-                      name="calls-grade-from"
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      max={selectedCallExam?.fullMark}
-                      step="any"
-                      value={callGradeFrom}
-                      onChange={(event) => {
-                        setCallGradeFrom(event.target.value);
-                        setCallGradePage(1);
-                      }}
-                      placeholder="مثال: 20"
-                    />
-                  </div>
-                  <div className="tp-calls__field">
-                    <Label htmlFor={`follow-up-calls-grade-to-${variant}`}>الدرجة إلى</Label>
-                    <Input
-                      id={`follow-up-calls-grade-to-${variant}`}
-                      name="calls-grade-to"
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      max={selectedCallExam?.fullMark}
-                      step="any"
-                      value={callGradeTo}
-                      onChange={(event) => {
-                        setCallGradeTo(event.target.value);
-                        setCallGradePage(1);
-                      }}
-                      placeholder={`حتى ${selectedCallExam?.fullMark ?? "الدرجة الكاملة"}`}
-                    />
-                  </div>
+            <details className="tp-calls__more" open={Boolean(callGradeFrom || callGradeTo) || undefined}>
+              <summary>فلاتر إضافية</summary>
+              <div className="tp-calls__range">
+                <div className="tp-calls__field">
+                  <Label htmlFor={`follow-up-calls-grade-from-${variant}`}>الدرجة من</Label>
+                  <Input
+                    id={`follow-up-calls-grade-from-${variant}`}
+                    name="calls-grade-from"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={selectedCallExam?.fullMark}
+                    step="any"
+                    value={callGradeFrom}
+                    onChange={(event) => {
+                      setCallGradeFrom(event.target.value);
+                      setCallGradePage(1);
+                    }}
+                    placeholder="مثال: 20"
+                  />
                 </div>
-              </details>
-            )}
+                <div className="tp-calls__field">
+                  <Label htmlFor={`follow-up-calls-grade-to-${variant}`}>الدرجة إلى</Label>
+                  <Input
+                    id={`follow-up-calls-grade-to-${variant}`}
+                    name="calls-grade-to"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={selectedCallExam?.fullMark}
+                    step="any"
+                    value={callGradeTo}
+                    onChange={(event) => {
+                      setCallGradeTo(event.target.value);
+                      setCallGradePage(1);
+                    }}
+                    placeholder={`حتى ${selectedCallExam?.fullMark ?? "الدرجة الكاملة"}`}
+                  />
+                </div>
+              </div>
+            </details>
 
-            {callStatusFilter === "absent" ? (
-              <p className="tp-calls__hint" data-tone="warning">
-                الغائبون يشملون المسجلين بحالة «غائب» والطلاب الذين لم تُدخل
-                درجاتهم بعد انتهاء الامتحان.
-              </p>
-            ) : callStatusFilter === "cheating" ? (
-              <p className="tp-calls__hint">حالة الغش غير رقمية، لذلك لا يوجد نطاق درجة لهذا الفلتر.</p>
-            ) : callGradeRangeInvalid ? (
+            {callGradeRangeInvalid ? (
               <p className="tp-calls__hint" data-tone="danger" role="alert">
                 درجة «من» يجب ألا تكون أكبر من درجة «إلى».
-              </p>
-            ) : callStatusFilter === "dismissed" && !callGradeFrom && !callGradeTo ? (
-              <p className="tp-calls__hint" data-tone="danger">
-                يعرض هذا الفلتر الطلاب الذين حالتهم الحالية «مفصول» ضمن الدورة والامتحان المحددين.
               </p>
             ) : callGradeFrom || callGradeTo ? (
               <p className="tp-calls__hint">نطاق الدرجة شامل للحدّين، وعند استخدامه تظهر الدرجات الرقمية فقط.</p>
@@ -1832,6 +1905,24 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           <p className="tp-calls__count" data-count-scope="filtered" aria-live="polite">
             المطابقون للفلاتر: <b>{callStatValue(callDatabaseStats?.total)}</b>
             {callLoading && visibleCallRows.length > 0 ? " · جاري التحديث…" : ""}
+            {callUpdatesPending && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  className="tp-calls__refresh"
+                  title="توجد تغييرات جديدة من مستخدم أو صفحة أخرى"
+                  onClick={() => setCallFilterRefreshKey((current) => current + 1)}
+                >
+                  تغييرات جديدة — تحديث
+                </button>
+              </>
+            )}
+            {callDepartedCount > 0 && (
+              <span className="tp-calls__departed">
+                {" "}· {callDepartedCount} تم إجراؤهم في هذه الصفحة ويبقون ظاهرين حتى «التالي»
+              </span>
+            )}
           </p>
 
           <div className="tp-calls__list">
@@ -1861,7 +1952,13 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                 variant="outline"
                 size="sm"
                 disabled={callSafePage >= callTotalPages}
-                onClick={() => setCallGradePage((page) => Math.min(callTotalPages, page + 1))}
+                onClick={() => {
+                  // Students who left the contact filter shrank the list, so the
+                  // same page number now holds the next students: reload it
+                  // instead of skipping them.
+                  if (callDepartedCount > 0) setCallFilterRefreshKey((current) => current + 1);
+                  else setCallGradePage((page) => Math.min(callTotalPages, page + 1));
+                }}
               >
                 التالي
               </Button>

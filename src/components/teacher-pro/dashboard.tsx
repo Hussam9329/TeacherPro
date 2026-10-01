@@ -99,7 +99,10 @@ export function DashboardView({
   const [callNotesOpen, setCallNotesOpen] = useState(false);
   // «إدارة المكالمات» opens the calls work list here; the calls tab stays too.
   const [callsOpen, setCallsOpen] = useState(false);
-  const canViewCodeClosures = canAccess("student-registry") || canAccess("dismissed-management");
+  // Student tools need the full «عرض الطلاب»; «عرض سجل الطلاب فقط» opens the
+  // registry and nothing else. dismissed-management is gated by students.view.
+  const hasFullStudentsView = canAccess("dismissed-management");
+  const canViewCodeClosures = hasFullStudentsView;
   const canManageCodeClosures = Boolean(actor && (
     actor.username?.trim().toLowerCase() === "admin" ||
     actor.roleId === "role_admin" ||
@@ -109,7 +112,7 @@ export function DashboardView({
   ));
   const [codeClosuresOpen, setCodeClosuresOpen] = useState(false);
   // «إدارة فترة السماح» is the only place that creates, edits or cancels grace.
-  const canViewGracePeriods = canAccess("student-registry");
+  const canViewGracePeriods = canAccess("student-registry") && hasFullStudentsView;
   const canManageGracePeriods = Boolean(actor && (
     actor.username?.trim().toLowerCase() === "admin" ||
     actor.roleId === "role_admin" ||
@@ -139,10 +142,6 @@ export function DashboardView({
     return () => window.removeEventListener(LEAVES_DIALOG_OPEN_EVENT, openFromLink);
   }, [canViewLeaves]);
   const alerts = useShortcutAlerts();
-  const sectionAlert: Partial<Record<string, { count: number | null | undefined; tone: AlertTone; label: string }>> = {
-    "dismissed-management": { count: alerts?.dismissedStudents, tone: "danger", label: "طالب مفصول" },
-    "grade-entry": { count: alerts?.gradeReviewsPending, tone: "warning", label: "درجة تنتظر المراجعة" },
-  };
   // A window that changes these numbers refreshes them when it closes.
   const closeAndRefresh = (setOpen: (open: boolean) => void) => (open: boolean) => {
     setOpen(open);
@@ -327,7 +326,6 @@ export function DashboardView({
                 </span>
                 <span className="tp-dashboard__shortcut-label">
                   {title}
-                  <ShortcutAlert count={sectionAlert[section]?.count} tone={sectionAlert[section]?.tone || "info"} label={sectionAlert[section]?.label || ""} />
                 </span>
               </a>
             ))}
@@ -392,7 +390,6 @@ export function DashboardView({
                 </span>
                 <span className="tp-dashboard__shortcut-label">
                   إدارة فترة السماح
-                  <ShortcutAlert count={alerts?.currentGracePeriods} tone="info" label="فترة سماح حالية أو قادمة" />
                 </span>
               </button>
             )}
@@ -409,7 +406,6 @@ export function DashboardView({
                 </span>
                 <span className="tp-dashboard__shortcut-label">
                   إدارة الإجازات
-                  <ShortcutAlert count={alerts?.currentLeaves} tone="info" label="طالب مجاز حالياً أو قريباً" />
                 </span>
               </button>
             )}

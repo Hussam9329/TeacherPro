@@ -118,7 +118,8 @@ export function OpportunitiesView() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterOpportunityCount, setFilterOpportunityCount] = useState("");
   const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(search, 180);
+  // Wait for a pause in typing so a name is one request, not one per letter.
+  const debouncedSearch = useDebouncedValue(search, 350);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [serverStudents, setServerStudents] = useState<OpportunityStudent[]>([]);

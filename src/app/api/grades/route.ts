@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthPrincipal, requirePermission } from "@/lib/server-auth";
 import { loadActiveGracePeriodsByStudent, withoutLegacyGraceFields } from "@/lib/grace-periods-server";
 import { db } from "@/lib/db";
+import { buildGradeSearchWhere } from "@/lib/grade-search-server";
 import {
   normalizeArabicText,
   routeErrorResponse,
@@ -51,47 +52,6 @@ function parsePositiveInt(
   return Math.min(Math.floor(parsed), max);
 }
 
-function buildGradeSearchWhere(
-  rawQuery: string,
-): Prisma.GradeWhereInput | null {
-  const query = rawQuery.trim();
-  if (!query) return null;
-
-  const normalizedQuery = normalizeArabicText(query);
-  const compactQuery = query.replace(/\s+/g, "");
-  const telegramQuery = query.startsWith("@") ? query : `@${query}`;
-
-  const studentSearch: Prisma.StudentWhereInput[] = [
-    { name: { contains: query, mode: "insensitive" } },
-    { code: { startsWith: query, mode: "insensitive" } },
-    { phone: { startsWith: compactQuery, mode: "insensitive" } },
-    { parentPhone: { startsWith: compactQuery, mode: "insensitive" } },
-    { telegram: { startsWith: telegramQuery, mode: "insensitive" } },
-    // يوزر تيليجرام المستعاد: بحث بنفس استعلام الدرجات (بدون مسافات).
-    { username: { contains: compactQuery, mode: "insensitive" } },
-  ];
-
-  if (normalizedQuery) {
-    studentSearch.push({
-      nameKey: { contains: normalizedQuery, mode: "insensitive" },
-    });
-  }
-  if (compactQuery.length >= 7) {
-    studentSearch.push(
-      { phone: { contains: compactQuery, mode: "insensitive" } },
-      { parentPhone: { contains: compactQuery, mode: "insensitive" } },
-    );
-  }
-
-  return {
-    OR: [
-      { notes: { contains: query, mode: "insensitive" } },
-      { student: { is: { OR: studentSearch } } },
-      { exam: { is: { name: { contains: query, mode: "insensitive" } } } },
-    ],
-  };
-}
-
 function buildNameLetterWhere(letter: string): Prisma.GradeWhereInput | null {
   const rawLetter = letter.trim();
   if (!rawLetter || rawLetter === "all") return null;
@@ -109,9 +69,9 @@ function buildNameLetterWhere(letter: string): Prisma.GradeWhereInput | null {
   return { student: { is: { OR: studentWhere } } };
 }
 
-function buildGradeWhere(
+async function buildGradeWhere(
   searchParams: URLSearchParams,
-): Prisma.GradeWhereInput {
+): Promise<Prisma.GradeWhereInput> {
   const and: Prisma.GradeWhereInput[] = [];
   const examId = normalizeListFilter(searchParams.get("examId"));
   const studentId = normalizeListFilter(searchParams.get("studentId"));
@@ -145,7 +105,7 @@ function buildGradeWhere(
   const letterWhere = buildNameLetterWhere(nameLetter);
   if (letterWhere) and.push(letterWhere);
 
-  const searchWhere = buildGradeSearchWhere(search);
+  const searchWhere = await buildGradeSearchWhere(search);
   if (searchWhere) and.push(searchWhere);
 
   return and.length > 0 ? { AND: and } : {};
@@ -166,7 +126,7 @@ function buildGradeWhere(
 async function buildGradeWhereWithExamCourseFilter(
   searchParams: URLSearchParams,
 ): Promise<Prisma.GradeWhereInput> {
-  const where = buildGradeWhere(searchParams);
+  const where = await buildGradeWhere(searchParams);
 
   const examId = normalizeListFilter(searchParams.get("examId"));
   // An explicit course filter is already part of `where`; keep it, but still

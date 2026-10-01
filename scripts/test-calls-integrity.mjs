@@ -122,10 +122,27 @@ assert(
   'خيار طلاب المحاسبة محذوف من فلاتر تبويبة المكالمات',
 );
 assert(
-  candidates.includes('filter === "failed"') &&
-    candidates.includes('kind === "failed" || kind === "academic-accounting"') &&
-    stats.includes('kind === "failed" || kind === "academic-accounting"'),
-  'فلتر الراسبين غير المخصومين يشمل طلاب المحاسبة ويستثني المخصومين',
+  followUp.includes('type CallStatusFilter = "all" | "discounted" | "full";') &&
+    followUp.includes('all: "كل الحالات",') &&
+    followUp.includes('discounted: "المخصومين",') &&
+    followUp.includes('full: "الدرجات الكاملة",') &&
+    ['الغائبين', 'الراسبين غير المخصومين', 'طلاب الغش', 'الطلاب الناجحين', 'المحميون', 'dismissed: "المفصولين"'].every(
+      (label) => !followUp.includes(label),
+    ),
+  'قائمة «حالة الطالب في الامتحان» فيها كل الحالات والمخصومين والدرجات الكاملة فقط',
+);
+assert(
+  [candidates, stats].every((source) =>
+    source.includes('type CallStatusFilter = "all" | "discounted" | "full";') &&
+    /function normalizeCallStatusFilter\(value: string \| null\): CallStatusFilter \{[^}]*if \(normalized === "discounted" \|\| normalized === "full"\) return normalized;\s*return "all";\s*\}/.test(source) &&
+    source.includes('return kind === "full";') &&
+    !source.includes('filter === "absent"') &&
+    !source.includes('filter === "failed"') &&
+    !source.includes('filter === "passed"') &&
+    !source.includes('filter === "protected"') &&
+    !source.includes('filter === "dismissed"') &&
+    !source.includes('STUDENT_STATUS_DISMISSED')),
+  'القائمة والإحصائيات تطبقان الفلاتر الثلاثة نفسها، وأي فلتر قديم من رابط أو تبويبة قديمة يُقرأ «كل الحالات»',
 );
 assert(
   followUp.includes('https://wa.me/') || followUp.includes('whatsappLink(phone || "")'),
@@ -151,15 +168,6 @@ assert(
     !callPhoneQrDialog.includes('api.qrserver') &&
     !callPhoneQrDialog.includes('chart.googleapis'),
   'رمز الاتصال ظاهر مباشرة ويُولد محلياً بهامش قابل للمسح ويحوّل الهاتف إلى tel: بلا خدمة خارجية',
-);
-assert(
-  followUp.includes('| "dismissed";') &&
-    followUp.includes('dismissed: "المفصولين"') &&
-    candidates.includes('normalized === "dismissed"') &&
-    stats.includes('normalized === "dismissed"') &&
-    candidates.includes('studentStatus === STUDENT_STATUS_DISMISSED') &&
-    stats.includes('student?.status === STUDENT_STATUS_DISMISSED'),
-  'فلتر المفصولين موجود في الواجهة وتطبقه القائمة والإحصائيات على الحالة الحالية نفسها',
 );
 
 
@@ -218,13 +226,6 @@ assert(
   'فلتر المخصومين يعتمد على الأثر الأكاديمي الحقيقي ويشمل الغياب المخصوم لا الدرجات فقط',
 );
 assert(
-  candidates.includes('filter === "absent"') &&
-    candidates.includes('return Boolean(absenceSource)') &&
-    stats.includes('filter === "absent"') &&
-    stats.includes('return Boolean(absenceSource)'),
-  'فلتر الغائبين يوحّد الغياب المسجل والمشتق ويستبعد الحالات المحمية',
-);
-assert(
   candidates.includes('loadActiveGracePeriodsByStudent') &&
     stats.includes('loadActiveGracePeriodsByStudent') &&
     !candidates.includes('gracePeriodStartDate') &&
@@ -274,8 +275,9 @@ assert(
 assert(
   api.includes('gradeFrom: query.gradeFrom') &&
     api.includes('gradeTo: query.gradeTo') &&
-    candidates.includes('callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)') &&
-    stats.includes('callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)'),
+    candidates.includes('callGradeMatchesRange(grade, gradeRange)') &&
+    stats.includes('callGradeMatchesRange(grade, gradeRange)') &&
+    !gradeRange.includes('callGradeMatchesRangeForStatus'),
   'نطاق الدرجة ينتقل إلى القائمة والتصدير والإحصائيات بنفس المنطق',
 );
 assert(
@@ -285,17 +287,12 @@ assert(
   'نطاق الدرجة شامل للحدين ويستبعد الحالات غير الرقمية عند تفعيله',
 );
 assert(
-  followUp.includes('callStatusSupportsGradeRange') &&
-    followUp.includes('setCallGradeFrom("");') &&
-    followUp.includes('setCallGradeTo("");') &&
-    followUp.includes('{callGradeRangeEnabled && (') &&
-    followUp.includes('<summary>فلاتر إضافية</summary>'),
-  'اختيار الغائبين أو الغش يمسح نطاق الدرجة ويخفي حقليه للحالات غير الرقمية',
-);
-assert(
-  followUp.includes('gradeFrom: effectiveCallGradeFrom') &&
-    followUp.includes('gradeTo: effectiveCallGradeTo'),
-  'طلبات القائمة والإحصائيات والتصدير لا ترسل نطاقاً رقمياً متأخراً مع الغائبين أو الغش',
+  followUp.includes('<summary>فلاتر إضافية</summary>') &&
+    !followUp.includes('callStatusSupportsGradeRange') &&
+    !followUp.includes('callGradeRangeEnabled') &&
+    followUp.includes('gradeFrom: debouncedCallGradeFrom') &&
+    followUp.includes('gradeTo: debouncedCallGradeTo'),
+  'نطاق الدرجة متاح مع كل خيارات الحالة الثلاثة وينتقل للقائمة والإحصائيات والتصدير بعد التأجيل',
 );
 assert(
   followUp.includes('حالة التواصل') &&
@@ -315,8 +312,15 @@ assert(
   'اختيار أحدث حالة تواصل حتمي ومتطابق بين القائمة والإحصائيات',
 );
 assert(
-  /setCallFilterRefreshKey\(\(current\) => current \+ 1\);\s*if \(callContactStatusFilter !== "all"\) setCallGradePage\(1\);/.test(followUp),
-  'حفظ حالة الاتصال يحدّث القائمة والإحصائيات دائماً، ويعيد الصفحة الأولى فقط عند فلتر تواصل نشط',
+  /setCallStatsRefreshKey\(\(current\) => current \+ 1\);\s*toast\.success\("تم حفظ إجراء التواصل"\);/.test(followUp) &&
+    !/if \(callContactStatusFilter !== "all"\) setCallGradePage\(1\);/.test(followUp) &&
+    followUp.includes('callFilterRefreshKey,\n    callStatsRefreshKey,\n  ]);'),
+  'حفظ حالة الاتصال يحدّث الأعداد فقط: البطاقات تبقى بمكانها ولا ترجع الصفحة الأولى',
+);
+assert(
+  followUp.includes('contactStatusMatchesFilter(callContactStatusFilter, callStatusForLog(callLogForRow(row)))') &&
+    followUp.includes('if (callDepartedCount > 0) setCallFilterRefreshKey((current) => current + 1);'),
+  'من خرج من فلتر التواصل يبقى ظاهراً، و«التالي» يعيد تحميل الصفحة نفسها حتى لا يُتخطى أي طالب',
 );
 assert(
   followUp.includes('if (!result.ok && !result.queued)') &&
@@ -351,11 +355,6 @@ assert(
     followUp.includes('setCallFilterRefreshKey((current) => current + 1)'),
   'حذف آخر ملاحظة يزيل الطالب من نتائج فلتر أصحاب الملاحظات مباشرة',
 );
-assert(
-  followUp.includes('الطلاب الذين لم تُدخل') &&
-    followUp.includes('درجاتهم بعد انتهاء الامتحان'),
-  'الواجهة توضح أن الغائبين تشمل أيضاً غير المدخلة درجاتهم بعد انتهاء الامتحان',
-);
 
 // ── Simplified calls: short cards, filter buttons, details window ──────────
 const dashboardSource = read('src/components/teacher-pro/dashboard.tsx');
@@ -378,6 +377,9 @@ assert(
   'أزرار حالة التواصل تعرض أعدادها محسوبة بكل الفلاتر عدا فلتر التواصل نفسه',
 );
 assert(
+  [candidates, stats].every((source) =>
+    source.includes('const words = normalizeArabicText(query).split(" ").filter(Boolean);') &&
+    source.includes('const haystack = values.map((value) => normalizeArabicText(value));')) &&
   candidates.includes('words.every((word) => haystack.some((value) => value.includes(word)))') &&
     stats.includes('words.every((word) => haystack.some((value) => value.includes(word)))') &&
     !followUp.includes('بحث داخل الفرز'),
@@ -419,20 +421,85 @@ assert(
   'كارت الطالب: رأس، لوحة الامتحان والنتيجة، صفا التواصل والإجراء (مع بدون إجراء)، الملاحظة، ورموز QR ظاهرة مباشرة',
 );
 
-const recordedChargeHelper = read('src/lib/call-recorded-impact-server.ts');
 assert(
-  recordedChargeHelper.includes('annotateGradeSettlementEffects(grades)') &&
-    recordedChargeHelper.includes('annotateGradeRecordedImpacts(grades)') &&
-    recordedChargeHelper.includes('!impact.text.includes("لا أثر على الرصيد الحالي")') &&
+  !fs.existsSync('src/lib/call-recorded-impact-server.ts') &&
     [candidates, stats].every((source) =>
-      source.includes('loadRecordedChargeByGradeId(') &&
-      source.includes('const deducted = recordedCharge ?? isDeductedImpact(impactKind);') &&
-      source.includes('if (filter === "discounted") return deducted;') &&
-      source.includes('!deducted && (kind === "failed" || kind === "academic-accounting")') &&
-      source.includes('grade.id.startsWith("implicit-absence:")') &&
-      source.includes('recordedChargeFor(grade)')),
-  'فلتر «المخصومين» وعدده يعتمدان سجل الفرص الفعلي (نفس دليل شارة الكارت)، والغياب المشتق بلا خصم',
+      source.includes('if (filter === "discounted") return isDeductedImpact(impactKind);') &&
+      !source.includes('recordedCharge') &&
+      !source.includes('loadRecordedChargeByGradeId')),
+  'فلتر «المخصومين» وعدده بقواعد الامتحان: الغياب بلا إجازة أو سماح (حتى غير المدخلة درجته والمفصول)، الغش، والراسب بدرجة الخصم أو الفصل',
 );
+
+assert(
+  !followUp.includes('isBackgroundSync') &&
+    !followUp.includes('    syncKey,\n') &&
+    followUp.includes('setCallLoadedSyncKey(latestSyncKeyRef.current);') &&
+    followUp.includes('const callUpdatesPending = syncKey !== callLoadedSyncKey;') &&
+    followUp.includes('تغييرات جديدة — تحديث'),
+  'تغييرات المستخدمين أو الصفحات الأخرى لا تعيد تحميل القائمة والأعداد وحدها؛ تظهر «تحديث» ويختار المستخدم متى',
+);
+
+assert(
+  followUp.includes('void refreshShortcutAlerts();') &&
+    followUp.includes('تم حفظ الملاحظة وأُعيدت إلى إدارة ملاحظات المكالمات') &&
+    read('src/lib/call-note-management-server.ts').includes('notes, noteResolved: false, noteRevision: { increment: 1 },'),
+  'تعديل ملاحظة من المكالمات يعيدها لإدارة ملاحظات المكالمات حتى لو كانت منجزة، ويحدّث عددها فوراً',
+);
+
+assert(
+  [candidates, stats].every((source) =>
+    source.includes('const workShare = parseCallWorkShare(searchParams.get("share"));') &&
+    source.includes('if (!studentInCallWorkShare(student.id, workShare))')) &&
+    (followUp.match(/share: callWorkShare \|\| undefined,/g) || []).length === 3 &&
+    followUp.includes('<Label htmlFor={`calls-share-${variant}`}>تقسيم العمل</Label>') &&
+    api.includes('share: query.share,'),
+  '«تقسيم العمل» يطبق نفس القسم على القائمة والأعداد والتصدير، ويحفظه كل جهاز لنفسه',
+);
+assert(
+  read('src/components/teacher-pro/layout.tsx').includes('  "follow-up-calls",\n  "accounts",') &&
+    !read('src/app/api/auth/logout/route.ts').includes('increment'),
+  'تغيير من جهاز آخر لا يعيد تحميل كل مكالمات النظام، وتسجيل الخروج من جهاز لا يخرج الأجهزة الأخرى',
+);
+
+{
+  const catalog = read('src/lib/permission-catalog.ts');
+  const bootstrap = read('src/app/api/bootstrap/route.ts');
+  const profileAccess = read('src/lib/student-profile-server.ts');
+  const courseExams = read('src/app/api/student-calls/course-exams/route.ts');
+  assert(
+    catalog.includes('id: "role_caller",') &&
+      catalog.includes('permissions: ["system.dashboard", "follow-up.calls.view", "follow-up.calls.manage", "students.registry.view"],') &&
+      [candidates, stats, courseExams, callsRoute].every((source) =>
+        source.includes('await requireAnyPermission(req, CALLS_VIEW_PERMISSIONS);') &&
+        !source.includes('requirePermission(req, "follow-up.view")')) &&
+      bootstrap.includes('["courses.view", ...CALLS_VIEW_PERMISSIONS]') &&
+      profileAccess.includes('const callsStaff = hasPermission(principal, "follow-up.calls.view");'),
+    'دور «موظف مكالمات» يكفي لفتح المكالمات واختيار الدورة والامتحان وقراءة ملف الطالب من المكالمة',
+  );
+  assert(
+    followUp.includes('<h3 id="tp-call-student" className="tp-modal__title">معلومات الطالب</h3>') &&
+      followUp.includes('["هاتف ولي الأمر", student.parentPhone || "لا يوجد"],'),
+    'نافذة التفاصيل في المكالمات تعرض معلومات الطالب كاملة',
+  );
+}
+
+{
+  const serverAuth = read('src/lib/server-auth.ts');
+  const store = read('src/lib/teacher-store.ts');
+  const dashboard = read('src/components/teacher-pro/dashboard.tsx');
+  const registryHelpers = read('src/components/teacher-pro/student-registry-helpers.ts');
+  assert(
+    read('src/lib/permission-catalog.ts').includes('id: "students.registry.view",') &&
+      serverAuth.includes('"students.view": ["page.student-registry.view", "page.dismissed-students.view", "students.registry.view"],') &&
+      store.includes('"student-registry": ["students.registry.view"],') &&
+      !store.includes('"dismissed-management": ["page.dismissed-students.view", "students.registry.view"') &&
+      dashboard.includes('const canViewCodeClosures = hasFullStudentsView;') &&
+      dashboard.includes('const canViewGracePeriods = canAccess("student-registry") && hasFullStudentsView;') &&
+      registryHelpers.includes('canEditStudents: isAdmin || permissions.has("students.edit"),') &&
+      registryHelpers.includes('canArchiveStudents: isAdmin || permissions.has("students.delete"),'),
+    '«عرض سجل الطلاب فقط» يفتح سجل الطلاب للقراءة فقط، بدون المفصولين وإغلاق الكودات وفترات السماح وبدون تعديل أو أرشفة',
+  );
+}
 
 if (process.exitCode) {
   console.error('\nفشل اختبار سلامة تبويبة المكالمات. راجع الرسائل أعلاه.');

@@ -62,6 +62,8 @@ const range = loadTypeScriptModule("src/lib/call-grade-range.ts");
 const contact = loadTypeScriptModule("src/lib/call-contact-status.ts");
 const notes = loadTypeScriptModule("src/lib/call-notes-filter.ts");
 const phoneQr = loadTypeScriptModule("src/lib/call-phone-qr.ts");
+const classification = loadTypeScriptModule("src/lib/grade-classification.ts");
+const workShare = loadTypeScriptModule("src/lib/call-work-share.ts");
 const candidatesSource = fs.readFileSync(
   path.join(root, "src/app/api/student-calls/candidates/route.ts"),
   "utf8",
@@ -350,30 +352,23 @@ test("students outside the exam site are not implicit absences", () => {
   );
 });
 
-test("absence filter ignores stale numeric range while numeric filters keep it", () => {
+test("an active grade range keeps numeric grades inside it only", () => {
   const parsed = range.parseCallGradeRange("10", "30");
+  assert.equal(range.callGradeMatchesRange(absentGrade, parsed), false);
   assert.equal(
-    range.callGradeMatchesRangeForStatus(absentGrade, parsed, "absent"),
-    true,
-  );
-  assert.equal(
-    range.callGradeMatchesRangeForStatus(
-      { status: "غش", score: null },
-      parsed,
-      "cheating",
-    ),
-    true,
-  );
-  assert.equal(
-    range.callGradeMatchesRangeForStatus(absentGrade, parsed, "all"),
+    range.callGradeMatchesRange({ status: "غش", score: null }, parsed),
     false,
   );
   assert.equal(
-    range.callGradeMatchesRangeForStatus(
-      { status: "درجة", score: 20 },
-      parsed,
-      "all",
-    ),
+    range.callGradeMatchesRange({ status: "درجة", score: 20 }, parsed),
+    true,
+  );
+  assert.equal(
+    range.callGradeMatchesRange({ status: "درجة", score: 31 }, parsed),
+    false,
+  );
+  assert.equal(
+    range.callGradeMatchesRange(absentGrade, range.parseCallGradeRange("", "")),
     true,
   );
 });
@@ -477,4 +472,80 @@ test("candidate rows and stats protect all scored notes and submitted papers", (
     assert.doesNotMatch(source, /gradeSmartNote\.findMany\([\s\S]{0,180}status:\s*"PENDING"/);
     assert.match(source, /attemptEvidenceStudentIds/);
   }
+});
+
+// The kinds «المخصومين» counts, as in the calls list and stats routes.
+const DEDUCTED_KINDS = new Set(["absent-deducted", "absent-dismissal", "discounted", "dismissal", "cheating"]);
+const deductionExam = { ...exam, type: "يومي", fullMark: 100, passMark: 50, discountMark: 20 };
+function isDeducted({ grade, student: who = student, leaves = [], examOverride = deductionExam }) {
+  const source = absence.resolveCallAbsenceSource({ grade, exam: examOverride, student: who, leaves, today });
+  const effective = grade || (source === "missing"
+    ? absence.buildImplicitCallAbsenceGrade({ studentId: who.id, examId: examOverride.id, examDate: examOverride.date })
+    : undefined);
+  if (!effective) return false;
+  return DEDUCTED_KINDS.has(
+    classification.classifyGradeAcademicImpact(effective, examOverride, { student: who, leaves }),
+  );
+}
+
+test("«المخصومين» holds every student who missed the exam, cheated or failed into a deduction", () => {
+  assert.equal(isDeducted({ grade: absentGrade }), true, "recorded absence");
+  assert.equal(isDeducted({ grade: undefined }), true, "no grade ever entered");
+  assert.equal(
+    isDeducted({ grade: undefined, student: { ...student, status: "مفصول" } }),
+    true,
+    "dismissed student who did not sit the exam",
+  );
+  assert.equal(isDeducted({ grade: { status: "غش", score: null } }), true, "cheating");
+  assert.equal(isDeducted({ grade: { status: "درجة", score: 20 } }), true, "at the deduction mark");
+});
+
+test("«المخصومين» leaves out leave, grace, passes and fails above the deduction mark", () => {
+  assert.equal(
+    isDeducted({
+      grade: undefined,
+      leaves: [{ studentId: student.id, examId: exam.id, leaveType: "exam", date: exam.date }],
+    }),
+    false,
+    "leave for the exam",
+  );
+  assert.equal(
+    isDeducted({
+      grade: undefined,
+      student: { ...student, gracePeriods: [{ startDate: "2026-08-01", endDate: "2026-08-20", active: true }] },
+    }),
+    false,
+    "within a grace period",
+  );
+  assert.equal(isDeducted({ grade: { status: "درجة", score: 35 } }), false, "fail above the deduction mark");
+  assert.equal(isDeducted({ grade: { status: "درجة", score: 80 } }), false, "pass");
+  assert.equal(isDeducted({ grade: { status: "مجاز", score: null } }), false, "excused");
+});
+
+test("«تقسيم العمل» puts every student in exactly one share and never moves them", () => {
+  const ids = Array.from({ length: 600 }, (_, i) => `c${(i * 7919).toString(36)}x${i}`);
+  for (let parts = 2; parts <= 5; parts += 1) {
+    const sizes = [];
+    for (const id of ids) {
+      const owners = [];
+      for (let part = 1; part <= parts; part += 1) {
+        if (workShare.studentInCallWorkShare(id, workShare.parseCallWorkShare(`${part}/${parts}`))) owners.push(part);
+      }
+      assert.equal(owners.length, 1, `${id} in ${parts} parts`);
+      sizes[owners[0]] = (sizes[owners[0]] || 0) + 1;
+    }
+    // Shares stay roughly even, so no laptop gets most of the list.
+    for (let part = 1; part <= parts; part += 1) {
+      assert.ok(sizes[part] > (ids.length / parts) * 0.7, `share ${part}/${parts} too small: ${sizes[part]}`);
+    }
+  }
+  const share = workShare.parseCallWorkShare("2/3");
+  assert.equal(
+    workShare.studentInCallWorkShare("same-student", share),
+    workShare.studentInCallWorkShare("same-student", workShare.parseCallWorkShare("2/3")),
+  );
+  assert.equal(workShare.parseCallWorkShare("4/3"), null);
+  assert.equal(workShare.parseCallWorkShare("1/1"), null);
+  assert.equal(workShare.parseCallWorkShare(""), null);
+  assert.equal(workShare.studentInCallWorkShare("anyone", null), true);
 });

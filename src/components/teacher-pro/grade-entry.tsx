@@ -32,6 +32,7 @@ import {
   confirmGradeEntryOfflineAttempt,
   flushGradeEntryOfflineSaves,
   getGradeEntryOfflineSaves,
+  isSessionExpiredMessage,
   markGradeEntryOfflineAttempted,
   markGradeEntryOfflineAttention,
   stageGradeEntryOfflineSave,
@@ -1638,20 +1639,21 @@ export function GradeEntryView() {
             return;
           }
 
-          // 401 is the session, not the grade: keep it pending on this device
-          // (never «rejected», which is never re-sent). The shell re-checks
-          // the session; the grade is sent once the account is signed in.
-          if (offlineAttempt && result.status === 401) {
+          // An expired session keeps the grade waiting on this device, like a
+          // lost connection: it is sent by itself once the teacher signs in.
+          const sessionExpired =
+            result.status === 401 || isSessionExpiredMessage(result.error);
+          if (offlineAttempt && sessionExpired) {
             setRowSaveStates((prev) => ({
               ...prev,
               [studentId]: {
                 phase: "queued",
-                message: "محفوظ محلياً — يُرسل بعد تسجيل الدخول",
+                message: "محفوظ محلياً — سجّل الدخول وتُرسل تلقائياً",
               },
             }));
             showGradeEntryNotice(
               "info",
-              "تعذر التحقق من تسجيل الدخول. الدرجة محفوظة على هذا الجهاز وستُرسل تلقائياً بعد التحقق من الدخول.",
+              "انتهت جلسة الدخول. الدرجة محفوظة على هذا الجهاز وستُرسل تلقائياً بعد تسجيل الدخول.",
             );
             return;
           }

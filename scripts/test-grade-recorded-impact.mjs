@@ -184,6 +184,7 @@ function routeHarness({ denied = false, computed = false } = {}) {
       calls.push({ type: "impact", ids: grades.map(row => row.id) });
     } }],
     ["@/lib/route-helpers", { routeErrorResponse: error => { throw error; } }],
+    ["@/lib/grade-search-server", { buildGradeSearchWhere: async () => null }],
   ]);
   const module = { exports: {} };
   new Function("require", "module", "exports", compile(path.join(root, "src/app/api/grades/route.ts")))(

@@ -66,6 +66,11 @@ function canUseStorage(): boolean {
   return typeof window !== "undefined" && Boolean(window.localStorage);
 }
 
+/** The server's answer when the login session has expired. */
+export function isSessionExpiredMessage(message: unknown): boolean {
+  return String(message ?? "").includes("يجب تسجيل الدخول");
+}
+
 function makeKey(examId: string, studentId: string): string {
   return `${examId}:${studentId}`;
 }
@@ -110,19 +115,17 @@ function normalizeItem(value: unknown): GradeEntryOfflineSave | null {
         .slice(-MAX_ATTEMPTED_SNAPSHOTS)
     : [];
 
-  const lastError = record.lastError ? String(record.lastError) : undefined;
   const storedState = ["pending", "conflict", "rejected"].includes(
     String(record.state || ""),
   )
     ? (record.state as GradeEntryOfflineSave["state"])
     : "pending";
-  // Earlier versions marked a save refused with 401 as «rejected», so the
-  // row kept saying «يجب تسجيل الدخول أولاً» and was never re-sent. That was
-  // the session, not the grade: send it again. The baseline check still
-  // stops it from overwriting a newer grade on the server.
-  const authRejected =
-    storedState === "rejected" && Boolean(lastError?.includes("تسجيل الدخول"));
-  const state = authRejected ? "pending" : storedState;
+  // An expired session is not a verdict on the grade. Saves that older
+  // versions marked «rejected» for it go back to waiting and are sent once
+  // the teacher is signed in again.
+  const lastError = record.lastError ? String(record.lastError) : undefined;
+  const authOnly = storedState === "rejected" && isSessionExpiredMessage(lastError);
+  const state = authOnly ? "pending" : storedState;
 
   return {
     ownerUserId: String(record.ownerUserId || ""),
@@ -139,7 +142,7 @@ function normalizeItem(value: unknown): GradeEntryOfflineSave | null {
     updatedAt: Number(record.updatedAt || Date.now()),
     attempts: Math.max(0, Number(record.attempts || 0)),
     state,
-    lastError: authRejected ? undefined : lastError,
+    lastError: authOnly ? undefined : lastError,
   };
 }
 

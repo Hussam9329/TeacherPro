@@ -160,6 +160,21 @@ must(
   "يجب إدخال سجل الدرجات داخل test:side-effects."
 );
 
+{
+  const gradesRoute = read("src/lib/grade-search-server.ts") + read("src/app/api/grades/route.ts") + read("src/app/api/grades/export/route.ts");
+  const gradeRecords = read("src/components/teacher-pro/grade-records.tsx");
+  must(
+    gradesRoute.includes("export async function buildGradeSearchWhere(") &&
+      gradesRoute.includes("const searchWhere = await buildGradeSearchWhere(q);") &&
+      gradesRoute.includes("{ studentId: { in: students.map((student) => student.id) } }") &&
+      gradesRoute.includes("{ examId: { in: exams.map((exam) => exam.id) } }") &&
+      gradesRoute.includes("const searchWhere = await buildGradeSearchWhere(search);") &&
+      gradeRecords.includes("useDebouncedValue(search, 350)"),
+    "بحث سجل الدرجات يُطابق الطلاب والامتحانات مرة واحدة ثم يفلتر الدرجات بالمعرفات، وينتظر توقف الكتابة",
+    "بحث سجل الدرجات يجب أن يحوّل البحث إلى معرفات طلاب وامتحانات قبل استعلامات الدرجات.",
+  );
+}
+
 if (failed) {
   console.error("\nفشل اختبار سلامة سجل الدرجات.");
   process.exit(1);
