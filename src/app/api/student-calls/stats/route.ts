@@ -2,7 +2,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { loadRecordedChargeByGradeId } from "@/lib/call-recorded-impact-server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
@@ -173,8 +172,6 @@ function gradeMatchesStatusFilter(
   student?: DbStudentLite,
   leaves: DbLeaveLite[] = [],
   absenceSource?: CallAbsenceSource | null,
-  /** From the opportunities ledger when known; the rule is only a fallback. */
-  recordedCharge?: boolean,
 ): boolean {
   if (!grade && !absenceSource) return false;
   const impactKind = classifyCallImpact(grade, exam, student, leaves);
@@ -187,8 +184,10 @@ function gradeMatchesStatusFilter(
   if (filter === "all") {
     return Boolean(absenceSource) || kind !== "missing";
   }
-  const deducted = recordedCharge ?? isDeductedImpact(impactKind);
-  if (filter === "discounted") return deducted;
+  // «المخصومين» by the exam rules: an absence with no leave or grace period
+  // (entered or never entered, dismissed students included), cheating, and a
+  // fail at or below the deduction or dismissal mark.
+  if (filter === "discounted") return isDeductedImpact(impactKind);
   return kind === "full";
 }
 
@@ -427,38 +426,6 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // Same ledger evidence as the calls list and the card's badge.
-    const studentById = new Map(students.map((student) => [student.id, student]));
-    const recordedChargeByGradeId =
-      statusFilter === "discounted"
-        ? await loadRecordedChargeByGradeId(
-            grades.flatMap((grade) => {
-              const owner = studentById.get(grade.studentId);
-              return owner
-                ? [{
-                    ...grade,
-                    examId: grade.examId || exam.id,
-                    student: {
-                      id: owner.id,
-                      status: owner.status,
-                      courseId: owner.courseId,
-                      createdAt: owner.createdAt,
-                      gracePeriods: owner.gracePeriods || [],
-                    },
-                    exam,
-                  }]
-                : [];
-            }) as Parameters<typeof loadRecordedChargeByGradeId>[0],
-            "StudentCallStats",
-          )
-        : new Map<string, boolean>();
-    const recordedChargeFor = (grade: DbGradeLite | undefined): boolean | undefined =>
-      !grade || statusFilter !== "discounted"
-        ? undefined
-        : grade.id.startsWith("implicit-absence:")
-          ? false
-          : recordedChargeByGradeId.get(grade.id);
-
     const baseMatching = students.filter((student) => {
       const storedGrade = gradeByStudentId.get(student.id);
       const studentLeaves = leavesByStudentId.get(student.id) || [];
@@ -486,7 +453,6 @@ export async function GET(req: NextRequest) {
           student,
           studentLeaves,
           absenceSource,
-          recordedChargeFor(grade),
         )
       ) {
         return false;
