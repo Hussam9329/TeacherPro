@@ -462,7 +462,8 @@ export function StudentRegistryView() {
     useActionLock();
   const { locked: isStatusActionSaving, runLocked: runStatusActionLocked } =
     useActionLock();
-  const debouncedSearch = useDebouncedValue(search, 180);
+  // Wait for a pause in typing so a name is one request, not one per letter.
+  const debouncedSearch = useDebouncedValue(search, 350);
   const registrySearchPending = search !== debouncedSearch;
   const studentListRequestId = useRef(0);
   const studentStatsRequestId = useRef(0);

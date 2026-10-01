@@ -411,7 +411,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   const [callGradeDisplayModes, setCallGradeDisplayModes] = useState<
     Record<string, CallGradeDisplayMode>
   >({});
-  const debouncedCallGeneralSearch = useDebouncedValue(callGeneralSearch, 300);
+  const debouncedCallGeneralSearch = useDebouncedValue(callGeneralSearch, 350);
   const debouncedCallGradeFrom = useDebouncedValue(callGradeFrom, 300);
   const debouncedCallGradeTo = useDebouncedValue(callGradeTo, 300);
 
@@ -1543,7 +1543,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       ["الكود", student.code],
       ["الدورة", courseName(student.courseId)],
       ["البرنامج", program],
-      ["نوع الدراسة", student.studyType],
+      ["نظام الدراسة", student.studyType],
       ["الموقع", place],
       ["المدرسة", student.school],
       ["الجنس", student.gender],

@@ -114,6 +114,14 @@ function isAllowedClientLogEntry(module: string, action: string): boolean {
   return actions.has(action.trim());
 }
 
+const LOGS_OVERVIEW_TTL_MS = 30_000;
+let logsOverviewCache: {
+  at: number;
+  systemTotal: number;
+  modules: Array<{ module: string }>;
+  users: Array<{ userName: string | null }>;
+} | null = null;
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, 'logs.view');
   if (authError) return authError;
@@ -143,14 +151,34 @@ export async function GET(req: NextRequest) {
     const moduleFreeWhere: Prisma.AuditLogWhereInput = { ...where };
     delete moduleFreeWhere.module;
 
-    const [logs, totalCount, systemTotalCount, modulesRaw, usersRaw, moduleGroups] = await Promise.all([
+    // While someone types a search, the section and user lists and the system
+    // total do not depend on it: reuse them for a short while instead of
+    // re-reading the whole log on every keystroke. A plain load refreshes them.
+    const reuseOverview =
+      Boolean(q) && logsOverviewCache && Date.now() - logsOverviewCache.at < LOGS_OVERVIEW_TTL_MS;
+    const overviewPromise = reuseOverview && logsOverviewCache
+      ? Promise.resolve(logsOverviewCache)
+      : Promise.all([
+          db.auditLog.count(),
+          db.auditLog.findMany({ distinct: ['module'], select: { module: true }, orderBy: { module: 'asc' } }),
+          db.auditLog.findMany({ distinct: ['userName'], select: { userName: true }, orderBy: { userName: 'asc' } }),
+        ]).then(([systemTotal, modules, users]) => {
+          logsOverviewCache = { at: Date.now(), systemTotal, modules, users };
+          return logsOverviewCache;
+        });
+    const [logs, overview, moduleGroups] = await Promise.all([
       db.auditLog.findMany({ where, orderBy: { time: 'desc' }, skip, take: limit }),
-      db.auditLog.count({ where }),
-      db.auditLog.count(),
-      db.auditLog.findMany({ distinct: ['module'], select: { module: true }, orderBy: { module: 'asc' } }),
-      db.auditLog.findMany({ distinct: ['userName'], select: { userName: true }, orderBy: { userName: 'asc' } }),
+      overviewPromise,
       db.auditLog.groupBy({ by: ['module'], where: moduleFreeWhere, _count: { _all: true } }),
     ]);
+    const systemTotalCount = overview.systemTotal;
+    const modulesRaw = overview.modules;
+    const usersRaw = overview.users;
+    // The per-section counts already cover this search and user; the total is
+    // their sum, or the picked section's count. No second count over the log.
+    const totalCount = moduleName
+      ? moduleGroups.find((group) => group.module === moduleName)?._count._all ?? 0
+      : moduleGroups.reduce((sum, group) => sum + group._count._all, 0);
 
     // Humanize the CURRENT page only. This keeps the route fast even with tens of
     // thousands of audit rows, while making old JSON logs readable immediately.

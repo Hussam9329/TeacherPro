@@ -1,24 +1,41 @@
 import type { Prisma } from "@prisma/client";
 import { baghdadTodayKey } from "./baghdad-time";
 import { normalizeStudentName } from "./student-utils";
+import { db } from "@/lib/db";
 
-export function studentLeaveListWhere(params: URLSearchParams): Prisma.StudentLeaveWhereInput {
+const SEARCH_ID_LIST_LIMIT = 5000;
+
+/**
+ * The leaves list search. Students and exams are matched once in their own
+ * (small) tables and leaves are filtered by those ids, instead of joining the
+ * student's name, code, phone and Telegram and the exam name on every leave
+ * row of every query.
+ */
+export async function studentLeaveListWhere(params: URLSearchParams): Promise<Prisma.StudentLeaveWhereInput> {
   const and: Prisma.StudentLeaveWhereInput[] = [];
   const studentId = params.get("studentId")?.trim();
   if (studentId) and.push({ studentId });
   const type = params.get("leaveType");
   if (type === "exam" || type === "period") and.push({ leaveType: type });
   const q = params.get("q")?.trim().slice(0, 200);
-  if (q) and.push({ OR: [
-    { student: { is: { OR: [
+  if (q) {
+    const studentSearch: Prisma.StudentWhereInput[] = [
       { name: { contains: q, mode: "insensitive" } },
       { nameKey: { contains: normalizeStudentName(q), mode: "insensitive" } },
       { code: { contains: q, mode: "insensitive" } },
       { phone: { contains: q } }, { telegram: { contains: q, mode: "insensitive" } },
-    ] } } },
-    { exam: { is: { name: { contains: q, mode: "insensitive" } } } },
-    ...(["reason", "notes", "studyType"] as const).map(field => ({ [field]: { contains: q, mode: "insensitive" as const } })),
-  ] });
+    ];
+    const [students, exams] = await Promise.all([
+      db.student.findMany({ where: { OR: studentSearch }, select: { id: true }, take: SEARCH_ID_LIST_LIMIT + 1 }),
+      db.exam.findMany({ where: { name: { contains: q, mode: "insensitive" } }, select: { id: true } }),
+    ]);
+    const or: Prisma.StudentLeaveWhereInput[] = (["reason", "notes", "studyType"] as const)
+      .map(field => ({ [field]: { contains: q, mode: "insensitive" as const } }));
+    if (students.length > SEARCH_ID_LIST_LIMIT) or.push({ student: { is: { OR: studentSearch } } });
+    else if (students.length) or.push({ studentId: { in: students.map((student) => student.id) } });
+    if (exams.length) or.push({ examId: { in: exams.map((exam) => exam.id) } });
+    and.push({ OR: or });
+  }
   const date = params.get("date") === "today" ? baghdadTodayKey() : params.get("date");
   if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
     const start = new Date(`${date}T00:00:00.000Z`);

@@ -389,7 +389,8 @@ export function DismissedManagementView() {
   const { courses, courseName, mergeStudentsCache, currentUser } = useTeacherStore();
   const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "dismissed", "follow-up"]);
   const [search, setSearch] = useState(() => peekDismissedStudentFocus() ?? "");
-  const debouncedSearch = useDebouncedValue(search, 180);
+  // Wait for a pause in typing so a name is one request, not one per letter.
+  const debouncedSearch = useDebouncedValue(search, 350);
   const [courseId, setCourseId] = useState("");
   const [historyScope, setHistoryScope] = useState<"all" | "current" | "former">("current");
   const [notesFilter, setNotesFilter] = useState<NotesFilter>("all");
