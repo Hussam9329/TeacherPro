@@ -139,10 +139,6 @@ export function DashboardView({
     return () => window.removeEventListener(LEAVES_DIALOG_OPEN_EVENT, openFromLink);
   }, [canViewLeaves]);
   const alerts = useShortcutAlerts();
-  const sectionAlert: Partial<Record<string, { count: number | null | undefined; tone: AlertTone; label: string }>> = {
-    "dismissed-management": { count: alerts?.dismissedStudents, tone: "danger", label: "طالب مفصول" },
-    "grade-entry": { count: alerts?.gradeReviewsPending, tone: "warning", label: "درجة تنتظر المراجعة" },
-  };
   // A window that changes these numbers refreshes them when it closes.
   const closeAndRefresh = (setOpen: (open: boolean) => void) => (open: boolean) => {
     setOpen(open);
@@ -327,7 +323,6 @@ export function DashboardView({
                 </span>
                 <span className="tp-dashboard__shortcut-label">
                   {title}
-                  <ShortcutAlert count={sectionAlert[section]?.count} tone={sectionAlert[section]?.tone || "info"} label={sectionAlert[section]?.label || ""} />
                 </span>
               </a>
             ))}
