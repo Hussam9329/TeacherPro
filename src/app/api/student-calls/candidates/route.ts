@@ -5,7 +5,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
 import { annotateGradeRecordedImpacts } from "@/lib/grade-recorded-impact-server";
 import { annotateGradeSettlementEffects } from "@/lib/grade-settlement-server";
-import { loadRecordedChargeByGradeId } from "@/lib/call-recorded-impact-server";
 import type { ReportGradePresentation } from "@/lib/student-report-presentation";
 import type { GracePeriodRange } from "@/lib/grace-periods";
 import { requirePermission } from "@/lib/server-auth";
@@ -356,16 +355,16 @@ function gradeMatchesStatusFilter(
   kind: CallKind,
   impactKind: GradeClassificationKind,
   absenceSource?: CallAbsenceSource | null,
-  /** From the opportunities ledger when known; the rule is only a fallback. */
-  recordedCharge?: boolean,
 ): boolean {
   if (filter === "all") {
     // ROOT-CAUSE FIX: شمل المحميين (مجاز، ضمن السماح، قبل التسجيل) في
     // فلتر "كل الحالات" ليطابق عددي سجل الدرجات. فقط missing مستثنى.
     return Boolean(absenceSource) || !NON_DISPLAY_CALL_KINDS.has(kind);
   }
-  const deducted = recordedCharge ?? isDeductedImpact(impactKind);
-  if (filter === "discounted") return deducted;
+  // «المخصومين» by the exam rules: an absence with no leave or grace period
+  // (entered or never entered, dismissed students included), cheating, and a
+  // fail at or below the deduction or dismissal mark.
+  if (filter === "discounted") return isDeductedImpact(impactKind);
   return kind === "full";
 }
 
@@ -724,33 +723,6 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // «المخصومين» follows what the ledger recorded, the same evidence the
-    // card's badge shows. A derived absence has no stored grade, so no
-    // deduction was ever recorded for it.
-    const recordedChargeByGradeId =
-      statusFilter === "discounted"
-        ? await loadRecordedChargeByGradeId(
-            selectedGrades.map((grade) => ({
-              ...grade,
-              student: {
-                id: grade.student.id,
-                status: grade.student.status,
-                courseId: grade.student.courseId,
-                createdAt: grade.student.createdAt,
-                gracePeriods: grade.student.gracePeriods || [],
-              },
-              exam: courseExamById.get(grade.examId) || exam,
-            })) as Parameters<typeof loadRecordedChargeByGradeId>[0],
-            "StudentCallCandidates",
-          )
-        : new Map<string, boolean>();
-    const recordedChargeFor = (grade: DbGradeLite): boolean | undefined =>
-      statusFilter !== "discounted"
-        ? undefined
-        : grade.id.startsWith("implicit-absence:")
-          ? false
-          : recordedChargeByGradeId.get(grade.id);
-
     const matching = selectedStudents.flatMap((student) => {
       const storedGrade = selectedGradeByStudentId.get(student.id);
       const leaves = leavesForExam(selectedLeavesByStudentId, student.id, exam);
@@ -779,7 +751,6 @@ export async function GET(req: NextRequest) {
           kind,
           impactKind,
           absenceSource,
-          recordedChargeFor(grade),
         )
       )
         return [];

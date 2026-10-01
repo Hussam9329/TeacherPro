@@ -62,6 +62,7 @@ const range = loadTypeScriptModule("src/lib/call-grade-range.ts");
 const contact = loadTypeScriptModule("src/lib/call-contact-status.ts");
 const notes = loadTypeScriptModule("src/lib/call-notes-filter.ts");
 const phoneQr = loadTypeScriptModule("src/lib/call-phone-qr.ts");
+const classification = loadTypeScriptModule("src/lib/grade-classification.ts");
 const candidatesSource = fs.readFileSync(
   path.join(root, "src/app/api/student-calls/candidates/route.ts"),
   "utf8",
@@ -470,4 +471,52 @@ test("candidate rows and stats protect all scored notes and submitted papers", (
     assert.doesNotMatch(source, /gradeSmartNote\.findMany\([\s\S]{0,180}status:\s*"PENDING"/);
     assert.match(source, /attemptEvidenceStudentIds/);
   }
+});
+
+// The kinds «المخصومين» counts, as in the calls list and stats routes.
+const DEDUCTED_KINDS = new Set(["absent-deducted", "absent-dismissal", "discounted", "dismissal", "cheating"]);
+const deductionExam = { ...exam, type: "يومي", fullMark: 100, passMark: 50, discountMark: 20 };
+function isDeducted({ grade, student: who = student, leaves = [], examOverride = deductionExam }) {
+  const source = absence.resolveCallAbsenceSource({ grade, exam: examOverride, student: who, leaves, today });
+  const effective = grade || (source === "missing"
+    ? absence.buildImplicitCallAbsenceGrade({ studentId: who.id, examId: examOverride.id, examDate: examOverride.date })
+    : undefined);
+  if (!effective) return false;
+  return DEDUCTED_KINDS.has(
+    classification.classifyGradeAcademicImpact(effective, examOverride, { student: who, leaves }),
+  );
+}
+
+test("«المخصومين» holds every student who missed the exam, cheated or failed into a deduction", () => {
+  assert.equal(isDeducted({ grade: absentGrade }), true, "recorded absence");
+  assert.equal(isDeducted({ grade: undefined }), true, "no grade ever entered");
+  assert.equal(
+    isDeducted({ grade: undefined, student: { ...student, status: "مفصول" } }),
+    true,
+    "dismissed student who did not sit the exam",
+  );
+  assert.equal(isDeducted({ grade: { status: "غش", score: null } }), true, "cheating");
+  assert.equal(isDeducted({ grade: { status: "درجة", score: 20 } }), true, "at the deduction mark");
+});
+
+test("«المخصومين» leaves out leave, grace, passes and fails above the deduction mark", () => {
+  assert.equal(
+    isDeducted({
+      grade: undefined,
+      leaves: [{ studentId: student.id, examId: exam.id, leaveType: "exam", date: exam.date }],
+    }),
+    false,
+    "leave for the exam",
+  );
+  assert.equal(
+    isDeducted({
+      grade: undefined,
+      student: { ...student, gracePeriods: [{ startDate: "2026-08-01", endDate: "2026-08-20", active: true }] },
+    }),
+    false,
+    "within a grace period",
+  );
+  assert.equal(isDeducted({ grade: { status: "درجة", score: 35 } }), false, "fail above the deduction mark");
+  assert.equal(isDeducted({ grade: { status: "درجة", score: 80 } }), false, "pass");
+  assert.equal(isDeducted({ grade: { status: "مجاز", score: null } }), false, "excused");
 });
