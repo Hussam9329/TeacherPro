@@ -5,6 +5,7 @@ import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import { ScheduledExamWorker } from "./scheduled-exam-worker";
 import { syncVersionApi } from "@/lib/api";
 import { flushGradeEntryOfflineSaves } from "@/lib/grade-entry-offline-outbox";
+import { SESSION_CHECK_EVENT } from "@/lib/outbox-session";
 import {
   announceTeacherProSyncPending,
   announceTeacherProSyncRefreshing,
@@ -980,6 +981,22 @@ export function TeacherProLayout() {
       void restoreSession();
     }, 10 * 60 * 1000);
     return () => window.clearInterval(timer);
+  }, [isAuthenticated, restoreSession]);
+
+  // A request was refused with 401: check the session right away. If it is
+  // really gone the login screen shows, and the grades kept on this device
+  // are sent as soon as the same account signs in again.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let lastCheck = 0;
+    const onSessionCheck = () => {
+      const now = Date.now();
+      if (now - lastCheck < 3000) return;
+      lastCheck = now;
+      void restoreSession();
+    };
+    window.addEventListener(SESSION_CHECK_EVENT, onSessionCheck);
+    return () => window.removeEventListener(SESSION_CHECK_EVENT, onSessionCheck);
   }, [isAuthenticated, restoreSession]);
 
   useEffect(() => {

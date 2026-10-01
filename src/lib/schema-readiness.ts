@@ -11,7 +11,7 @@ import {
  * column used by the application. Keep this in sync with the newest migration.
  */
 export const REQUIRED_DATABASE_MIGRATION =
-  '20260925120000_grace_period_table';
+  '20261001120000_code_closure_contact_marks';
 
 const SCHEMA_NOT_READY_MESSAGE =
   'نسخة قاعدة البيانات أقدم من نسخة النظام. يلزم مسؤول النظام تطبيق تحديثات قاعدة البيانات قبل إعادة المحاولة.';

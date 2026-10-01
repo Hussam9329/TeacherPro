@@ -74,7 +74,19 @@ function command(action,amount,date,extra={}) {return {id:'l'+date,studentId:'s'
  grades.confirmGradeEntryOfflineAttempt(a); // Cannot remove B using A's response.
  assert.ok([...storage.values()].some(value=>value.includes(b.revision)));
  pass('enqueue during flush, owner switching, expired sessions and cross-owner grade acknowledgements');
+ const legacy=(studentId,lastError)=>storage.set(`teacherpro-grade-entry-offline-v3:b:e:${studentId}`,JSON.stringify({ownerUserId:'b',studentId,examId:'e',desired:{status:'درجة',score:7,notes:''},state:'rejected',lastError}));
+ legacy('s401','يجب تسجيل الدخول أولاً.');legacy('sbad','الدرجة خارج المدى');
+ const saved=id=>grades.getGradeEntryOfflineSaves('e').find(item=>item.studentId===id);
+ assert.equal(saved('s401').state,'pending');assert.equal(saved('s401').lastError,undefined);assert.equal(saved('sbad').state,'rejected');
+ pass('a grade refused only for the session is sent again; a grade refused for itself stays for review');
  delete global.window;delete global.document;
+
+ const priorDb=mocks.get('@/lib/db');
+ mocks.set('@/lib/db',{db:{appUser:{update:async()=>{throw new Error('logout must not sign out the other devices')}}}});
+ const signOut=await source('app/api/auth/logout/route.ts').POST();
+ assert.equal(signOut.status,200);assert.match(signOut.headers.get('set-cookie')||'',/teacherpro_session=;/);
+ mocks.set('@/lib/db',priorDb);
+ pass('logging out ends this device only; other devices on the same account stay signed in');
 
  mocks.set('@/lib/scheduled-exam-activation-server',{settleDueScheduledExamActivations:async()=>({scanned:0,activated:0,recalculatedStudents:0,examIds:[]})});
  process.env.CRON_SECRET='p1-local-test';

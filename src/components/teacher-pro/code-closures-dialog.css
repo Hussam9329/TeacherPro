@@ -90,7 +90,8 @@
 
 /* Contact row */
 .tp-closure-card__row { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); align-items: center; gap: 0.4rem 0.6rem; }
-.tp-closure-card__row > .tp-closure-card__telegram { justify-self: start; }
+.tp-closure-card__row > .tp-closure-card__actions { justify-self: start; }
+.tp-closure-card__actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; min-inline-size: 0; max-inline-size: 100%; }
 .tp-closure-card__row-label { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--tp-text); font-size: 0.86rem; font-weight: 800; }
 .tp-closure-card__row-label svg { inline-size: 1.05rem; block-size: 1.05rem; color: var(--tp-text-muted); }
 .tp-closure-card__telegram {
@@ -113,6 +114,58 @@
 a.tp-closure-card__telegram:hover { border-color: transparent; background: var(--status-info-solid); color: var(--status-info-on); }
 a.tp-closure-card__telegram:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
 .tp-closure-card__telegram[aria-disabled="true"] { border-color: var(--tp-border); background: transparent; color: var(--tp-text-muted); }
+
+/* Opens the platform and copies the phone: a red launch button behind hazard tape */
+.tp-closure-card__danger {
+  --danger-glow: color-mix(in srgb, var(--status-danger-vivid) 60%, transparent);
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border: 3px solid transparent;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--status-danger-solid) 55%, white), var(--status-danger-solid) 55%, color-mix(in srgb, var(--status-danger-solid) 65%, black)) padding-box,
+    repeating-linear-gradient(45deg, var(--status-warning-vivid) 0 5px, var(--tp-deep) 5px 10px) border-box;
+  color: var(--status-warning-vivid);
+  cursor: pointer;
+  animation: tp-closure-danger-pulse 1.6s ease-in-out infinite;
+  transition: transform 120ms ease;
+}
+.tp-closure-card__danger svg { inline-size: 1.4rem; block-size: 1.4rem; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.55)); }
+.tp-closure-card__danger:hover { transform: scale(1.07); }
+.tp-closure-card__danger:active { transform: scale(0.93); }
+.tp-closure-card__danger:focus-visible { outline: 3px solid var(--tp-focus); outline-offset: 2px; }
+@keyframes tp-closure-danger-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--danger-glow), 0 4px 14px -4px var(--status-danger-vivid); }
+  50% { box-shadow: 0 0 0 0.45rem transparent, 0 4px 18px -2px var(--status-danger-vivid); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tp-closure-card__danger { animation: none; box-shadow: 0 4px 14px -4px var(--status-danger-vivid); transition: none; }
+}
+
+/* Done: a green ring and a check, so the step is visibly finished */
+.tp-closure-card__danger[data-done] { animation: none; box-shadow: 0 0 0 3px var(--status-success-vivid); }
+a.tp-closure-card__telegram[data-done] { position: relative; border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success-fg); box-shadow: 0 0 0 3px var(--status-success-vivid); }
+.tp-closure-card__danger[data-done]::after,
+a.tp-closure-card__telegram[data-done]::after {
+  content: "✓";
+  position: absolute;
+  inset-block-start: -0.45rem;
+  inset-inline-end: -0.45rem;
+  display: grid;
+  place-items: center;
+  inline-size: 1.2rem;
+  block-size: 1.2rem;
+  border-radius: 50%;
+  background: var(--status-success-solid);
+  color: var(--status-success-on);
+  font-size: 0.72rem;
+  font-weight: 900;
+  box-shadow: 0 0 0 2px var(--tp-surface);
+}
 
 /* The close toggle: a large tile, amber while waiting, green once closed */
 .tp-closure-card__toggle {

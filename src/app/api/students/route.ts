@@ -86,6 +86,8 @@ const NON_WRITABLE_STUDENT_UPDATE_KEYS = new Set([
   // Shared checklist has a narrow endpoint; generic edits must preserve it.
   "dismissedChecked",
   "dismissedCheckEpoch",
+  "closurePlatformEpoch",
+  "closureTelegramEpoch",
   // Grace periods are managed only from the dashboard grace-management
   // screen (GracePeriod table). Legacy grace columns are never written here.
   "accountingGraceDays",
