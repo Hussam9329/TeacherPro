@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
             take: SEARCH_STUDENT_LIMIT,
           }),
           db.studentLeave.findMany({
-            where: studentLeaveListWhere(new URLSearchParams({ q: query })),
+            where: await studentLeaveListWhere(new URLSearchParams({ q: query })),
             select: { studentId: true },
             distinct: ["studentId"],
             take: SEARCH_STUDENT_LIMIT,

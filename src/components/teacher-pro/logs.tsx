@@ -125,7 +125,8 @@ export function LogsView() {
   const [moduleCounts, setModuleCounts] = useState<Array<{ module: string; count: number }>>([]);
   const [users, setUsers] = useState<string[]>([]);
   const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(search, 180);
+  // Wait for a pause in typing so a name is one request, not one per letter.
+  const debouncedSearch = useDebouncedValue(search, 350);
   const [filterModule, setFilterModule] = useState("");
   const [filterUser, setFilterUser] = useState("");
   const [page, setPage] = useState(1);

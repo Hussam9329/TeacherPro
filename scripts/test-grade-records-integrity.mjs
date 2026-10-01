@@ -161,10 +161,11 @@ must(
 );
 
 {
-  const gradesRoute = read("src/app/api/grades/route.ts");
+  const gradesRoute = read("src/lib/grade-search-server.ts") + read("src/app/api/grades/route.ts") + read("src/app/api/grades/export/route.ts");
   const gradeRecords = read("src/components/teacher-pro/grade-records.tsx");
   must(
-    gradesRoute.includes("async function buildGradeSearchWhere(") &&
+    gradesRoute.includes("export async function buildGradeSearchWhere(") &&
+      gradesRoute.includes("const searchWhere = await buildGradeSearchWhere(q);") &&
       gradesRoute.includes("{ studentId: { in: students.map((student) => student.id) } }") &&
       gradesRoute.includes("{ examId: { in: exams.map((exam) => exam.id) } }") &&
       gradesRoute.includes("const searchWhere = await buildGradeSearchWhere(search);") &&

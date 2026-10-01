@@ -512,7 +512,7 @@ export async function GET(req: NextRequest) {
   try {
     const { page, pageSize, skip } = readListPagination(req);
     const params = new URL(req.url).searchParams;
-    const where = studentLeaveListWhere(params);
+    const where = await studentLeaveListWhere(params);
     const [totalCount, studentLeaves, stats] = await withDatabaseSchema(
       () =>
         Promise.all([
