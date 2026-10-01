@@ -66,6 +66,7 @@ function harness() {
   const writes = [];
   const contacts = [];
   const copies = [];
+  let copyWorks = true;
   const opened = [];
   const successes = [];
   const errors = [];
@@ -156,7 +157,7 @@ function harness() {
     '@/components/ui/input': named(['Input']),
     '@/lib/code-closures-client': { codeClosuresApi: api },
     // The real phone/notice/link helpers; only the clipboard is recorded.
-    '@/lib/code-closure-contact': { ...contactHelpers, copyTextNow: (text) => { copies.push(text); return true; } },
+    '@/lib/code-closure-contact': { ...contactHelpers, copyText: (text, near) => { copies.push({ text, near }); return Promise.resolve(copyWorks); } },
     '@/lib/dismissed-check-api': { saveDismissedCheck: (...args) => api.save(...args) },
     '@/lib/teacherpro-sync': { emitTeacherProDataChanged() {} },
     '@/lib/user-toast': { toast: { error: (error) => errors.push(error), success: (message) => successes.push(message) } },
@@ -218,6 +219,7 @@ function harness() {
 
   return {
     reads, writes, contacts, copies, opened, successes, errors, render,
+    failCopies() { copyWorks = false; },
     async flush() {
       // Drain promises originating in the VM realm before applying state updates.
       await new Promise((resolve) => setImmediate(resolve));
@@ -522,22 +524,29 @@ function selectCourse(view, value) {
   assert(notice.includes('**الامتحان:** يومي 3') && notice.includes('**الحالة:** غياب') && notice.includes('**@hf_chances**'));
   assert(decodeURIComponent(links()[1].props.href.split('&text=')[1]).includes('**الامتحان:** [اسم الامتحان]'), 'an unknown exam keeps its placeholder to be filled before sending');
 
-  dangerButtons()[0].props.onClick();
+  const clicked = { id: 'danger-button' };
+  dangerButtons()[0].props.onClick({ currentTarget: clicked });
   view.render();
-  assert.deepEqual(view.copies, ['009647705550679'], 'the phone is copied in the platform search form');
+  assert.deepEqual(view.copies.map((copy) => copy.text), ['009647705550679'], 'the phone is copied in the platform search form');
+  assert.equal(view.copies[0].near, clicked, 'the copy happens next to the clicked button, inside the dialog');
   assert.deepEqual(view.opened, [['https://www.mz-academy.com/ar/teachers/users/active', '_blank', 'noopener,noreferrer']]);
   assert.deepEqual(view.contacts[0].args, [dangerous.id, 'platform', 3], 'the mark is saved for this dismissal episode');
   assert.equal(dangerButtons()[0].props['data-done'], true, 'highlighted at once, before the save returns');
   assert.equal(view.writes.length, 0, 'contact steps never change the closed-code flag');
   view.contacts[0].resolve();
   await view.flush();
+  assert.deepEqual(view.successes, ['نُسخ رقم الطالب 009647705550679'], 'success is announced only after the copy is confirmed');
   assert.equal(view.reads.length, 2, 'a saved mark refreshes the shared list');
   view.reads[1].resolve(response([{ ...dangerous, closurePlatformEpoch: 3 }, doneBefore]));
   await view.flush();
   assert.equal(dangerButtons()[0].props['data-done'], true);
-  dangerButtons()[0].props.onClick();
+  view.failCopies();
+  dangerButtons()[0].props.onClick({ currentTarget: clicked });
   view.render();
   assert.equal(view.contacts.length, 1, 'an already done step is not saved twice');
+  await view.flush();
+  assert.equal(view.successes.length, 1, 'a failed copy is never reported as copied');
+  assert(view.errors.includes('تعذر النسخ تلقائياً. رقم الطالب: 009647705550679'), 'a failed copy shows the number to copy by hand');
 
   links()[0].props.onClick();
   view.render();
@@ -548,7 +557,7 @@ function selectCourse(view, value) {
   assert.equal(links()[0].props['data-done'], undefined, 'a mark the server refused is not shown as done');
   assert(view.errors.includes('تعذر الحفظ'));
 
-  dangerButtons()[1].props.onClick();
+  dangerButtons()[1].props.onClick({ currentTarget: clicked });
   view.render();
   assert.equal(view.copies.length, 2, 'nothing is copied without a usable phone');
   assert.equal(view.opened.length, 3, 'the platform still opens');

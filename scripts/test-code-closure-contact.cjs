@@ -46,6 +46,77 @@ assert.equal(
 );
 console.log("PASS: 07… phones become 00964…, the notice keeps the agreed text with exam/result or placeholders, and the Telegram link carries it");
 
+// copyText inside a modal: a fake document whose focus trap refuses focus
+// outside the dialog, as the real dialog does. The old helper put its box on
+// <body>, so the browser copied the old selection while reporting success.
+async function copyScenario({ copyEventFires = true, asyncWrite = "ok" } = {}) {
+  const listeners = new Map();
+  const clipboard = { value: "OLD-CLIPBOARD", asyncCalls: [] };
+  const element = (tag, parent = null) => {
+    const node = {
+    tag, parent: null, children: [], style: {}, attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+    appendChild(child) { child.parent = this; this.children.push(child); },
+    remove() { if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this); this.parent = null; },
+    closest(selector) { let node = this; while (node) { if (selector === '[role="dialog"]' && node.attributes.role === "dialog") return node; node = node.parent; } return null; },
+    focus() { if (this.closest('[role="dialog"]')) doc.activeElement = this; },
+    select() { if (doc.activeElement === this) doc.selection = this.value; },
+    setSelectionRange() { if (doc.activeElement === this) doc.selection = this.value; },
+    };
+    if (parent) parent.appendChild(node);
+    return node;
+  };
+  const doc = {
+    selection: "اسماعيل ابراهيم خليل ابراهيم",
+    activeElement: null,
+    body: null,
+    createElement: (tag) => element(tag),
+    addEventListener: (name, fn) => listeners.set(name, fn),
+    removeEventListener: (name) => listeners.delete(name),
+    execCommand(command) {
+      assert.equal(command, "copy");
+      if (!copyEventFires) return false;
+      let prevented = false;
+      const data = {};
+      listeners.get("copy")?.({ clipboardData: { setData: (type, value) => { data[type] = value; } }, preventDefault: () => { prevented = true; } });
+      clipboard.value = prevented ? data["text/plain"] : doc.selection;
+      return true;
+    },
+  };
+  doc.body = element("body");
+  const dialog = element("div", doc.body);
+  dialog.attributes.role = "dialog";
+  const button = element("button", dialog);
+  doc.activeElement = button;
+  global.document = doc;
+  Object.defineProperty(global, "navigator", {
+    configurable: true,
+    value: { clipboard: { writeText: (text) => { clipboard.asyncCalls.push(text); return asyncWrite === "ok" ? Promise.resolve() : Promise.reject(new Error("denied")); } } },
+  });
+  let appendedTo = null;
+  const appendChild = dialog.appendChild.bind(dialog);
+  dialog.appendChild = (child) => { appendedTo = "dialog"; appendChild(child); };
+  const result = await contact.copyText("009647705550679", button);
+  delete global.document;
+  return { result, clipboard, appendedTo, focusBack: doc.activeElement === button, leftovers: dialog.children.length };
+}
+
+(async () => {
+  const ok = await copyScenario();
+  assert.equal(ok.appendedTo, "dialog", "the helper box is placed inside the open dialog");
+  assert.equal(ok.clipboard.value, "009647705550679", "the exact phone is copied, not the selected name");
+  assert.equal(ok.result, true);
+  assert.equal(ok.focusBack, true, "focus returns to the clicked button");
+  assert.equal(ok.leftovers, 1, "the helper box is removed");
+  assert.deepEqual(ok.clipboard.asyncCalls, [], "no second write when the copy worked");
+  const fallback = await copyScenario({ copyEventFires: false });
+  assert.deepEqual(fallback.clipboard.asyncCalls, ["009647705550679"], "falls back to the clipboard API");
+  assert.equal(fallback.result, true);
+  const failed = await copyScenario({ copyEventFires: false, asyncWrite: "denied" });
+  assert.equal(failed.result, false, "a copy that did not happen is reported as failed, never as copied");
+  console.log("PASS: copying the phone inside the dialog writes exactly 00964…, restores focus, falls back to the clipboard API, and never reports a failed copy as done");
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+
 (async () => {
   const rows = new Map();
   const audits = [];

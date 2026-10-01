@@ -10,7 +10,7 @@ import { codeClosuresApi, type CodeClosureStudent } from "@/lib/code-closures-cl
 import {
   MZ_ACTIVE_USERS_URL,
   buildDismissalNotice,
-  copyTextNow,
+  copyText,
   mzPlatformPhone,
   telegramNoticeHref,
   type ClosureContactStep,
@@ -190,15 +190,20 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
     );
   }
 
-  function openPlatform(student: CodeClosureStudent) {
+  function openPlatform(student: CodeClosureStudent, button: Element) {
     const phone = mzPlatformPhone(student.phone);
     // Copy first: the new tab takes the focus the clipboard needs.
-    const copied = phone ? copyTextNow(phone) : false;
+    const copying = phone ? copyText(phone, button) : Promise.resolve(false);
     window.open(MZ_ACTIVE_USERS_URL, "_blank", "noopener,noreferrer");
     markStep(student, "platform");
-    if (!phone) toast.error(`لا يوجد رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه في المنصة يدوياً.`);
-    else if (!copied) toast.error(`تعذر النسخ تلقائياً. رقم الطالب: ${phone}`);
-    else toast.success(`نُسخ رقم الطالب ${phone}`);
+    if (!phone) {
+      toast.error(`لا يوجد رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه في المنصة يدوياً.`);
+      return;
+    }
+    void copying.then((copied) => {
+      if (copied) toast.success(`نُسخ رقم الطالب ${phone}`);
+      else toast.error(`تعذر النسخ تلقائياً. رقم الطالب: ${phone}`);
+    });
   }
 
   const courses = useMemo(() => {
@@ -399,7 +404,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
                             type="button"
                             className="tp-closure-card__danger"
                             data-done={platformDone || undefined}
-                            onClick={() => openPlatform(student)}
+                            onClick={(event) => openPlatform(student, event.currentTarget)}
                             aria-label={`فتح المنصة ونسخ رقم هاتف ${student.name}${platformDone ? " — تم" : ""}`}
                             title={platformDone ? "تم فتح المنصة ونسخ الرقم" : "فتح المنصة ونسخ رقم هاتف الطالب"}
                           >
