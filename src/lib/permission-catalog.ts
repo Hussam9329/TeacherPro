@@ -116,6 +116,13 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
     description: "عرض سجل الطلاب",
   },
   {
+    id: "students.registry.view",
+    label: "عرض سجل الطلاب فقط",
+    category: "الطلاب",
+    level: "read",
+    description: "فتح سجل الطلاب للقراءة فقط، بدون إدارة المفصولين أو إغلاق الكودات أو فترات السماح، وبدون أي تعديل أو أرشفة",
+  },
+  {
     id: "students.add",
     label: "تسجيل طالب",
     category: "الطلاب",
@@ -455,7 +462,7 @@ export const DEFAULT_ROLE_DEFINITIONS: DefaultRoleDefinition[] = [
     name: "موظف مكالمات",
     isDefault: true,
     // The dashboard holds the «إدارة المكالمات» and «ملاحظات المكالمات» buttons.
-    permissions: ["system.dashboard", "follow-up.calls.view", "follow-up.calls.manage"],
+    permissions: ["system.dashboard", "follow-up.calls.view", "follow-up.calls.manage", "students.registry.view"],
   },
   {
     id: "role_viewer",

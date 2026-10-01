@@ -99,7 +99,10 @@ export function DashboardView({
   const [callNotesOpen, setCallNotesOpen] = useState(false);
   // «إدارة المكالمات» opens the calls work list here; the calls tab stays too.
   const [callsOpen, setCallsOpen] = useState(false);
-  const canViewCodeClosures = canAccess("student-registry") || canAccess("dismissed-management");
+  // Student tools need the full «عرض الطلاب»; «عرض سجل الطلاب فقط» opens the
+  // registry and nothing else. dismissed-management is gated by students.view.
+  const hasFullStudentsView = canAccess("dismissed-management");
+  const canViewCodeClosures = hasFullStudentsView;
   const canManageCodeClosures = Boolean(actor && (
     actor.username?.trim().toLowerCase() === "admin" ||
     actor.roleId === "role_admin" ||
@@ -109,7 +112,7 @@ export function DashboardView({
   ));
   const [codeClosuresOpen, setCodeClosuresOpen] = useState(false);
   // «إدارة فترة السماح» is the only place that creates, edits or cancels grace.
-  const canViewGracePeriods = canAccess("student-registry");
+  const canViewGracePeriods = canAccess("student-registry") && hasFullStudentsView;
   const canManageGracePeriods = Boolean(actor && (
     actor.username?.trim().toLowerCase() === "admin" ||
     actor.roleId === "role_admin" ||
