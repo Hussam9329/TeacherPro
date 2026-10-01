@@ -8,6 +8,7 @@ import {
   hasPermission,
   unauthorizedResponse,
 } from "@/lib/server-auth";
+import { CALLS_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
 import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 import { buildExamMutationToken } from "@/lib/exam-mutation-token";
 import { routeErrorResponse } from "@/lib/route-helpers";
@@ -23,7 +24,8 @@ export async function GET(req: NextRequest) {
     if (!principal) return unauthorizedResponse();
 
     const loaders: Array<Promise<Record<string, unknown>>> = [];
-    if (hasPermission(principal, "courses.view")) {
+    // The calls page picks a course first, so calls staff get the course list too.
+    if (["courses.view", ...CALLS_VIEW_PERMISSIONS].some((permission) => hasPermission(principal, permission))) {
       loaders.push(
         db.course.findMany({ orderBy: { createdAt: "desc" } })
           .then((courses) => ({ courses })),

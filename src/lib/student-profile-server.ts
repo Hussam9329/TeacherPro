@@ -28,11 +28,14 @@ export type StudentProfileSectionAccess = {
 export function studentProfileSectionAccess(
   principal: AuthPrincipal,
 ): StudentProfileSectionAccess {
-  const students = hasPermission(principal, "students.view");
-  const grades = ["grades.view", "grades.add", "grades.edit"].some(
+  // Calls staff open «ملف الطالب» from a call: they read the student's details,
+  // grades and opportunities there (read-only) to explain a deduction.
+  const callsStaff = hasPermission(principal, "follow-up.calls.view");
+  const students = callsStaff || hasPermission(principal, "students.view");
+  const grades = callsStaff || ["grades.view", "grades.add", "grades.edit"].some(
     (permission) => hasPermission(principal, permission),
   );
-  const opportunities = hasPermission(principal, "opportunities.view");
+  const opportunities = callsStaff || hasPermission(principal, "opportunities.view");
   const followUp = [
     "follow-up.view",
     "follow-up.calls.view",

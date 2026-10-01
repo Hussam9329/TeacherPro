@@ -1535,6 +1535,28 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     );
   };
 
+  /** The student's facts for the details window; empty ones are left out. */
+  const callStudentFacts = (student: Student): Array<[string, string]> => {
+    const program = [student.courseProgram, student.courseTerm].filter(Boolean).join(" — ");
+    const place = [student.mainSite, student.subSite].filter(Boolean).join(" / ");
+    const facts: Array<[string, string]> = [
+      ["الكود", student.code],
+      ["الدورة", courseName(student.courseId)],
+      ["البرنامج", program],
+      ["نوع الدراسة", student.studyType],
+      ["الموقع", place],
+      ["المدرسة", student.school],
+      ["الجنس", student.gender],
+      ["الحالة", student.status],
+      ["سبب الفصل", student.status === "مفصول" ? student.dismissalReason : ""],
+      ["الفرص", studentOpportunityText(student)],
+      ["هاتف الطالب", student.phone || "لا يوجد"],
+      ["هاتف ولي الأمر", student.parentPhone || "لا يوجد"],
+      ["تاريخ التسجيل", student.createdAt ? formatAppDate(student.createdAt) : ""],
+    ];
+    return facts.filter(([, value]) => String(value || "").trim());
+  };
+
   // ── The details window ──────────────────────────────────────────────────
   const renderDetailsWindow = () => {
     const row = detailsLiveRow;
@@ -1557,6 +1579,19 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
               </DialogHeader>
             </div>
             <div className="tp-modal__body">
+              <section className="tp-modal__section" aria-labelledby="tp-call-student">
+                <h3 id="tp-call-student" className="tp-modal__title">معلومات الطالب</h3>
+                {/* Everything a call may need, without leaving the calls page. */}
+                <dl className="tp-call-info">
+                  {callStudentFacts(row.student).map(([label, value]) => (
+                    <div key={label} className="tp-call-info__item">
+                      <dt>{label}</dt>
+                      <dd dir="auto">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+
               <section className="tp-modal__section" aria-labelledby="tp-call-focus">
                 <h3 id="tp-call-focus" className="tp-modal__title">الامتحان المختار</h3>
                 {item ? (

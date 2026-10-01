@@ -381,6 +381,12 @@ export const ALL_VIEW_PERMISSION_IDS = PERMISSION_CATALOG.filter(
   (p) => p.level === "read",
 ).map((p) => p.id);
 
+/**
+ * Who may open the calls work list: the calls page permission, or the older
+ * whole-follow-up permission. A calls-only account needs nothing else.
+ */
+export const CALLS_VIEW_PERMISSIONS = ["follow-up.calls.view", "follow-up.view"];
+
 export const ADMIN_ROLE_ID = "role_admin";
 export const ADMIN_ROLE_NAME = "مدير عام";
 
@@ -440,6 +446,16 @@ export const DEFAULT_ROLE_DEFINITIONS: DefaultRoleDefinition[] = [
     name: "مصحح",
     isDefault: true,
     permissions: ["grades.view", "students.view", "exams.view"],
+  },
+  {
+    // For staff who only make calls: the calls list, its actions and notes.
+    // Inside the calls page they still see what a call needs (the student's
+    // details, grades and opportunities in the card and «ملف الطالب»).
+    id: "role_caller",
+    name: "موظف مكالمات",
+    isDefault: true,
+    // The dashboard holds the «إدارة المكالمات» and «ملاحظات المكالمات» buttons.
+    permissions: ["system.dashboard", "follow-up.calls.view", "follow-up.calls.manage"],
   },
   {
     id: "role_viewer",

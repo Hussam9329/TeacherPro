@@ -7,7 +7,8 @@ import { annotateGradeRecordedImpacts } from "@/lib/grade-recorded-impact-server
 import { annotateGradeSettlementEffects } from "@/lib/grade-settlement-server";
 import type { ReportGradePresentation } from "@/lib/student-report-presentation";
 import type { GracePeriodRange } from "@/lib/grace-periods";
-import { requirePermission } from "@/lib/server-auth";
+import { requireAnyPermission } from "@/lib/server-auth";
+import { CALLS_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
 import { db } from "@/lib/db";
 import { normalizeArabicText, routeErrorResponse } from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
@@ -464,7 +465,7 @@ function buildGradeItem(args: {
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, "follow-up.view");
+  const authError = await requireAnyPermission(req, CALLS_VIEW_PERMISSIONS);
   if (authError) return authError;
 
   try {

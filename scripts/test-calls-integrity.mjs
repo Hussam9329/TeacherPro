@@ -461,6 +461,28 @@ assert(
   'تغيير من جهاز آخر لا يعيد تحميل كل مكالمات النظام، وتسجيل الخروج من جهاز لا يخرج الأجهزة الأخرى',
 );
 
+{
+  const catalog = read('src/lib/permission-catalog.ts');
+  const bootstrap = read('src/app/api/bootstrap/route.ts');
+  const profileAccess = read('src/lib/student-profile-server.ts');
+  const courseExams = read('src/app/api/student-calls/course-exams/route.ts');
+  assert(
+    catalog.includes('id: "role_caller",') &&
+      catalog.includes('permissions: ["system.dashboard", "follow-up.calls.view", "follow-up.calls.manage"],') &&
+      [candidates, stats, courseExams, callsRoute].every((source) =>
+        source.includes('await requireAnyPermission(req, CALLS_VIEW_PERMISSIONS);') &&
+        !source.includes('requirePermission(req, "follow-up.view")')) &&
+      bootstrap.includes('["courses.view", ...CALLS_VIEW_PERMISSIONS]') &&
+      profileAccess.includes('const callsStaff = hasPermission(principal, "follow-up.calls.view");'),
+    'دور «موظف مكالمات» يكفي لفتح المكالمات واختيار الدورة والامتحان وقراءة ملف الطالب من المكالمة',
+  );
+  assert(
+    followUp.includes('<h3 id="tp-call-student" className="tp-modal__title">معلومات الطالب</h3>') &&
+      followUp.includes('["هاتف ولي الأمر", student.parentPhone || "لا يوجد"],'),
+    'نافذة التفاصيل في المكالمات تعرض معلومات الطالب كاملة',
+  );
+}
+
 if (process.exitCode) {
   console.error('\nفشل اختبار سلامة تبويبة المكالمات. راجع الرسائل أعلاه.');
   process.exit(process.exitCode);

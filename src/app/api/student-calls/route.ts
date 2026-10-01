@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
-import { requirePermission, requirePermissionPrincipal } from "@/lib/server-auth";
+import { requireAnyPermission, requirePermissionPrincipal } from "@/lib/server-auth";
+import { CALLS_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
 import { db } from "@/lib/db";
 import {
   requireText,
@@ -72,7 +73,7 @@ function isUniqueConstraintError(error: unknown): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, "follow-up.view");
+  const authError = await requireAnyPermission(req, CALLS_VIEW_PERMISSIONS);
   if (authError) return authError;
 
   try {

@@ -513,3 +513,14 @@ a.tp-qr-tile:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in s
   .tp-qr-tile > svg, .tp-qr-tile__placeholder { inline-size: 6rem; max-inline-size: 6rem; }
   .tp-qr-tile__placeholder { block-size: 6rem; }
 }
+
+/* «معلومات الطالب» in the details window */
+.tp-call-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0;
+}
+.tp-call-info__item { min-width: 0; }
+.tp-call-info dt { color: var(--muted-foreground); font-size: 0.75rem; }
+.tp-call-info dd { margin: 0; font-weight: 650; overflow-wrap: anywhere; }
