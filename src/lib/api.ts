@@ -1,5 +1,5 @@
 import { withReadDeadline } from "./read-deadline";
-import { getOutboxOwner, ownerHeaders } from "./outbox-session";
+import { getOutboxOwner, ownerHeaders, requestSessionCheck } from "./outbox-session";
 import {
   beginTeacherProInteractionBlocker,
   inferTeacherProScopesFromEndpoint,
@@ -137,6 +137,7 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
             `تعذر حفظ البيانات (رمز ${res.status})`,
           );
           console.warn(`[API] POST /api/${endpoint} failed:`, error);
+          if (res.status === 401) requestSessionCheck();
           return {
             ok: false,
             error,
@@ -232,6 +233,7 @@ async function apiPut(
             `تعذر تحديث البيانات (رمز ${res.status})`,
           );
           console.warn(`[API] PUT /api/${endpoint} failed:`, error);
+          if (res.status === 401) requestSessionCheck();
           return {
             ok: false,
             error,
@@ -323,6 +325,7 @@ async function apiDelete(
             `تعذر حذف السجل (رمز ${res.status})`,
           );
           console.warn(`[API] DELETE /api/${endpoint} failed:`, error);
+          if (res.status === 401) requestSessionCheck();
           return {
             ok: false,
             error,
@@ -429,6 +432,7 @@ async function apiGetResponse<T>(
         if (!quietStatuses.includes(res.status)) {
           console.warn(`[API] GET /api/${endpoint} failed:`, error);
         }
+        if (res.status === 401) requestSessionCheck();
         return { ok: false, status: res.status, data: null, error };
       }
       const json = await res.json();

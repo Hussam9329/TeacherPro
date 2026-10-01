@@ -7,6 +7,12 @@ export function setOutboxOwner(value: string | null): void {
     window.dispatchEvent(new CustomEvent('teacherpro:outbox-owner', { detail: value }));
   }
 }
+/** A request came back 401: ask the shell to re-check the session now
+ *  instead of leaving the page open on a session the server no longer accepts. */
+export const SESSION_CHECK_EVENT = 'teacherpro:session-check';
+export function requestSessionCheck(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(SESSION_CHECK_EVENT));
+}
 export function ownerHeaders(owner = getOutboxOwner()): Record<string, string> {
   return owner ? { 'x-teacherpro-owner-id': owner } : {};
 }

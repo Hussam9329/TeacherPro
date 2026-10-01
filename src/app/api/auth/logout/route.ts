@@ -1,11 +1,12 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-import { NextRequest, NextResponse } from 'next/server';
-import { clearAuthCookie, getAuthPrincipal } from '@/lib/server-auth';
-import { db } from '@/lib/db';
-export async function POST(req: NextRequest) {
-  const principal = await getAuthPrincipal(req);
-  if (principal) await db.appUser.update({ where: { id: principal.id }, data: { sessionVersion: { increment: 1 } } });
+import { NextResponse } from 'next/server';
+import { clearAuthCookie } from '@/lib/server-auth';
+// Logging out ends this device's session only. Bumping the account's
+// sessionVersion here also signed out every other phone/computer using the
+// same account, and their next grade save failed with «يجب تسجيل الدخول أولاً».
+// A password change or deactivation still revokes every session (DB trigger).
+export async function POST() {
   const res = NextResponse.json({ ok: true });
   clearAuthCookie(res);
   return res;

@@ -110,11 +110,19 @@ function normalizeItem(value: unknown): GradeEntryOfflineSave | null {
         .slice(-MAX_ATTEMPTED_SNAPSHOTS)
     : [];
 
-  const state = ["pending", "conflict", "rejected"].includes(
+  const lastError = record.lastError ? String(record.lastError) : undefined;
+  const storedState = ["pending", "conflict", "rejected"].includes(
     String(record.state || ""),
   )
     ? (record.state as GradeEntryOfflineSave["state"])
     : "pending";
+  // Earlier versions marked a save refused with 401 as «rejected», so the
+  // row kept saying «يجب تسجيل الدخول أولاً» and was never re-sent. That was
+  // the session, not the grade: send it again. The baseline check still
+  // stops it from overwriting a newer grade on the server.
+  const authRejected =
+    storedState === "rejected" && Boolean(lastError?.includes("تسجيل الدخول"));
+  const state = authRejected ? "pending" : storedState;
 
   return {
     ownerUserId: String(record.ownerUserId || ""),
@@ -131,7 +139,7 @@ function normalizeItem(value: unknown): GradeEntryOfflineSave | null {
     updatedAt: Number(record.updatedAt || Date.now()),
     attempts: Math.max(0, Number(record.attempts || 0)),
     state,
-    lastError: record.lastError ? String(record.lastError) : undefined,
+    lastError: authRejected ? undefined : lastError,
   };
 }
 
