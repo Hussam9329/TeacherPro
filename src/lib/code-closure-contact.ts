@@ -42,28 +42,43 @@ export function telegramNoticeHref(chatHref: string, notice: string): string {
 }
 
 /**
- * Copies before the click opens another tab or app. The synchronous copy
- * finishes while this page still has focus; the async API is the fallback.
+ * Copies `text` before the click opens another tab or app (the new tab takes
+ * the focus the clipboard needs). The helper box goes inside the open dialog
+ * next to the clicked element: a modal's focus trap pulls focus back from
+ * <body>, and the browser then copied the old selection (e.g. the student's
+ * name) or nothing while reporting success. A copy listener writes the exact
+ * text, and success is only reported when that write really happened.
  */
-export function copyTextNow(text: string): boolean {
-  if (typeof document === "undefined" || !text) return false;
+export function copyText(text: string, near?: Element | null): Promise<boolean> {
+  if (typeof document === "undefined" || !text) return Promise.resolve(false);
+  const host = near?.closest('[role="dialog"]') ?? document.body;
+  const previous = document.activeElement as HTMLElement | null;
   const area = document.createElement("textarea");
   area.value = text;
   area.setAttribute("readonly", "");
-  area.style.position = "fixed";
-  area.style.opacity = "0";
-  document.body.appendChild(area);
-  area.select();
-  let copied = false;
+  area.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+  host.appendChild(area);
+  let written = false;
+  const onCopy = (event: ClipboardEvent) => {
+    if (!event.clipboardData) return;
+    event.clipboardData.setData("text/plain", text);
+    event.preventDefault();
+    written = true;
+  };
+  document.addEventListener("copy", onCopy, true);
   try {
-    copied = document.execCommand("copy");
+    area.focus({ preventScroll: true });
+    area.select();
+    area.setSelectionRange(0, text.length);
+    document.execCommand("copy");
   } catch {
-    copied = false;
+    written = false;
+  } finally {
+    document.removeEventListener("copy", onCopy, true);
+    area.remove();
+    previous?.focus?.({ preventScroll: true });
   }
-  area.remove();
-  if (!copied && typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-    void navigator.clipboard.writeText(text).catch(() => undefined);
-    return true;
-  }
-  return copied;
+  if (written) return Promise.resolve(true);
+  if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) return Promise.resolve(false);
+  return navigator.clipboard.writeText(text).then(() => true, () => false);
 }
