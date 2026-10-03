@@ -63,12 +63,14 @@ check(
 
 check(
   !opportunities.includes("reactivateDismissedOnAdd") &&
-  opportunities.includes("تُضاف لهم الفرص فقط دون تغيير حالتهم") &&
+  opportunities.includes("يرجعون نشطين بعدد الفرص المحدد") &&
+  bulkAdjust.includes("restoreDismissedStudentManually(tx") &&
+  bulkAdjust.includes('hasPermission(principal, "students.edit")') &&
   !bulkAdjust.includes("reactivateDismissedOnAdd") &&
   !bulkTargets.includes("reactivateDismissedOnAdd") &&
   !bulkPreview.includes("reactivateDismissedOnAdd") &&
   !api.includes("reactivateDismissedOnAdd"),
-  "الإضافة الجماعية لا تملك أي علم أو مسار لإعادة تفعيل المفصول",
+  "الإضافة الجماعية للمفصولين ترجعهم نشطين عبر خدمة الاستعادة الوحيدة وبصلاحية تعديل الطلاب، مثل الإضافة الفردية",
 );
 
 check(

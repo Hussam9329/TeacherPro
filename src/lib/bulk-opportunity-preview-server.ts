@@ -60,6 +60,12 @@ export async function buildBulkOpportunityPreview(
   const excludedDismissed = input.excludeDismissed
     ? eligibleRows.filter((student) => student.status === "مفصول").length
     : 0;
+  // A bulk add that includes dismissed students returns them to active, as
+  // adding to one dismissed student does.
+  const returningDismissed =
+    input.actionType === "add"
+      ? targetRows.filter((student) => student.status === "مفصول").length
+      : 0;
   const excludedFullOpportunities =
     input.actionType === "deduct" && input.excludeFullOpportunities
       ? eligibleRows.filter((student) => student.isOpportunityFull).length
@@ -96,6 +102,7 @@ export async function buildBulkOpportunityPreview(
     invalidOpportunitySource:
       noActiveChapter + activeChapterConflicts + zeroOpportunityLimit,
     excludedDismissed,
+    returningDismissed,
     excludedFullOpportunities,
     skipped: Math.max(0, candidateRows.length - targetRows.length),
     targetCount: targetRows.length,

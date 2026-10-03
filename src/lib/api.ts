@@ -701,6 +701,8 @@ export interface OpportunityBulkTargetsResponse {
   zeroOpportunityLimit: number;
   invalidOpportunitySource: number;
   excludedDismissed: number;
+  /** Dismissed students a bulk add returns to active (0 when they are excluded). */
+  returningDismissed?: number;
   excludedFullOpportunities: number;
   skipped: number;
   targetCount: number;
@@ -710,6 +712,8 @@ export interface OpportunityBulkTargetsResponse {
 
 export interface OpportunityBulkAdjustResponse {
   updatedStudents: number;
+  /** Dismissed students the bulk add returned to active. */
+  reactivatedStudents?: number;
   savedOpportunityLogs: number;
   savedStudentNotes: number;
   totalMatching: number;
