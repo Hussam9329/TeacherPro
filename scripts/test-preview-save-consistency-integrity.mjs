@@ -15,14 +15,12 @@ const coursesView = read("src/components/teacher-pro/courses.tsx");
 const chaptersRoute = read("src/app/api/chapters/route.ts");
 const chaptersView = read("src/components/teacher-pro/chapters.tsx");
 const courseChapterAction = read("src/app/api/course-chapters/activate/route.ts");
-const safeOpportunityRepair = read(
-  "src/app/api/students/fix-zero-opportunities/route.ts",
-);
 const academicRepair = read(
   "src/app/api/students/academic-repair/route.ts",
 );
-const retiredOpportunityClamp = read(
-  "src/app/api/students/clamp-opportunities/route.ts",
+// Old emergency repairs: deleted, so no stale tab can run them again.
+const retiredRepairRoutesGone = ["fix-zero-opportunities", "clamp-opportunities"].every(
+  (name) => !fs.existsSync(path.join(root, `src/app/api/students/${name}/route.ts`)),
 );
 const secondChapterTransition = read(
   "src/app/api/course-chapters/second-chapter-transition/route.ts",
@@ -134,12 +132,7 @@ check(
 );
 check(
   "مسار إصلاح فرص 0/0 موقوف ولا يستطيع أي تبويب قديم إعادة تشغيله",
-  safeOpportunityRepair.includes("retiredMaintenanceEndpoint") &&
-    safeOpportunityRepair.includes("status: 410") &&
-    safeOpportunityRepair.includes('"x-teacherpro-retryable": "0"') &&
-    !safeOpportunityRepair.includes('from "@/lib/db"') &&
-    !safeOpportunityRepair.includes("updateMany") &&
-    !safeOpportunityRepair.includes("buildMutationPreviewToken"),
+  retiredRepairRoutesGone,
 );
 check(
   "انتقال الدورتين يعيد نفس المعاينة داخل transaction ويمنع الحفظ الجزئي أو token القديم",
@@ -241,9 +234,7 @@ check(
     academicRepair.includes("if (!EXPLICIT_ACADEMIC_REPAIR_SCOPES.has(scope))") &&
     academicRepair.includes("retiredMaintenanceEndpoint: true") &&
     !academicRepair.includes("recalculateAllStudentsAcademicState") &&
-    retiredOpportunityClamp.includes("retiredMaintenanceEndpoint: true") &&
-    retiredOpportunityClamp.includes("{ status: 410 }") &&
-    !retiredOpportunityClamp.includes("db.student.updateMany"),
+    retiredRepairRoutesGone,
 );
 
 check(

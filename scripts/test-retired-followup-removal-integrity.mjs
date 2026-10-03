@@ -74,9 +74,8 @@ check(
 check(
   compatibility.includes('RETIRED_FOLLOWUP_NOTE_KIND = "تعهد ولي الأمر"') &&
     studentNotes.includes("kind: { not: RETIRED_FOLLOWUP_NOTE_KIND }") &&
-    studentNotes.includes("data.kind === RETIRED_FOLLOWUP_NOTE_KIND") &&
-    studentNotes.includes("updates.kind ??") &&
-    studentNotes.match(/isRetiredFollowupNote\(existing\)/g)?.length === 2 &&
+    // No screen writes notes through this route, so it accepts no writes at all.
+    !/export async function (POST|PUT|PATCH|DELETE)\b/.test(studentNotes) &&
     profileStats.includes("kind: { not: RETIRED_FOLLOWUP_NOTE_KIND }") &&
     profileLog.includes("kind: { not: RETIRED_FOLLOWUP_NOTE_KIND }") &&
     dismissedHistory.includes("kind: { not: RETIRED_FOLLOWUP_NOTE_KIND }"),
