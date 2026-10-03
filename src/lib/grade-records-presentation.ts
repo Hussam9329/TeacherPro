@@ -1,4 +1,5 @@
 import { formatGradeScore, normalizeScore, type GradeLike } from "./exam-utils";
+import { DURING_DISMISSAL_GRADE_MARK, isDuringDismissalGrade } from "./student-report-presentation";
 
 type ResultTone = "pass" | "fail-light" | "excused" | "sky" | "absent" | "cheating" | "neutral";
 
@@ -16,6 +17,11 @@ export function gradeRecordResultPresentation(
     const passMark = normalizeScore(exam.passMark);
     if (score === null) {
       return { scoreText: "بانتظار الدرجة", label: "", tone: "neutral", numeric: false };
+    }
+    // Typed while the student was dismissed and kept after the return: on
+    // record only, with no pass/fail result and no effect.
+    if (isDuringDismissalGrade(grade as Parameters<typeof isDuringDismissalGrade>[0])) {
+      return { scoreText: `${formatGradeScore(grade, exam)} ${DURING_DISMISSAL_GRADE_MARK}`, label: "", tone: "neutral", numeric: true };
     }
     const passed = passMark !== null && score >= passMark;
     return {

@@ -2,6 +2,87 @@ import { findStudentGracePeriod, GRACE_PERIOD_EXCUSE_LABEL, type GracePeriodRang
 import { isExamOnOrAfterStudentRegistration } from "./exam-utils";
 import { examResultTimelineDate } from "./academic-event-order";
 import type { AcademicOpportunityCommandEffect } from "./academic-types";
+import { baghdadDateKey } from "./baghdad-time";
+
+/** An exam held while the student was dismissed, with nothing recorded for it. */
+export const DISMISSED_NO_GRADE_TEXT = "الطالب مفصول - بلا درجة";
+/** Beside a score typed while the student was dismissed and kept, for the record only, after the return. */
+export const DURING_DISMISSAL_GRADE_MARK = "(الامتحان اثناء فصل الطالب)";
+export const NO_OPPORTUNITY_EFFECT_TEXT = "بدون أثر على الفرص";
+
+/** A score typed during a dismissal and made official at the return: on record, never counted. */
+export function isDuringDismissalGrade(grade: {
+  academicEffectExcluded?: unknown;
+  academicEffectExclusionSource?: unknown;
+} | null | undefined): boolean {
+  return Boolean(grade?.academicEffectExcluded) &&
+    String(grade?.academicEffectExclusionSource || "").startsWith("GradeSmartNote:DISMISSED_PENDING:");
+}
+
+export type ReportDismissalPeriod = { from: string; until: string | null };
+
+/**
+ * The days the student spent dismissed, as Baghdad day keys. A period starts
+ * on the day of the dismissal (an exam dismissal starts on that exam's day)
+ * and ends on the return day; while the student is still dismissed it stays
+ * open. Exams strictly after the start and before the return fell during it,
+ * which is also the window the academic engine ignores after a return.
+ */
+export function reportDismissalPeriods(input: {
+  logs: Array<Record<string, unknown>>;
+  manualDismissals?: Array<{ date?: unknown }>;
+  examDates?: Map<string, unknown>;
+  dismissedNow: boolean;
+}): ReportDismissalPeriod[] {
+  const day = (value: unknown) => baghdadDateKey(value as string | Date | null | undefined);
+  const time = (value: unknown) => {
+    const parsed = Date.parse(String(value ?? ""));
+    return Number.isFinite(parsed) ? parsed : NaN;
+  };
+  const events: Array<{ time: number; day: string; kind: "dismiss" | "return" }> = [];
+  for (const log of input.logs) {
+    const action = String(log.action || "").trim();
+    const reason = String(log.reason || "");
+    const at = time(log.date);
+    if (!Number.isFinite(at)) continue;
+    if (action.startsWith("فصل") || (action === "خصم" && /^فصل الطالب/u.test(reason.trim()))) {
+      const examDate = log.examId ? input.examDates?.get(String(log.examId)) : null;
+      const startDay = day(examDate || log.date);
+      if (startDay) events.push({ time: at, day: startDay, kind: "dismiss" });
+    } else if (
+      action === "إعادة تفعيل" || action === "رصيد إعادة التفعيل" || action === "رصيد بعد تعهد" ||
+      reason.includes("فرصتين بعد التعهد")
+    ) {
+      const returnDay = day(log.date);
+      if (returnDay) events.push({ time: at, day: returnDay, kind: "return" });
+    }
+  }
+  for (const dismissal of input.manualDismissals || []) {
+    const at = time(dismissal.date);
+    const startDay = day(dismissal.date);
+    if (Number.isFinite(at) && startDay) events.push({ time: at, day: startDay, kind: "dismiss" });
+  }
+  events.sort((a, b) => a.time - b.time || (a.kind === b.kind ? 0 : a.kind === "dismiss" ? -1 : 1));
+  const periods: ReportDismissalPeriod[] = [];
+  let open: string | null = null;
+  for (const event of events) {
+    if (event.kind === "dismiss") {
+      if (open === null) open = event.day;
+    } else if (open !== null) {
+      periods.push({ from: open, until: event.day });
+      open = null;
+    }
+  }
+  if (open !== null && input.dismissedNow) periods.push({ from: open, until: null });
+  return periods;
+}
+
+/** Whether an exam's day fell inside one of the student's dismissal periods. */
+export function examHeldDuringDismissal(examDate: unknown, periods: ReportDismissalPeriod[]): boolean {
+  const examDay = baghdadDateKey(examDate as string | Date | null | undefined);
+  if (!examDay) return false;
+  return periods.some(period => examDay > period.from && (period.until === null || examDay < period.until));
+}
 /** Read-only wording for the published student report. Never replay the ledger. */
 export function reportNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
@@ -362,6 +443,9 @@ export function presentOpportunityMovement(log: Movement) {
 
 export function reportGradeOutcome(grade: Record<string, unknown>, exam?: Record<string, unknown>): string {
   const status = String(grade.status || "");
+  if (status === DISMISSED_NO_GRADE_TEXT) return DISMISSED_NO_GRADE_TEXT;
+  // Kept for the record only: no pass/fail result is claimed for it.
+  if (isDuringDismissalGrade(grade)) return DURING_DISMISSAL_GRADE_MARK.slice(1, -1);
   if (status === "درجة") {
     const score = reportNumber(grade.score);
     if (score === null) return "بانتظار الدرجة";
@@ -418,6 +502,7 @@ export function reportGradePresentation(grade: Record<string, unknown>, exam: Re
     { createdAt: context?.registeredAt },
     { date: exam?.date as string | Date | null | undefined },
   )) return withoutPenalty("قبل تسجيل الطالب");
+  if (isDuringDismissalGrade(grade) || grade.status === DISMISSED_NO_GRADE_TEXT) return withoutPenalty(NO_OPPORTUNITY_EFFECT_TEXT);
   if (grade.academicEffectExcluded) return withoutPenalty("لا خصم");
   if (grade.status === "مجاز") return withoutPenalty("لا خصم");
   if (gracePeriod) {

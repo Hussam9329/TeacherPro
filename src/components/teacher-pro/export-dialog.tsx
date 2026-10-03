@@ -18,7 +18,7 @@ import { toast } from "@/lib/user-toast";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 import { buildProfessionalXlsx } from "@/lib/xlsx-export";
 import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
-import { buildReportOpportunityContext, buildReportTimelineEvents, reportGradeTimelineDate, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, studentReportText, type ReportBalanceNote, type ReportTimelineEvent, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
+import { buildReportOpportunityContext, buildReportTimelineEvents, reportGradeTimelineDate, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, studentReportText, DISMISSED_NO_GRADE_TEXT, DURING_DISMISSAL_GRADE_MARK, examHeldDuringDismissal, isDuringDismissalGrade, reportDismissalPeriods, type ReportBalanceNote, type ReportTimelineEvent, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
 import { GRACE_PERIOD_EXCUSE_LABEL, isStudentInGracePeriod, normalizeGracePeriodRanges } from "@/lib/grace-periods";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS, type AcademicOpportunityCommandEffect } from "@/lib/academic-types";
 import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
@@ -52,6 +52,8 @@ export type StudentGradeDetail = {
   opportunityEffect?: string;
   opportunityTone?: ReportGradeTone;
   passMark?: number | null;
+  /** A score typed while the student was dismissed, kept after the return for the record only. */
+  duringDismissal?: boolean;
 };
 
 export type StudentOpportunityLogDetail = {
@@ -199,7 +201,7 @@ const PUBLIC_GRADE_OUTCOMES = new Set(["ناجح", "راسب", "الدرجة ك�
 
 type PublicStudentHtmlDetails = Pick<StudentDetails, "activeChapterName" | "timelineEvents"> & {
   grades: Array<Pick<StudentGradeDetail,
-    "examName" | "examType" | "examDate" | "timelineDate" | "score" | "fullMark" | "status" | "outcome" | "opportunityEffect" | "opportunityTone"
+    "examName" | "examType" | "examDate" | "timelineDate" | "score" | "fullMark" | "status" | "outcome" | "opportunityEffect" | "opportunityTone" | "duringDismissal"
   >>;
 };
 
@@ -227,6 +229,7 @@ function buildPublicStudentHtmlData(details: StudentDetailsMap, students: Studen
         outcome: PUBLIC_GRADE_OUTCOMES.has(String(grade.outcome)) ? grade.outcome : "",
         opportunityEffect: grade.opportunityEffect,
         opportunityTone: grade.opportunityTone,
+        duringDismissal: grade.duringDismissal === true,
       })).sort((a, b) => (new Date(a.examDate).getTime() || 0) - (new Date(b.examDate).getTime() || 0)),
     }]);
     // Resolve the latest database snapshot before dropping its duplicate copy.
@@ -456,6 +459,14 @@ export function buildStudentDetailsFromProfileLog(
   const registeredAt = (reportContext?.registeredAt ?? profile.student?.createdAt) as string | Date | null | undefined;
   timelineEvents.push(...reportDismissalEvents(profile, rawLogs, scopedLogs, logScope, studentStatus));
   timelineEvents.sort((a, b) => (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0));
+  // The days the student spent dismissed, so an exam held then with nothing
+  // recorded reads «الطالب مفصول - بلا درجة» instead of awaiting a grade.
+  const dismissalPeriods = reportDismissalPeriods({
+    logs: rawLogs,
+    manualDismissals: reportContext?.dismissals || [],
+    examDates: new Map([...examMap].map(([id, exam]) => [id, exam.date])),
+    dismissedNow: studentStatus === "مفصول",
+  });
   const opportunityContext = {
     ...buildReportOpportunityContext(rawLogs, String(profile.currentChapter?.id || "")),
     gracePeriods,
@@ -510,6 +521,7 @@ export function buildStudentDetailsFromProfileLog(
         opportunityEffect: presentation.text,
         opportunityTone: presentation.tone,
         passMark: reportNumber(exam?.passMark),
+        duringDismissal: isDuringDismissalGrade(rawGrade),
       };
     });
 
@@ -552,7 +564,13 @@ export function buildStudentDetailsFromProfileLog(
       includeExam(undefined, examRecord)
     ) {
       examMap.set(examId, examRecord);
-      const grade = { status: reportStatus("", examRecord), score: null };
+      // A leave or grace period explains the exam first; otherwise an exam
+      // held while the student was dismissed has no grade, by design.
+      const excuse = reportStatus("", examRecord);
+      const grade = {
+        status: excuse || (examHeldDuringDismissal(examRecord.date, dismissalPeriods) ? DISMISSED_NO_GRADE_TEXT : ""),
+        score: null,
+      };
       const presentation = reportGradePresentation(grade, examRecord, scopedLogs.filter(log => log.examId === examId), opportunityContext);
       grades.push({
         examId,
@@ -1155,8 +1173,11 @@ const DETAILS_MODAL_JS = `
           : 'neutral';
         var pill = g.outcome === 'ناجح' || g.outcome === 'الدرجة كاملة' ? '<span class="tp-result-pill tp-result-pill-passed">' + esc(g.outcome) + '</span>'
           : g.outcome === 'راسب' ? '<span class="tp-result-pill tp-result-pill-failed">راسب</span>' : '';
+        // A score typed during a dismissal: on record only, so no pass/fail pill.
         var score = g.status === 'غش' ? 'غش' : g.score === null || g.score === undefined
-          ? (g.status === 'مجاز' ? 'إجازة' : g.status === ${JSON.stringify(GRACE_PERIOD_EXCUSE_LABEL)} ? 'مجاز فترة سماح' : g.status === 'غائب' ? 'غياب' : g.status === ${JSON.stringify(PENDING_GRADE_STATUS)} ? ${JSON.stringify(PENDING_GRADE_STATUS)} : 'بانتظار الدرجة')
+          ? (g.status === 'مجاز' ? 'إجازة' : g.status === ${JSON.stringify(GRACE_PERIOD_EXCUSE_LABEL)} ? 'مجاز فترة سماح' : g.status === 'غائب' ? 'غياب' : g.status === ${JSON.stringify(PENDING_GRADE_STATUS)} ? ${JSON.stringify(PENDING_GRADE_STATUS)} : g.status === ${JSON.stringify(DISMISSED_NO_GRADE_TEXT)} ? ${JSON.stringify(DISMISSED_NO_GRADE_TEXT)} : 'بانتظار الدرجة')
+          : g.duringDismissal === true
+          ? '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi> ' + ${JSON.stringify(DURING_DISMISSAL_GRADE_MARK)}
           : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>' + pill;
         var effectText = String(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.').trim();
         return '<tr role="row" class="tp-grade-row-' + tone + ' tp-result-' + result + '">'

@@ -716,6 +716,67 @@ check("الامتحان بلا نتيجة مسجلة يبقى بانتظار ا�
   assert.equal(report.activeChapterSince, null);
 });
 
+check("امتحانات فترة الفصل: «الطالب مفصول - بلا درجة»، والدرجة المحفوظة بعد العودة تُكتب مع «(الامتحان اثناء فصل الطالب)» بلا أثر", () => {
+  const exam = (id, date) => ({ id, name: `امتحان ${id}`, type: "يومي", date, fullMark: 20, passMark: 10 });
+  const exams = [
+    exam("e3", "2026-09-19"), // her absence here dismissed her
+    exam("e4", "2026-09-23"), // nothing recorded while dismissed
+    exam("e5", "2026-09-26"), // a score typed while dismissed, kept at the return
+    exam("e6", "2026-09-30"), // nothing recorded while dismissed
+    exam("e7", "2026-10-05"), // after the return: still awaiting a grade
+  ];
+  const grades = [
+    { id: "g3", examId: "e3", status: "غائب", score: null },
+    {
+      id: "g5", examId: "e5", status: "درجة", score: 14, academicEffectExcluded: true,
+      academicEffectExclusionSource: "GradeSmartNote:DISMISSED_PENDING:note-5",
+    },
+  ];
+  const dismissLog = { action: "فصل تلقائي", amount: 0, examId: "e3", date: "2026-09-21T09:00:00.000Z" };
+  const returnLogs = [
+    { action: "إعادة تفعيل", amount: 0, date: "2026-10-03T12:27:00.000Z", ledgerVersion: 2, balanceAfter: 1 },
+    { action: "رصيد إعادة التفعيل", amount: 1, date: "2026-10-03T12:27:00.000Z", ledgerVersion: 2, balanceAfter: 1 },
+  ];
+  const build = (status, logs) => buildStudentDetailsFromProfileLog({
+    student: { opportunities: status === "نشط" ? 1 : 0, status },
+    exams, allCourseExams: exams, grades, opportunityLogs: logs,
+    currentChapter: { id: "ch3", name: "الفصل الثالث", since: null, examIds: exams.map((item) => item.id) },
+    reportContext: { status, registeredAt: "2026-01-01", leaves: [], dismissals: [], pendingGrades: [] },
+  });
+  const row = (report, examId) => report.grades.find((grade) => grade.examId === examId);
+
+  // Returned on 3 Oct.
+  const returned = build("نشط", [dismissLog, ...returnLogs]);
+  for (const examId of ["e4", "e6"]) {
+    assert.equal(row(returned, examId).status, "الطالب مفصول - بلا درجة", examId);
+    assert.equal(row(returned, examId).outcome, "الطالب مفصول - بلا درجة", examId);
+    assert.equal(row(returned, examId).opportunityEffect, "بدون أثر على الفرص", examId);
+  }
+  assert.equal(row(returned, "e5").duringDismissal, true);
+  assert.equal(row(returned, "e5").outcome, "الامتحان اثناء فصل الطالب");
+  assert.equal(row(returned, "e5").opportunityEffect, "بدون أثر على الفرص");
+  assert.equal(row(returned, "e7").outcome, "بانتظار الدرجة", "an exam after the return still waits for its grade");
+  assert.notEqual(row(returned, "e3").status, "الطالب مفصول - بلا درجة", "the dismissing exam keeps its own result");
+
+  const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: { s1: returned } });
+  const { dom } = executeInlineScripts(html, "dismissal-period-cells");
+  openStudentDetails(dom, "s1", "محمد علي حسن");
+  const body = dom.elements.tpGradesBody.innerHTML;
+  assert.match(body, /data-label="الدرجة"[^]*?tp-mobile-field-value"><bdi>14 \/ 20<\/bdi> \(الامتحان اثناء فصل الطالب\)<\/span>/);
+  assert.equal((body.match(/tp-mobile-field-value">الطالب مفصول - بلا درجة<\/span>/g) || []).length, 2);
+  assert.doesNotMatch(body, /<bdi>14 \/ 20<\/bdi><span class="tp-result-pill/, "no pass/fail pill on a score kept for the record");
+
+  // Still dismissed: every exam after the dismissal day reads the same.
+  const dismissedNow = build("مفصول", [dismissLog]);
+  for (const examId of ["e4", "e6", "e7"]) {
+    assert.equal(row(dismissedNow, examId).status, "الطالب مفصول - بلا درجة", examId);
+  }
+
+  // Active with no recorded return (legacy data): nothing is guessed.
+  const unknownReturn = build("نشط", [dismissLog]);
+  assert.equal(row(unknownReturn, "e4").outcome, "بانتظار الدرجة");
+});
+
 check("HTML يميز الإجازة والغياب المثبت والدرجات المعلقة دون اختراع غياب أو إخفاء خصم", () => {
   const cases = [
     { label: "formal-leave", grade: { status: "مجاز", score: null }, cell: "إجازة", effect: "لا خصم" },
@@ -1820,7 +1881,7 @@ check("ملف HTML ينقل حقول العرض حصراً ويحذف السجل
   const publicDetails = JSON.parse(JSON.stringify(sandbox.STUDENT_DETAILS));
   const publicStudents = JSON.parse(JSON.stringify(sandbox.STUDENT_LIST));
   const detailKeys = ["activeChapterName", "timelineEvents", "grades"].sort();
-  const gradeKeys = ["examName", "examType", "examDate", "timelineDate", "score", "fullMark", "status", "outcome", "opportunityEffect", "opportunityTone"].sort();
+  const gradeKeys = ["examName", "examType", "examDate", "timelineDate", "score", "fullMark", "status", "outcome", "opportunityEffect", "opportunityTone", "duringDismissal"].sort();
   const studentKeys = ["id", "name", "code", "courseName", "opportunities", "status"].sort();
   assert.deepEqual(Object.keys(publicDetails).sort(), ["s1", "s2", "s3"]);
   for (const detail of Object.values(publicDetails)) {
