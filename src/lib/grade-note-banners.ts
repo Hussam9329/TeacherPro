@@ -29,15 +29,6 @@ export interface GradeNoteBannerInfo {
   title: string;
 }
 
-/** النصوص القصيرة المعتمدة التي يولّدها السيرفر من الآن فصاعداً */
-export const CANONICAL_GRADE_NOTE_TEXTS = [
-  "غياب تلقائي",
-  "قبل تسجيل الطالب",
-  "فترة سماح",
-  "إجازة",
-  "درجة مؤجلة أثناء الفصل",
-] as const;
-
 /** العبارات الآلية القديمة الطويلة (تاريخية — لا يولّدها السيرفر بعدُ) */
 const LEGACY_PATTERNS = {
   autoAbsent: ["لم تُدخل درجة الطالب في امتحان سابق"],

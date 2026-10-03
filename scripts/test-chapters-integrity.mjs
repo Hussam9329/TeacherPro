@@ -6,7 +6,6 @@ const files = {
   chaptersRoute: "src/app/api/chapters/route.ts",
   courseChaptersRoute: "src/app/api/course-chapters/route.ts",
   activateRoute: "src/app/api/course-chapters/activate/route.ts",
-  fixZeroRoute: "src/app/api/students/fix-zero-opportunities/route.ts",
   secondChapterTransitionRoute:
     "src/app/api/course-chapters/second-chapter-transition/route.ts",
   secondChapterTransitionPolicy: "src/lib/second-chapter-transition.ts",
@@ -32,7 +31,6 @@ const chaptersOverview = read(files.chaptersOverview);
 const chaptersRoute = read(files.chaptersRoute);
 const courseChaptersRoute = read(files.courseChaptersRoute);
 const activateRoute = read(files.activateRoute);
-const fixZeroRoute = read(files.fixZeroRoute);
 const secondChapterTransitionRoute = read(files.secondChapterTransitionRoute);
 const secondChapterCourseMatchSource = secondChapterTransitionRoute.slice(
   secondChapterTransitionRoute.indexOf("const courseMatches"),
@@ -111,10 +109,8 @@ assert(
   "الأرشفة وتحديث الفرص تتم من قاعدة البيانات وتستثني المؤرشفين وتتعامل مع المفصولين بوضوح",
 );
 assert(
-  courseChaptersRoute.includes("updateMany({") &&
-    courseChaptersRoute.includes("id: { not: String(id) }") &&
-    courseChaptersRoute.includes("active: false"),
-  "مسار تحديث ربط الفصل يمنع بقاء أكثر من فصل نشط لنفس الدورة حتى للنداءات القديمة",
+  !courseChaptersRoute.includes("export async function PUT"),
+  "مسار التعديل القديم لربط الفصل محذوف؛ تفعيل الفصل وإيقافه يمرّان فقط بمسار التفعيل مع المعاينة",
 );
 assert(
   courseChaptersRoute.includes("parseArchiveEntries(link.archive)") &&
@@ -187,13 +183,8 @@ assert(
   "صفحة الفصول تعرض 0/0 كمؤشر تشخيصي فقط ولا تملك زر أو حوار إصلاح جماعي",
 );
 assert(
-  fixZeroRoute.includes("retiredMaintenanceEndpoint") &&
-    fixZeroRoute.includes("status: 410") &&
-    fixZeroRoute.includes('"x-teacherpro-retryable": "0"') &&
-    !fixZeroRoute.includes('from "@/lib/db"') &&
-    !fixZeroRoute.includes("updateMany") &&
-    !fixZeroRoute.includes("withSerializableTransaction"),
-  "مسار إصلاح الطلاب القديم موقوف نهائياً ولا يقرأ أو يكتب بيانات الطلاب",
+  !fs.existsSync("src/app/api/students/fix-zero-opportunities/route.ts"),
+  "مسار إصلاح الطلاب القديم محذوف نهائياً ولا يستطيع أي تبويب قديم تشغيله",
 );
 assert(
   chaptersView.includes(
@@ -301,19 +292,7 @@ assert(
     migration.includes("CourseChapter_courseId_chapterId_unarchived_key"),
   "قاعدة البيانات تفرض فصلاً نشطاً واحداً وربطاً غير مؤرشف واحداً حتى مع الطلبات المتزامنة",
 );
-assert(
-  courseChaptersRoute.includes("لا يمكن نقل ربط فصل مفعل مباشرة") &&
-    courseChaptersRoute.includes("const courseId = courseChapter.courseId") &&
-    courseChaptersRoute.includes("effectiveActiveLink.chapter.opportunities") &&
-    courseChaptersRoute.includes("activeLinks.length > 1") &&
-    !courseChaptersRoute.includes("body.chapterOpportunities"),
-  "مسار الربط القديم يمنع نقل الربط النشط ويقرأ الدورة والسقف من السجل الحقيقي لا من الطلب",
-);
-assert(
-  courseChaptersRoute.includes("data: { active: false }") &&
-    !courseChaptersRoute.includes("data: { active: false, archived: false }"),
-  "تعطيل الروابط الأخرى لا يلغي أرشفتها بلا إجراء استعادة صريح",
-);
+
 assert(
   api.includes(
     "previewUpdate: (id: string, updates: Record<string, unknown>)",

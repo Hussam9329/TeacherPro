@@ -26,13 +26,6 @@ export const TEACHERPRO_ACTION_COPY = Object.freeze({
   refreshFailed: "تعذر تحديث البيانات",
 });
 
-export const TEACHERPRO_COUNT_SCOPE_COPY = Object.freeze({
-  system: "",
-  filtered: "المطابقون للفلاتر",
-  page: "المعروض في الصفحة",
-  context: "ضمن الاختيار الحالي",
-});
-
 export type TeacherProActionStatus =
   | "idle"
   | "saving"

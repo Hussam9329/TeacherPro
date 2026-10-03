@@ -22,10 +22,6 @@ const serverAuth = read("src/lib/server-auth.ts");
 const canonicalList = read("src/app/api/dismissed-management/list/route.ts");
 const canonicalHistory = read("src/app/api/dismissed-management/history/route.ts");
 const canonicalStats = read("src/app/api/dismissed-management/stats/route.ts");
-const legacyList = read("src/app/api/dismissed-students/list/route.ts");
-const legacyHistory = read("src/app/api/dismissed-students/history/route.ts");
-const legacyDetails = read("src/app/api/dismissed-students/details/route.ts");
-const legacyStats = read("src/app/api/dismissed-students/stats/route.ts");
 const pkg = JSON.parse(read("package.json"));
 
 must(
@@ -65,14 +61,8 @@ must(
 );
 
 must(
-  legacyList.includes("@/app/api/dismissed-management/list/route") &&
-    legacyHistory.includes("@/app/api/dismissed-management/history/route") &&
-    legacyStats.includes("@/app/api/dismissed-management/stats/route") &&
-    legacyDetails.includes("توافق قراءة فقط") &&
-    legacyDetails.includes("export async function GET") &&
-    !legacyDetails.includes("export async function POST") &&
-    !legacyDetails.includes("export async function PUT"),
-  "مسارات القراءة القديمة تبقى طبقة توافق بلا منطق تعديل مكرر",
+  ["list", "history", "details", "stats"].every((name) => !exists(`src/app/api/dismissed-students/${name}/route.ts`)),
+  "مسارات «الطلاب المفصولين» القديمة محذوفة؛ إدارة المفصولين هي المسار الوحيد",
 );
 
 must(

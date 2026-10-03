@@ -279,46 +279,6 @@ function parseNumericScore(value: unknown): number | null | undefined {
   return numeric;
 }
 
-export function hasAcademicGradeWritebackPayload(
-  body: Record<string, unknown>,
-): boolean {
-  return [
-    "gradeStatus",
-    "grade_status",
-    "gradeScore",
-    "grade_score",
-    "score",
-    "finalScore",
-    "final_score",
-    "academicAccountingChecked",
-    "academic_accounting_checked",
-  ].some((key) => body[key] !== undefined);
-}
-
-export function readAcademicGradeWritebackStatus(
-  body: Record<string, unknown>,
-  fallback: AcademicGradeWritebackStatus = "درجة",
-): AcademicGradeWritebackStatus {
-  return normalizeAcademicGradeStatus(
-    body.gradeStatus ??
-      body.grade_status ??
-      body.gradeState ??
-      body.grade_state,
-    fallback,
-  );
-}
-
-export function readAcademicGradeWritebackScore(
-  body: Record<string, unknown>,
-): unknown {
-  if (body.gradeScore !== undefined) return body.gradeScore;
-  if (body.grade_score !== undefined) return body.grade_score;
-  if (body.finalScore !== undefined) return body.finalScore;
-  if (body.final_score !== undefined) return body.final_score;
-  if (body.score !== undefined) return body.score;
-  return undefined;
-}
-
 function parseCourseIds(value: string | null | undefined): string[] {
   try {
     const parsed = JSON.parse(value || "[]");

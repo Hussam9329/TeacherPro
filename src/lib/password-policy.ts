@@ -127,19 +127,3 @@ export function validatePasswordPolicy(password: string): PasswordPolicyResult {
 export function isPasswordAcceptable(password: string): boolean {
   return validatePasswordPolicy(password).ok;
 }
-
-/**
- * Estimate password strength as a 0-4 score (for UI feedback).
- * 0 = very weak, 4 = strong. This is informational only — enforcement
- * uses validatePasswordPolicy above.
- */
-export function scorePasswordStrength(password: string): 0 | 1 | 2 | 3 | 4 {
-  if (!password) return 0;
-  let score = 0;
-  if (password.length >= 8) score += 1;
-  if (password.length >= 12) score += 1;
-  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
-  if (HAS_DIGIT.test(password) && HAS_LETTER.test(password)) score += 1;
-  if (/[^a-zA-Z0-9\u0600-\u06FF]/.test(password)) score += 1; // symbols
-  return Math.min(4, score) as 0 | 1 | 2 | 3 | 4;
-}

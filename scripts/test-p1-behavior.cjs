@@ -95,7 +95,7 @@ function command(action,amount,date,extra={}) {return {id:'l'+date,studentId:'s'
  pass('real maintenance route no longer settles grace');
 
  mocks.set('@/lib/server-auth',{requirePermission:async()=>null,getAuthPrincipal:async()=>({id:'admin',username:'admin'})});
- for(const route of ['logs/clear','logs/restore','opportunity-logs']) {
+ for(const route of ['opportunity-logs']) {
   const mod=source(`app/api/${route}/route.ts`);const res=await mod.POST({});assert.equal(res.status,410);assert.equal(res.headers.get('x-teacherpro-retryable'),'false');
   if(mod.DELETE)assert.equal((await mod.DELETE({})).status,410);
  }

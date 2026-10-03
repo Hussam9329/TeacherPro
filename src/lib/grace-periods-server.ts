@@ -1,8 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
-  graceDateKey,
-  isStudentInGracePeriod,
   type GracePeriodRange,
   type GracePeriodRecord,
 } from "@/lib/grace-periods";
@@ -108,18 +106,6 @@ export async function listStudentGracePeriods(
     orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
   });
   return rows.map(toGracePeriodRecord);
-}
-
-/** isStudentInGracePeriod(studentId, examDate) for server code without a loaded state. */
-export async function isStudentInGracePeriodForExam(
-  studentId: string,
-  examDate: Date | string,
-  client: GracePeriodClient = db,
-): Promise<boolean> {
-  const dateKey = graceDateKey(examDate);
-  if (!studentId || !dateKey) return false;
-  const periods = await loadActiveGracePeriodsByStudent(client, [studentId]);
-  return isStudentInGracePeriod(periods.get(studentId), dateKey);
 }
 
 /** Retired Student grace columns. Nothing reads them; responses strip them. */

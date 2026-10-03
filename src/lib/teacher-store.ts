@@ -117,22 +117,6 @@ export interface Student {
 
 export type CourseTransferPolicy = "reset" | "keep";
 
-export type StudentUpdatePayload = Partial<
-  Omit<
-    Student,
-    "id" | "code" | "gracePeriods"
-  >
-> & {
-  /**
-   * Required only when courseId changes from one course to another.
-   * - reset: treat the student as new in the target course and grant the
-   *   target course active chapter opportunities.
-   * - keep: move course/settings only and keep the student's current
-   *   opportunities/baseOpportunities untouched.
-   */
-  courseTransferPolicy?: CourseTransferPolicy;
-};
-
 export interface Exam {
   examCourses?: Array<{ courseId: string; chapterId: string | null }>;
   id: string;
@@ -276,12 +260,6 @@ export interface LogEntry {
   action: string;
   details: string;
   time: string;
-}
-
-export interface LogClearOptions {
-  scopeIds: string[];
-  dateFrom?: string;
-  dateTo?: string;
 }
 
 export type SectionId =
@@ -439,24 +417,6 @@ const DEFAULT_ROLES: Role[] = DEFAULT_ROLE_DEFINITIONS.map((role) => ({
   ...role,
   permissions: [...role.permissions],
 }));
-
-// ─── Backup Shape ───────────────────────────────────────────────────────────
-
-export interface BackupShape {
-  courses?: Course[];
-  chapters?: Chapter[];
-  courseChapters?: CourseChapter[];
-  students?: Student[];
-  exams?: Exam[];
-  grades?: Grade[];
-  opportunityLogs?: OpportunityLog[];
-  studentLeaves?: StudentLeave[];
-  studentCalls?: StudentCall[];
-  studentNotes?: StudentNote[];
-  users?: User[];
-  roles?: Role[];
-  logs?: LogEntry[];
-}
 
 // ─── Store State ────────────────────────────────────────────────────────────
 

@@ -57,12 +57,6 @@ export function studentLeaveState(days: StudentLeaveDays, today: string): Studen
   return "active";
 }
 
-export function leaveStateMatchesFilter(state: StudentLeaveState, filter: StudentLeaveListFilter): boolean {
-  if (filter === "past") return state === "ended";
-  if (filter === "current") return state !== "ended";
-  return true;
-}
-
 export type StudentLeaveSummary = {
   total: number;
   active: number;

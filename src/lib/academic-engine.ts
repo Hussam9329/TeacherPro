@@ -29,7 +29,6 @@ import type {
   AcademicStudent,
   AcademicStudentLeave,
   AcademicStudentNote,
-  GradeImpact,
   StudentLeaveType,
 } from "./academic-types";
 
@@ -94,18 +93,6 @@ function automaticOpportunityLogId(
   return `auto_${studentId}_${examId}_${sourceId || "exam"}_${slug}`;
 }
 
-export function encodeAcademicReactivationLink(
-  link: Partial<AcademicReactivationLink>,
-): string {
-  const params = new URLSearchParams();
-  if (link.sourceGradeId) params.set("sourceGradeId", link.sourceGradeId);
-  if (link.sourceExamId) params.set("sourceExamId", link.sourceExamId);
-  if (link.sourceAutomaticLogId)
-    params.set("sourceAutomaticLogId", link.sourceAutomaticLogId);
-  params.set("reactivationMode", link.reactivationMode || "بسبب إجراء تلقائي");
-  return `${ACADEMIC_REACTIVATION_LINK_PREFIX}${params.toString()}${ACADEMIC_REACTIVATION_LINK_SUFFIX}`;
-}
-
 export function parseAcademicReactivationLink(
   reason: string | null | undefined,
 ): AcademicReactivationLink | null {
@@ -152,24 +139,6 @@ export function isSystemAcademicReactivationLog(log: AcademicOpportunityLog): bo
       reason.includes("إرجاع الطالب بعد إعادة التفعيل") ||
       reason.includes("بعد تعهد") ||
       reason.includes("فرصتين"))
-  );
-}
-
-function academicReactivationLinkMatchesExam(
-  link: AcademicReactivationLink | null,
-  examId: string,
-): boolean {
-  return Boolean(link && link.sourceExamId && link.sourceExamId === examId);
-}
-
-export function opportunityLogBelongsToExam(
-  log: AcademicOpportunityLog,
-  examId: string,
-): boolean {
-  if (log.examId === examId) return true;
-  return academicReactivationLinkMatchesExam(
-    parseAcademicReactivationLink(log.reason),
-    examId,
   );
 }
 
@@ -328,100 +297,6 @@ export function gradeCausesDismissalGradeEffect(
   return false;
 }
 
-export function classifyGradeImpact(
-  grade: AcademicGrade,
-  exam: AcademicExam,
-  opportunitiesBefore: number,
-): GradeImpact {
-  if (!gradeHasAcademicEffect(grade, exam)) {
-    return { type: "none", reason: "", penalty: 0, priority: -1 };
-  }
-
-  if (grade.status === "غش") {
-    return {
-      type: "dismissal",
-      reason: `غش في امتحان: ${exam.name}`,
-      penalty: Math.max(0, opportunitiesBefore),
-      priority: 80,
-    };
-  }
-
-  if (exam.noDiscount) {
-    return { type: "none", reason: "", penalty: 0, priority: -1 };
-  }
-
-  if (grade.status === "غائب") {
-    if (exam.type === "فاينل") {
-      return {
-        type: "dismissal",
-        reason: `غياب ضمن درجة الفصل في امتحان ${exam.type}: ${exam.name}`,
-        penalty: Math.max(0, opportunitiesBefore),
-        priority: 75,
-      };
-    }
-    const penalty = examPenaltyValue(exam);
-    const opportunityEffect = applyOpportunityPenalty(opportunitiesBefore, penalty);
-    if (opportunityEffect.dismissalTrigger) {
-      return {
-        type: "dismissal",
-        reason: `مخالفة بعد انتهاء الفرص - غياب في امتحان ${exam.type}: ${exam.name}`,
-        penalty,
-        priority: 60,
-      };
-    }
-    return {
-      type: "discount",
-      reason: `غياب في امتحان ${exam.type}: ${exam.name}`,
-      penalty,
-      priority: 10,
-    };
-  }
-
-  if (grade.status === "درجة" && grade.score !== null) {
-    const score = Number(grade.score);
-    if (exam.type === "فاينل") {
-      if (score === 0) {
-        return {
-          type: "dismissal",
-          reason: `درجة صفر في امتحان ${exam.type}: ${exam.name}`,
-          penalty: Math.max(0, opportunitiesBefore),
-          priority: 76,
-        };
-      }
-      if (exam.dismissalGrade !== null && score <= exam.dismissalGrade) {
-        return {
-          type: "dismissal",
-          reason: `درجة فصل (${score}): ${exam.name}`,
-          penalty: Math.max(0, opportunitiesBefore),
-          priority: 75,
-        };
-      }
-      return { type: "none", reason: "", penalty: 0, priority: -1 };
-    }
-
-    if (score <= exam.discountMark) {
-      const penalty = examPenaltyValue(exam);
-      const opportunityEffect = applyOpportunityPenalty(opportunitiesBefore, penalty);
-      if (opportunityEffect.dismissalTrigger) {
-        return {
-          type: "dismissal",
-          reason: `مخالفة بعد انتهاء الفرص - درجة خصم (${score}) في امتحان: ${exam.name}`,
-          penalty,
-          priority: 60,
-        };
-      }
-      return {
-        type: "discount",
-        reason: `درجة ${score} ضمن الخصم في امتحان: ${exam.name}`,
-        penalty,
-        priority: 10,
-      };
-    }
-  }
-
-  return { type: "none", reason: "", penalty: 0, priority: -1 };
-}
-
 function latestStudentLogDate(
   logs: AcademicOpportunityLog[],
   predicate: (log: AcademicOpportunityLog) => boolean,
@@ -562,25 +437,6 @@ function resolveAcademicReactivationLinkForLog(
     sourceAutomaticLogId: inferred.sourceAutomaticLogId || "",
     reactivationMode: inferred.reactivationMode || "بسبب إجراء تلقائي",
   };
-}
-
-export function isAcademicallyManagedOpportunityLog(log: AcademicOpportunityLog): boolean {
-  return (
-    isAutomaticOpportunityLog(log) ||
-    isLinkedAcademicReactivationLog(log) ||
-    isSystemAcademicReactivationLog(log)
-  );
-}
-
-export function findAcademicReactivationSourceForStudent(
-  state: Pick<
-    AcademicStateInput,
-    "grades" | "exams" | "opportunityLogs" | "studentLeaves"
-  >,
-  student: AcademicStudent,
-): Partial<AcademicReactivationLink> | null {
-  if (!isRuleManagedDismissal(student)) return null;
-  return findLatestAcademicReactivationSourceForStudent(state, student);
 }
 
 export function recalculateAcademicState(

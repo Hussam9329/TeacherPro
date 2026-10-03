@@ -110,12 +110,6 @@ export function firstArabicLetter(value: unknown): string {
   return first;
 }
 
-export function buildArabicLetterOptions(names: unknown[]): string[] {
-  return Array.from(new Set(names.map(firstArabicLetter).filter(Boolean))).sort(
-    (a, b) => a.localeCompare(b, "ar"),
-  );
-}
-
 export function matchesArabicLetterFilter(
   name: unknown,
   letter: string,

@@ -74,8 +74,6 @@ const recoveredOperationalMigration = read(
 const migrationLock = read("prisma/migrations/migration_lock.toml");
 const examStatsRoute = read("src/app/api/exams/stats/route.ts");
 const opportunityLogsRoute = read("src/app/api/opportunity-logs/route.ts");
-const clearLogsRoute = read("src/app/api/logs/clear/route.ts");
-const restoreLogsRoute = read("src/app/api/logs/restore/route.ts");
 const studentsRoute = read("src/app/api/students/route.ts");
 const bulkStudentsRoute = read("src/app/api/students/bulk/route.ts");
 
@@ -221,8 +219,6 @@ check(
 check(
   examStatsRoute.includes("await assertDatabaseSchemaReady()") &&
     opportunityLogsRoute.includes("await assertDatabaseSchemaReady()") &&
-    clearLogsRoute.includes("LEDGER_HISTORY_IMMUTABLE") &&
-    restoreLogsRoute.includes("LEDGER_HISTORY_IMMUTABLE") &&
     studentsRoute.includes("await assertDatabaseSchemaReady()") &&
     bulkStudentsRoute.includes("await assertDatabaseSchemaReady()") &&
     !opportunityLogsRoute.includes("$executeRawUnsafe"),

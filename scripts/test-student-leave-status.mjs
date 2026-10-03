@@ -66,8 +66,6 @@ test("filters: past = ended, current = running or upcoming, all = everything", (
   assert.equal(status.summaryMatchesFilter(upcomingOnly, "current"), true);
   assert.equal(status.summaryMatchesFilter(upcomingOnly, "past"), false);
   assert.equal(status.summaryMatchesFilter(upcomingOnly, "all"), true);
-  assert.equal(status.leaveStateMatchesFilter("upcoming", "current"), true);
-  assert.equal(status.leaveStateMatchesFilter("ended", "current"), false);
   assert.equal(status.normalizeStudentLeaveListFilter("current"), "current");
   assert.equal(status.normalizeStudentLeaveListFilter("anything"), "all");
   assert.deepEqual(status.STUDENT_LEAVE_LIST_FILTERS.map((option) => option.label), ["الإجازات السابقة", "الإجازات الحالية", "كل الإجازات"]);

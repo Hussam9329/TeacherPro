@@ -76,85 +76,6 @@ test("a successful database null never falls back to a cached active chapter", (
   );
 });
 
-test("switching A to B clears A immediately and rejects A's late response", () => {
-  let state = profile.createStudentProfileRemoteState();
-  state = profile.beginStudentProfileRemoteLoad(state, "student-a", 1);
-  state = profile.succeedStudentProfileRemoteLoad(
-    state,
-    "student-a",
-    1,
-    { grades: [{ id: "grade-a" }] },
-  );
-
-  state = profile.beginStudentProfileRemoteLoad(state, "student-b", 2);
-  assert.equal(state.studentId, "student-b");
-  assert.equal(state.data, null);
-
-  const afterLateA = profile.succeedStudentProfileRemoteLoad(
-    state,
-    "student-a",
-    1,
-    { grades: [{ id: "late-grade-a" }] },
-  );
-  assert.equal(afterLateA, state);
-  assert.equal(afterLateA.data, null);
-
-  const readyB = profile.succeedStudentProfileRemoteLoad(
-    afterLateA,
-    "student-b",
-    2,
-    { grades: [{ id: "grade-b" }] },
-  );
-  assert.deepEqual(readyB.data, { grades: [{ id: "grade-b" }] });
-});
-
-test("a same-student refresh keeps the last successful snapshot on failure", () => {
-  let state = profile.createStudentProfileRemoteState();
-  state = profile.beginStudentProfileRemoteLoad(state, "student-a", 1);
-  state = profile.succeedStudentProfileRemoteLoad(
-    state,
-    "student-a",
-    1,
-    [{ id: "server-row" }],
-  );
-  state = profile.beginStudentProfileRemoteLoad(state, "student-a", 2);
-  assert.deepEqual(state.data, [{ id: "server-row" }]);
-
-  state = profile.failStudentProfileRemoteLoad(
-    state,
-    "student-a",
-    2,
-    "network failed",
-  );
-  const resolved = profile.resolveStudentProfileRemoteData(
-    state,
-    "student-a",
-    [{ id: "partial-local-row" }],
-  );
-  assert.deepEqual(resolved.data, [{ id: "server-row" }]);
-  assert.equal(resolved.source, "database");
-  assert.equal(resolved.incomplete, true);
-});
-
-test("an authoritative empty response removes stale locally cached rows", () => {
-  let state = profile.createStudentProfileRemoteState();
-  state = profile.beginStudentProfileRemoteLoad(state, "student-a", 11);
-  state = profile.succeedStudentProfileRemoteLoad(
-    state,
-    "student-a",
-    11,
-    [],
-  );
-  const resolved = profile.resolveStudentProfileRemoteData(
-    state,
-    "student-a",
-    [{ id: "deleted-on-server" }],
-  );
-  assert.deepEqual(resolved.data, []);
-  assert.equal(resolved.source, "database");
-  assert.equal(resolved.incomplete, false);
-});
-
 test("profile cards open the matching filtered content", () => {
   assert.deepEqual(profile.getStudentProfileCardTarget("absences"), {
     tab: "grades",
@@ -197,31 +118,6 @@ test("profile cards open the matching filtered content", () => {
   );
 });
 
-test("timeline count includes each visible source exactly once", () => {
-  assert.equal(
-    profile.calculateStudentProfileTimelineCount({
-      grades: 3,
-      opportunityLogs: 2,
-      calls: 4,
-      leaves: 1,
-      notes: 5,
-      auditLogs: 6,
-    }),
-    22,
-  );
-  assert.equal(
-    profile.calculateStudentProfileTimelineCount({
-      grades: -2,
-      opportunityLogs: Number.NaN,
-      calls: 0,
-      leaves: 0,
-      notes: 0,
-      auditLogs: 0,
-    }),
-    1,
-  );
-});
-
 test("server activity counters do not double-count notes or reactivation balance logs", () => {
   const summary = profileServer.summarizeStudentProfileActivity({
     gradeCount: 3,
@@ -248,38 +144,6 @@ test("server activity counters do not double-count notes or reactivation balance
     actions: 6,
     timeline: 18,
   });
-});
-
-test("audit ownership uses exact id/code tokens, not names or substrings", () => {
-  const student = { id: "student-123", code: "ST-100" };
-  assert.equal(
-    profile.studentAuditLogMatchesIdentity(
-      { details: "تعديل الطالب [student-123]" },
-      student,
-    ),
-    true,
-  );
-  assert.equal(
-    profile.studentAuditLogMatchesIdentity(
-      { details: "فصل الطالب - ST-100 - سبب" },
-      student,
-    ),
-    true,
-  );
-  assert.equal(
-    profile.studentAuditLogMatchesIdentity(
-      { details: "سجل الطالب ST-1000" },
-      student,
-    ),
-    false,
-  );
-  assert.equal(
-    profile.studentAuditLogMatchesIdentity(
-      { details: "إجراء باسم طالب مشابه فقط" },
-      student,
-    ),
-    false,
-  );
 });
 
 test("database audit candidate filtering cannot attribute a prefix collision", async () => {

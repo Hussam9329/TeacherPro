@@ -49,7 +49,7 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  console.log('PASS: PostgreSQL revokes every password writer and atomically limits concurrent login attempts');
  const {validatePendingMigration}=await import('./check-deployment-contract.mjs');const {createHash}=require('node:crypto');let sql='ALTER TABLE "Student" DROP COLUMN "name";';const policy={kind:'expand',checksum:createHash('sha256').update(sql).digest('hex')};assert.throws(()=>validatePendingMigration('bad',sql,policy,true),/Destructive/);assert.throws(()=>validatePendingMigration('unknown','SELECT 1',null,true),/Unreviewed/);
  assert.ok(!fs.readFileSync('src/app/api/exams/route.ts','utf8').includes('settleDueScheduledExamActivations'));
- for(const file of ['cleanup_invalid_absences.mjs','repair-final-pledge-residual.mjs','repair-exam1-bulk-register.mjs'])assert.match(fs.readFileSync('scripts/'+file,'utf8'),/^throw new Error\("Retired/);
+ for(const file of ['cleanup_invalid_absences.mjs','repair-final-pledge-residual.mjs','repair-exam1-bulk-register.mjs'])assert.equal(fs.existsSync('scripts/'+file),false,'retired historical repairs are deleted and cannot run');
 
  await pg.exec(`CREATE TABLE IF NOT EXISTS "DemoCopy" (id TEXT); CREATE TABLE IF NOT EXISTS "Site" (id TEXT); INSERT INTO "DemoCopy" VALUES ('must-preserve')`);
  const contract=fs.readFileSync('scripts/contracts/retire-empty-schema.sql','utf8');

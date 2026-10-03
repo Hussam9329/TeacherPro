@@ -78,23 +78,6 @@ export function formatAppDate(value: string | Date | null | undefined, fallback 
   return `${parts.year}/${parts.month}/${parts.day}`;
 }
 
-/** Display date-time values as 2026/6/11 08:30 while preserving the stored time part. */
-export function formatAppDateTime(value: string | Date | null | undefined, fallback = '—'): string {
-  if (!value) return fallback;
-  const raw = value instanceof Date ? '' : toLatinDigits(String(value)).trim();
-  const date = formatAppDate(value, '');
-  if (!date) return fallback;
-
-  const timeMatch = raw.match(/[T\s](\d{1,2}):(\d{2})/);
-  if (timeMatch) return `${date} ${padDatePart(Number(timeMatch[1]))}:${timeMatch[2]}`;
-
-  if (value instanceof Date && Number.isFinite(value.getTime())) {
-    return `${date} ${padDatePart(value.getHours())}:${padDatePart(value.getMinutes())}`;
-  }
-
-  return date;
-}
-
 /** Convert a displayed date such as 2026/6/11 back to the ISO value used by inputs and APIs. */
 export function parseAppDateInput(value: string, fallback = ''): string {
   const parts = getDateParts(value);

@@ -302,8 +302,7 @@ export async function POST(req: NextRequest) {
  * Now: requires an authenticated admin principal (username='admin' OR
  * roleId='role_admin'). Non-admins get 403.
  *
- * Bulk wipe is handled by the dedicated /api/logs/clear endpoint which
- * has its own admin + password gate.
+ * There is no bulk wipe of the audit log; the old clear/restore tool is gone.
  */
 export async function DELETE(req: NextRequest) {
   const principal = await getAuthPrincipal(req);

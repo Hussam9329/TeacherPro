@@ -25,4 +25,3 @@ export async function recordLoginFailure(_identifier: string): Promise<void> {
 export async function clearLoginFailures(identifier: string): Promise<void> {
   await db.loginRateBucket.deleteMany({ where: { key: bucketKey(identifier) } });
 }
-export function isDistributedRateLimitActive(): boolean { return true; }
