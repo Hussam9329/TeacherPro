@@ -270,5 +270,9 @@
   "20261001120000_code_closure_contact_marks": {
     "kind": "expand",
     "checksum": "bc7fe8426ed315341e5d5d1c275869d39e19de1fbd6da6816ec251de03c1aa5f"
+  },
+  "20261003150000_archived_students_hold_no_opportunities": {
+    "kind": "expand",
+    "checksum": "4dc48956792f097af7fd7d80910787eb452a4e88a3ee750c6d8dd9449f1adc65"
   }
 }

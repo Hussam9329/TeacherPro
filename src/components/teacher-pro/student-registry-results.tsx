@@ -350,7 +350,8 @@ function studentMoreActions({
   onArchive,
 }: StudentActionsProps): RowAction[] {
   const actions: RowAction[] = [];
-  if (canEdit) {
+  // An archived student is frozen: «استعادة من الأرشيف» is the only action.
+  if (canEdit && student.status !== ARCHIVED_STUDENT_STATUS) {
     actions.push({
       key: "edit",
       label: "تعديل",

@@ -20,6 +20,11 @@ import { normalizeListFilter } from "@/lib/all-filter";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { gradeMatchesStatusFilterUnified, isExamBeforeStudentRegistration, type StudentGraceLike } from "@/lib/grade-classification";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
+import {
+  archivedStudentLockedResponse,
+  assertStudentsNotArchived,
+  isArchivedStudentError,
+} from "@/lib/archived-student-guard";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import {
   AcademicGradeWritebackError,
@@ -850,6 +855,7 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
+    if (isArchivedStudentError(error)) return archivedStudentLockedResponse();
     if (error instanceof GradeWriteConflictError) {
       return NextResponse.json(
         { error: error.message, requiresFreshGrade: true },
@@ -1003,6 +1009,7 @@ export async function PUT(req: NextRequest) {
       ) {
         throw new GradeWriteConflictError();
       }
+      await assertStudentsNotArchived(tx, [freshTargetGrade.studentId]);
       if (!hasAcademicMutation) {
         const grade = await tx.grade.update({
           where: { id: freshTargetGrade.id },
@@ -1071,6 +1078,7 @@ export async function PUT(req: NextRequest) {
     });
     return NextResponse.json(result);
   } catch (error) {
+    if (isArchivedStudentError(error)) return archivedStudentLockedResponse();
     if (error instanceof GradeWriteConflictError) {
       return NextResponse.json(
         { error: error.message, requiresFreshGrade: true },
@@ -1181,6 +1189,7 @@ export async function DELETE(req: NextRequest) {
         ) {
           throw new GradeWriteConflictError();
         }
+        await assertStudentsNotArchived(tx, [targetGrade?.studentId]);
         const deletedById = await tx.grade.deleteMany({ where: { id } });
         const academicRecalculation =
           targetGrade && deletedById.count > 0
@@ -1223,6 +1232,7 @@ export async function DELETE(req: NextRequest) {
             409,
           );
         }
+        await assertStudentsNotArchived(tx, [studentId]);
         const deletedByPair = await tx.grade.deleteMany({
           where: { studentId, examId },
         });
@@ -1250,6 +1260,7 @@ export async function DELETE(req: NextRequest) {
     }
     return validationError("تعذر تحديد الدرجة المطلوبة");
   } catch (error) {
+    if (isArchivedStudentError(error)) return archivedStudentLockedResponse();
     if (error instanceof GradeWriteConflictError) {
       return validationError(error.message, 409);
     }

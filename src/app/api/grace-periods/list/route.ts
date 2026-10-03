@@ -56,9 +56,12 @@ export async function GET(req: NextRequest) {
     const today = baghdadTodayKey();
     const todayColumn = graceDateColumn(today);
 
+    // Archived students are hidden: their periods are not listed or counted.
     const base: Prisma.GracePeriodWhereInput = {
       cancelledAt: null,
-      ...(studentWhere ? { student: studentWhere } : {}),
+      student: studentWhere
+        ? { AND: [studentWhere, { status: { not: "مؤرشف" } }] }
+        : { status: { not: "مؤرشف" } },
     };
     const currentWhere: Prisma.GracePeriodWhereInput = { ...base, endDate: { gte: todayColumn } };
     const pastWhere: Prisma.GracePeriodWhereInput = { ...base, endDate: { lt: todayColumn } };

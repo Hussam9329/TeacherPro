@@ -42,17 +42,19 @@ function buildStatusCounts(
   const countsByStatus = new Map(
     rows.map((row) => [row.status, row._count._all]),
   );
-  const total = rows.reduce((sum, row) => sum + row._count._all, 0);
   const active = countsByStatus.get(STUDENT_STATUS_ACTIVE) || 0;
   const dismissed = countsByStatus.get(STUDENT_STATUS_DISMISSED) || 0;
   const archived = countsByStatus.get(STUDENT_STATUS_ARCHIVED) || 0;
+  // Archived students are hidden: «الكل» counts everyone else, and they are
+  // reached only through their own «مؤرشف» button.
+  const total = rows.reduce((sum, row) => sum + row._count._all, 0) - archived;
 
   return {
     total,
     active,
     dismissed,
     archived,
-    other: Math.max(0, total - active - dismissed - archived),
+    other: Math.max(0, total - active - dismissed),
     noActiveChapter,
   };
 }

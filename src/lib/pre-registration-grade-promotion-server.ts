@@ -30,10 +30,12 @@ export async function promotePendingPreRegistrationGrades(
   tx: Prisma.TransactionClient,
   actor: { id?: string | null; name?: string | null } = {},
 ): Promise<PreRegistrationGradePromotionResult> {
+  // An archived student's attempts stay as they are until they are restored.
   const notes = await tx.gradeSmartNote.findMany({
     where: {
       category: "BEFORE_REGISTRATION_PENDING",
       status: "PENDING",
+      student: { status: { not: "مؤرشف" } },
     },
     orderBy: [{ attemptedAt: "asc" }, { id: "asc" }],
     take: BATCH_SIZE,
@@ -183,6 +185,7 @@ export async function promotePendingPreRegistrationGrades(
     where: {
       category: "BEFORE_REGISTRATION_PENDING",
       status: "PENDING",
+      student: { status: { not: "مؤرشف" } },
     },
   });
 

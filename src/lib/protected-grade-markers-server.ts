@@ -58,6 +58,8 @@ export async function reconcileProtectedGradeMarkersForExamEdit(
     where: {
       examId,
       ...(requestedStudentIds.length ? { studentId: { in: requestedStudentIds } } : {}),
+      // An archived student's rows are frozen; an exam edit never rewrites them.
+      student: { status: { not: "مؤرشف" } },
     },
     select: {
       id: true,

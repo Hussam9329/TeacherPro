@@ -33,6 +33,11 @@ import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-ser
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { studentsWithGracePeriodsForResponse } from "@/lib/grace-periods-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import {
+  ArchivedStudentError,
+  archivedStudentLockedResponse,
+  isArchivedStudentError,
+} from "@/lib/archived-student-guard";
 import { archiveAndResetStudentEnrollment } from "@/lib/student-enrollment-archive-server";
 import { buildStudentAcademicImpactToken } from "@/lib/student-academic-impact-token";
 import {
@@ -671,6 +676,10 @@ export async function PUT(req: NextRequest) {
       { status: 404 },
     );
   }
+  // An archived student's file is frozen; only «استعادة من الأرشيف» opens it.
+  if (currentStudent.status === ARCHIVED_STUDENT_STATUS) {
+    return archivedStudentLockedResponse();
+  }
 
   if (data.name !== undefined) {
     const nameError = getRequiredTextError(
@@ -904,6 +913,9 @@ export async function PUT(req: NextRequest) {
           "تعذر العثور على الطالب المطلوب. حدّث الصفحة ثم حاول مرة أخرى.",
           404,
         );
+      }
+      if (lockedStudent.status === ARCHIVED_STUDENT_STATUS) {
+        throw new ArchivedStudentError();
       }
       const expectedMutationToken = String(rawExpectedMutationToken || "").trim();
       if (
@@ -1205,6 +1217,7 @@ export async function PUT(req: NextRequest) {
       source: "database",
     });
   } catch (error) {
+    if (isArchivedStudentError(error)) return archivedStudentLockedResponse();
     // إذا كانت ترحيلات قاعدة البيانات الأخيرة غير مطبّقة (مثل جدول
     // StudentEnrollmentArchive أو قيود الدرجة/الامتحان)، أعطِ رسالة واضحة
     // بدل 500 عام كي يعرف المدير أنه يجب تشغيل npm run db:deploy.
@@ -1256,12 +1269,17 @@ export async function DELETE(req: NextRequest) {
       }
 
       const relationSummary = buildStudentArchiveSummary(impact.counts);
-      const archiveText = `أرشفة الطالب بدلاً من الحذف النهائي. السبب: حماية البيانات المرتبطة (${relationSummary}). الحالة السابقة: ${impact.student.status || "غير محددة"}.`;
+      const balanceBefore = await tx.student.findUnique({ where: { id }, select: { opportunities: true } });
+      const archiveText = `أرشفة الطالب بدلاً من الحذف النهائي. السبب: حماية البيانات المرتبطة (${relationSummary}). الحالة السابقة: ${impact.student.status || "غير محددة"}. الفرص قبل الأرشفة: ${Math.max(0, Number(balanceBefore?.opportunities ?? 0))}، وأصبحت 0.`;
 
+      // An archived student holds no opportunities; nothing may change them
+      // until an explicit «استعادة من الأرشيف».
       const student = await tx.student.update({
         where: { id },
         data: {
           status: ARCHIVED_STUDENT_STATUS,
+          opportunities: 0,
+          baseOpportunities: 0,
         },
       });
       await tx.studentNote.create({

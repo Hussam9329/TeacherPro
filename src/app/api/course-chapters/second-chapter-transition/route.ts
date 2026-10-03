@@ -543,9 +543,11 @@ export async function POST(req: NextRequest) {
         }
         updatedStudents += update.count;
 
-        if (courseStudents.length > 0) {
+        // An archived student is frozen: the transition writes nothing on them.
+        const notedStudents = courseStudents.filter((student) => student.status !== "مؤرشف");
+        if (notedStudents.length > 0) {
           await tx.studentNote.createMany({
-            data: courseStudents.map((student) => ({
+            data: notedStudents.map((student) => ({
               studentId: student.id,
               kind: "إجراء",
               text: `${student.status === "نشط" ? `بدء رصيد فصل جديد بثلاث فرص عند الانتقال إلى ${chapterName}` : `تثبيت الانتقال إلى ${chapterName} مع بقاء الحالة «${student.status}» دون استرجاع`}. الحالة السابقة: ${student.status}، الرصيد السابق: ${student.opportunities}/${student.baseOpportunities}${student.dismissalReason ? `، السبب السابق: ${student.dismissalReason}` : ""}${student.dismissalNotes ? `، الملاحظات السابقة: ${student.dismissalNotes}` : ""}.`,

@@ -1,5 +1,7 @@
 import type { Prisma, StudentCall } from "@prisma/client";
 import { CALL_STUDENT_NOTE_CATEGORY, hasManualCallNote } from "@/lib/call-notes-filter";
+import { ARCHIVED_STUDENT_LOCKED_MESSAGE } from "@/lib/archived-student-guard";
+import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 
 type NoteActor = { id: string; name: string };
 
@@ -26,10 +28,14 @@ function assertNoteRevision(note: StudentCall | null, expectedRevision?: number)
 async function lockNoteStudent(tx: Prisma.TransactionClient, studentId: string) {
   // This lock is also used for contact actions. It serializes edits, completion,
   // and nullable legacy note upserts without touching the student's own values.
-  const students = await tx.$queryRaw<Array<{ id: string; courseId: string }>>`
-    SELECT "id", "courseId" FROM "Student" WHERE "id" = ${studentId} FOR UPDATE
+  const students = await tx.$queryRaw<Array<{ id: string; courseId: string; status: string }>>`
+    SELECT "id", "courseId", "status" FROM "Student" WHERE "id" = ${studentId} FOR UPDATE
   `;
   if (!students.length) throw new CallNoteMutationError("الطالب غير موجود.", 404);
+  // An archived student is frozen: no note is added, edited, cleared or completed.
+  if (students[0].status === STUDENT_STATUS_ARCHIVED) {
+    throw new CallNoteMutationError(ARCHIVED_STUDENT_LOCKED_MESSAGE, 409);
+  }
   return students[0];
 }
 

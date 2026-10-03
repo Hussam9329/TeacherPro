@@ -87,8 +87,10 @@ export function attachStudentOpportunitySnapshotsFromLinks<
           opportunities: opportunityNumber(uniqueLink.chapter.opportunities),
         }
       : null;
-    const current = opportunityNumber(student.opportunities);
-    const storedBase = opportunityNumber(student.baseOpportunities);
+    // An archived student holds no opportunities, whatever an old row says.
+    const archived = (student as { status?: unknown }).status === "مؤرشف";
+    const current = archived ? 0 : opportunityNumber(student.opportunities);
+    const storedBase = archived ? 0 : opportunityNumber(student.baseOpportunities);
     const opportunityLimit = activeChapter?.opportunities ?? null;
     const hasActiveChapter = Boolean(
       activeChapter && opportunityLimit !== null && opportunityLimit > 0,

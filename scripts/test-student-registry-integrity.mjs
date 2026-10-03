@@ -49,14 +49,16 @@ check(
     registryIssueHelper.includes('opportunity-over-limit'),
 );
 check(
-  'كل الحالات تعني جميع الطلاب فعلياً بما فيهم المؤرشفون',
-  // «الكل» is the first status button (status "") and includes the archived.
+  'المؤرشفون مخفيون: «الكل» بدونهم، ويظهرون بزر «مؤرشف» وحده',
+  // «الكل» is the first status button (status "") and leaves the archived out;
+  // the archived list is reached only by choosing «مؤرشف».
   registry.includes('{ key: "", label: "الكل"') &&
-    registry.includes('includeArchived: true') &&
-    registry.includes('params.set("includeArchived", "1")') &&
+    !registry.includes('includeArchived: true') &&
+    !registry.includes('params.set("includeArchived", "1")') &&
     registryFiltersHelper.includes('if (status) and.push({ status });') &&
     registryFiltersHelper.includes('else if (!includeArchived)') &&
-    studentsStatsRoute.includes('const filters: Prisma.StudentWhereInput[] = status ? [{ status }] : [];'),
+    studentsStatsRoute.includes('const filters: Prisma.StudentWhereInput[] = status ? [{ status }] : [];') &&
+    studentsStatsRoute.includes('- archived;'),
 );
 check(
   'التصدير الكامل مجزأ ومثبت بلقطة ويتحقق من العدد ولا يرسل كائن الدورة الضخم',
@@ -86,7 +88,7 @@ check(
     studentsStatsRoute.includes('system,') &&
     studentsStatsRoute.includes('filtered,') &&
     studentsStatsRoute.includes('systemTotal: system.total') &&
-    studentsStatsRoute.includes('other: Math.max(0, total - active - dismissed - archived)') &&
+    studentsStatsRoute.includes('other: Math.max(0, total - active - dismissed)') &&
     api.includes('system: StudentStatusCounts') &&
     api.includes('filtered: StudentStatusCounts') &&
     studentsStatsRoute.includes('scope: "all"'),

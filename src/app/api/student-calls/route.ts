@@ -15,6 +15,11 @@ import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { CALL_STUDENT_NOTE_CATEGORY } from "@/lib/call-notes-filter";
 import { isStudentExamCall } from "@/lib/call-identity";
 import { CallNoteMutationError, editCallNote, readExpectedNoteRevision, upsertExamCallNote } from "@/lib/call-note-management-server";
+import {
+  archivedStudentLockedResponse,
+  assertStudentsNotArchived,
+  isArchivedStudentError,
+} from "@/lib/archived-student-guard";
 
 function dateOrNull(value: unknown): Date | null {
   if (!value) return null;
@@ -120,6 +125,7 @@ export async function POST(req: NextRequest) {
     const result = await withDatabaseSchema(
       () =>
         db.$transaction(async (tx) => {
+          await assertStudentsNotArchived(tx, [data.studentId]);
           const examCall = isStudentExamCall(data);
 
           // The DB unique key still includes category for backward compatibility.
@@ -197,6 +203,7 @@ export async function POST(req: NextRequest) {
     );
     return NextResponse.json(result);
   } catch (error) {
+    if (isArchivedStudentError(error)) return archivedStudentLockedResponse();
     if (error instanceof CallNoteMutationError) return NextResponse.json({ error: error.message, studentCall: error.studentCall }, { status: error.status });
     return routeErrorResponse(error, "تعذر حفظ المكالمة حالياً.");
   }
@@ -229,6 +236,7 @@ export async function PUT(req: NextRequest) {
       () => db.$transaction(async (tx) => {
         const existing = await tx.studentCall.findUnique({ where: { id: String(id) } });
         if (!existing) throw new CallNoteMutationError("المكالمة غير موجودة.", 404);
+        await assertStudentsNotArchived(tx, [existing.studentId]);
         if (existing.category === CALL_STUDENT_NOTE_CATEGORY) {
           // Legacy notes keep their existing scope. Only the dedicated endpoint
           // changes completion, and editing cannot convert a note into a call.
@@ -249,6 +257,7 @@ export async function PUT(req: NextRequest) {
     );
     return NextResponse.json(result);
   } catch (error) {
+    if (isArchivedStudentError(error)) return archivedStudentLockedResponse();
     if (error instanceof CallNoteMutationError) return NextResponse.json({ error: error.message, studentCall: error.studentCall }, { status: error.status });
     return routeErrorResponse(error, "تعذر تحديث المكالمة حالياً.");
   }
@@ -264,6 +273,7 @@ export async function DELETE(req: NextRequest) {
     if (!id) return validationError("تعذر تحديد المكالمة المطلوبة");
     await withDatabaseSchema(() => db.$transaction(async (tx) => {
       const existing = await tx.studentCall.findUnique({ where: { id } });
+      await assertStudentsNotArchived(tx, [existing?.studentId]);
       if (existing?.category === CALL_STUDENT_NOTE_CATEGORY) {
         const rawRevision = searchParams.get("expectedRevision");
         await editCallNote(tx, principal, {
@@ -275,6 +285,7 @@ export async function DELETE(req: NextRequest) {
     }), "StudentCall");
     return NextResponse.json({ ok: true });
   } catch (error) {
+    if (isArchivedStudentError(error)) return archivedStudentLockedResponse();
     if (error instanceof CallNoteMutationError) return NextResponse.json({ error: error.message, studentCall: error.studentCall }, { status: error.status });
     return routeErrorResponse(error, "تعذر حذف المكالمة حالياً.");
   }

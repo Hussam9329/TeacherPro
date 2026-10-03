@@ -506,7 +506,6 @@ export function StudentRegistryView() {
     if (!registryStateHydrated) return;
     setLoadedLocationFilterContextKey("");
     const params = new URLSearchParams();
-    params.set("includeArchived", "1");
     if (filterStatus) params.set("status", filterStatus);
     if (filterGender) params.set("gender", filterGender);
     if (filterCourseId) params.set("courseId", filterCourseId);
@@ -628,7 +627,6 @@ export function StudentRegistryView() {
           studyType: filterStudyType,
           location: filterLocation,
           registryIssue: filterRegistryIssue,
-          includeArchived: true,
           opportunityMode: true,
           page,
           pageSize,
@@ -1754,7 +1752,6 @@ export function StudentRegistryView() {
     onProgress,
   }: ExportFetchContext) => {
     const params = new URLSearchParams();
-    params.set("includeArchived", "1");
     if (debouncedSearch) params.set("q", debouncedSearch);
     if (filterStatus) params.set("status", filterStatus);
     if (filterGender) params.set("gender", filterGender);

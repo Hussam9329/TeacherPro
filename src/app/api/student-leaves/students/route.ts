@@ -47,14 +47,15 @@ export async function GET(req: NextRequest) {
       } else if (query) {
         const studentWhere = buildStudentRegistrySearchWhere(query);
         const [byStudent, byLeave] = await Promise.all([
+          // Archived students are hidden here: never listed, never opened.
           db.student.findMany({
-            where: studentWhere || undefined,
+            where: { AND: [studentWhere || {}, { status: { not: "مؤرشف" } }] },
             select: { id: true },
             orderBy: [{ name: "asc" }, { code: "asc" }],
             take: SEARCH_STUDENT_LIMIT,
           }),
           db.studentLeave.findMany({
-            where: await studentLeaveListWhere(new URLSearchParams({ q: query })),
+            where: { AND: [await studentLeaveListWhere(new URLSearchParams({ q: query })), { student: { status: { not: "مؤرشف" } } }] },
             select: { studentId: true },
             distinct: ["studentId"],
             take: SEARCH_STUDENT_LIMIT,
@@ -69,7 +70,10 @@ export async function GET(req: NextRequest) {
       const leaves = candidateIds && candidateIds.length === 0
         ? []
         : await db.studentLeave.findMany({
-            where: candidateIds ? { studentId: { in: candidateIds } } : {},
+            where: {
+              ...(candidateIds ? { studentId: { in: candidateIds } } : {}),
+              student: { status: { not: "مؤرشف" } },
+            },
             select: {
               studentId: true,
               leaveType: true,
