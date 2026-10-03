@@ -44,15 +44,11 @@ require.extensions[".ts"] = (module, filename) => {
 };
 
 const {
-  classifyGradeImpact,
   gradeHasAcademicEffect,
   recalculateAcademicState,
 } = require(path.join(root, "src/lib/academic-engine.ts"));
 const { classifyGradeAcademicImpact } = require(
   path.join(root, "src/lib/grade-classification.ts"),
-);
-const { isProtectedDismissedPendingGrade } = require(
-  path.join(root, "src/lib/grade-smart-notes-server.ts"),
 );
 const {
   DISMISSED_PENDING_GRADE_EXCLUSION_REASON,
@@ -60,25 +56,6 @@ const {
 } = require(
   path.join(root, "src/lib/grade-smart-note-reactivation-server.ts"),
 );
-
-test("dismissed historical protection survives smart-note relation removal", () => {
-  assert.equal(
-    isProtectedDismissedPendingGrade({
-      academicEffectExcluded: true,
-      academicEffectExclusionSource:
-        "GradeSmartNote:DISMISSED_PENDING:note-dismissed",
-      smartNoteId: null,
-    }),
-    true,
-  );
-  assert.equal(
-    isProtectedDismissedPendingGrade({
-      academicEffectExcluded: true,
-      academicEffectExclusionSource: "GradeSmartNote:GRACE_SCORED:note-grace",
-    }),
-    false,
-  );
-});
 
 test("a GRACE_SCORED grade stays excluded after the grace window changes", () => {
   const student = {
@@ -273,7 +250,6 @@ test("a migrated dismissed score is permanently excluded from academic effects",
   };
 
   assert.equal(gradeHasAcademicEffect(excludedGrade, exam), false);
-  assert.equal(classifyGradeImpact(excludedGrade, exam, 3).type, "none");
   assert.equal(
     classifyGradeAcademicImpact(excludedGrade, exam, { student }),
     "academic-effect-excluded",

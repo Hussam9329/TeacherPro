@@ -11,8 +11,6 @@ export type OpportunityFilterInput = {
   q?: string | null;
 };
 
-export type BulkOpportunityActionType = "add" | "deduct";
-
 export type BulkOpportunityFilterInput = OpportunityFilterInput & {
   actionType?: string | null;
   excludeDismissed?: string | boolean | null;
@@ -144,26 +142,4 @@ export function noActiveChapterWhere(): Prisma.StudentWhereInput {
       },
     },
   };
-}
-
-export function bulkOpportunityWhereParts(
-  input: BulkOpportunityFilterInput,
-): Prisma.StudentWhereInput[] {
-  const actionType = input.actionType === "deduct" ? "deduct" : "add";
-  const excludeDismissed = normalizeBoolean(input.excludeDismissed, true);
-  const excludeFullOpportunities = normalizeBoolean(
-    input.excludeFullOpportunities,
-    true,
-  );
-  const parts = [...buildOpportunityFilters(input), hasActiveChapterWhere()];
-
-  if (actionType === "add" && excludeDismissed) {
-    parts.push({ status: { not: "مفصول" } });
-  }
-
-  // أصحاب الفرص الكاملة يحتاجون مقارنة ديناميكية بسقف الفصل النشط الفعلي، لذلك
-  // يتم حسمهم بعد جلب Snapshot موحد داخل API حتى تطابق المعاينة التنفيذ.
-  void excludeFullOpportunities;
-
-  return parts;
 }

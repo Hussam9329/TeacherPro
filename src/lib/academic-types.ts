@@ -163,12 +163,3 @@ export interface AcademicOpportunityCommandEffect {
   readonly amount: number;
   readonly cap: number;
 }
-
-export type GradeImpactType = "none" | "discount" | "dismissal";
-
-export interface GradeImpact {
-  type: GradeImpactType;
-  reason: string;
-  penalty: number;
-  priority: number;
-}

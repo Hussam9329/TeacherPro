@@ -14,6 +14,9 @@ require.extensions['.ts'] = (module, filename) => module._compile(
   }).outputText, filename,
 );
 const engine = require('../src/lib/academic-engine.ts');
+// The marker the engine reads on stored reactivation logs (parseAcademicReactivationLink).
+const reactivationLink = (link) => '[academic-reactivation-link:' +
+  new URLSearchParams({ ...link, reactivationMode: link.reactivationMode || 'بسبب إجراء تلقائي' }).toString() + ']';
 const calculate = engine.recalculateAcademicState;
 let reviewReplayCount = 0;
 engine.recalculateAcademicState = (...args) => { reviewReplayCount++; return calculate(...args); };
@@ -142,7 +145,7 @@ function pledgedHistoryFixture() {
   const oldResult = persist({ ...original, exams: [original.exams[0]], grades: [original.grades[0]] });
   const source = oldResult.opportunityLogs.find(l => l.action === 'فصل تلقائي');
   const pledge = { id: 'pledge', studentId: 's', examId: 'old', action: 'رصيد بعد تعهد', amount: 2,
-    reason: 'إرجاع الطالب بعد تعهد ولي الأمر برصيد فرصتين ' + engine.encodeAcademicReactivationLink({
+    reason: 'إرجاع الطالب بعد تعهد ولي الأمر برصيد فرصتين ' + reactivationLink({
       sourceGradeId: 's-old', sourceExamId: 'old', sourceAutomaticLogId: source.id,
     }), date: '2026-09-02', chapterId: 'ch' };
   return persist({ ...original, opportunityLogs: [...oldResult.opportunityLogs, pledge] });
@@ -187,8 +190,6 @@ test('legacy reactivation stays tied to the earlier cause after a newer dismissa
   const seededReplay = calculate(seeded, new Set(['s']), { respectLegacyReactivationDates: true });
   assert.equal(student(seededReplay).status, 'مفصول', 'new exam cannot be exempted by re-binding an older reactivation');
   assert.match(student(seededReplay).dismissalReason, /e9/);
-  assert.equal(engine.findAcademicReactivationSourceForStudent(before, student(before)).sourceExamId, 'e9',
-    'a current explicit manual recovery still selects the latest cause');
   before.opportunityLogs.push({ id: 'manual-add', studentId: 's', examId: '', action: 'إضافة', amount: 1,
     requestedAmount: 1, appliedAmount: 1, balanceBefore: 0, balanceAfter: 1, ledgerVersion: 2,
     reason: 'إضافة يدوية محفوظة', date: '2026-09-10', chapterId: 'ch' });
@@ -219,7 +220,7 @@ test('legacy fallback grades cannot come from an exam after the reactivation day
 test('an existing explicit source link keeps its identity without legacy date inference', () => {
   const original = fixture([exam('old', '01', { type: 'فاينل' }), exam('new', '09', { type: 'فاينل' })]);
   original.opportunityLogs = [{ id: 'explicit-balance', studentId: 's', examId: '', action: 'رصيد بعد تعهد', amount: 2,
-    reason: 'بعد تعهد ' + engine.encodeAcademicReactivationLink({ sourceExamId: 'new', sourceGradeId: 's-new' }),
+    reason: 'بعد تعهد ' + reactivationLink({ sourceExamId: 'new', sourceGradeId: 's-new' }),
     date: '2026-09-02', chapterId: 'ch' }];
   const result = calculate(original, new Set(['s']), { respectLegacyReactivationDates: true });
   assert.deepEqual([student(result).status, student(result).opportunities], ['نشط', 2]);

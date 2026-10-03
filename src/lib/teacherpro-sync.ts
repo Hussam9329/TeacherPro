@@ -358,11 +358,6 @@ export function announceTeacherProSyncError(message?: string): void {
   announceTeacherProSyncStatus("error", { message, autoIdleMs: 4500 });
 }
 
-export function requestTeacherProSyncNow(): void {
-  if (!canUseWindow()) return;
-  window.dispatchEvent(new Event(TEACHERPRO_SYNC_APPLY_NOW_EVENT));
-}
-
 export function inferTeacherProScopesFromEndpoint(endpoint: string): TeacherProSyncScope[] {
   const path = String(endpoint || "").toLowerCase();
   const scopes = new Set<TeacherProSyncScope>();

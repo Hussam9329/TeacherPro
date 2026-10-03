@@ -53,13 +53,6 @@ export const GRADE_STATUS_VALUES = [
 export type GradeStatus = (typeof GRADE_STATUS_VALUES)[number];
 
 /**
- * Quick non-throwing check: does this status require score = NULL?
- */
-export function statusRequiresNullScore(status: string | null | undefined): boolean {
-  return Boolean(status) && status !== SCORED_GRADE_STATUS;
-}
-
-/**
  * Is the given value a known Grade status? Used to reject unknown values
  * before they reach the DB.
  */
@@ -113,47 +106,4 @@ export function assertGradeStatusScoreConsistency(
       );
     }
   }
-}
-
-/**
- * Non-throwing variant: returns `true` if the combination is consistent,
- * `false` otherwise. Useful for UI guards that want to disable a button
- * without surfacing an error message.
- */
-export function isGradeStatusScoreConsistent(
-  status: unknown,
-  score: unknown,
-): boolean {
-  try {
-    assertGradeStatusScoreConsistency(status, score);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Normalize an inbound payload so the downstream writeback never sees a
- * contradictory (status != "درجة", score != null) shape. This is a defensive
- * sanitizer: if the caller somehow passed a non-null score with a marker
- * status, the score is silently dropped. The assertion above still runs as
- * the authoritative gate, but this keeps the upsert payload clean.
- *
- * Returns the (possibly rewritten) score value to persist.
- */
-export function coerceConsistentScore(
-  status: unknown,
-  score: unknown,
-): number | null {
-  const statusStr =
-    typeof status === "string" ? status.trim() : "";
-  if (statusStr === SCORED_GRADE_STATUS) {
-    if (score === null || score === undefined || String(score).trim() === "") {
-      return null;
-    }
-    const numeric = Number(score);
-    return Number.isFinite(numeric) ? numeric : null;
-  }
-  // Any non-"درجة" status must persist score = NULL.
-  return null;
 }

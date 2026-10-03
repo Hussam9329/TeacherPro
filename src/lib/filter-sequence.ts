@@ -218,30 +218,3 @@ export function examMatchesAcademicFilters(
 
   return true;
 }
-
-export function studentMatchesAcademicFilters(
-  student: AcademicStudent,
-  filters: AcademicFilterState,
-  _extra?: unknown,
-): boolean {
-  if (filters.courseId && student.courseId !== filters.courseId) return false;
-  if (filters.courseProgram && student.courseProgram !== filters.courseProgram)
-    return false;
-  if (
-    filters.courseProgram === "كورسات" &&
-    filters.courseTerm &&
-    student.courseTerm !== filters.courseTerm
-  )
-    return false;
-  if (filters.studyType && student.studyType !== filters.studyType) return false;
-  if (filters.locationScope && student.locationScope !== filters.locationScope)
-    return false;
-  if (filters.nameLetter && filters.nameLetter !== "all") {
-    const firstLetter = (student.name || "").trim()[0]?.replace(
-      /[إأآٱ]/g,
-      "ا",
-    );
-    if (firstLetter !== filters.nameLetter) return false;
-  }
-  return true;
-}

@@ -102,12 +102,3 @@ export function formatOpportunityBalance(
   const unavailableLimit = options.unavailableLimit ?? "—";
   return `${current}${separator}${limit === null ? unavailableLimit : limit}`;
 }
-
-export function getOpportunityProgressPercent(
-  source: OpportunityBalanceLike | null | undefined,
-): number {
-  const current = getOpportunityBalance(source);
-  const limit = getOpportunityLimit(source);
-  if (limit === null || limit <= 0) return 0;
-  return Math.min(100, Math.max(0, (current / limit) * 100));
-}

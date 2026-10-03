@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { getAuthPrincipal, type AuthPrincipal } from "@/lib/server-auth";
 
@@ -89,20 +89,4 @@ export async function writeSystemAuditLog(
     console.warn("[audit-log-server] failed to write system audit log:", error);
     return null;
   }
-}
-
-export function confirmationRequiredResponse(message: string, details?: AuditDetails) {
-  return NextResponse.json(
-    {
-      error: message,
-      requiresConfirmation: true,
-      confirmationParam: "confirmImpact",
-      details: safeStringify(details),
-    },
-    { status: 409 },
-  );
-}
-
-export function isConfirmed(value: unknown): boolean {
-  return value === true || value === "true" || value === "1" || value === 1 || value === "yes";
 }

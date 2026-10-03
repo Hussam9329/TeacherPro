@@ -1,13 +1,10 @@
-import { COURSE_TERMS, COURSE_PROGRAMS, STUDY_TYPES } from "./course-config";
+import { COURSE_TERMS } from "./course-config";
 import {
   BAGHDAD_COURSE_SITES,
   IRAQI_PROVINCES,
   normalizeIraqiProvinceName,
 } from "./iraq";
-
-export const STUDENT_FILTER_COURSE_PROGRAMS = COURSE_PROGRAMS;
 export const STUDENT_FILTER_COURSE_TERMS = COURSE_TERMS;
-export const STUDENT_FILTER_STUDY_TYPES = STUDY_TYPES;
 
 export type StudentListFilterValues = {
   courseProgram?: string;

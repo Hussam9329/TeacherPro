@@ -19,7 +19,6 @@ export type CourseProgram = (typeof COURSE_PROGRAMS)[number];
 export type CourseTerm = (typeof COURSE_TERMS)[number];
 export type StudyType = (typeof STUDY_TYPES)[number];
 export type LocationScope = (typeof LOCATION_SCOPES)[number];
-export type StudentLocationScope = LocationScope | typeof OUT_OF_COUNTRY_LOCATION_SCOPE;
 export type BaghdadMode = (typeof BAGHDAD_MODES)[number];
 
 export type StudyLocationConfig = {

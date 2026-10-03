@@ -18,7 +18,3 @@ export function normalizeListFilter(value: unknown): string {
   if (!text) return "";
   return ALL_FILTER_SENTINELS.has(text) ? "" : text;
 }
-
-export function isAllListFilter(value: unknown): boolean {
-  return normalizeListFilter(value) === "";
-}

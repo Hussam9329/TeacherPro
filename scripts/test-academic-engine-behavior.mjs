@@ -46,7 +46,6 @@ require.extensions[".ts"] = (module, filename) => {
 };
 
 const {
-  classifyGradeImpact,
   examPenaltyValue,
   isAutomaticOpportunityLog,
   recalculateAcademicState,
@@ -189,10 +188,6 @@ function recalculatedStudent(input) {
   assert.equal(result.status, "مفصول");
   assert.equal(result.opportunities, 0);
   assert.match(result.dismissalReason, /درجة صفر/);
-  assert.equal(
-    classifyGradeImpact(grade(), exam(), 3).type,
-    "dismissal",
-  );
   console.log("✅ فاينل صفر يفصل حتى عندما dismissalGrade فارغة");
 }
 
@@ -226,10 +221,6 @@ function recalculatedStudent(input) {
   assert.equal(result.status, "نشط");
   assert.equal(result.opportunities, 0);
   assert.equal(result.dismissalReason, "");
-  assert.equal(
-    classifyGradeImpact(grade({ score: 10 }), dailyExam, 1).type,
-    "discount",
-  );
   console.log("✅ فقدان آخر فرصة يوصل الرصيد إلى صفر ويبقي الطالب نشطاً");
 }
 
@@ -298,10 +289,6 @@ function recalculatedStudent(input) {
   assert.equal(result.status, "مفصول");
   assert.equal(result.opportunities, 0);
   assert.match(result.dismissalReason, /بعد انتهاء الفرص|بدون فرص/);
-  assert.equal(
-    classifyGradeImpact(grade({ score: 10 }), secondExam, 0).type,
-    "dismissal",
-  );
   console.log("✅ مخالفة خصم جديدة عند رصيد صفر تفصل بدون إنشاء رصيد سالب");
 }
 

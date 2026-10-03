@@ -1410,8 +1410,6 @@ export const courseChapterApi = {
     archived?: boolean;
     archive?: string;
   }) => apiPost("course-chapters", cc),
-  update: (id: string, updates: Record<string, unknown>) =>
-    apiPut("course-chapters", { id, ...updates }),
   previewAction: (courseChapterId: string, action: "activate" | "deactivate") =>
     apiPost("course-chapters/activate", {
       courseChapterId,
@@ -1688,37 +1686,6 @@ export const gradeApi = {
   add: (grade: Record<string, unknown>) => apiPost("grades", grade),
   markMissingAbsent: (examId: string, studentIds: string[]) =>
     apiPost("grades/mark-missing-absent", { examId, studentIds }),
-  listAll: async (
-    query: GradeListQuery = {},
-  ): Promise<GradeListResponse | null> => {
-    const pageSize = Math.min(
-      Math.max(Number(query.pageSize || LIST_ALL_PAGE_SIZE), 1),
-      LIST_ALL_PAGE_SIZE,
-    );
-    const collected: Array<Record<string, unknown>> = [];
-    let page = 1;
-    let totalCount = 0;
-    let totalPages = 1;
-
-    while (page <= totalPages) {
-      const result = await gradeApi.list({ ...query, page, pageSize });
-      if (!result) return null;
-      totalCount = Number(result.totalCount || 0);
-      totalPages = Math.max(1, Number(result.totalPages || 1));
-      collected.push(...(result.grades || []));
-      if (!result.hasMore || page >= totalPages) break;
-      page += 1;
-    }
-
-    return {
-      grades: collected,
-      totalCount,
-      page: 1,
-      pageSize: collected.length,
-      totalPages: 1,
-      hasMore: false,
-    };
-  },
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("grades", { id, ...updates }),
   remove: (
@@ -2028,35 +1995,6 @@ export const opportunityLogApi = {
       "opportunityLogs",
     );
   },
-  add: (log: Record<string, unknown>) => apiPost("opportunity-logs", log),
-  bulkAdjust: (payload: {
-    students?: Array<Record<string, unknown>>;
-    opportunityLogs?: Array<Record<string, unknown>>;
-    studentNotes?: Array<Record<string, unknown>>;
-  }) => apiPost("opportunities/bulk-adjust", payload),
-  remove: async (
-    id: string,
-    options: { confirmImpact?: boolean; previewToken?: string } = {},
-  ) => {
-    if (options.previewToken) {
-      return apiDelete("opportunity-logs", id, {
-        confirmImpact: options.confirmImpact ? "1" : undefined,
-        previewToken: options.previewToken,
-      });
-    }
-    const previewResult = await apiDelete("opportunity-logs", id);
-    if (!options.confirmImpact || previewResult.status !== 409) {
-      return previewResult;
-    }
-    const previewToken = String(
-      (previewResult.data as { previewToken?: unknown } | null)?.previewToken || "",
-    );
-    if (!previewToken) return previewResult;
-    return apiDelete("opportunity-logs", id, {
-      confirmImpact: "1",
-      previewToken,
-    });
-  },
 };
 
 // ─── Follow-up API ───────────────────────────────────────────────────────────
@@ -2079,11 +2017,7 @@ export const studentCallApi = {
       "student-calls",
       "studentCalls",
     ),
-  add: (call: Record<string, unknown>) => apiPost("student-calls", call),
   upsert: (call: Record<string, unknown>) => apiPost("student-calls", call),
-  update: (id: string, updates: Record<string, unknown>) =>
-    apiPut("student-calls", { id, ...updates }),
-  remove: (id: string) => apiDelete("student-calls", id),
 };
 
 export const studentNoteApi = {
@@ -2092,28 +2026,6 @@ export const studentNoteApi = {
       "student-notes",
       "studentNotes",
     ),
-  add: (note: Record<string, unknown>) => apiPost("student-notes", note),
-  update: (id: string, updates: Record<string, unknown>) =>
-    apiPut("student-notes", { id, ...updates }),
-  remove: (id: string) => apiDelete("student-notes", id),
-};
-
-// ─── User API ─────────────────────────────────────────────────────────────────
-
-export const userApi = {
-  add: (user: Record<string, unknown>) => apiPost("users", user),
-  update: (id: string, updates: Record<string, unknown>) =>
-    apiPut("users", { id, ...updates }),
-  remove: (id: string) => apiDelete("users", id),
-};
-
-// ─── Role API ─────────────────────────────────────────────────────────────────
-
-export const roleApi = {
-  add: (role: Record<string, unknown>) => apiPost("roles", role),
-  update: (id: string, updates: Record<string, unknown>) =>
-    apiPut("roles", { id, ...updates }),
-  remove: (id: string) => apiDelete("roles", id),
 };
 
 // ─── Log API ──────────────────────────────────────────────────────────────────
@@ -2178,36 +2090,6 @@ export const logApi = {
         status: res.status,
         transient: isTransientHttpResponse(res),
       };
-    } catch (e) {
-      const msg = toUserFriendlyError(
-        e instanceof Error ? e.message : "Network error",
-      );
-      return { ok: false, error: msg, status: 0, transient: true };
-    }
-  },
-  clear: (password: string, options?: Record<string, unknown>) =>
-    apiPost("logs/clear", { password, ...(options || {}) }),
-  restoreLastClear: async (password: string): Promise<ApiResult> => {
-    try {
-      const res = await fetch("/api/logs/restore", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ password }),
-      });
-      if (!res.ok) {
-        const error = await readApiError(
-          res,
-          `تعذر استعادة السجلات (رمز ${res.status})`,
-        );
-        return {
-          ok: false,
-          error,
-          status: res.status,
-          transient: isTransientHttpResponse(res),
-        };
-      }
-      return { ok: true };
     } catch (e) {
       const msg = toUserFriendlyError(
         e instanceof Error ? e.message : "Network error",

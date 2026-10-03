@@ -44,20 +44,3 @@ export const CHAPTER_TRANSITION_SETTLEMENT_REASON =
  * لاستخراج اللحظة الدقيقة لانتقال الدورة (أقدم تسوية موسومة بالفصل النشط).
  */
 export const CHAPTER_TRANSITION_SETTLEMENT_REASON_PREFIX = "تسوية تاريخية:";
-
-/**
- * Audit-log identifier minted once per chapter transition execution. It lets
- * us trace every batch of settlement logs created through the regular
- * activate flow, and lets a future admin see exactly when a chapter was
- * switched without re-reading the opportunity log table.
- */
-export const CHAPTER_TRANSITION_AUDIT_SOURCE =
-  "course-chapter-activate-transition";
-
-export function isSecondChapterProtectedOpportunityReason(
-  value: unknown,
-): boolean {
-  return SECOND_CHAPTER_PROTECTED_OPPORTUNITY_REASONS.includes(
-    String(value || "") as (typeof SECOND_CHAPTER_PROTECTED_OPPORTUNITY_REASONS)[number],
-  );
-}

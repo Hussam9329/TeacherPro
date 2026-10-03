@@ -9,8 +9,6 @@ import {
   announceTeacherProSyncSettled,
   emitTeacherProDataChanged,
 } from "./teacherpro-sync";
-
-export const OFFLINE_GRADE_STATUSES = GRADE_STATUSES;
 export type OfflineGradeStatus = GradeStatus;
 
 export type OfflineGradeDesired = {
@@ -647,20 +645,6 @@ async function flushOwnedGradeSaves(): Promise<number> {
   if (stillPending && !networkStopped) scheduleFlush(RETRY_DELAY_MS);
   if (stillPending && networkStopped && navigator.onLine) scheduleFlush(5000);
   return synced;
-}
-
-export function retryGradeEntryOfflineSave(key: string): void {
-  const next = updateItem(key, (item) => ({
-    ...item,
-    state: "pending",
-    lastError: undefined,
-    attempts: 0,
-    updatedAt: Date.now(),
-  }));
-  if (next) {
-    dispatch({ type: "queued", item: next });
-    scheduleFlush(80);
-  }
 }
 
 export function clearGradeEntryOfflineSave(key: string): void {

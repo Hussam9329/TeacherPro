@@ -17,25 +17,6 @@ export const GRADE_SMART_NOTE_STATUSES = [
   "REJECTED",
 ] as const;
 
-export function gradeSmartNoteExclusionSource(
-  category: GradeSmartNoteCategory,
-  noteId: string,
-): string {
-  return `GradeSmartNote:${category}:${noteId}`;
-}
-
-export function isProtectedDismissedPendingGrade(grade: {
-  academicEffectExcluded?: boolean | null;
-  academicEffectExclusionSource?: string | null;
-}): boolean {
-  return Boolean(
-    grade.academicEffectExcluded &&
-      String(grade.academicEffectExclusionSource || "").startsWith(
-        "GradeSmartNote:DISMISSED_PENDING:",
-      ),
-  );
-}
-
 export function isProtectedSmartNoteHistoricalGrade(grade: {
   academicEffectExcluded?: boolean | null;
   academicEffectExclusionSource?: string | null;

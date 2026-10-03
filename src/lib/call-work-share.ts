@@ -18,10 +18,6 @@ export function parseCallWorkShare(value: unknown): CallWorkShare | null {
   return { part, parts };
 }
 
-export function formatCallWorkShare(share: CallWorkShare): string {
-  return `${share.part}/${share.parts}`;
-}
-
 /** FNV-1a: stable across server and browser, evenly spread for cuid ids. */
 function hashStudentId(id: string): number {
   let hash = 0x811c9dc5;

@@ -116,13 +116,8 @@ must(
 );
 
 must(
-  uiKit.includes("TEACHERPRO_COUNT_SCOPE_COPY") &&
-    uiKit.includes("data-count-scope={scope}") &&
-    uiKit.includes("CountScopeSummary") &&
-    uiKit.includes("إجمالي ${subject}") &&
-    uiKit.includes("المطابقون للفلاتر") &&
-    uiKit.includes("المعروض في الصفحة"),
-  "مكوّنات العدادات تميّز بصرياً بين النظام والفلاتر والصفحة الحالية",
+  !uiKit.includes("CountScopeSummary") && !uiKit.includes("function StatCard"),
+  "بطاقات العدادات القديمة التي لم تستعملها أي صفحة محذوفة؛ نطاق كل رقم يظهر في شريط القائمة",
 );
 
 must(
@@ -133,9 +128,8 @@ must(
 
 must(
   [opportunitiesView, registryView, gradeRecordsView, logsView].every((source) =>
-    source.includes("CountScopeSummary") ||
-      // The list toolbar: counts on the filter buttons and one «المعروض … من …» line.
-      (source.includes("<ListToolbar") && source.includes("المعروض")),
+    // The list toolbar: counts on the filter buttons and one «المعروض … من …» line.
+    source.includes("<ListToolbar") && source.includes("المعروض"),
   ),
   "الصفحات ذات العدادات الحساسة تعرض نطاق كل رقم بوضوح",
 );

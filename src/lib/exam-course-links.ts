@@ -19,10 +19,6 @@ export function parseCourseIds(value: unknown): string[] {
   return Array.from(new Set(raw.map((item) => String(item).trim()).filter(Boolean)));
 }
 
-export function stringifyCourseIds(value: unknown): string {
-  return JSON.stringify(parseCourseIds(value));
-}
-
 export function canonicalCourseIds(value: unknown): string {
   return JSON.stringify([...parseCourseIds(value)].sort());
 }
