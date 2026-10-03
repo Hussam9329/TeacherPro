@@ -682,7 +682,7 @@ export interface OpportunityStatsResponse extends OpportunityCountSet {
   system: OpportunityCountSet;
   filtered: OpportunityCountSet;
   /** Every filter but the status: what each status button would show. */
-  statusCounts?: { all: number; active: number; hasOpportunities: number; noOpportunities: number; dismissed: number };
+  statusCounts?: { all: number; active: number; hasOpportunities: number; noOpportunities: number; dismissed: number; bonusOnTheWay?: number; bonusEarned?: number };
   source: "database";
 }
 

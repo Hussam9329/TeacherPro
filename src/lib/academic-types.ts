@@ -51,6 +51,13 @@ export interface AcademicStudent {
   createdAt: string;
   /** Active (non-cancelled) grace periods; the only grace input of the engine. */
   gracePeriods?: GracePeriodRange[];
+  /** «فرصة مكافأة» progress computed by the engine: 0, 1 pass counted, or 2
+   * (earned but held until a missing grade in the streak is recorded). */
+  bonusProgress?: number;
+  /** The exam whose missing grade holds an earned bonus. */
+  bonusWaitingExamName?: string | null;
+  /** True only when a bonus removed a stored automatic dismissal. */
+  bonusAutoReturned?: boolean;
 }
 
 export interface AcademicExam {

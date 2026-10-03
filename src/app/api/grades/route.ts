@@ -17,7 +17,7 @@ import {
 } from "@/lib/route-helpers";
 import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 import { normalizeListFilter } from "@/lib/all-filter";
-import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { bonusReturnsDismissedStudent, recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { gradeMatchesStatusFilterUnified, isExamBeforeStudentRegistration, type StudentGraceLike } from "@/lib/grade-classification";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 import {
@@ -246,6 +246,8 @@ type NumericGradeAttemptContext = {
     scheduledActivateAt: Date | null;
   };
   category: GradeSmartNoteCategory | null;
+  /** A late pass that returns a dismissed student through «فرصة مكافأة». */
+  bonusReturn?: boolean;
   reason: string;
 };
 
@@ -360,13 +362,19 @@ async function inspectNumericGradeAttempt(
   // لا تضف مساراً يحوّل حالة ما قبل التسجيل إلى ملاحظة معلقة؛ هذا سيعيد
   // المشكلة التي أصلحناها. الإجازة كذلك: الدرجة الرقمية تمر مباشرة إلى
   // syncAcademicGradeWriteback الذي ينهي الإجازة ويحفظ الدرجة.
+  let bonusReturn = false;
   if (!beforeRegistration && student.status === "مفصول") {
-    category = "DISMISSED_PENDING";
-    // نص قصير بطلب صاحب النظام — بدل العبارة الطويلة القديمة
-    reason = "تم تعليق الدرجة لان الطالب امتحن وهو مفصول";
+    // «فرصة مكافأة»: a late pass for an exam before the dismissal that would
+    // have kept the student above zero is a real grade, and returns them.
+    bonusReturn = await bonusReturnsDismissedStudent(tx, student.id, exam.id, score);
+    if (!bonusReturn) {
+      category = "DISMISSED_PENDING";
+      // نص قصير بطلب صاحب النظام — بدل العبارة الطويلة القديمة
+      reason = "تم تعليق الدرجة لان الطالب امتحن وهو مفصول";
+    }
   }
 
-  return { student, exam, category, reason, score };
+  return { student, exam, category, reason, score, bonusReturn };
 }
 
 /** Grade rows carry their student's active grace periods (read-only result). */
@@ -802,7 +810,7 @@ export async function POST(req: NextRequest) {
           // الواجهة تسمح بتصحيح الدرجة التي سببت فصل الطالب. نسمح بذلك
           // فقط إذا كان لهذا الطالب سجل موجود فعلاً في الامتحان؛ إنشاء
           // درجة جديدة لطالب مفصول يبقى ممنوعاً.
-          allowDismissedExistingGradeCorrection: Boolean(existingGrade),
+          allowDismissedExistingGradeCorrection: Boolean(existingGrade) || numericAttempt?.bonusReturn === true,
           confirmLeaveEnd: body.confirmEndLeave === true,
         });
         if (!writeback) {

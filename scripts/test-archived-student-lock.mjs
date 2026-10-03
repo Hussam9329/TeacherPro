@@ -30,8 +30,9 @@ check(
   "المؤرشفون الحاليون تتصفّر فرصهم مرة واحدة عند النشر",
 );
 check(policyEntry, "الترحيل مسجّل في سياسة النشر ببصمته الصحيحة");
-check(read("src/lib/schema-readiness.ts").includes(`"${migrationName}"`) || read("src/lib/schema-readiness.ts").includes(`'${migrationName}'`),
-  "النظام ينتظر هذا الترحيل قبل العمل");
+// Readiness waits for the newest schema migration; any later one includes this.
+const requiredMigration = read("src/lib/schema-readiness.ts").match(/REQUIRED_DATABASE_MIGRATION\s*=\s*['"]([^'"]+)['"]/)?.[1] || "";
+check(requiredMigration >= migrationName, "النظام ينتظر هذا الترحيل قبل العمل");
 
 // 2. Archiving zeroes the balance and says so; the snapshot never shows more.
 const students = read("src/app/api/students/route.ts");

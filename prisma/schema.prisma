@@ -83,6 +83,10 @@ model Student {
   closureTelegramEpoch Int?
   opportunities   Int      @default(0)
   baseOpportunities Int    @default(0)
+  // «فرصة مكافأة»: 0 none, 1 one pass counted, 2 earned but held until the
+  // grade of bonusWaitingExamName is recorded. Written by the academic replay.
+  bonusProgress   Int      @default(0)
+  bonusWaitingExamName String?
   accountingGraceDays Int   @default(0)
   gracePeriodStartDate DateTime?
   gracePeriodEndedAt DateTime?

@@ -16,6 +16,14 @@ import {
   hasZeroBalanceViolationMarker,
   REACTIVATION_OPPORTUNITY_GRANT,
 } from "./opportunity-balance";
+import {
+  BONUS_LIMIT_PER_CHAPTER,
+  BONUS_OPPORTUNITY_ACTION,
+  BONUS_PASSES_REQUIRED,
+  BONUS_PROGRESS_WAITING,
+  BONUS_START_DAY,
+  isBonusOpportunityLog,
+} from "./bonus-opportunity";
 import type {
   AcademicChapter,
   AcademicCourseChapter,
@@ -642,6 +650,17 @@ export function recalculateAcademicState(
     let opportunities = Number(
       activeChapter?.opportunities ?? student.baseOpportunities ?? 0,
     );
+    // «فرصة مكافأة»: the part of the shortfall an administrator removed by
+    // hand (manual/bulk deduction, reset to a lower balance). Everything else
+    // below the limit can be earned back with consecutive passes.
+    const bonusCap = Math.max(0, Number(activeChapter?.opportunities ?? student.baseOpportunities ?? 0));
+    let bonusHold = 0;
+    const clampBonusHold = () => {
+      bonusHold = Math.max(0, Math.min(bonusHold, bonusCap - opportunities));
+    };
+    const isSettlementReason = (reason: unknown) => String(reason || "").startsWith("تسوية");
+    const isUndoOfDeduction = (reason: unknown) => String(reason || "").includes("تراجع موثق عن خصم");
+    const isUndoOfAddition = (reason: unknown) => String(reason || "").includes("تراجع موثق عن إضافة");
     let dismissed = false;
     let dismissalReason = "";
     let dismissalPriority = -1;
@@ -692,10 +711,17 @@ export function recalculateAcademicState(
           Number.isSafeInteger(log.balanceAfter) && log.balanceAfter >= 0) {
           opportunities = log.balanceAfter;
         }
+        // A returned student may earn back up to the chapter limit.
+        bonusHold = 0;
       }
-      else if (log.action === "إضافة") opportunities += amount;
+      else if (log.action === "إضافة") {
+        opportunities += amount;
+        if (isUndoOfDeduction(log.reason)) bonusHold = Math.max(0, bonusHold - amount);
+        clampBonusHold();
+      }
       if (log.action === "خصم") {
         const effect = applyOpportunityPenalty(opportunities, amount);
+        if (!isUndoOfAddition(log.reason)) bonusHold += effect.deducted;
         if (
           (effect.dismissalTrigger || hasZeroBalanceViolationMarker(log.reason)) &&
           !undoneManualOpportunityLogIds.has(log.id) &&
@@ -712,7 +738,11 @@ export function recalculateAcademicState(
         // وإرجاع الرصيد إلى السقف. المبلغ مضمون > 0 هنا لأن حركات
         // المبلغ 0 تُتخطى قبل هذه النقطة، والسقف النهائي للمحرك يبقى
         // صمام الأمان ضد أي مبلغ شاذ.
+        const beforeReset = opportunities;
         opportunities = amount;
+        if (isSettlementReason(log.reason)) bonusHold = 0;
+        else if (amount < beforeReset) bonusHold += beforeReset - amount;
+        clampBonusHold();
       }
     }
 
@@ -807,7 +837,16 @@ export function recalculateAcademicState(
     // by a reset that never included that grade ID.
     if (settlement === lastReset && lastReset) {
       opportunities = Math.max(0, Math.min(Number(activeChapter?.opportunities ?? student.baseOpportunities ?? 0), Number(lastReset.balanceAfter ?? lastReset.amount)));
+      // A chapter settlement opens a fresh balance; an administrator's reset
+      // to a lower balance is a deliberate deduction that passes cannot undo.
+      bonusHold = isSettlementReason(lastReset.reason) ? 0 : Math.max(0, bonusCap - opportunities);
     }
+    // Balance without any bonus. A bonus that keeps the student above zero
+    // where this balance would have dismissed is recorded below.
+    let bonusShadow = opportunities;
+    // Where (exam ID, or the manual-deduction marker) a bonus prevented a
+    // dismissal that the balance without bonuses would have caused.
+    const bonusSavedAt = new Set<string>();
     const pendingCommands = currentCommands.filter(log => log !== lastReset && (!lastReset || String(log.date) >= String(lastReset.date)) && (!latestGrant || String(log.date) >= String(latestGrant.date)));
     let commandIndex = 0;
     // Counterfactual balance before the first credit following a late old
@@ -820,17 +859,32 @@ export function recalculateAcademicState(
         const cap = Math.max(0, Number(activeChapter?.opportunities ?? student.baseOpportunities ?? 0));
         const amount = Math.abs(Number(log.appliedAmount ?? log.amount ?? 0));
         const balanceBefore = opportunities;
-        if (log.action === "إعادة تعيين") opportunities = Math.max(0, Math.min(cap, Number(log.balanceAfter ?? log.amount)));
+        if (log.action === "إعادة تعيين") {
+          opportunities = Math.max(0, Math.min(cap, Number(log.balanceAfter ?? log.amount)));
+          bonusShadow = opportunities;
+          if (isSettlementReason(log.reason)) bonusHold = 0;
+          else if (opportunities < balanceBefore) bonusHold += balanceBefore - opportunities;
+          clampBonusHold();
+        }
         else if (log.action === "إضافة") {
           opportunities = Math.min(cap, opportunities + amount);
+          bonusShadow = Math.min(cap, bonusShadow + amount);
           if (amount > 0) beforeLateResults = null;
+          if (isUndoOfDeduction(log.reason)) bonusHold = Math.max(0, bonusHold - (opportunities - balanceBefore));
+          clampBonusHold();
         }
         else if (log.action === "خصم") {
           const effect = applyOpportunityPenalty(opportunities, amount);
+          const shadowEffect = applyOpportunityPenalty(bonusShadow, amount);
           if (beforeLateResults) beforeLateResults.balance = applyOpportunityPenalty(beforeLateResults.balance, amount).after;
           opportunities = effect.after;
+          bonusShadow = shadowEffect.after;
+          if (!isUndoOfAddition(log.reason)) bonusHold += effect.deducted;
+          const violation = hasZeroBalanceViolationMarker(log.reason) && !undoneManualOpportunityLogIds.has(log.id);
           if ((effect.dismissalTrigger || hasZeroBalanceViolationMarker(log.reason)) && !undoneManualOpportunityLogIds.has(log.id)) {
             setDismissal(`مخالفة بعد انتهاء الفرص - خصم يدوي: ${log.reason || "بدون سبب مسجل"}`, 60);
+          } else if (shadowEffect.dismissalTrigger && !violation && !undoneManualOpportunityLogIds.has(log.id)) {
+            bonusSavedAt.add("manual-deduction");
           }
         }
         options.onOpportunityCommand?.(Object.freeze({
@@ -859,6 +913,98 @@ export function recalculateAcademicState(
         ? timeA - timeB
         : a.ledgerDate.localeCompare(b.ledgerDate);
     });
+
+    // «فرصة مكافأة» streak. Bonuses earned in this chapter before a return
+    // still count toward the chapter's limit.
+    let bonusCount = reactivationStartDate
+      ? state.opportunityLogs.filter((log) =>
+          log.studentId === student.id && isBonusOpportunityLog(log) &&
+          log.chapterId === activeChapter?.id && dayKey(log.date) < reactivationStartDate).length
+      : 0;
+    let bonusStreak = 0;
+    let bonusFirstPass: { exam: AcademicExam; score: number } | null = null;
+    let bonusWaitingExam: AcademicExam | null = null;
+    const examOrderKey = (exam: AcademicExam) => `${String(exam.date || "")}|${exam.id}`;
+    const bonusOpeningDays = [
+      reactivationStartDate,
+      historicalSettlementDate,
+      settlement ? dayKey(settlement.date) : "",
+    ].filter(Boolean).sort();
+    // Missing grades before the student's current balance window cannot
+    // change a streak that starts after it.
+    let bonusWindowKey = bonusOpeningDays.length ? `${bonusOpeningDays[bonusOpeningDays.length - 1]}\uffff` : "";
+    const enteredExamIds = new Set(studentGrades
+      .filter((grade) => {
+        const exam = examsById.get(grade.examId);
+        return Boolean(exam && isGradeEntered(grade, exam));
+      })
+      .map((grade) => grade.examId));
+    const bonusMissingExams = state.exams
+      .filter((exam) =>
+        !enteredExamIds.has(exam.id) &&
+        (exam.courseIds || []).includes(student.courseId) &&
+        studentMatchesExamMainSites(student, splitSelection(String(exam.mainSite || ""))) &&
+        !examChapterExclusion(exam, student.courseId, activeChapter?.id) &&
+        !exam.noDiscount &&
+        dayKey(exam.date) >= BONUS_START_DAY &&
+        isExamAvailableForEntry(exam) &&
+        isExamOnOrAfterStudentRegistration(student, exam) &&
+        !normalizedLeaves.some((leave) => studentLeaveAppliesToExam(leave, student.id, exam)) &&
+        !isExamInStudentGracePeriod(student, exam))
+      .sort((a, b) => examOrderKey(a).localeCompare(examOrderKey(b)));
+    const bonusRecoverable = () => Math.max(0, bonusCap - opportunities - bonusHold);
+    const resetBonusStreak = (exam: AcademicExam) => {
+      bonusStreak = 0;
+      bonusFirstPass = null;
+      bonusWaitingExam = null;
+      bonusWindowKey = examOrderKey(exam);
+    };
+    const countBonusPass = (exam: AcademicExam, grade: AcademicGrade, score: number) => {
+      if (dismissed || dayKey(exam.date) < BONUS_START_DAY) return;
+      // A full balance has nothing to earn back, and passes before a loss
+      // never count toward it.
+      if (bonusCount >= BONUS_LIMIT_PER_CHAPTER || bonusRecoverable() <= 0) {
+        resetBonusStreak(exam);
+        return;
+      }
+      if (bonusStreak === 0) {
+        bonusStreak = 1;
+        bonusFirstPass = { exam, score };
+        return;
+      }
+      const missing = bonusMissingExams.find((item) =>
+        examOrderKey(item) > bonusWindowKey && examOrderKey(item) < examOrderKey(exam));
+      if (missing) {
+        bonusStreak = BONUS_PASSES_REQUIRED;
+        bonusWaitingExam = missing;
+        return;
+      }
+      const first = bonusFirstPass;
+      opportunities = Math.min(bonusCap, opportunities + 1);
+      if (beforeLateResults) beforeLateResults.balance = Math.min(bonusCap, beforeLateResults.balance + 1);
+      bonusCount += 1;
+      addAutomaticLog(
+        exam,
+        grade.id,
+        BONUS_OPPORTUNITY_ACTION,
+        1,
+        `${BONUS_OPPORTUNITY_ACTION}: نجاح متتالي في «${first?.exam.name || ""}» (${first?.score ?? ""}) و«${exam.name}» (${score})`,
+      );
+      resetBonusStreak(exam);
+    };
+    const applyExamLoss = (
+      exam: AcademicExam,
+      penalty: number,
+      effect: ReturnType<typeof applyOpportunityPenalty>,
+      historicalZero: boolean,
+    ) => {
+      const shadowEffect = applyOpportunityPenalty(bonusShadow, penalty);
+      bonusShadow = shadowEffect.after;
+      if (shadowEffect.dismissalTrigger && !historicalZero && !effect.dismissalTrigger) {
+        bonusSavedAt.add(exam.id);
+      }
+      resetBonusStreak(exam);
+    };
 
     for (const { grade, ledgerDate } of gradesInLedgerOrder) {
       const eventExam = examsById.get(grade.examId);
@@ -976,6 +1122,7 @@ export function recalculateAcademicState(
             penalty,
           );
           opportunities = opportunityEffect.after;
+          applyExamLoss(exam, penalty, opportunityEffect, historicalZeroIntroduced);
           if (opportunityEffect.deducted > 0) {
             addAutomaticLog(
               exam,
@@ -1017,8 +1164,18 @@ export function recalculateAcademicState(
               exam,
               grade.id,
             );
+          } else if (score >= Number(exam.passMark)) {
+            countBonusPass(exam, grade, score);
+          } else {
+            resetBonusStreak(exam);
           }
           continue;
+        }
+        if (score >= Number(exam.passMark) && score > exam.discountMark) {
+          countBonusPass(exam, grade, score);
+        } else if (score > exam.discountMark) {
+          // راسب غير مخصوم: no deduction, but the streak starts over.
+          resetBonusStreak(exam);
         }
         if (score <= exam.discountMark) {
           const penalty = examPenaltyValue(exam);
@@ -1027,6 +1184,7 @@ export function recalculateAcademicState(
             penalty,
           );
           opportunities = opportunityEffect.after;
+          applyExamLoss(exam, penalty, opportunityEffect, historicalZeroIntroduced);
           if (opportunityEffect.deducted > 0) {
             addAutomaticLog(
               exam,
@@ -1069,12 +1227,45 @@ export function recalculateAcademicState(
     // inconsistency. All maintenance, chapter-settlement, grade, and
     // opportunity replays see the stored dismissed status and preserve it
     // here together with the zero balance.
+    const bonusProgress = dismissed
+      ? 0
+      : bonusWaitingExam
+        ? BONUS_PROGRESS_WAITING
+        : bonusStreak === 1 && bonusRecoverable() > 0 && bonusCount < BONUS_LIMIT_PER_CHAPTER
+          ? 1
+          : 0;
+    const bonusWaitingExamName = dismissed ? null : (bonusWaitingExam as AcademicExam | null)?.name || null;
+
     if (student.status === "مفصول" && !dismissed) {
+      // The one implicit return: a «فرصة مكافأة» earned before the stored
+      // automatic dismissal kept the student above zero, so that dismissal
+      // never happens in this replay. Manual dismissals never return here.
+      const storedDismissal = state.opportunityLogs
+        .filter((log) => log.studentId === student.id && log.action === "فصل تلقائي" &&
+          isAutomaticOpportunityLog(log) && (!log.chapterId || log.chapterId === activeChapter?.id))
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+        .at(-1);
+      const savedByBonus = storedDismissal
+        ? bonusSavedAt.has(storedDismissal.examId)
+        : String(student.dismissalReason || "").includes("خصم يدوي") && bonusSavedAt.has("manual-deduction");
+      if (savedByBonus && isRuleManagedDismissal(student)) {
+        return {
+          ...student,
+          opportunities,
+          status: "نشط" as AcademicStudent["status"],
+          dismissalReason: "",
+          bonusProgress,
+          bonusWaitingExamName,
+          bonusAutoReturned: true,
+        };
+      }
       return {
         ...student,
         opportunities: 0,
         status: "مفصول" as AcademicStudent["status"],
         dismissalReason: student.dismissalReason,
+        bonusProgress: 0,
+        bonusWaitingExamName: null,
       };
     }
 
@@ -1083,6 +1274,8 @@ export function recalculateAcademicState(
       opportunities: dismissed ? 0 : opportunities,
       status: (dismissed ? "مفصول" : "نشط") as AcademicStudent["status"],
       dismissalReason,
+      bonusProgress,
+      bonusWaitingExamName,
     };
   });
 

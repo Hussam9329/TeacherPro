@@ -1,4 +1,5 @@
 "use client";
+import { BONUS_OPPORTUNITY_ACTION } from "@/lib/bonus-opportunity";
 import { isCurrentChapterOpportunityLog } from "@/lib/opportunity-chapter-scope";
 import { Button } from "@/components/ui/button";
 
@@ -342,7 +343,7 @@ function buildOpportunityTraceRows(logs: OpportunityLog[]): OpportunityTraceRow[
       const action = String(log.action || "");
       let deltaText = "بدون تغيير مباشر";
 
-      if (action === "إضافة" || action.includes("إعادة تفعيل")) {
+      if (action === "إضافة" || action === BONUS_OPPORTUNITY_ACTION || action.includes("إعادة تفعيل")) {
         deltaText = `+${amount}`;
       } else if (action === "خصم" || action === "خصم تلقائي") {
         deltaText = `-${amount}`;
@@ -995,6 +996,10 @@ export function StudentProfileDialog({
         isCurrentChapterOpportunityLog(log, profileStudent, log.examId ? profileExamById.get(log.examId) : undefined);
     })
     .reduce((sum, log) => sum + Math.abs(Number(log.amount) || 0), 0);
+  const currentChapterBonuses = studentOpportunities
+    .filter((log) => String(log.action || "") === BONUS_OPPORTUNITY_ACTION &&
+      isCurrentChapterOpportunityLog(log, profileStudent, log.examId ? profileExamById.get(log.examId) : undefined))
+    .reduce((sum, log) => sum + Math.abs(Number(log.amount) || 0), 0);
   const canReturnStudent = isDismissedNow && canAccessSection("dismissed-management");
   const openReturnStudent = () => {
     requestDismissedStudentFocus(profileStudent.code || profileStudent.name);
@@ -1139,7 +1144,10 @@ export function StudentProfileDialog({
                 <p className="mt-1 text-sm text-muted-foreground">جاري قراءة ملف الطالب من النظام…</p>
               )}
               {currentChapterDeducted > 0 ? (
-                <p className="mt-1 font-bold">انخصمت {currentChapterDeducted} {currentChapterDeducted === 1 ? "فرصة" : "فرص"} بهذا الفصل</p>
+                <p className="mt-1 font-bold">
+                  انخصمت {currentChapterDeducted} {currentChapterDeducted === 1 ? "فرصة" : "فرص"} بهذا الفصل
+                  {currentChapterBonuses > 0 ? `، ورجعت ${currentChapterBonuses === 1 ? "فرصة مكافأة" : `${currentChapterBonuses} فرص مكافأة`}` : ""}
+                </p>
               ) : null}
               {currentGraceText && <p className="mt-1 text-xs leading-6 text-muted-foreground">{currentGraceText}</p>}
               {isDismissedNow && (canReturnStudent || profileTabs.some((item) => item.tab === "timeline")) ? (

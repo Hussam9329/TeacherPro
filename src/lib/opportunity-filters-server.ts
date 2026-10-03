@@ -3,6 +3,18 @@ import { normalizeListFilter } from "@/lib/all-filter";
 import { sanitizePhoneInput } from "@/lib/format";
 import { normalizeArabicText } from "@/lib/route-helpers";
 import { sanitizeTelegramInput } from "@/lib/student-utils";
+import { BONUS_OPPORTUNITY_ACTION } from "@/lib/bonus-opportunity";
+
+/** Active students one pass (or one missing grade) away from «فرصة مكافأة». */
+export const BONUS_ON_THE_WAY_WHERE: Prisma.StudentWhereInput = {
+  status: "نشط",
+  bonusProgress: { gte: 1 },
+};
+/** Students whose ledger holds a «فرصة مكافأة». */
+export const BONUS_EARNED_WHERE: Prisma.StudentWhereInput = {
+  status: { not: "مؤرشف" },
+  opportunityLogs: { some: { action: BONUS_OPPORTUNITY_ACTION } },
+};
 
 export type OpportunityFilterInput = {
   courseId?: string | null;
@@ -101,6 +113,10 @@ export function buildOpportunityFilters(
     and.push({ status: "نشط", opportunities: { gt: 0 } });
   } else if (status === "no-opportunities") {
     and.push({ status: "نشط", opportunities: 0 });
+  } else if (status === "bonus-on-the-way") {
+    and.push(BONUS_ON_THE_WAY_WHERE);
+  } else if (status === "bonus-earned") {
+    and.push(BONUS_EARNED_WHERE);
   } else {
     and.push({ status: { not: "مؤرشف" } });
   }

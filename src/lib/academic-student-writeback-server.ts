@@ -4,7 +4,7 @@ import type { AcademicStudent } from "@/lib/academic-types";
 type AcademicStudentResult = Pick<
   AcademicStudent,
   "id" | "status" | "opportunities" | "dismissalReason"
->;
+> & Partial<Pick<AcademicStudent, "bonusProgress" | "bonusWaitingExamName">>;
 
 /**
  * Persist the engine's final student fields inside the caller's transaction.
@@ -23,24 +23,41 @@ export async function persistAcademicStudentResults(
 
   for (let offset = 0; offset < uniqueStudents.length; offset += 500) {
     const group = uniqueStudents.slice(offset, offset + 500);
-    const values = group.map((student) => Prisma.sql`(
+    // A student the engine did not replay (no unique active chapter) keeps
+    // its stored «فرصة مكافأة» progress: NULL means "unchanged".
+    const values = group.map((student) => {
+      const replayed = student.bonusProgress !== undefined;
+      const progress = replayed ? Math.max(0, Math.min(2, Math.trunc(Number(student.bonusProgress) || 0))) : null;
+      const waiting = replayed ? (progress === 2 ? student.bonusWaitingExamName || null : null) : null;
+      return Prisma.sql`(
       ${student.id}::text,
       ${student.status}::text,
       ${Math.max(0, Math.trunc(Number(student.opportunities || 0)))}::integer,
-      ${student.dismissalReason || null}::text
-    )`);
+      ${student.dismissalReason || null}::text,
+      ${progress}::integer,
+      ${replayed}::boolean,
+      ${waiting}::text
+    )`;
+    });
     const [counts] = await client.$queryRaw<Array<{ matched: number; updated: number }>>(Prisma.sql`
-      WITH input(id, status, opportunities, "dismissalReason") AS (
+      WITH input(id, status, opportunities, "dismissalReason", "bonusProgress", replayed, "bonusWaitingExamName") AS (
         VALUES ${Prisma.join(values)}
+      ), target AS (
+        SELECT input.id, input.status, input.opportunities, input."dismissalReason",
+          CASE WHEN input.replayed THEN input."bonusProgress" ELSE student."bonusProgress" END AS "bonusProgress",
+          CASE WHEN input.replayed THEN input."bonusWaitingExamName" ELSE student."bonusWaitingExamName" END AS "bonusWaitingExamName"
+        FROM input JOIN "Student" AS student USING (id)
       ), updated AS (
         UPDATE "Student" AS student
-        SET status = input.status,
-            opportunities = input.opportunities,
-            "dismissalReason" = input."dismissalReason"
-        FROM input
-        WHERE student.id = input.id
-          AND ROW(student.status, student.opportunities, student."dismissalReason")
-            IS DISTINCT FROM ROW(input.status, input.opportunities, input."dismissalReason")
+        SET status = target.status,
+            opportunities = target.opportunities,
+            "dismissalReason" = target."dismissalReason",
+            "bonusProgress" = target."bonusProgress",
+            "bonusWaitingExamName" = target."bonusWaitingExamName"
+        FROM target
+        WHERE student.id = target.id
+          AND ROW(student.status, student.opportunities, student."dismissalReason", student."bonusProgress", student."bonusWaitingExamName")
+            IS DISTINCT FROM ROW(target.status, target.opportunities, target."dismissalReason", target."bonusProgress", target."bonusWaitingExamName")
         RETURNING student.id
       )
       SELECT

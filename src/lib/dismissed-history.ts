@@ -1,3 +1,7 @@
+// Same text as BONUS_OPPORTUNITY_ACTION in bonus-opportunity.ts; this module
+// stays import-free so behavior tests can run it directly.
+const BONUS_OPPORTUNITY_ACTION = "فرصة مكافأة";
+
 type DismissalLogLike = {
   action?: unknown;
   reason?: unknown;
@@ -118,6 +122,7 @@ export function classifyDismissedOpportunityMovement({
   }
   if (
     action === "إضافة" ||
+    action === BONUS_OPPORTUNITY_ACTION ||
     action === "إعادة تعيين" ||
     action === "إعادة تفعيل" ||
     title.startsWith("إضافة")
@@ -649,6 +654,9 @@ export function opportunityMovementSentence(log: OpportunityTelegramLog): string
   }
   if (kind === "deduct" || (!kind && /خصم/.test(cleanText(log.action)))) {
     return withReason(amount === 0 ? "لم يتغيّر عدد الفرص" : amount === 1 ? "خُصمت فرصة" : `خُصمت ${words}`);
+  }
+  if (cleanText(log.action) === BONUS_OPPORTUNITY_ACTION) {
+    return withReason(`رجعت ${BONUS_OPPORTUNITY_ACTION}`);
   }
   if (kind === "add" || (!kind && cleanText(log.action) === "إضافة")) {
     return withReason(amount === 0 ? "لم يتغيّر عدد الفرص" : amount === 1 ? "أُضيفت فرصة" : `أُضيفت ${words}`);

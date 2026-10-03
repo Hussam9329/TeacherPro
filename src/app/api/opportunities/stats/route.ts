@@ -6,6 +6,8 @@ import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import {
+  BONUS_EARNED_WHERE,
+  BONUS_ON_THE_WAY_WHERE,
   buildOpportunityFilters,
   composeStudentWhere,
   hasActiveChapterWhere,
@@ -114,14 +116,16 @@ async function collectOpportunityCounts(
 
 /** The status buttons count inside every filter but the status itself. */
 async function collectStatusCounts(filters: Prisma.StudentWhereInput[]) {
-  const [all, active, hasOpportunities, noOpportunities, dismissed] = await Promise.all([
+  const [all, active, hasOpportunities, noOpportunities, dismissed, bonusOnTheWay, bonusEarned] = await Promise.all([
     db.student.count({ where: composeStudentWhere(filters) }),
     db.student.count({ where: composeStudentWhere([...filters, { status: "نشط" }]) }),
     db.student.count({ where: composeStudentWhere([...filters, { status: "نشط", opportunities: { gt: 0 } }]) }),
     db.student.count({ where: composeStudentWhere([...filters, { status: "نشط", opportunities: 0 }]) }),
     db.student.count({ where: composeStudentWhere([...filters, { status: "مفصول" }]) }),
+    db.student.count({ where: composeStudentWhere([...filters, BONUS_ON_THE_WAY_WHERE]) }),
+    db.student.count({ where: composeStudentWhere([...filters, BONUS_EARNED_WHERE]) }),
   ]);
-  return { all, active, hasOpportunities, noOpportunities, dismissed };
+  return { all, active, hasOpportunities, noOpportunities, dismissed, bonusOnTheWay, bonusEarned };
 }
 
 export async function GET(req: NextRequest) {

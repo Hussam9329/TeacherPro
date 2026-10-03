@@ -10,6 +10,7 @@ import { persistAcademicStudentResults } from "@/lib/academic-student-writeback-
 import { historicalLeaveLogIds, recalculateWithLeaveReview, type LeaveDismissalReview } from "@/lib/leave-dismissal-review";
 import { recalculateWithExamEditReview } from "@/lib/exam-dismissal-review";
 import { recalculateWithGraceReview, type GraceDismissalReview } from "@/lib/grace-dismissal-review";
+import { BONUS_OPPORTUNITY_ACTION } from "@/lib/bonus-opportunity";
 import {
   getActiveChapterForStudent,
   gradeHasAcademicEffect,
@@ -1048,6 +1049,20 @@ export async function recalculateStudentsAcademicState(
   const settledHistory = settledAutomaticHistory(state, result, new Set(recalculableStudentIds));
   for (const log of settledHistory) preservedHistory.add(log.id);
   result.opportunityLogs.push(...settledHistory);
+  // A «فرصة مكافأة» that removed a stored automatic dismissal returns the
+  // student here, like an exam edit that removes its dismissal: a dated
+  // note, no grant, and grades held while dismissed stay pending smart notes.
+  const storedDismissed = new Set(state.students.filter(student => student.status === "مفصول").map(student => student.id));
+  const bonusReturned = result.students.filter(student =>
+    student.bonusAutoReturned && student.status === "نشط" && storedDismissed.has(student.id));
+  for (const group of chunks(bonusReturned, 500)) {
+    await client.studentNote.createMany({ data: group.map(student => ({
+      studentId: student.id,
+      kind: "إجراء",
+      text: `رجع الطالب تلقائياً: «${BONUS_OPPORTUNITY_ACTION}» حسبت قبل الامتحان اللي فصله، فما وصل للصفر. الرصيد المحسوب: ${student.opportunities}.`,
+      date: new Date(),
+    })) });
+  }
   // Explicit leave/exam edits may remove only a proved obsolete exam dismissal.
   // Neither creates a grant nor promotes dismissed pending grades.
   return persistAcademicRecalculation(
@@ -1057,6 +1072,40 @@ export async function recalculateStudentsAcademicState(
     preservedHistory,
     state.opportunityLogs,
   );
+}
+
+/** A score entered for a dismissed student is held as a smart note, except
+ * when this exam's pass completes a «فرصة مكافأة» that keeps the student
+ * above zero at the exam that dismissed them. Read-only: replays the stored
+ * state with the attempted score and reports whether the student returns. */
+export async function bonusReturnsDismissedStudent(
+  client: PrismaClientLike,
+  studentId: string,
+  examId: string,
+  score: number,
+): Promise<boolean> {
+  const state = await loadAcademicStateForStudents(client, [studentId]);
+  const stored = state.students.find((student) => student.id === studentId);
+  if (!stored || stored.status !== "مفصول") return false;
+  const now = new Date().toISOString();
+  const existing = state.grades.find((grade) => grade.studentId === studentId && grade.examId === examId);
+  const attempted = {
+    id: existing?.id || `bonus-what-if-${studentId}-${examId}`,
+    studentId,
+    examId,
+    status: "درجة" as const,
+    score,
+    notes: existing?.notes ?? null,
+    academicEffectExcluded: false,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+  };
+  const result = recalculateAcademicState({
+    ...state,
+    grades: [...state.grades.filter((grade) => grade !== existing), attempted],
+  }, new Set([studentId]));
+  const replayed = result.students.find((student) => student.id === studentId);
+  return Boolean(replayed?.bonusAutoReturned && replayed.status === "نشط");
 }
 
 /** Pure multi-student preview used by guarded maintenance routes. It reads the

@@ -1,5 +1,6 @@
 "use client";
 
+import { isBonusOpportunityLog } from "@/lib/bonus-opportunity";
 import React, {
   useCallback,
   useEffect,
@@ -796,6 +797,7 @@ export function GradeEntryView() {
     for (const log of entryOpportunityLogsSource) {
       if (
         log.examId === selectedExamId &&
+        !isBonusOpportunityLog(log) &&
         (log.action === "خصم تلقائي" ||
           log.action === "فصل تلقائي" ||
           String(log.reason || "").startsWith("تلقائي:"))

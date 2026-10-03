@@ -291,6 +291,7 @@ export function summarizeStudentProfileActivity(input: {
     const action = String(log.action || "").trim();
     return (
       action === "إضافة" ||
+      action === "فرصة مكافأة" || // BONUS_OPPORTUNITY_ACTION (pure module: no TS imports)
       action === "إعادة تعيين" ||
       action === "رصيد بعد تعهد" ||
       action === "رصيد إعادة التفعيل"

@@ -70,7 +70,7 @@ const { persistAcademicStudentResults } = require('../src/lib/academic-student-w
     assert.equal(await transact(() => persistAcademicStudentResults(client, results)), 2102);
     assert.equal(statements.length, Math.ceil(results.length / 500), '2102 students require only five database statements');
     for (const statement of statements) {
-      assert.ok(statement.values.length <= 500 * 4, 'each statement is bounded to 500 student rows');
+      assert.ok(statement.values.length <= 500 * 7, 'each statement is bounded to 500 student rows');
       assert.ok(!statement.text.includes(maliciousId), 'student IDs are parameters, never SQL text');
     }
 
@@ -103,6 +103,17 @@ const { persistAcademicStudentResults } = require('../src/lib/academic-student-w
     assert.equal((await pg.query('SELECT opportunities FROM "Student" WHERE id=$1', ['s1'])).rows[0].opportunities, 2);
     assert.equal(await transact(() => persistAcademicStudentResults(client, [{ ...duplicateResult, opportunities: -2 }])), 1);
     assert.equal((await pg.query('SELECT opportunities FROM "Student" WHERE id=$1', ['s1'])).rows[0].opportunities, 0);
+
+    // «فرصة مكافأة» progress: written only by a replay that computed it.
+    const bonusRow = async () => (await pg.query('SELECT "bonusProgress", "bonusWaitingExamName" FROM "Student" WHERE id=$1', ['s1'])).rows[0];
+    await transact(() => persistAcademicStudentResults(client, [{ ...duplicateResult, opportunities: 0, bonusProgress: 2, bonusWaitingExamName: 'امتحان 3' }]));
+    assert.deepEqual(await bonusRow(), { bonusProgress: 2, bonusWaitingExamName: 'امتحان 3' });
+    await transact(() => persistAcademicStudentResults(client, [{ ...duplicateResult, opportunities: 0 }]));
+    assert.deepEqual(await bonusRow(), { bonusProgress: 2, bonusWaitingExamName: 'امتحان 3' }, 'a student the engine did not replay keeps its progress');
+    await transact(() => persistAcademicStudentResults(client, [{ ...duplicateResult, opportunities: 0, bonusProgress: 1, bonusWaitingExamName: 'امتحان 3' }]));
+    assert.deepEqual(await bonusRow(), { bonusProgress: 1, bonusWaitingExamName: null }, 'a waiting exam is stored only while the bonus is held');
+    await transact(() => persistAcademicStudentResults(client, [{ ...duplicateResult, opportunities: 0, bonusProgress: 0 }]));
+    assert.deepEqual(await bonusRow(), { bonusProgress: 0, bonusWaitingExamName: null });
 
     const beforeFailure = await snapshot();
     statements.length = 0;

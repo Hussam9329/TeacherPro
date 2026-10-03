@@ -6,6 +6,7 @@ import { getStudentFilterLocationAliases } from "@/lib/student-list-filters";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 import { buildStudentRegistryIssueWhere } from "@/lib/student-registry-issue-server";
+import { BONUS_EARNED_WHERE, BONUS_ON_THE_WAY_WHERE } from "@/lib/opportunity-filters-server";
 
 const BAGHDAD_SITES = ["المنصور", "البنوك", "زيونة"] as const;
 
@@ -173,6 +174,8 @@ export async function buildStudentRegistryWhere(
     and.push({ status: "نشط", opportunities: { gt: 0 } });
   else if (opportunityStatus === "no-opportunities")
     and.push({ status: "نشط", opportunities: 0 });
+  else if (opportunityStatus === "bonus-on-the-way") and.push(BONUS_ON_THE_WAY_WHERE);
+  else if (opportunityStatus === "bonus-earned") and.push(BONUS_EARNED_WHERE);
 
   if (opportunityCount !== "") {
     const count = Number(opportunityCount);

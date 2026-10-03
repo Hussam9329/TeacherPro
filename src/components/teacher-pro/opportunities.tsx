@@ -52,6 +52,7 @@ import {
   displayOpportunityReason,
 } from "@/lib/retired-followup-compat";
 import { displayReasonText } from "@/lib/reason-display";
+import { bonusProgressLabel, isOpportunityCreditAction } from "@/lib/bonus-opportunity";
 
 const opportunityExportColumns: ExportColumn<any>[] = [
   { key: "student", label: "الطالب", value: (s) => s.name || "", defaultSelected: true },
@@ -76,6 +77,8 @@ const opportunityExportColumns: ExportColumn<any>[] = [
 ];
 
 type OpportunityStudent = Student & {
+  bonusProgress?: number | null;
+  bonusWaitingExamName?: string | null;
   hasActiveChapter?: boolean;
   activeChapterConflictCount?: number;
   activeChapter?: { id: string; name: string; opportunities: number } | null;
@@ -157,6 +160,8 @@ export function OpportunitiesView() {
         "dismissed",
         "has-opportunities",
         "no-opportunities",
+        "bonus-on-the-way",
+        "bonus-earned",
       ].includes(status)
     ) {
       setFilterStatus(status);
@@ -388,6 +393,8 @@ export function OpportunitiesView() {
           dismissed: "طلاب مفصولون",
           "has-opportunities": "نشط ولديه فرص",
           "no-opportunities": "نشط بدون فرص",
+          "bonus-on-the-way": "بالطريق لفرصة مكافأة",
+          "bonus-earned": "حصلوا على فرصة مكافأة",
         } as Record<string, string>
       )[filterStatus] || "حالة مخصصة"
     : "كل الحالات";
@@ -429,11 +436,7 @@ export function OpportunitiesView() {
       (acc, log) => {
         if (log.action === "خصم" || log.action === "خصم تلقائي")
           acc.deducted += Number(log.appliedAmount ?? log.amount) || 0;
-        if (
-          log.action === "إضافة" ||
-          log.action === "رصيد بعد تعهد" ||
-          log.action === "رصيد إعادة التفعيل"
-        )
+        if (isOpportunityCreditAction(log.action))
           acc.added += Number(log.amount) || 0;
         if (log.examId) acc.examLinked += 1;
         return acc;
@@ -945,6 +948,8 @@ export function OpportunitiesView() {
           { key: "has-opportunities", label: "نشط ولديه فرص", tone: "success", count: statusCounts?.hasOpportunities ?? null },
           { key: "no-opportunities", label: "نشط بدون فرص", tone: "warning", count: statusCounts?.noOpportunities ?? null },
           { key: "dismissed", label: "مفصولون", tone: "danger", count: statusCounts?.dismissed ?? null },
+          { key: "bonus-on-the-way", label: "بالطريق لفرصة مكافأة", tone: "info", count: statusCounts?.bonusOnTheWay ?? null },
+          { key: "bonus-earned", label: "حصلوا على فرصة مكافأة", tone: "success", count: statusCounts?.bonusEarned ?? null },
         ]}
         chipsLabel="حالة الطالب"
         activeChip={filterStatus === "active" ? "" : filterStatus}
@@ -1070,6 +1075,11 @@ export function OpportunitiesView() {
                       </span>
                       {dismissed && student.dismissalReason ? (
                         <span className="tp-rcard__line">فُصل: {displayReasonText(student.dismissalReason)}</span>
+                      ) : null}
+                      {!dismissed && bonusProgressLabel(student.bonusProgress, student.bonusWaitingExamName) ? (
+                        <span className="tp-rcard__line" data-bonus-progress={student.bonusProgress}>
+                          {bonusProgressLabel(student.bonusProgress, student.bonusWaitingExamName)}
+                        </span>
                       ) : null}
                       {!hasChapter ? (
                         <span className="tp-rcard__line">لم يتم اختيار الفصل لهم بعد؛ كل الإجراءات مقفلة.</span>
@@ -1205,7 +1215,7 @@ export function OpportunitiesView() {
                         variant={
                           log.action === "خصم"
                             ? "destructive"
-                            : log.action === "إضافة"
+                            : isOpportunityCreditAction(log.action)
                               ? "default"
                               : "secondary"
                         }
@@ -1307,7 +1317,7 @@ export function OpportunitiesView() {
                             variant={
                               log.action === "خصم"
                                 ? "destructive"
-                                : log.action === "إضافة"
+                                : isOpportunityCreditAction(log.action)
                                   ? "default"
                                   : "secondary"
                             }

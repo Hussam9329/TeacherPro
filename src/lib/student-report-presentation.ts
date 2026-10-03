@@ -3,6 +3,7 @@ import { isExamOnOrAfterStudentRegistration } from "./exam-utils";
 import { examResultTimelineDate } from "./academic-event-order";
 import type { AcademicOpportunityCommandEffect } from "./academic-types";
 import { baghdadDateKey } from "./baghdad-time";
+import { BONUS_OPPORTUNITY_ACTION, isBonusOpportunityLog } from "./bonus-opportunity";
 
 /** An exam held while the student was dismissed, with nothing recorded for it. */
 export const DISMISSED_NO_GRADE_TEXT = "الطالب مفصول - بلا درجة";
@@ -380,7 +381,7 @@ export function buildReportOpportunityContext(
   return { settlement, balanceNotes };
 }
 
-export type ReportMovementKind = "add" | "deduct" | "reset" | "chapter-start" | "confirm-balance" | "return-balance" | "return" | "dismiss" | "other";
+export type ReportMovementKind = "add" | "bonus" | "deduct" | "reset" | "chapter-start" | "confirm-balance" | "return-balance" | "return" | "dismiss" | "other";
 type Movement = {
   action: string; amount: number; reason?: string | null;
   appliedAmount?: number | null; balanceBefore?: number | null; balanceAfter?: number | null;
@@ -392,6 +393,7 @@ export function presentOpportunityMovement(log: Movement) {
   const rawReason = log.reason || "";
   const kind: ReportMovementKind = log.movementKind || (
     action === "إضافة" ? "add" :
+    action === BONUS_OPPORTUNITY_ACTION ? "bonus" :
     action === "خصم" || action === "خصم تلقائي" ? "deduct" :
     action === "رصيد بعد تعهد" || action === "رصيد إعادة التفعيل" ? "return-balance" :
     action === "إعادة تفعيل" ? "return" :
@@ -399,7 +401,7 @@ export function presentOpportunityMovement(log: Movement) {
     action === "إعادة تعيين" ? (/حماية P\d+|دون تغيير بتوجيه المالك/.test(rawReason) ? "confirm-balance" : /انتقال|تحويل فصل/.test(rawReason) ? "chapter-start" : "reset") : "other"
   );
   const labels: Record<ReportMovementKind, string> = {
-    add: "إضافة فرص", deduct: "خصم فرص", reset: "رصيد جديد",
+    add: "إضافة فرص", bonus: BONUS_OPPORTUNITY_ACTION, deduct: "خصم فرص", reset: "رصيد جديد",
     "chapter-start": "بداية رصيد الفصل", "return-balance": "رصيد العودة للدراسة",
     "confirm-balance": "تأكيد الرصيد",
     return: "العودة للدراسة", dismiss: "فصل من الدراسة", other: "تحديث مسجّل",
@@ -429,8 +431,8 @@ export function presentOpportunityMovement(log: Movement) {
   if (!reason) reason = "لم يُسجّل سبب إضافي لهذه الحركة.";
 
   let effectText = "لا يوجد تغيير في عدد الفرص مسجّل لهذه الحركة";
-  if (kind === "add" || kind === "deduct") {
-    effectText = amount === null ? "عدد الفرص غير مسجّل" : amount === 0 ? "لم يتغيّر عدد الفرص" : `${kind === "add" ? "إضافة" : "خصم"} ${amount}`;
+  if (kind === "add" || kind === "bonus" || kind === "deduct") {
+    effectText = amount === null ? "عدد الفرص غير مسجّل" : amount === 0 ? "لم يتغيّر عدد الفرص" : `${kind === "deduct" ? "خصم" : "إضافة"} ${amount}`;
   } else if (kind === "confirm-balance") {
     const balance = after ?? reportNumber(log.amount);
     effectText = balance === null ? "لم يتغيّر الرصيد" : `بقي الرصيد ${balance}`;
@@ -492,6 +494,13 @@ export function reportGradePresentation(grade: Record<string, unknown>, exam: Re
       ? deductionText ? `${deductionText} و${dismissalText}` : dismissalText
       : deductionText,
     tone: dismissed ? "dismissed" : "deducted",
+  };
+  // The second of two consecutive passes carries the «فرصة مكافأة» it earned.
+  if (effectiveLogs.some(isBonusOpportunityLog)) return {
+    text: context?.audience === "staff"
+      ? `رجعت للطالب ${BONUS_OPPORTUNITY_ACTION} (+1)`
+      : `رجعت لك ${BONUS_OPPORTUNITY_ACTION} (+1)`,
+    tone: "ordinary",
   };
   const gracePeriod = findStudentGracePeriod(context?.gracePeriods, exam?.date as string | Date | null | undefined);
   const withoutPenalty = (text: string): ReportGradePresentation => ({

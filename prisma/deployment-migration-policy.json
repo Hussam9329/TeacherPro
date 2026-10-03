@@ -274,5 +274,9 @@
   "20261003150000_archived_students_hold_no_opportunities": {
     "kind": "expand",
     "checksum": "4dc48956792f097af7fd7d80910787eb452a4e88a3ee750c6d8dd9449f1adc65"
+  },
+  "20261003180000_bonus_opportunity_progress": {
+    "kind": "expand",
+    "checksum": "7a01d632949c6ca4dbab0d990126bade2a8e5902c9e41c55240d59c57da9b11f"
   }
 }
