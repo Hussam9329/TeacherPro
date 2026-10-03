@@ -18,6 +18,11 @@ import {
   isGradeSmartNoteStatus,
 } from "@/lib/grade-smart-notes-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
+import {
+  archivedStudentLockedResponse,
+  assertStudentsNotArchived,
+  isArchivedStudentError,
+} from "@/lib/archived-student-guard";
 
 type SmartNoteWithResolution = Prisma.GradeSmartNoteGetPayload<{
   include: { resolutionGrade: { select: { id: true } } };
@@ -191,6 +196,11 @@ async function updateSmartNote(req: NextRequest) {
     }
 
     const note = await db.$transaction(async (tx) => {
+      const target = await tx.gradeSmartNote.findUnique({
+        where: { id },
+        select: { studentId: true },
+      });
+      await assertStudentsNotArchived(tx, [target?.studentId]);
       const changed = await tx.gradeSmartNote.updateMany({
         where: { id, updatedAt: expectedDate },
         data: {
@@ -230,6 +240,7 @@ async function updateSmartNote(req: NextRequest) {
     );
     return NextResponse.json({ note: serializeSmartNote(note) });
   } catch (error) {
+    if (isArchivedStudentError(error)) return archivedStudentLockedResponse();
     return routeErrorResponse(
       error,
       "تعذر تحديث ملاحظة الدرجة الذكية حالياً.",

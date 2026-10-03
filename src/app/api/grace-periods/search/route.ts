@@ -26,8 +26,9 @@ export async function GET(req: NextRequest) {
     const query = String(new URL(req.url).searchParams.get("q") || "").trim();
     if (query.length < 2) return NextResponse.json({ students: [] });
     const where = buildStudentRegistrySearchWhere(query);
+    // Archived students are hidden from the search.
     const students = await withDatabaseSchema(() => db.student.findMany({
-      where: where || undefined,
+      where: { AND: [where || {}, { status: { not: "مؤرشف" } }] },
       select: {
         id: true,
         name: true,

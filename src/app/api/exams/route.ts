@@ -628,10 +628,15 @@ export async function PUT(req: NextRequest) {
                     >= (evidence.date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Baghdad')::date
               )
           `;
+          // An archived student's history is frozen and keeps the old name.
           await tx.$executeRaw`
             UPDATE "OpportunityLog"
             SET reason = replace(reason, ${oldName}, ${newName})
             WHERE "examId" = ${exam.id} AND strpos(reason, ${oldName}) > 0
+              AND NOT EXISTS (
+                SELECT 1 FROM "Student" AS archived
+                WHERE archived.id = "OpportunityLog"."studentId" AND archived.status = 'مؤرشف'
+              )
           `;
         }
       }
@@ -642,7 +647,7 @@ export async function PUT(req: NextRequest) {
         // administrative leave date instead of rewriting it blindly.
         const oldExamDay = baghdadDateKey(existingExam.date);
         const examLeaves = await tx.studentLeave.findMany({
-          where: { examId: exam.id, leaveType: 'exam' },
+          where: { examId: exam.id, leaveType: 'exam', student: { status: { not: 'مؤرشف' } } },
           select: { id: true, date: true, dateFrom: true, dateTo: true },
         });
         for (const leave of examLeaves) {
@@ -674,7 +679,7 @@ export async function PUT(req: NextRequest) {
       }
       if (protectedScopeChanged) {
         const examGradeStudents = await tx.grade.findMany({
-          where: { examId: exam.id },
+          where: { examId: exam.id, student: { status: { not: 'مؤرشف' } } },
           distinct: ['studentId'],
           select: { studentId: true },
         });

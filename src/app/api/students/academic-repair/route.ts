@@ -153,7 +153,7 @@ export async function PATCH(req: NextRequest) {
       let enabledEffectGrades = 0;
       if (effectExamIds.length) {
         const grades = await db.grade.findMany({
-          where: { examId: { in: effectExamIds }, status: "غائب" },
+          where: { examId: { in: effectExamIds }, status: "غائب", student: { status: { not: "مؤرشف" } } },
           select: { id: true, notes: true },
         });
         for (const grade of grades) {

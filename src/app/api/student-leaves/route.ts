@@ -25,6 +25,11 @@ import {
 } from "@/lib/exam-utils";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import {
+  archivedStudentLockedResponse,
+  assertStudentsNotArchived,
+  isArchivedStudentError,
+} from "@/lib/archived-student-guard";
 import { rejectPendingLeaveNotesForExams } from "@/lib/student-leave-grade-override-server";
 import { studentLeaveListWhere } from "@/lib/student-leave-query-server";
 
@@ -749,6 +754,8 @@ export async function PUT(req: NextRequest) {
             },
           });
           if (!existingLeave) throw new Error("الإجازة المطلوبة غير موجودة");
+          // A leave of an archived student stays as it is, and is never moved off them.
+          await assertStudentsNotArchived(tx, [existingLeave.studentId]);
 
           const previousData = normalizeStoredLeave(existingLeave);
           const nextData = mergeLeavePayload(existingLeave, body);
@@ -922,6 +929,7 @@ export async function PUT(req: NextRequest) {
     });
     return NextResponse.json(result);
   } catch (error) {
+    if (isArchivedStudentError(error)) return archivedStudentLockedResponse();
     // Q65/Q68/Q69 FIX: validation errors should return 400, not 500.
     const message = error instanceof Error ? error.message : String(error);
     if (
@@ -957,6 +965,7 @@ export async function DELETE(req: NextRequest) {
             where: { id },
           });
           if (!existingLeave) throw new Error("الإجازة المطلوبة غير موجودة");
+          await assertStudentsNotArchived(tx, [existingLeave.studentId]);
           const skippedGradeRestores = emptySkippedGradeRestoreSummary();
           const restoredGrades = await restoreGradesForLeave(
             tx,
@@ -1009,6 +1018,7 @@ export async function DELETE(req: NextRequest) {
       academicRecalculation: result.academicRecalculation,
     });
   } catch (error) {
+    if (isArchivedStudentError(error)) return archivedStudentLockedResponse();
     // حذف إجازة غير موجودة يجب أن يظهر للمستخدم كرسالة واضحة 400/404، لا كخطأ 500.
     const message = error instanceof Error ? error.message : String(error);
     if (message.includes("الإجازة المطلوبة غير موجودة")) {

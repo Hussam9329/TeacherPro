@@ -29,7 +29,7 @@ const profile = read("src/components/teacher-pro/student-profile-dialog.tsx");
 const bulkImport = read("src/components/teacher-pro/student-bulk-text-import.tsx");
 
 check(
-  snapshot.includes("const current = opportunityNumber(student.opportunities)") &&
+  snapshot.includes("const current = archived ? 0 : opportunityNumber(student.opportunities)") &&
     snapshot.includes("const opportunityLimit = activeChapter?.opportunities ?? null") &&
     !snapshot.includes("activeChapter?.opportunities || student.baseOpportunities"),
   "الرصيد الحالي مصدره Student.opportunities والسقف مصدره الفصل النشط فقط",

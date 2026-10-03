@@ -30,7 +30,7 @@ function adapter(sql) {
   return {
     $queryRaw: async (strings, ...params) => {
       const query = strings.reduce((text, part, index) => text + part + (index < params.length ? `$${index + 1}` : ''), '');
-      assert.match(query, /SELECT "id", "courseId" FROM "Student" .* FOR UPDATE/s);
+      assert.match(query, /SELECT "id", "courseId", "status" FROM "Student" .* FOR UPDATE/s);
       return (await sql.query(query, params)).rows;
     },
     examCourse: { findFirst: ({ where }) => one('SELECT id FROM "ExamCourse" WHERE "examId"=$1 AND "courseId"=$2', [where.examId, where.courseId]) },
@@ -70,13 +70,14 @@ function adapter(sql) {
     );
     CREATE UNIQUE INDEX ON "StudentCall" ("studentId",coalesce("examId",''),category);
     CREATE TABLE "AuditLog" (id serial PRIMARY KEY,module text,action text,details text,"userId" text,"userName" text);
-    INSERT INTO "Student" VALUES ('student','مفصول',0,'course'),('untouched','نشط',2,'course');
+    INSERT INTO "Student" VALUES ('student','مفصول',0,'course'),('untouched','نشط',2,'course'),('archived','مؤرشف',0,'course');
     INSERT INTO "Exam" VALUES ('exam-a'),('exam-b'),('exam-other');
     INSERT INTO "ExamCourse" VALUES ('ec-a','exam-a','course'),('ec-b','exam-b','course'),('ec-other','exam-other','other-course');
     INSERT INTO "Grade" VALUES ('grade','student',7);
     INSERT INTO "StudentCall" (id,"studentId","examId",category,notes,status,completed)
       VALUES ('general','student',NULL,'${CATEGORY}','ملاحظة عامة محفوظة','',false),
-             ('contact','student','exam-a','legacy-grade-key','تاريخ المكالمة','لم يرد',false);
+             ('contact','student','exam-a','legacy-grade-key','تاريخ المكالمة','لم يرد',false),
+             ('archived-note','archived','exam-a','${CATEGORY}','ملاحظة قبل الأرشفة','',false);
   `);
   const snapshot = async (table) => (await pg.query(`SELECT row_to_json(t) AS row FROM "${table}" t ORDER BY id`)).rows.map(({ row }) => row);
   const studentsBefore = await snapshot('Student');
@@ -157,6 +158,16 @@ function adapter(sql) {
   await assert.rejects(save('نسخة قديمة قبل الحذف', 1, 'exam-a', created.id), (error) => error.status === 409 && error.studentCall?.id === recreated.id);
   assert.equal((await note(recreated.id)).notes, 'ملاحظة جديدة بعد الحذف');
   assert.equal((await note(otherExam.id)).notes, 'ملاحظة الامتحان الثاني');
+  // An archived student is frozen: no note is added, edited, cleared or completed.
+  const archivedNoteBefore = await note('archived-note');
+  await assert.rejects(
+    run((tx) => upsertExamCallNote(tx, actor, { studentId: 'archived', examId: 'exam-b', notes: 'ملاحظة جديدة', expectedRevision: 0, expectedNoteId: null })),
+    (error) => error.status === 409 && /مؤرشف/.test(error.message),
+  );
+  await assert.rejects(run((tx) => editCallNote(tx, actor, { id: 'archived-note', notes: '', expectedRevision: 0 })), /مؤرشف/);
+  await assert.rejects(resolve('archived-note', 0), /مؤرشف/);
+  assert.deepEqual(await note('archived-note'), archivedNoteBefore);
+  assert.equal((await pg.query(`SELECT count(*)::int AS n FROM "StudentCall" WHERE "studentId"='archived'`)).rows[0].n, 1);
   assert.deepEqual(await snapshot('Student'), studentsBefore);
   assert.deepEqual(await snapshot('Grade'), gradesBefore);
   assert.deepEqual(await note('contact'), contactBefore);
@@ -164,5 +175,5 @@ function adapter(sql) {
   assert(audits.every((row) => row.userId === actor.id && row.userName === actor.name));
   assert(audits.every((row) => JSON.parse(row.details).source === 'call-note-management'));
   await pg.close();
-  console.log('Shared call-note PostgreSQL behavior passed: exam isolation, legacy preservation, revision conflicts, completion, idempotence, rollback, concurrent edits, durable audit, unchanged grades and balances.');
+  console.log('Shared call-note PostgreSQL behavior passed: exam isolation, legacy preservation, revision conflicts, completion, idempotence, rollback, concurrent edits, durable audit, unchanged grades and balances, and a frozen archived student.');
 })().catch((error) => { console.error(error); process.exitCode = 1; });

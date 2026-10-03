@@ -38,6 +38,8 @@ export async function repairPreRegistrationAbsencesForStudents(
       studentId: { in: requestedStudentIds },
       ...(options.examIds ? { examId: { in: uniqueIds(options.examIds) } } : {}),
       status: "غائب",
+      // An archived student's grades are frozen; no repair rewrites them.
+      student: { status: { not: "مؤرشف" } },
     },
     select: {
       id: true,
