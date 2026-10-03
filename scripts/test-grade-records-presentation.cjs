@@ -66,3 +66,16 @@ test('pass threshold boundary uses the actual academic score', () => {
   assert.equal(result({ status: 'درجة', score: 49 }, exam).label, 'راسب');
   assert.equal(result({ status: 'درجة', score: 20 }, { fullMark: 50 }).label, 'درجة مسجّلة');
 });
+
+test('a score typed during a dismissal and kept after the return is shown for the record only', () => {
+  const kept = {
+    status: 'درجة', score: 40, academicEffectExcluded: true,
+    academicEffectExclusionSource: 'GradeSmartNote:DISMISSED_PENDING:note-1',
+  };
+  assert.deepEqual(result(kept, exam), {
+    scoreText: '40/100 (الامتحان اثناء فصل الطالب)', label: '', tone: 'neutral', numeric: true,
+  });
+  // Other exclusions keep their ordinary result.
+  const otherExclusion = { ...kept, academicEffectExclusionSource: 'StudentLeave:1' };
+  assert.equal(result(otherExclusion, exam).label, 'راسب');
+});
