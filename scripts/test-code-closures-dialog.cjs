@@ -150,7 +150,7 @@ function harness() {
     './tp-modal.css': {},
     './code-closures-dialog.css': {},
     'react/jsx-runtime': { jsx, jsxs: jsx },
-    'lucide-react': named(['AlertCircle', 'BookOpen', 'CalendarDays', 'CheckCheck', 'ChevronDown', 'LockKeyhole', 'Loader2', 'MessageCircle', 'Radiation', 'RefreshCw', 'Search', 'UserRound', 'X']),
+    'lucide-react': named(['AlertCircle', 'BookOpen', 'CalendarDays', 'CheckCheck', 'ChevronDown', 'LockKeyhole', 'Loader2', 'MessageCircle', 'Radiation', 'RefreshCw', 'Search', 'SlidersHorizontal', 'UserRound', 'X']),
     '@/components/ui/button': named(['Button']),
     '@/components/ui/checkbox': named(['Checkbox']),
     '@/components/ui/dialog': named(['Dialog', 'DialogContent', 'DialogHeader', 'DialogTitle']),
@@ -163,6 +163,7 @@ function harness() {
     '@/lib/user-toast': { toast: { error: (error) => errors.push(error), success: (message) => successes.push(message) } },
     '@/lib/validation': validationContext.exports,
     './student-registry-helpers': registryHelpers,
+    './ui-kit': named(['EmptyState', 'LoadingState']),
     '@/lib/baghdad-time': loadHelper('@/lib/baghdad-time'),
     '@/lib/format': loadHelper('@/lib/format'),
     '@/lib/reason-display': loadHelper('@/lib/reason-display'),
@@ -260,10 +261,17 @@ const response = (students) => ({
 const snapshot = (value, checked) => ({
   id: value.id, status: value.status, dismissedChecked: checked, dismissedCheckEpoch: value.dismissedCheckEpoch,
 });
-function filter(view, label) {
-  const button = view.nodes('Button').find((node) => node.props['aria-label'] === label);
-  assert(button, `Missing ${label} status filter`);
-  button.props.onClick();
+// The status filters are Arabic pill buttons (الكل / بانتظار الإغلاق / مغلقة) marked by key.
+const FILTER_KEYS = { All: 'all', Checked: 'checked', unChecked: 'unchecked' };
+const FILTER_LABELS = { all: 'الكل', checked: 'مغلقة', unchecked: 'بانتظار الإغلاق' };
+function filterButton(view, name) {
+  const key = FILTER_KEYS[name];
+  const button = view.nodes('button').find((node) => node.props['data-closure-filter'] === key);
+  assert(button, `Missing ${name} status filter`);
+  return button;
+}
+function filter(view, name) {
+  filterButton(view, name).props.onClick();
   view.render();
 }
 function checkedValues(view) {
@@ -274,6 +282,13 @@ function setSearch(view, value) {
   view.render();
 }
 function selectCourse(view, value) {
+  // The course filter waits behind «تصفية», like the other management windows.
+  if (!view.nodes('select').length) {
+    const toggle = view.nodes('Button').find((node) => JSON.stringify(node.props.children).includes('تصفية'));
+    assert(toggle, 'Missing «تصفية» toggle');
+    toggle.props.onClick();
+    view.render();
+  }
   view.nodes('select')[0].props.onChange({ target: { value } });
   view.render();
 }
@@ -325,7 +340,12 @@ function selectCourse(view, value) {
   selectCourse(view, 'course2');
   assert.equal(view.nodes('Checkbox').length, 1);
   assert(view.text().includes('المعروض 1 من 1 طالب مفصول'));
-  const courseCount = (label) => view.nodes('Button').find((node) => node.props['aria-label'] === label).props.children[1].props.children;
+  const courseCount = (name) => {
+    const children = filterButton(view, name).props.children;
+    const label = children.find((child) => child?.props?.className === 'tp-modal__filter-label').props.children;
+    assert.equal(label, FILTER_LABELS[FILTER_KEYS[name]], 'filters are labelled in Arabic only');
+    return children.find((child) => child?.props?.className === 'tp-modal__filter-count').props.children;
+  };
   assert.equal(courseCount('All'), 1);
   assert.equal(courseCount('Checked'), 0);
   assert.equal(courseCount('unChecked'), 1);

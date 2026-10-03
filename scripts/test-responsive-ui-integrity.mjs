@@ -161,7 +161,7 @@ includesAll(layout, [
 pass(/<button[\s\S]*?tp-sidebar-overlay/.test(layout), "TeacherPro layout: mobile drawer overlay must be an accessible button");
 
 // Full-screen and floating interfaces use dynamic viewport units rather than brittle screen classes.
-includesAll(courses, ["CourseEditorDialog", 'className="tp-course-editor sm:max-w-3xl"'], "Course dialog uses the shared responsive primitive");
+includesAll(courses, ["CourseEditorDialog", 'className="tp-form-dialog tp-course-editor sm:max-w-3xl"'], "Course dialog uses the shared responsive primitive");
 includesAll(profileDialog, ["h-dvh", "w-dvw", "tp-student-profile__header"], "Student profile dialog");
 const profileCss = globals.slice(globals.indexOf("/* Student profile layout contract"), globals.indexOf("/* Grade-entry page contract"));
 includesAll(profileCss, ["env(safe-area-inset-top)", "env(safe-area-inset-bottom)"], "Student profile safe areas");

@@ -54,6 +54,7 @@ import { baghdadDateKey, formatBaghdadDateTime } from "@/lib/baghdad-time";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
 import { describeTelegramHandle } from "./student-registry-helpers";
+import { EmptyState } from "./ui-kit";
 import "./tp-modal.css";
 import "./grace-periods-dialog.css";
 
@@ -574,14 +575,8 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                 )}
               </section>
 
-              <section className="tp-modal__section" aria-labelledby="tp-grace-list">
-                <div className="tp-modal__section-head">
-                  <h3 id="tp-grace-list" className="tp-modal__title">
-                    {listQuery ? "فترات السماح للطلاب المطابقين للبحث" : "فترات السماح"}
-                  </h3>
-                  <span className="tp-modal__muted">من الأحدث إلى الأقدم</span>
-                </div>
-                <div role="group" aria-label="تصفية فترات السماح" className="tp-modal__filters">
+              <section className="tp-modal__section" aria-label={listQuery ? "فترات السماح للطلاب المطابقين للبحث" : "فترات السماح"}>
+                <div role="group" aria-label="تصفية فترات السماح" className="tp-modal__chips">
                   {GRACE_PERIOD_LIST_FILTERS.map((option) => (
                     <button
                       key={option.value}
@@ -598,6 +593,13 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                     </button>
                   ))}
                 </div>
+                <div className="tp-modal__toolbar">
+                  <span className="tp-modal__count" aria-live="polite">
+                    {list
+                      ? `المعروض ${list.periods.length} من ${list.counts.all} فترة${listQuery ? " للطلاب المطابقين للبحث" : ""} · من الأحدث إلى الأقدم`
+                      : "فترات السماح"}
+                  </span>
+                </div>
                 {listError && <p role="alert" className="tp-modal__error"><AlertCircle aria-hidden="true" />{listError}</p>}
                 {listLoading && !list && (
                   <p role="status" className="tp-modal__status">
@@ -605,13 +607,14 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                   </p>
                 )}
                 {list && list.periods.length === 0 && !listLoading && (
-                  <p className="tp-modal__empty-note">
-                    {listFilter === "current"
+                  <EmptyState
+                    icon={CalendarClock}
+                    title={listFilter === "current"
                       ? "لا توجد فترات سماح مستمرة."
                       : listFilter === "past"
                         ? "لا توجد فترات سماح منتهية."
                         : "لا توجد فترات سماح."}
-                  </p>
+                  />
                 )}
                 {list && list.periods.length > 0 && (
                   <ul className="tp-grace-cards" aria-busy={listLoading}>
@@ -693,14 +696,16 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                     actions: renderPeriodActions(currentPeriod),
                   })
                 ) : (
-                  <div className="tp-grace__empty">
-                    <p>لا توجد فترة سماح حالية</p>
-                    {canManage && !editor && (
+                  <EmptyState
+                    compact
+                    icon={CalendarClock}
+                    title="لا توجد فترة سماح حالية"
+                    action={canManage && !editor ? (
                       <Button type="button" onClick={startCreate} disabled={busy || Boolean(lock)} title={lock?.hint}>
                         <CalendarPlus className="size-4" aria-hidden="true" />إضافة فترة سماح
                       </Button>
-                    )}
-                  </div>
+                    ) : null}
+                  />
                 )}
                 {currentPeriod && canManage && !editor && (
                   <Button type="button" variant="outline" size="sm" className="tp-grace__add-more" onClick={startCreate} disabled={busy || Boolean(lock)} title={lock?.hint}>
@@ -884,7 +889,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
               <section className="tp-modal__section" aria-labelledby="tp-grace-history">
                 <h3 id="tp-grace-history" className="tp-modal__title">الفترات السابقة</h3>
                 {historyPeriods.length === 0 ? (
-                  <p className="tp-modal__empty-note">لا توجد فترات سابقة.</p>
+                  <EmptyState compact icon={CalendarClock} title="لا توجد فترات سابقة." />
                 ) : (
                   <ul className="tp-grace__history">
                     {historyPeriods.map((period) => {

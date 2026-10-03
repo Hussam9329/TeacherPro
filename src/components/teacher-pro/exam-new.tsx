@@ -32,6 +32,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import "./exam-new.css";
+import { EmptyState, LoadingState } from "./ui-kit";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -569,15 +570,13 @@ export function ExamNewView() {
     return (
       <div className="tp-exam-new__course-picker">
         {contextLoading ? (
-          <div role="status" className="tp-exam-new__empty">
-            جاري تحميل الدورات…
-          </div>
+          <LoadingState title="جاري تحميل الدورات…" />
         ) : contextError ? (
           <div role="alert" className="tp-exam-new__validation">
             {contextError}
           </div>
         ) : contextRows.length === 0 ? (
-          <div className="tp-exam-new__empty">لا توجد دورات متاحة.</div>
+          <EmptyState compact icon={BookOpen} title="لا توجد دورات متاحة." />
         ) : (
           <>
             {selectableCourses.length > 0 ? (

@@ -45,8 +45,7 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -66,7 +65,8 @@ import {
   useTeacherProSyncKey,
 } from "@/hooks/use-teacherpro-sync";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
-import { BookOpen, Plus, Pencil, Pause, Play, Settings2, Trash2 } from "lucide-react";
+import { BookOpen, BookPlus, Plus, Pencil, Pause, Play, Settings2, SquarePen, Trash2 } from "lucide-react";
+import { FormDialogHero } from "./form-dialog";
 import { EmptyState } from "./ui-kit";
 import { ListToolbar } from "./list-toolbar";
 import { RowActionsMenu } from "./row-actions-menu";
@@ -206,12 +206,14 @@ function CourseEditorDialog({
   open,
   onOpenChange,
   onCloseFocus,
+  icon,
   title,
   children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCloseFocus: () => void;
+  icon: React.ComponentType<{ className?: string }>;
   title: string;
   children: React.ReactNode;
 }) {
@@ -223,12 +225,10 @@ function CourseEditorDialog({
           event.preventDefault();
           onCloseFocus();
         }}
-        className="tp-course-editor sm:max-w-3xl"
+        className="tp-form-dialog tp-course-editor sm:max-w-3xl"
       >
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
-        <div className="tp-course-editor__body">{children}</div>
+        <FormDialogHero icon={icon} title={title} />
+        <div className="tp-form-dialog__body tp-course-editor__body">{children}</div>
       </DialogContent>
     </Dialog>
   );
@@ -975,20 +975,18 @@ export function CoursesView() {
             event.preventDefault();
             courseDialogTrigger.current?.focus();
           }}
-          className="tp-course-settings-dialog sm:max-w-2xl"
+          className="tp-form-dialog tp-course-settings-dialog sm:max-w-2xl"
         >
-          <DialogHeader>
-            <DialogTitle>إعدادات الدورة</DialogTitle>
-            {settingsRow && (
-              <p className="text-sm text-muted-foreground">
-                {settingsRow.course.name} ·{" "}
-                {settingsRow.course.active ? "نشطة للتسجيل" : "موقوفة عن التسجيل"}
-              </p>
-            )}
-          </DialogHeader>
-          {settingsRow && renderCourseSettings(settingsRow)}
+          <FormDialogHero
+            icon={Settings2}
+            title="إعدادات الدورة"
+            description={settingsRow
+              ? `${settingsRow.course.name} · ${settingsRow.course.active ? "نشطة للتسجيل" : "موقوفة عن التسجيل"}`
+              : null}
+          />
+          {settingsRow && <div className="tp-form-dialog__body">{renderCourseSettings(settingsRow)}</div>}
           {settingsRow && (
-            <div className="tp-course-settings__footer">
+            <DialogFooter>
               <Button
                 type="button"
                 onClick={() => {
@@ -1000,7 +998,7 @@ export function CoursesView() {
                 <Pencil aria-hidden="true" />
                 تعديل إعدادات الدورة
               </Button>
-            </div>
+            </DialogFooter>
           )}
         </DialogContent>
       </Dialog>
@@ -1011,6 +1009,7 @@ export function CoursesView() {
         onOpenChange={(open) => {
           if (!isAddingCourse) setShowCreateForm(open);
         }}
+        icon={BookPlus}
         title="إضافة دورة جديدة"
       >
         <CourseBuilderForm
@@ -1029,6 +1028,7 @@ export function CoursesView() {
           if (!isSavingCourse && !isApplyingCourseSync)
             setEditDialog((prev) => ({ ...prev, open }));
         }}
+        icon={SquarePen}
         title="تعديل الدورة"
       >
         {editDialog.row && (

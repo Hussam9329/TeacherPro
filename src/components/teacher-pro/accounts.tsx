@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTeacherStore, PERMISSION_CATALOG, type PermissionEntry } from '@/lib/teacher-store';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -22,8 +21,11 @@ import {
   useTeacherProSyncKey,
 } from '@/hooks/use-teacherpro-sync';
 import { baghdadTodayKey } from '@/lib/baghdad-time';
-import { Lock, UserPlus } from 'lucide-react';
+import { Download, FileUp, KeyRound, Lock, RefreshCw, ShieldAlert, ShieldCheck, ShieldPlus, Trash2, UserCheck, UserPen, UserPlus, UserRoundSearch, UserX } from 'lucide-react';
 import { RowActionsMenu, type RowAction } from './row-actions-menu';
+import { FormDialogHero } from './form-dialog';
+import { ListToolbar, type ListChip } from './list-toolbar';
+import { EmptyState, LoadingState } from './ui-kit';
 import { validatePasswordPolicy } from '@/lib/password-policy';
 import { searchAny } from '@/lib/validation';
 import './tp-list.css';
@@ -60,6 +62,12 @@ const PERMISSION_CATEGORIES: string[] = [
 ];
 
 const PERMISSION_IDS = new Set(PERMISSION_CATALOG.map(permission => permission.id));
+const PERMISSION_LABELS = new Map(PERMISSION_CATALOG.map(permission => [permission.id, permission.label]));
+
+/** A permission by its Arabic name; the technical id only when it has none. */
+function permissionLabel(id: string): string {
+  return PERMISSION_LABELS.get(id) || id;
+}
 
 /** A sign-in code the server accepts: 10 characters, letters and digits. */
 function generatePasscode(): string {
@@ -87,10 +95,9 @@ function passwordProblem(password: string): string {
   return check.ok ? '' : check.reason;
 }
 
-const ACCOUNT_DIALOG_CONTENT_CLASS = 'flex max-h-[calc(100dvh-1rem)] max-w-3xl flex-col overflow-hidden p-0 sm:max-h-[calc(100dvh-2rem)]';
-const ACCOUNT_DIALOG_HEADER_CLASS = 'shrink-0 px-4 pb-3 pt-4 sm:px-6 sm:pt-6';
-const ACCOUNT_DIALOG_BODY_CLASS = 'min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto px-4 py-2 sm:px-6';
-const ACCOUNT_DIALOG_FOOTER_CLASS = 'shrink-0 border-t bg-background/95 px-4 py-4 sm:px-6';
+// The account windows: the system's dark header, a scrolling form, one footer.
+const ACCOUNT_DIALOG_CONTENT_CLASS = 'tp-form-dialog max-w-3xl';
+const ACCOUNT_DIALOG_BODY_CLASS = 'tp-form-dialog__body';
 
 const PERMISSION_LEVEL_LABELS: Record<PermissionEntry['level'], string> = {
   read: 'عرض',
@@ -319,74 +326,97 @@ const PAGE_PERMISSION_BLUEPRINT = [
   { page: 'تصفير الـ Log', view: 'logs.clear', manage: 'logs.restore' },
 ];
 
+/** 'accounts.users.add / edit / delete' → the three permission ids it names. */
+function blueprintPermissionIds(value: string): string[] {
+  const [first = '', ...rest] = value.split('/').map(part => part.trim()).filter(Boolean);
+  const base = first.slice(0, first.lastIndexOf('.') + 1);
+  return [first, ...rest.map(part => (part.includes('.') ? part : base + part))];
+}
+
+/** The technical ids, folded away: they matter only to whoever adds a feature. */
+function TechnicalIds({ ids }: { ids: string[] }) {
+  return (
+    <details className="tp-account-tech">
+      <summary>تفاصيل تقنية</summary>
+      <p dir="ltr">{ids.join(' · ')}</p>
+    </details>
+  );
+}
+
 function PermissionsArchitectureTab() {
   const grouped = getPermissionsByCategory(PERMISSION_CATALOG);
   const totalByLevel = PERMISSION_CATALOG.reduce<Record<string, number>>((acc, permission) => {
     acc[permission.level] = (acc[permission.level] || 0) + 1;
     return acc;
   }, {});
+  const counts = [
+    { label: 'إجمالي الصلاحيات', value: PERMISSION_CATALOG.length },
+    { label: 'عرض', value: totalByLevel.read || 0 },
+    { label: 'إضافة/تعديل', value: totalByLevel.write || 0 },
+    { label: 'إدارة/حذف', value: (totalByLevel.manage || 0) + (totalByLevel.delete || 0) },
+  ];
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">هيكلة الصلاحيات الذكية</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="rounded-xl bg-muted/30 p-3 text-xs leading-6 text-muted-foreground">
-            أي ميزة جديدة تنضاف لأي صفحة لازم تنضاف هنا داخل قائمة الصلاحيات مع معرّف صلاحية واضح، وتُربط بإجراء الصفحة في مخطط الربط.
-          </p>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">إجمالي الصلاحيات</p><p className="text-2xl font-black">{PERMISSION_CATALOG.length}</p></div>
-            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">عرض</p><p className="text-2xl font-black">{totalByLevel.read || 0}</p></div>
-            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">إضافة/تعديل</p><p className="text-2xl font-black">{totalByLevel.write || 0}</p></div>
-            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">إدارة/حذف</p><p className="text-2xl font-black">{(totalByLevel.manage || 0) + (totalByLevel.delete || 0)}</p></div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">ربط الصفحات والإجراءات</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {PAGE_PERMISSION_BLUEPRINT.map((item) => (
-            <div key={item.page} className="rounded-xl border bg-background p-3">
-              <p className="mb-2 font-semibold">{item.page}</p>
-              <div className="space-y-1 text-xs text-muted-foreground">
-                <p><span className="font-semibold text-foreground">عرض:</span> {item.view}</p>
-                <p><span className="font-semibold text-foreground">إجراء:</span> {item.manage}</p>
-              </div>
+    <div className="tp-list">
+      <section className="tp-rcard" aria-labelledby="permissions-architecture-title">
+        <h3 id="permissions-architecture-title" className="tp-rcard__name">هيكلة الصلاحيات الذكية</h3>
+        <p className="tp-rcard__line">
+          أي ميزة جديدة تنضاف لأي صفحة لازم تنضاف هنا داخل قائمة الصلاحيات مع معرّف صلاحية واضح، وتُربط بإجراء الصفحة في مخطط الربط.
+        </p>
+        <dl className="tp-account-stats" aria-label="عدد الصلاحيات حسب النوع">
+          {counts.map((count) => (
+            <div key={count.label}>
+              <dt>{count.label}</dt>
+              <dd>{count.value}</dd>
             </div>
           ))}
-        </CardContent>
-      </Card>
+        </dl>
+      </section>
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <section className="tp-rcard" aria-labelledby="permissions-blueprint-title">
+        <h3 id="permissions-blueprint-title" className="tp-rcard__name">ربط الصفحات والإجراءات</h3>
+        <ul className="tp-rcards" data-columns="2">
+          {PAGE_PERMISSION_BLUEPRINT.map((item) => {
+            const viewIds = blueprintPermissionIds(item.view);
+            const manageIds = blueprintPermissionIds(item.manage);
+            return (
+              <li key={item.page} className="tp-rcard__panel">
+                <span className="tp-rcard__title">{item.page}</span>
+                <span className="tp-rcard__line"><b>عرض:</b> {viewIds.map(permissionLabel).join('، ')}</span>
+                <span className="tp-rcard__line"><b>إجراء:</b> {manageIds.map(permissionLabel).join('، ')}</span>
+                <TechnicalIds ids={[...viewIds, ...manageIds]} />
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <ul className="tp-rcards" data-columns="2" aria-label="الصلاحيات حسب القسم">
         {PERMISSION_CATEGORIES.map((category) => {
           const permissions = grouped.get(category) || [];
           if (permissions.length === 0) return null;
           return (
-            <Card key={category}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">{category}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {permissions.map((permission) => (
-                  <div key={permission.id} className="rounded-xl border bg-muted/15 p-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold">{permission.label}</span>
-                      <Badge variant="outline" className="text-[10px]">{permission.id}</Badge>
-                      <Badge variant="secondary" className="text-[10px]">{PERMISSION_LEVEL_LABELS[permission.level]}</Badge>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">{permission.description}</p>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+            <li key={category} className="tp-rcard">
+              <div className="tp-rcard__head">
+                <h3 className="tp-rcard__name">{category}</h3>
+                <span className="tp-rcard__head-end">
+                  <span className="tp-rcard__pill">{permissions.length} صلاحية</span>
+                </span>
+              </div>
+              {permissions.map((permission) => (
+                <div key={permission.id} className="tp-rcard__panel">
+                  <span className="tp-rcard__title">
+                    {permission.label}{' '}
+                    <Badge variant="secondary" className="align-middle text-[10px]">{PERMISSION_LEVEL_LABELS[permission.level]}</Badge>
+                  </span>
+                  <span className="tp-rcard__line">{permission.description}</span>
+                </div>
+              ))}
+              <TechnicalIds ids={permissions.map((permission) => permission.id)} />
+            </li>
           );
         })}
-      </div>
+      </ul>
     </div>
   );
 }
@@ -474,60 +504,69 @@ function RolesTab() {
 
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-bold">الأدوار والصلاحيات</h3>
-        </div>
-        <Button onClick={() => setShowAddRoleDialog(true)}>إضافة دور</Button>
-      </div>
+    <div className="tp-list">
+      <ListToolbar
+        label="الأدوار"
+        actions={
+          <Button onClick={() => setShowAddRoleDialog(true)}>
+            <ShieldPlus aria-hidden="true" />
+            إضافة دور
+          </Button>
+        }
+        summary={<><b>{roles.length}</b> دور · كل دور يحدد صلاحيات الحسابات المرتبطة بيه</>}
+      />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <ul className="tp-rcards" data-columns="2" aria-label="الأدوار">
         {roles.map(role => {
           const userCount = users.filter(u => u.roleId === role.id).length;
           const displayedRolePermissions = role.id === 'role_admin' ? PERMISSION_CATALOG.map(p => p.id) : role.permissions;
           return (
-            <Card key={role.id} className="transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-xl hover:shadow-primary/10">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <p className="font-bold">{role.name}</p>
-                    <p className="text-xs text-muted-foreground">{displayedRolePermissions.length} صلاحية</p>
-                  </div>
-                  <div className="flex gap-1">
-                    {role.isDefault && <Badge variant="secondary" className="text-[10px]">افتراضي</Badge>}
-                    <Badge variant="outline" className="text-[10px]">{userCount} مستخدم</Badge>
-                  </div>
-                </div>
+            <li key={role.id} className="tp-rcard">
+              <div className="tp-rcard__head">
+                <h3 className="tp-rcard__name">{role.name}</h3>
+                <span className="tp-rcard__sep" aria-hidden="true" />
+                <span className="tp-rcard__sub">{displayedRolePermissions.length} صلاحية · {userCount} مستخدم</span>
+                {role.isDefault ? (
+                  <span className="tp-rcard__head-end">
+                    <span className="tp-rcard__pill">افتراضي</span>
+                  </span>
+                ) : null}
+              </div>
 
-                <div className="mb-3 space-y-3">
-                  <PermissionCategoryBadges permissions={displayedRolePermissions} limit={5} />
-                  <PermissionCompactSummary permissions={displayedRolePermissions} />
-                </div>
+              <div className="tp-rcard__main">
+                <PermissionCategoryBadges permissions={displayedRolePermissions} limit={5} />
+                <PermissionCompactSummary permissions={displayedRolePermissions} />
+              </div>
 
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="text-xs flex-1" onClick={() => handleEditRole(role.id)}>
+              <div className="tp-rcard__foot">
+                <span className="tp-rcard__foot-end">
+                  <Button variant="outline" size="sm" onClick={() => handleEditRole(role.id)}>
+                    <ShieldCheck aria-hidden="true" />
                     تعديل الصلاحيات
                   </Button>
-                  {!role.isDefault && (
-                    <Button variant="destructive" size="sm" className="text-xs" onClick={() => setDeleteRoleDialog({ open: true, id: role.id, name: role.name })}>
-                      حذف
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                  {!role.isDefault ? (
+                    <RowActionsMenu
+                      label={`إجراءات ${role.name}`}
+                      actions={[{
+                        key: 'delete',
+                        label: 'حذف الدور…',
+                        icon: <Trash2 aria-hidden="true" />,
+                        danger: true,
+                        onSelect: () => setDeleteRoleDialog({ open: true, id: role.id, name: role.name }),
+                      }]}
+                    />
+                  ) : null}
+                </span>
+              </div>
+            </li>
           );
         })}
-      </div>
+      </ul>
 
       {/* Add Role Dialog */}
       <Dialog open={showAddRoleDialog} onOpenChange={setShowAddRoleDialog}>
         <DialogContent dir="rtl" className={ACCOUNT_DIALOG_CONTENT_CLASS}>
-          <DialogHeader className={ACCOUNT_DIALOG_HEADER_CLASS}>
-            <DialogTitle>إضافة دور جديد</DialogTitle>
-            <DialogDescription>أنشئ دوراً جديداً وحدد الصلاحيات المطلوبة</DialogDescription>
-          </DialogHeader>
+          <FormDialogHero icon={ShieldPlus} title="إضافة دور جديد" description="أنشئ دوراً جديداً وحدد الصلاحيات المطلوبة" />
           <div className={ACCOUNT_DIALOG_BODY_CLASS}>
             <div className="space-y-2">
               <Label htmlFor="role-name">اسم الدور</Label>
@@ -538,7 +577,7 @@ function RolesTab() {
               <PermissionChecklist perms={newRolePerms} onChange={setNewRolePerms} />
             </div>
           </div>
-          <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
+          <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddRoleDialog(false)}>إلغاء</Button>
             <Button onClick={handleAddRole} disabled={isAddingRole}>{isAddingRole ? 'جاري الإضافة...' : 'إضافة'}</Button>
           </DialogFooter>
@@ -548,14 +587,13 @@ function RolesTab() {
       {/* Edit Role Permissions Dialog */}
       <Dialog open={!!editRoleId} onOpenChange={() => { setEditRoleId(null); setEditRolePerms([]); }}>
         <DialogContent dir="rtl" className={ACCOUNT_DIALOG_CONTENT_CLASS}>
-          <DialogHeader className={ACCOUNT_DIALOG_HEADER_CLASS}>
-            <DialogTitle>تعديل صلاحيات الدور - {roles.find(r => r.id === editRoleId)?.name}</DialogTitle>
-            <DialogDescription>
-              {roles.find(r => r.id === editRoleId)?.isDefault
-                ? 'دور افتراضي: التعديل ينطبق على كل الحسابات المرتبطة بيه.'
-                : 'التعديل ينطبق على كل الحسابات المرتبطة بهذا الدور.'}
-            </DialogDescription>
-          </DialogHeader>
+          <FormDialogHero
+            icon={ShieldCheck}
+            title={<>تعديل صلاحيات الدور - {roles.find(r => r.id === editRoleId)?.name}</>}
+            description={roles.find(r => r.id === editRoleId)?.isDefault
+              ? 'دور افتراضي: التعديل ينطبق على كل الحسابات المرتبطة بيه.'
+              : 'التعديل ينطبق على كل الحسابات المرتبطة بهذا الدور.'}
+          />
           <div className={ACCOUNT_DIALOG_BODY_CLASS}>
             {editRoleId !== 'role_admin' ? (
               <div className="space-y-2">
@@ -565,7 +603,7 @@ function RolesTab() {
             ) : null}
             <PermissionChecklist perms={editRolePerms} onChange={setEditRolePerms} readOnly={editRoleId === 'role_admin'} />
           </div>
-          <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
+          <DialogFooter>
             <Button variant="outline" onClick={() => { setEditRoleId(null); setEditRolePerms([]); }}>إلغاء</Button>
             <Button onClick={handleSaveRole} disabled={isSavingRole || editRoleId === 'role_admin'}>{isSavingRole ? 'جاري الحفظ...' : editRoleId === 'role_admin' ? 'صلاحيات المدير كاملة دائماً' : 'حفظ'}</Button>
           </DialogFooter>
@@ -595,6 +633,15 @@ function RolesTab() {
 
 // ─── Users Tab Component ─────────────────────────────────────────────────────
 
+type UserChip = 'all' | 'active' | 'disabled' | 'protected';
+
+const USER_CHIPS: ListChip[] = [
+  { key: 'all', label: 'الكل' },
+  { key: 'active', label: 'فعّال', tone: 'success' },
+  { key: 'disabled', label: 'معطّل', tone: 'danger' },
+  { key: 'protected', label: 'محمي', tone: 'muted', hint: 'حسابات المدير: ما تنحذف ولا تنقص صلاحياتها' },
+];
+
 function UsersTab() {
   const { users, roles, addUser, updateUser, toggleUser, updateUserPermissions, deleteUser, currentUserId } = useTeacherStore();
 
@@ -616,6 +663,7 @@ function UsersTab() {
   const [deleteUserDialog, setDeleteUserDialog] = useState({ open: false, id: '', userName: '' });
   const [detailsUserId, setDetailsUserId] = useState('');
   const [userSearch, setUserSearch] = useState('');
+  const [userChip, setUserChip] = useState<UserChip>('all');
   const { locked: isAddingUser, runLocked: runAddUserLocked } = useActionLock();
   const { locked: isSavingUser, runLocked: runSaveUserLocked } = useActionLock();
   const { locked: isSavingPermissions, runLocked: runSavePermissionsLocked } = useActionLock();
@@ -764,103 +812,129 @@ function UsersTab() {
   const detailsMissingRolePermissions = selectedPermissions(detailsRolePermissions.filter(permission => !detailsPermissions.includes(permission)));
 
 
-  const shownUsers = userSearch.trim()
+  const isAdminAccount = (user: { username: string; roleId: string }) =>
+    user.username.trim().toLowerCase() === 'admin' || user.roleId === 'role_admin';
+  const searchedUsers = userSearch.trim()
     ? users.filter(u => searchAny(userSearch, [u.name, u.username, getRoleName(u.roleId)]))
     : users;
+  const userChipMatches = (key: UserChip, user: (typeof users)[number]) =>
+    key === 'active' ? user.active
+      : key === 'disabled' ? !user.active
+        : key === 'protected' ? isAdminAccount(user)
+          : true;
+  const userChips: ListChip[] = USER_CHIPS.map(chip => ({
+    ...chip,
+    count: searchedUsers.filter(user => userChipMatches(chip.key as UserChip, user)).length,
+  }));
+  const shownUsers = searchedUsers.filter(user => userChipMatches(userChip, user));
 
   return (
     <div className="tp-list">
-      <div className="tp-list-toolbar__row">
-        <div className="tp-list-toolbar__search">
+      <ListToolbar
+        label="المستخدمون"
+        search={
           <Input
             id="accounts-user-search"
             type="search"
             autoComplete="off"
             aria-label="ابحث عن مستخدم"
-            placeholder="ابحث عن مستخدم"
+            placeholder="ابحث بالاسم أو اسم الدخول أو الدور"
             value={userSearch}
             onChange={(event) => setUserSearch(event.target.value)}
           />
-        </div>
-        <Button onClick={() => {
-          setNewUser({ username: '', name: '', password: generatePasscode(), roleId: defaultNewUserRoleId, permissions: [] });
-          setShowAddDialog(true);
-        }}>
-          <UserPlus aria-hidden="true" />
-          إضافة مستخدم
-        </Button>
-      </div>
+        }
+        actions={
+          <Button onClick={() => {
+            setNewUser({ username: '', name: '', password: generatePasscode(), roleId: defaultNewUserRoleId, permissions: [] });
+            setShowAddDialog(true);
+          }}>
+            <UserPlus aria-hidden="true" />
+            إضافة مستخدم
+          </Button>
+        }
+        chips={userChips}
+        chipsLabel="حالة الحساب"
+        activeChip={userChip}
+        onChipChange={(key) => setUserChip(key as UserChip)}
+        summary={<>المعروض <b>{shownUsers.length}</b> من <b>{users.length}</b> مستخدم</>}
+      />
 
-      {/* One line per user: who, role, state, how much they can do. «تعديل»
-          stays visible; the rest waits in «⋯». The protected admin shows a
-          lock instead of buttons that cannot be pressed. */}
-      <ol className="tp-accounts-list" aria-label="المستخدمون">
-        {shownUsers.map(user => {
-          const isAdminUser = user.username.trim().toLowerCase() === 'admin' || user.roleId === 'role_admin';
-          const isProtectedAccount = user.username.trim().toLowerCase() === 'admin';
-          const displayedUserPermissions = isAdminUser ? PERMISSION_CATALOG.map(p => p.id) : user.permissions;
-          const permissionCount = displayedUserPermissions.filter(id => PERMISSION_IDS.has(id)).length;
-          const permissionShare = PERMISSION_CATALOG.length ? permissionCount / PERMISSION_CATALOG.length : 0;
-          const menuActions: RowAction[] = [
-            { key: 'details', label: 'تفاصيل الصلاحيات', onSelect: () => setDetailsUserId(user.id) },
-            { key: 'permissions', label: isAdminUser ? 'صلاحيات كاملة' : 'تعديل الصلاحيات', onSelect: () => handleEditPermissions(user.id) },
-          ];
-          if (!isProtectedAccount) {
-            menuActions.push({
-              key: 'toggle',
-              label: user.active ? 'تعطيل الحساب' : 'تفعيل الحساب',
-              onSelect: () => void handleToggleUser(user.id),
-            });
-          }
-          if (!isAdminUser) {
-            menuActions.push({ key: 'delete', label: 'حذف المستخدم…', danger: true, onSelect: () => openDeleteUserDialog(user.id) });
-          }
-          return (
-            <li key={user.id} className="tp-account-row" data-active={user.active ? 'true' : 'false'}>
-              <span className="tp-account-row__avatar" aria-hidden="true">{user.name.trim().charAt(0) || '؟'}</span>
-              <div className="tp-account-row__who">
-                <p className="tp-account-row__name">{user.name}</p>
-                <p className="tp-account-row__sub">
-                  <span dir="ltr">{user.username}</span> · {getRoleName(user.roleId)}
-                </p>
-              </div>
-              <span className="tp-account-row__state" data-tone={user.active ? 'success' : 'danger'}>
-                <span className="tp-account-row__dot" aria-hidden="true" />
-                {user.active ? 'فعّال' : 'معطّل'}
-              </span>
-              <div className="tp-account-row__perms" title={`${permissionCount} من ${PERMISSION_CATALOG.length} صلاحية`}>
-                <span className="tp-account-row__bar" aria-hidden="true">
-                  <span style={{ inlineSize: `${Math.round(permissionShare * 100)}%` }} />
-                </span>
-                <span>{permissionCount} من {PERMISSION_CATALOG.length} صلاحية</span>
-              </div>
-              <div className="tp-account-row__actions">
-                {isAdminUser ? (
-                  <span className="tp-account-row__lock" title={isProtectedAccount ? 'حساب admin محمي: يبقى فعّال دائماً ولا ينحذف' : 'حساب مدير: لا ينحذف'}>
-                    <Lock aria-hidden="true" />
-                    محمي
+      {/* One card per user, in the system's card look: who, role, state and how
+          much they can do. «تعديل» stays visible; the rest waits in «⋯». The
+          protected admin carries «محمي» instead of buttons that cannot work. */}
+      {shownUsers.length === 0 ? (
+        <EmptyState title="ماكو مستخدم بهذا البحث أو الفلتر." />
+      ) : (
+        <ul className="tp-rcards" data-columns="2" aria-label="المستخدمون">
+          {shownUsers.map(user => {
+            const isAdminUser = isAdminAccount(user);
+            const isProtectedAccount = user.username.trim().toLowerCase() === 'admin';
+            const displayedUserPermissions = isAdminUser ? PERMISSION_CATALOG.map(p => p.id) : user.permissions;
+            const permissionCount = displayedUserPermissions.filter(id => PERMISSION_IDS.has(id)).length;
+            const permissionShare = PERMISSION_CATALOG.length ? permissionCount / PERMISSION_CATALOG.length : 0;
+            const tone = user.active ? 'success' : 'danger';
+            const menuActions: RowAction[] = [
+              { key: 'details', label: 'تفاصيل الصلاحيات', icon: <UserRoundSearch aria-hidden="true" />, onSelect: () => setDetailsUserId(user.id) },
+              { key: 'permissions', label: isAdminUser ? 'صلاحيات كاملة' : 'تعديل الصلاحيات', icon: <KeyRound aria-hidden="true" />, onSelect: () => handleEditPermissions(user.id) },
+            ];
+            if (!isProtectedAccount) {
+              menuActions.push({
+                key: 'toggle',
+                label: user.active ? 'تعطيل الحساب' : 'تفعيل الحساب',
+                icon: user.active ? <UserX aria-hidden="true" /> : <UserCheck aria-hidden="true" />,
+                onSelect: () => void handleToggleUser(user.id),
+              });
+            }
+            if (!isAdminUser) {
+              menuActions.push({ key: 'delete', label: 'حذف المستخدم…', icon: <Trash2 aria-hidden="true" />, danger: true, onSelect: () => openDeleteUserDialog(user.id) });
+            }
+            return (
+              <li key={user.id} className="tp-rcard" data-muted={user.active ? undefined : 'true'}>
+                <div className="tp-rcard__head">
+                  <span className="tp-rcard__light" data-tone={tone} aria-hidden="true" />
+                  <h3 className="tp-rcard__name">{user.name}</h3>
+                  <span className="tp-rcard__sep" aria-hidden="true" />
+                  <span dir="ltr" className="tp-rcard__code">{user.username}</span>
+                  <span className="tp-rcard__sub">{getRoleName(user.roleId)}</span>
+                  <span className="tp-rcard__head-end">
+                    {isAdminUser ? (
+                      <span className="tp-rcard__pill" title={isProtectedAccount ? 'حساب admin محمي: يبقى فعّال دائماً ولا ينحذف' : 'حساب مدير: لا ينحذف'}>
+                        <Lock aria-hidden="true" />
+                        محمي
+                      </span>
+                    ) : null}
+                    <span className="tp-rcard__pill" data-tone={tone}>{user.active ? 'فعّال' : 'معطّل'}</span>
                   </span>
-                ) : null}
-                <Button variant="outline" size="sm" onClick={() => openEditUserDialog(user.id)}>
-                  تعديل
-                </Button>
-                <RowActionsMenu label={`إجراءات ${user.name}`} actions={menuActions} />
-              </div>
-            </li>
-          );
-        })}
-        {shownUsers.length === 0 ? <li className="empty-state">ماكو مستخدم بهذا البحث.</li> : null}
-      </ol>
+                </div>
+                <div className="tp-rcard__panel">
+                  <span className="tp-rcard__eyebrow">الصلاحيات</span>
+                  <span className="tp-account-card__bar" aria-hidden="true">
+                    <span style={{ inlineSize: `${Math.round(permissionShare * 100)}%` }} />
+                  </span>
+                  <span className="tp-rcard__line">
+                    <b>{permissionCount}</b> من <b>{PERMISSION_CATALOG.length}</b> صلاحية
+                    {isAdminUser ? ' · كل الصلاحيات دائماً' : ''}
+                  </span>
+                </div>
+                <div className="tp-rcard__foot">
+                  <span className="tp-rcard__foot-end">
+                    <Button variant="outline" size="sm" onClick={() => openEditUserDialog(user.id)}>
+                      <UserPen aria-hidden="true" />
+                      تعديل
+                    </Button>
+                    <RowActionsMenu label={`إجراءات ${user.name}`} actions={menuActions} />
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       {/* User Permissions Details Dialog */}
       <Dialog open={!!detailsUserId} onOpenChange={(open) => { if (!open) setDetailsUserId(''); }}>
         <DialogContent dir="rtl" className={ACCOUNT_DIALOG_CONTENT_CLASS}>
-          <DialogHeader className={ACCOUNT_DIALOG_HEADER_CLASS}>
-            <DialogTitle>تفاصيل صلاحيات الحساب - {detailsUser?.name || ''}</DialogTitle>
-            <DialogDescription>
-              عرض تفصيلي للصلاحيات الفعلية حسب الحساب والدور، حتى تعرف بالضبط شنو يستطيع هذا المستخدم يشوف أو يعدّل.
-            </DialogDescription>
-          </DialogHeader>
+          <FormDialogHero icon={UserRoundSearch} title={<>تفاصيل صلاحيات الحساب - {detailsUser?.name || ''}</>} description="عرض تفصيلي للصلاحيات الفعلية حسب الحساب والدور، حتى تعرف بالضبط شنو يستطيع هذا المستخدم يشوف أو يعدّل." />
           <div className={ACCOUNT_DIALOG_BODY_CLASS}>
             {detailsUser && (
               <div className="space-y-4">
@@ -922,7 +996,7 @@ function UsersTab() {
               </div>
             )}
           </div>
-          <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
+          <DialogFooter>
             <Button variant="outline" onClick={() => setDetailsUserId('')}>إغلاق</Button>
             {detailsUser && !detailsIsAdmin && (
               <Button onClick={() => { const id = detailsUser.id; setDetailsUserId(''); handleEditPermissions(id); }}>
@@ -936,10 +1010,7 @@ function UsersTab() {
       {/* Edit User Dialog */}
       <Dialog open={editUserDialog.open} onOpenChange={o => setEditUserDialog(prev => ({ ...prev, open: o }))}>
         <DialogContent dir="rtl" className={ACCOUNT_DIALOG_CONTENT_CLASS}>
-          <DialogHeader className={ACCOUNT_DIALOG_HEADER_CLASS}>
-            <DialogTitle>تعديل المستخدم</DialogTitle>
-            <DialogDescription>أدخل الاسم الجديد، واترك رمز المرور فارغاً إذا لا تريد تغييره</DialogDescription>
-          </DialogHeader>
+          <FormDialogHero icon={UserPen} title="تعديل المستخدم" description="أدخل الاسم الجديد، واترك رمز المرور فارغاً إذا لا تريد تغييره" />
           <div className={ACCOUNT_DIALOG_BODY_CLASS}>
             <div className="space-y-2">
               <Label htmlFor="user-edit-name">الاسم الكامل</Label>
@@ -977,7 +1048,7 @@ function UsersTab() {
               );
             })()}
           </div>
-          <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
+          <DialogFooter>
             <Button variant="outline" onClick={() => setEditUserDialog(prev => ({ ...prev, open: false }))}>إلغاء</Button>
             <Button onClick={handleEditUserSave} disabled={isSavingUser}>{isSavingUser ? 'جاري الحفظ...' : 'حفظ'}</Button>
           </DialogFooter>
@@ -1005,10 +1076,7 @@ function UsersTab() {
       {/* Add User Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent dir="rtl" className={ACCOUNT_DIALOG_CONTENT_CLASS}>
-          <DialogHeader className={ACCOUNT_DIALOG_HEADER_CLASS}>
-            <DialogTitle>إضافة مستخدم جديد</DialogTitle>
-            <DialogDescription>أنشئ حساب مستخدم جديد وحدد دوره وصلاحياته</DialogDescription>
-          </DialogHeader>
+          <FormDialogHero icon={UserPlus} title="إضافة مستخدم جديد" description="أنشئ حساب مستخدم جديد وحدد دوره وصلاحياته" />
           <div className={ACCOUNT_DIALOG_BODY_CLASS}>
             <div className="space-y-2">
               <Label htmlFor="new-username">اسم المستخدم</Label>
@@ -1048,7 +1116,7 @@ function UsersTab() {
               />
             </div>
           </div>
-          <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
+          <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddDialog(false)}>إلغاء</Button>
             <Button onClick={handleAddUser} disabled={isAddingUser}>{isAddingUser ? 'جاري الإضافة...' : 'إضافة'}</Button>
           </DialogFooter>
@@ -1058,10 +1126,7 @@ function UsersTab() {
       {/* Edit Permissions Dialog */}
       <Dialog open={!!editPermsId} onOpenChange={() => { setEditPermsId(''); setEditPerms([]); }}>
         <DialogContent dir="rtl" className={ACCOUNT_DIALOG_CONTENT_CLASS}>
-          <DialogHeader className={ACCOUNT_DIALOG_HEADER_CLASS}>
-            <DialogTitle>تحديث الصلاحيات - {users.find(u => u.id === editPermsId)?.name}</DialogTitle>
-            <DialogDescription>صلاحيات الدور مقفولة (تتغيّر من تبويب الأدوار أو بتغيير دور الحساب). أشّر على الصلاحيات الإضافية لهذا الحساب ثم احفظ.</DialogDescription>
-          </DialogHeader>
+          <FormDialogHero icon={KeyRound} title={<>تحديث الصلاحيات - {users.find(u => u.id === editPermsId)?.name}</>} description="صلاحيات الدور مقفولة (تتغيّر من تبويب الأدوار أو بتغيير دور الحساب). أشّر على الصلاحيات الإضافية لهذا الحساب ثم احفظ." />
           <div className={ACCOUNT_DIALOG_BODY_CLASS}>
             <PermissionChecklist
               perms={editPerms}
@@ -1070,7 +1135,7 @@ function UsersTab() {
               readOnly={users.find(u => u.id === editPermsId)?.username.trim().toLowerCase() === 'admin' || users.find(u => u.id === editPermsId)?.roleId === 'role_admin'}
             />
           </div>
-          <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
+          <DialogFooter>
             <Button variant="outline" onClick={() => { setEditPermsId(''); setEditPerms([]); }}>إلغاء</Button>
             <Button onClick={handleSavePermissions} disabled={isSavingPermissions}>{isSavingPermissions ? 'جاري الحفظ...' : (users.find(u => u.id === editPermsId)?.username.trim().toLowerCase() === 'admin' || users.find(u => u.id === editPermsId)?.roleId === 'role_admin') ? 'تأكيد الصلاحيات الكاملة' : 'حفظ'}</Button>
           </DialogFooter>
@@ -1134,13 +1199,6 @@ type SecurityOverview = {
   recentLogs: SecurityLogItem[];
 };
 
-function securityBadgeVariant(severity: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-  if (severity === 'danger') return 'destructive';
-  if (severity === 'warn') return 'secondary';
-  if (severity === 'ok') return 'default';
-  return 'outline';
-}
-
 function formatSecurityTime(value: string) {
   if (!value) return 'غير محدد';
   const date = new Date(value);
@@ -1193,143 +1251,140 @@ function SecurityTab() {
   }, [isBackgroundSync, loadOverview, syncKey]);
 
   if (loading) {
-    return (
-      <Card>
-        <CardContent className="p-6 text-sm text-muted-foreground">جاري تحميل لوحة أمان الحسابات...</CardContent>
-      </Card>
-    );
+    return <LoadingState title="جاري تحميل لوحة أمان الحسابات..." />;
   }
 
   if (error) {
     return (
-      <Card className="border-destructive/40">
-        <CardContent className="space-y-3 p-6">
-          <p className="font-semibold text-danger">{error}</p>
-          <p className="text-sm text-muted-foreground">تحتاج صلاحية إدارة الحسابات لفتح هذه اللوحة.</p>
-          <Button variant="outline" onClick={() => void loadOverview()}>إعادة المحاولة</Button>
-        </CardContent>
-      </Card>
+      <EmptyState
+        icon={ShieldAlert}
+        title={error}
+        description="تحتاج صلاحية إدارة الحسابات لفتح هذه اللوحة."
+        action={<Button variant="outline" onClick={() => void loadOverview()}>إعادة المحاولة</Button>}
+      />
     );
   }
 
   if (!overview) return null;
 
+  const counts: Array<{ label: string; value: number; tone?: 'success' | 'danger' | 'warning' }> = [
+    { label: 'المستخدمين', value: overview.summary.users },
+    { label: 'فعالين', value: overview.summary.activeUsers, tone: 'success' },
+    { label: 'معطلين', value: overview.summary.disabledUsers, tone: 'danger' },
+    { label: 'الأدوار', value: overview.summary.roles },
+    { label: 'مستخدمين حساسين', value: overview.summary.riskyUsers, tone: 'warning' },
+    { label: 'أدوار حساسة', value: overview.summary.riskyRoles, tone: 'warning' },
+  ];
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h3 className="text-lg font-bold">أمان الحسابات</h3>
-        </div>
-        <Button variant="outline" disabled={refreshing} onClick={() => void loadOverview({ background: true })}>{refreshing ? 'جارٍ التحديث...' : 'تحديث الفحص'}</Button>
-      </div>
+    <div className="tp-list">
+      <ListToolbar
+        label="أمان الحسابات"
+        actions={
+          <Button variant="outline" disabled={refreshing} onClick={() => void loadOverview({ background: true })}>
+            <RefreshCw className={refreshing ? 'animate-spin motion-reduce:animate-none' : undefined} aria-hidden="true" />
+            {refreshing ? 'جارٍ التحديث...' : 'تحديث الفحص'}
+          </Button>
+        }
+        summary={<>آخر فحص: <b>{formatSecurityTime(overview.generatedAt)}</b></>}
+      />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">المستخدمين</p><p className="text-2xl font-black">{overview.summary.users}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">فعالين</p><p className="text-2xl font-black">{overview.summary.activeUsers}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">معطلين</p><p className="text-2xl font-black">{overview.summary.disabledUsers}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">الأدوار</p><p className="text-2xl font-black">{overview.summary.roles}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">مستخدمين حساسين</p><p className="text-2xl font-black">{overview.summary.riskyUsers}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">أدوار حساسة</p><p className="text-2xl font-black">{overview.summary.riskyRoles}</p></CardContent></Card>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        {overview.checks.map((check) => (
-          <Card key={check.id} className={check.severity === 'danger' ? 'border-destructive/40' : ''}>
-            <CardContent className="space-y-2 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-bold">{check.title}</p>
-                <Badge variant={securityBadgeVariant(check.severity)}>{check.ok ? 'سليم' : check.severity === 'danger' ? 'خطر' : 'تنبيه'}</Badge>
-              </div>
-              <p className="text-sm text-muted-foreground">{check.message}</p>
-            </CardContent>
-          </Card>
+      <dl className="tp-account-stats" aria-label="ملخص الحسابات">
+        {counts.map((count) => (
+          <div key={count.label} data-tone={count.tone}>
+            <dt>{count.label}</dt>
+            <dd>{count.value}</dd>
+          </div>
         ))}
-      </div>
+      </dl>
+
+      <ul className="tp-rcards" data-columns="2" aria-label="فحوصات الأمان">
+        {overview.checks.map((check) => {
+          const tone = check.ok ? 'success' : check.severity === 'danger' ? 'danger' : 'warning';
+          return (
+            <li key={check.id} className="tp-rcard">
+              <div className="tp-rcard__head">
+                <span className="tp-rcard__light" data-tone={tone} aria-hidden="true" />
+                <h3 className="tp-rcard__name">{check.title}</h3>
+                <span className="tp-rcard__head-end">
+                  <span className="tp-rcard__pill" data-tone={tone}>{check.ok ? 'سليم' : check.severity === 'danger' ? 'خطر' : 'تنبيه'}</span>
+                </span>
+              </div>
+              <p className="tp-rcard__line">{check.message}</p>
+            </li>
+          );
+        })}
+      </ul>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle className="text-base">المستخدمين أصحاب الصلاحيات الحساسة</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {overview.riskyUsers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">لا توجد صلاحيات حساسة خارج النطاق المتوقع.</p>
-            ) : overview.riskyUsers.map((user) => (
-              <div key={user.id} className="rounded-xl border bg-muted/20 p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold">{user.name}</p>
-                    <p className="text-xs text-muted-foreground">@{user.username} — {user.role}</p>
-                  </div>
-                  <Badge variant={user.active ? 'success' : 'danger'}>{user.active ? 'فعال' : 'معطل'}</Badge>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {user.sensitivePermissions.map((permission) => (
-                    <Badge key={permission} variant={user.isAdmin ? 'default' : 'outline'} className="text-[10px]">{permission}</Badge>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <section className="tp-rcard content-start" aria-labelledby="security-risky-users">
+          <h3 id="security-risky-users" className="tp-rcard__name">المستخدمين أصحاب الصلاحيات الحساسة</h3>
+          {overview.riskyUsers.length === 0 ? (
+            <EmptyState compact icon={ShieldCheck} title="لا توجد صلاحيات حساسة خارج النطاق المتوقع." />
+          ) : overview.riskyUsers.map((user) => (
+            <div key={user.id} className="tp-rcard__panel">
+              <span className="tp-rcard__title">{user.name}</span>
+              <span className="tp-rcard__line">
+                <span dir="ltr">@{user.username}</span> · {user.role} · {user.active ? 'فعال' : 'معطل'}
+              </span>
+              <span className="flex flex-wrap gap-1">
+                {user.sensitivePermissions.map((permission) => (
+                  <Badge key={permission} variant={user.isAdmin ? 'default' : 'outline'} className="text-[10px]">{permissionLabel(permission)}</Badge>
+                ))}
+              </span>
+            </div>
+          ))}
+        </section>
 
-        <Card>
-          <CardHeader><CardTitle className="text-base">الأدوار الحساسة</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {overview.riskyRoles.length === 0 ? (
-              <p className="text-sm text-muted-foreground">لا توجد أدوار تحتوي صلاحيات حساسة.</p>
-            ) : overview.riskyRoles.map((role) => (
-              <div key={role.id} className="rounded-xl border bg-muted/20 p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold">{role.name}</p>
-                    <p className="text-xs text-muted-foreground">{role.userCount} مستخدم مرتبط</p>
-                  </div>
-                  <Badge variant={role.id === 'role_admin' ? 'default' : 'secondary'}>{role.id}</Badge>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {role.sensitivePermissions.map((permission) => (
-                    <Badge key={permission} variant="outline" className="text-[10px]">{permission}</Badge>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <section className="tp-rcard content-start" aria-labelledby="security-risky-roles">
+          <h3 id="security-risky-roles" className="tp-rcard__name">الأدوار الحساسة</h3>
+          {overview.riskyRoles.length === 0 ? (
+            <EmptyState compact icon={ShieldCheck} title="لا توجد أدوار تحتوي صلاحيات حساسة." />
+          ) : overview.riskyRoles.map((role) => (
+            <div key={role.id} className="tp-rcard__panel">
+              <span className="tp-rcard__title">{role.name}</span>
+              <span className="tp-rcard__line">
+                {role.userCount} مستخدم مرتبط{role.id === 'role_admin' ? ' · دور المدير' : ''}
+              </span>
+              <span className="flex flex-wrap gap-1">
+                {role.sensitivePermissions.map((permission) => (
+                  <Badge key={permission} variant="outline" className="text-[10px]">{permissionLabel(permission)}</Badge>
+                ))}
+              </span>
+            </div>
+          ))}
+        </section>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">آخر تدقيق للحسابات والصلاحيات</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="table-wrap" tabIndex={0} aria-label="جدول الحسابات؛ يمكن تمريره أفقياً عند الحاجة">
-            <table className="responsive-table min-w-[760px] text-sm">
-              <thead>
-                <tr className="border-b text-xs text-muted-foreground">
-                  <th className="p-2 text-right">الوقت</th>
-                  <th className="p-2 text-right">المستخدم</th>
-                  <th className="p-2 text-right">القسم</th>
-                  <th className="p-2 text-right">الإجراء</th>
-                  <th className="p-2 text-right">التفاصيل</th>
+      <section className="tp-rcard" aria-labelledby="security-recent-logs">
+        <h3 id="security-recent-logs" className="tp-rcard__name">آخر تدقيق للحسابات والصلاحيات</h3>
+        <div className="table-wrap" tabIndex={0} aria-label="جدول الحسابات؛ يمكن تمريره أفقياً عند الحاجة">
+          <table className="responsive-table min-w-[760px] text-sm">
+            <thead>
+              <tr className="border-b text-xs text-muted-foreground">
+                <th className="p-2 text-right">الوقت</th>
+                <th className="p-2 text-right">المستخدم</th>
+                <th className="p-2 text-right">القسم</th>
+                <th className="p-2 text-right">الإجراء</th>
+                <th className="p-2 text-right">التفاصيل</th>
+              </tr>
+            </thead>
+            <tbody>
+              {overview.recentLogs.length === 0 ? (
+                <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">لا توجد عمليات حديثة.</td></tr>
+              ) : overview.recentLogs.slice(0, 30).map((log) => (
+                <tr key={log.id} className="border-b last:border-0">
+                  <td className="p-2 text-xs text-muted-foreground">{formatSecurityTime(log.time)}</td>
+                  <td className="p-2">{log.userName}</td>
+                  <td className="p-2">{log.module}</td>
+                  <td className="p-2 font-medium">{log.action}</td>
+                  <td className="max-w-md truncate p-2 text-xs text-muted-foreground" title={log.details}>{log.details || '—'}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {overview.recentLogs.length === 0 ? (
-                  <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">لا توجد عمليات حديثة.</td></tr>
-                ) : overview.recentLogs.slice(0, 30).map((log) => (
-                  <tr key={log.id} className="border-b last:border-0">
-                    <td className="p-2 text-xs text-muted-foreground">{formatSecurityTime(log.time)}</td>
-                    <td className="p-2">{log.userName}</td>
-                    <td className="p-2">{log.module}</td>
-                    <td className="p-2 font-medium">{log.action}</td>
-                    <td className="max-w-md truncate p-2 text-xs text-muted-foreground" title={log.details}>{log.details || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-3 text-xs text-muted-foreground">آخر فحص: {formatSecurityTime(overview.generatedAt)}</p>
-        </CardContent>
-      </Card>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
@@ -1476,45 +1531,50 @@ function BackupTab() {
     : [];
 
   return (
-    <div className="space-y-4">
+    <div className="tp-list">
       {/* Export section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">تصدير نسخة احتياطية</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <section className="tp-rcard" aria-labelledby="backup-export-title">
+        <h3 id="backup-export-title" className="tp-rcard__name">تصدير نسخة احتياطية</h3>
+        <div className="tp-rcard__foot">
           <Button onClick={handleExport} disabled={exporting || exportLocked}>
+            <Download aria-hidden="true" />
             {exporting ? 'جارٍ التصدير...' : 'تصدير النسخة الاحتياطية (JSON)'}
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {/* Restore section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">استعادة نسخة احتياطية</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-md bg-warning-soft border border-warning-line p-3 text-sm text-warning leading-relaxed">
+      <section className="tp-rcard" aria-labelledby="backup-restore-title">
+        <h3 id="backup-restore-title" className="tp-rcard__name">استعادة نسخة احتياطية</h3>
+        <div className="grid gap-4">
+          <div className="rounded-xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 text-sm leading-relaxed text-warning">
             <strong>⚠️ تحذير:</strong> الاستعادة عملية حساسة قد تستبدل أو تدمج البيانات الحالية.
-            يُنصح بشدة بأخذ نسخة احتياطية جديدة قبل الاستعادة، واختبارها على بيئة Preview أولاً.
+            يُنصح بشدة بأخذ نسخة احتياطية جديدة قبل الاستعادة، وتجربتها على نسخة تجريبية من النظام أولاً.
           </div>
 
-          {/* File picker */}
+          {/* File picker: the system's own button, not the browser's English «Choose File». */}
           <div className="space-y-2">
-            <Label>اختر ملف النسخة الاحتياطية (.json)</Label>
+            <Label htmlFor="backup-file">ملف النسخة الاحتياطية (.json)</Label>
             <input
+              id="backup-file"
               ref={fileInputRef}
               type="file"
               accept="application/json,.json"
               onChange={(e) => void handleFileSelect(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-muted-foreground file:ml-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground file:cursor-pointer hover:file:bg-primary/90"
+              className="sr-only"
+              tabIndex={-1}
             />
-            {selectedFile && (
-              <p className="text-xs text-muted-foreground">
-                الملف: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
-              </p>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={restoring}>
+                <FileUp aria-hidden="true" />
+                اختيار ملف
+              </Button>
+              <span className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                {selectedFile
+                  ? <>الملف: <bdi>{selectedFile.name}</bdi> ({(selectedFile.size / 1024).toFixed(1)} KB)</>
+                  : 'ما اخترت ملف بعد'}
+              </span>
+            </div>
           </div>
 
           {/* Parse error */}
@@ -1651,24 +1711,58 @@ function BackupTab() {
               </p>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
     </div>
   );
 }
 
 // ─── Main Accounts View ──────────────────────────────────────────────────────
 
+/**
+ * On a phone the five tabs do not fit: the bar scrolls sideways, fades at the
+ * side that has more tabs, and keeps the open tab in view.
+ */
+function useScrollableTabs(active: string) {
+  const listRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const update = () => {
+      // In RTL the start is on the right: scrollLeft runs from 0 to negative.
+      const max = list.scrollWidth - list.clientWidth;
+      const scrolled = Math.abs(list.scrollLeft);
+      list.dataset.moreStart = scrolled > 4 ? 'true' : 'false';
+      list.dataset.moreEnd = max - scrolled > 4 ? 'true' : 'false';
+    };
+    update();
+    list.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      list.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, []);
+  useEffect(() => {
+    listRef.current
+      ?.querySelector<HTMLElement>('[role="tab"][data-state="active"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [active]);
+  return listRef;
+}
+
 export function AccountsView() {
   const refreshAccounts = useTeacherStore((state) => state.refreshAccounts);
+  const [tab, setTab] = useState('users');
+  const tabsListRef = useScrollableTabs(tab);
   // The page shows the accounts and roles as the database has them now.
   useEffect(() => {
     void refreshAccounts();
   }, [refreshAccounts]);
   return (
     <div className="space-y-6 tp-accounts-page">
-      <Tabs defaultValue="users" dir="rtl">
-        <TabsList className="w-full max-w-5xl">
+      <Tabs value={tab} onValueChange={setTab} dir="rtl">
+        <TabsList ref={tabsListRef} className="w-full max-w-5xl">
           <TabsTrigger value="users" className="flex-1">المستخدمين</TabsTrigger>
           <TabsTrigger value="roles" className="flex-1">الأدوار والصلاحيات</TabsTrigger>
           <TabsTrigger value="security" className="flex-1">الأمان</TabsTrigger>

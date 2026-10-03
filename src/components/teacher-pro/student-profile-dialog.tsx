@@ -27,7 +27,8 @@ import {
   type StudentProfileStatsResponse,
 } from "@/lib/api";
 import { classifyGradeAcademicImpact, type GradeClassificationKind } from "@/lib/grade-classification";
-import { ArrowRightIcon, XIcon } from "lucide-react";
+import { AlertCircle, ArrowRightIcon, XIcon } from "lucide-react";
+import { EmptyState, LoadingState } from "./ui-kit";
 
 import { GradeNoteBanner } from "@/components/teacher-pro/grade-note-banner";
 import { displayReasonText } from "@/lib/reason-display";
@@ -169,9 +170,15 @@ function ProfileCollectionEmpty({
   error: string | null;
   emptyText: string;
 }) {
-  if (loading) return <p role="status" aria-live="polite" className="empty-state py-8">جاري تحميل البيانات…</p>;
-  if (error) return <p role="alert" className="empty-state py-8 text-danger">تعذر تحميل هذه البيانات.</p>;
-  return <p className="empty-state py-8">{emptyText}</p>;
+  if (loading) return <LoadingState title="جاري تحميل البيانات…" />;
+  if (error) {
+    return (
+      <div role="alert">
+        <EmptyState compact icon={AlertCircle} title="تعذر تحميل هذه البيانات." />
+      </div>
+    );
+  }
+  return <EmptyState compact title={emptyText} />;
 }
 
 function InfoBox({ label, value }: { label: string; value: React.ReactNode }) {

@@ -1,7 +1,7 @@
 "use client";
 import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type Exam } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,7 @@ import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
 import { visibleGradeNote } from "@/lib/grade-note-banners";
 import { ListToolbar } from "./list-toolbar";
+import { EmptyState } from "./ui-kit";
 import { RowActionsMenu } from "./row-actions-menu";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import {
@@ -532,6 +533,9 @@ export function ExamRecordsView() {
   });
   const [editingExamId, setEditingExamId] = useState<string | null>(null);
   const [disableExamId, setDisableExamId] = useState<string | null>(null);
+  // The stored-grades warning before activation, answered in the system's own window.
+  const [activationGradeCount, setActivationGradeCount] = useState<number | null>(null);
+  const activationAnswerRef = useRef<((confirmed: boolean) => void) | null>(null);
   const [clockTick, setClockTick] = useState(0);
   const [expandedExamIds, setExpandedExamIds] = useState<Record<string, boolean>>({});
   const [mutatingExamIds, setMutatingExamIds] = useState<Record<string, boolean>>({});
@@ -740,6 +744,24 @@ export function ExamRecordsView() {
     [examById],
   );
 
+  const answerActivation = useCallback((confirmed: boolean) => {
+    const answer = activationAnswerRef.current;
+    activationAnswerRef.current = null;
+    setActivationGradeCount(null);
+    answer?.(confirmed);
+  }, []);
+
+  const askActivationConfirmation = useCallback((storedGradeCount: number) => {
+    activationAnswerRef.current?.(false);
+    setActivationGradeCount(storedGradeCount);
+    return new Promise<boolean>((resolve) => {
+      activationAnswerRef.current = resolve;
+    });
+  }, []);
+
+  // Leaving the page with the question open counts as «إلغاء».
+  useEffect(() => () => activationAnswerRef.current?.(false), []);
+
   const updateExamWithActivationConfirmation = useCallback(
     async (
       examId: string,
@@ -772,11 +794,7 @@ export function ExamRecordsView() {
       return initialResult;
     }
     const storedGradeCount = Math.max(0, Number(conflict.storedGradeCount || 0));
-    if (
-      !window.confirm(
-        `تنبيه: الامتحان مرتبط بـ ${storedGradeCount} درجة محفوظة، وقد تصبح مؤثرة عند التفعيل. هل راجعت هذا الأثر وتؤكد المتابعة؟`,
-      )
-    ) {
+    if (!(await askActivationConfirmation(storedGradeCount))) {
       return null;
     }
     const confirmedResult = await examApi.update(examId, {
@@ -791,7 +809,7 @@ export function ExamRecordsView() {
       }
       return confirmedResult;
     },
-    [examById, loadFromServer],
+    [askActivationConfirmation, examById, loadFromServer],
   );
 
   const handleEditExam = async (editDialog: FullExamEditState) => {
@@ -1001,9 +1019,7 @@ export function ExamRecordsView() {
         );
       })}
       {filteredExams.length === 0 && (
-        <div className="empty-state xl:col-span-2">
-          لا توجد امتحانات مطابقة للفلاتر.
-        </div>
+        <EmptyState className="xl:col-span-2" title="لا توجد امتحانات مطابقة للفلاتر." />
       )}
     </div>
   );
@@ -1211,6 +1227,29 @@ export function ExamRecordsView() {
               }}
             >
               تعطيل الامتحان
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={activationGradeCount !== null}
+        onOpenChange={(open) => {
+          if (!open) answerActivation(false);
+        }}
+      >
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>تفعيل امتحان عليه درجات محفوظة؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              تنبيه: الامتحان مرتبط بـ {activationGradeCount ?? 0} درجة محفوظة، وقد تصبح مؤثرة عند
+              التفعيل. هل راجعت هذا الأثر وتؤكد المتابعة؟
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction onClick={() => answerActivation(true)}>
+              تأكيد التفعيل
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

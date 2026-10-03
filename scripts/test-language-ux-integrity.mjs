@@ -137,7 +137,7 @@ must(
 must(
   followUpView.includes('data-count-scope="filtered"') &&
     followUpView.includes("المعروض في الصفحة") &&
-    followUpView.includes("المطابقون للفلاتر"),
+    followUpView.includes("المعروض <b>{visibleCallRows.length}</b> من <b>{callStatValue(callDatabaseStats?.total)}</b>"),
   "عدادات المكالمات لا تبدو كأنها إجمالي النظام وهي مرتبطة بالاختيار الحالي",
 );
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, CheckCheck, ClipboardList, Loader2, RefreshCw, Search, Send, SlidersHorizontal, X } from "lucide-react";
+import { Check, CheckCheck, ClipboardList, RefreshCw, Search, Send, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { toast } from "@/lib/user-toast";
 import { normalizeForSearch } from "@/lib/validation";
 import { contactStatusMatchesFilter, normalizeContactStatusFilter, type ContactStatusFilter } from "@/lib/call-contact-status";
 import { describeTelegramHandle } from "./student-registry-helpers";
+import { EmptyState, LoadingState } from "./ui-kit";
 
 type Props = {
   open: boolean;
@@ -280,8 +281,8 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
         </div>
 
         <div className="tp-modal__body">
-          <div className="tp-notes__toolbar">
-            <div className="tp-modal__input-wrap tp-notes__search">
+          <div className="tp-modal__searchbar">
+            <div className="tp-modal__input-wrap tp-modal__search">
               <Search aria-hidden="true" />
               <Input
                 value={search}
@@ -293,13 +294,13 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
             <Button
               type="button"
               variant="outline"
-              className="tp-notes__filter-toggle"
+              className="tp-modal__filter-toggle"
               aria-expanded={filtersOpen}
               onClick={() => setFiltersOpen((value) => !value)}
             >
               <SlidersHorizontal className="size-4" aria-hidden="true" />
               تصفية
-              {panelFilterCount > 0 && <span className="tp-notes__filter-count">{panelFilterCount}</span>}
+              {panelFilterCount > 0 && <span className="tp-modal__filter-badge">{panelFilterCount}</span>}
             </Button>
             <Button
               type="button"
@@ -315,7 +316,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
           </div>
 
           {filtersOpen && (
-            <div className="tp-modal__fields tp-notes__filters">
+            <div className="tp-modal__fields tp-modal__panel">
               <label className="tp-modal__field">
                 <span>اسم الدورة</span>
                 <div className="tp-modal__select-wrap" data-plain="true">
@@ -352,7 +353,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
             </div>
           )}
 
-          <div role="group" aria-label="تصفية حسب الإجراء" className="tp-notes__chips">
+          <div role="group" aria-label="تصفية حسب الإجراء" className="tp-modal__chips">
             {ACTION_FILTERS.map((option) => (
               <button
                 key={option.key}
@@ -391,15 +392,12 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
 
           <section className="tp-modal__section" aria-label="الملاحظات">
             {!loaded && loading ? (
-              <div className="tp-modal__empty" role="status">
-                <span className="tp-modal__empty-icon"><Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden="true" /></span>
-                <p>جاري تحميل الملاحظات...</p>
-              </div>
+              <LoadingState title="جاري تحميل الملاحظات..." />
             ) : loaded && visibleNotes.length === 0 ? (
-              <div className="tp-modal__empty">
-                <span className="tp-modal__empty-icon"><CheckCheck aria-hidden="true" /></span>
-                <p>{pendingIds.size > 0 ? "جاري حفظ الإنجاز..." : hasFilters ? "لا توجد ملاحظات تطابق البحث والفلاتر" : "لا توجد ملاحظات معلّقة"}</p>
-              </div>
+              <EmptyState
+                icon={CheckCheck}
+                title={pendingIds.size > 0 ? "جاري حفظ الإنجاز..." : hasFilters ? "لا توجد ملاحظات تطابق البحث والفلاتر" : "لا توجد ملاحظات معلّقة"}
+              />
             ) : (
               <ul className="tp-notes__cards">
                 {studentGroups.map((group) => {

@@ -26,7 +26,8 @@ export async function saveDismissedCheck(studentId: string, checked: boolean, ex
       body: JSON.stringify({ studentId, checked, expectedChecked, expectedEpoch }),
       signal: controller.signal,
     });
-    const data = await response.json();
+    // An unreadable reply falls through to the confirmation check below, which re-reads the saved value.
+    const data = await response.json().catch(() => null);
     if (!response.ok) throw new Error(data?.error || "تعذر حفظ اغلاق كود الطالب.");
     if (!data?.student || data.student.id !== studentId ||
         typeof data.student.dismissedChecked !== "boolean" ||

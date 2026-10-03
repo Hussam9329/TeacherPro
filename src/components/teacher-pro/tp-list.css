@@ -5,7 +5,10 @@
    Colours come from the page's own tokens, so night mode follows them.
    ============================================================================ */
 
-.tp-list {
+/* The tokens also sit on a row of filter buttons used on its own (e.g. the
+   «حالة الدرجة» buttons above the grade sheet). */
+.tp-list,
+.tp-list-chips {
   --tp-surface: var(--card);
   --tp-panel: color-mix(in srgb, var(--border) 38%, var(--card));
   --tp-panel-strong: color-mix(in srgb, var(--border) 70%, var(--card));
@@ -18,6 +21,8 @@
   --tp-primary-tint: color-mix(in srgb, var(--primary) 8%, var(--card));
   --tp-muted-tint: color-mix(in srgb, var(--muted-foreground) 10%, var(--card));
   --tp-focus: color-mix(in srgb, var(--primary) 28%, transparent);
+}
+.tp-list {
   container-type: inline-size;
   display: grid;
   gap: 0.9rem;
@@ -274,7 +279,6 @@ a.tp-rcard__contact:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--t
 .tp-meter > i { inline-size: 0.7rem; block-size: 0.7rem; border-radius: 50%; background: var(--tone, var(--status-success-vivid)); }
 .tp-meter > i[data-off="true"] { background: transparent; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--tp-text-muted) 55%, transparent); }
 
-.tp-list-empty { margin: 0; padding: 1.25rem 1rem; border: 1px dashed var(--tp-border-strong); border-radius: 1rem; color: var(--tp-text-muted); font-size: 0.9rem; font-weight: 650; text-align: center; }
 
 @container (min-width: 44rem) {
   .tp-rcard__body[data-tile="true"] { grid-template-columns: minmax(0, 1fr) 10.5rem; }

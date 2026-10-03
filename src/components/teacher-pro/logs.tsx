@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, ScrollText } from "lucide-react";
+import { EmptyState, LoadingState } from "./ui-kit";
 import { logApi } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { Button } from "@/components/ui/button";
@@ -425,10 +426,10 @@ export function LogsView() {
           </section>
         ))}
         {!loading && logs.length === 0 ? (
-          <p className="empty-state">لا توجد سجلات حسب الفلترة الحالية.</p>
+          <EmptyState icon={ScrollText} title="لا توجد سجلات حسب الفلترة الحالية." />
         ) : null}
         {loading && logs.length === 0 ? (
-          <p className="empty-state">جاري تحميل السجلات...</p>
+          <LoadingState title="جاري تحميل السجلات..." />
         ) : null}
       </div>
 

@@ -525,8 +525,7 @@
   box-shadow: none;
 }
 
-.tp-exam-new__validation,
-.tp-exam-new__empty {
+.tp-exam-new__validation {
   min-inline-size: 0;
   padding: 0.75rem;
   border: 1px solid var(--border);
@@ -541,10 +540,6 @@
   border-color: var(--status-danger-border);
   background: var(--status-danger-bg);
   color: var(--status-danger-fg);
-}
-
-.tp-exam-new__empty {
-  color: var(--muted-foreground);
 }
 
 @container exam-fields (min-width: 18rem) {

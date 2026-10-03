@@ -51,6 +51,7 @@ import {
   type StudentLeaveSummary,
 } from "@/lib/student-leave-status";
 import { describeTelegramHandle } from "./student-registry-helpers";
+import { EmptyState } from "./ui-kit";
 import "./tp-modal.css";
 import "./leaves-dialog.css";
 
@@ -878,14 +879,8 @@ export function LeavesDialog({ open, onOpenChange, canManage }: Props) {
           </div>
         </section>
 
-        <section className="tp-modal__section" aria-labelledby="tp-leaves-list">
-          <div className="tp-modal__section-head">
-            <h3 id="tp-leaves-list" className="tp-modal__title">
-              {listQuery ? "الطلاب المطابقون للبحث" : "الطلاب المجازون"}
-            </h3>
-            <span className="tp-modal__muted">من الأحدث إلى الأقدم</span>
-          </div>
-          <div role="group" aria-label="تصفية الإجازات" className="tp-modal__filters">
+        <section className="tp-modal__section" aria-label={listQuery ? "الطلاب المطابقون للبحث" : "الطلاب المجازون"}>
+          <div role="group" aria-label="تصفية الإجازات" className="tp-modal__chips">
             {STUDENT_LEAVE_LIST_FILTERS.map((option) => (
               <button
                 key={option.value}
@@ -894,14 +889,21 @@ export function LeavesDialog({ open, onOpenChange, canManage }: Props) {
                 aria-pressed={filter === option.value}
                 data-filter={option.value}
                 data-tone={filterTone(option.value)}
+                title={option.hint || undefined}
                 onClick={() => setFilter(option.value)}
               >
                 {option.value !== "all" && <span className="tp-modal__filter-dot" aria-hidden="true" />}
                 <span className="tp-modal__filter-label">{option.label}</span>
                 <span className="tp-modal__filter-count">{list ? list.counts[option.value] : "…"}</span>
-                {option.hint && <span className="tp-modal__filter-description">{option.hint}</span>}
               </button>
             ))}
+          </div>
+          <div className="tp-modal__toolbar">
+            <span className="tp-modal__count" aria-live="polite">
+              {list
+                ? `المعروض ${list.students.length} من ${list.counts.all} طالب${listQuery ? " مطابق للبحث" : ""} · من الأحدث إلى الأقدم`
+                : "الطلاب المجازون"}
+            </span>
           </div>
           {listError && (
             <div role="alert" className="tp-modal__error">
@@ -918,15 +920,16 @@ export function LeavesDialog({ open, onOpenChange, canManage }: Props) {
             </p>
           )}
           {list && list.students.length === 0 && !listLoading && (
-            <p className="tp-modal__empty-note">
-              {listQuery
+            <EmptyState
+              icon={listQuery ? Search : CalendarCheck}
+              title={listQuery
                 ? "لا يوجد طالب يطابق البحث."
                 : filter === "current"
                   ? "لا توجد إجازات سارية أو قادمة."
                   : filter === "past"
                     ? "لا توجد إجازات منتهية."
                     : "لا توجد إجازات. ابحث عن الطالب لإضافة أول إجازة."}
-            </p>
+            />
           )}
           {list && list.students.length > 0 && (
             <ul className="tp-leave-cards" aria-busy={listLoading}>
@@ -1041,14 +1044,16 @@ export function LeavesDialog({ open, onOpenChange, canManage }: Props) {
           </p>
         )}
         {!selectedLeavesLoading && !selectedLeavesError && sortedLeaves.length === 0 && (
-          <div className="tp-leaves__empty">
-            <p>لا توجد إجازات</p>
-            {canManage && (
+          <EmptyState
+            compact
+            icon={CalendarCheck}
+            title="لا توجد إجازات"
+            action={canManage ? (
               <Button type="button" onClick={startAdd} disabled={busy || Boolean(selectedLeaveStudentBlockedReason)} title={selectedLeaveStudentBlockedReason || undefined}>
                 <CalendarPlus className="size-4" aria-hidden="true" />إضافة إجازة
               </Button>
-            )}
-          </div>
+            ) : null}
+          />
         )}
         {sortedLeaves.length > 0 && (
           <ul className="tp-leave-items" aria-busy={selectedLeavesLoading}>

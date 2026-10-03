@@ -11,6 +11,7 @@ import {
   UserRound,
   UserRoundX,
 } from "lucide-react";
+import { EmptyState, LoadingState } from "@/components/teacher-pro/ui-kit";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -247,17 +248,9 @@ export function GradeSmartNotesPanel({
               </Button>
             </div>
           ) : loading && notes.length === 0 ? (
-            <p
-              role="status"
-              aria-live="polite"
-              className="rounded-2xl border bg-background/80 p-4 text-sm text-muted-foreground"
-            >
-              جاري تحميل الدرجات الذكية...
-            </p>
+            <LoadingState title="جاري تحميل الدرجات الذكية..." />
           ) : filteredNotes.length === 0 ? (
-            <p className="rounded-2xl border border-dashed bg-background/70 p-5 text-center text-sm text-muted-foreground">
-              لا توجد حالات من هذا النوع لهذا الامتحان.
-            </p>
+            <EmptyState compact icon={CheckCircle2} title="لا توجد حالات من هذا النوع لهذا الامتحان." />
           ) : (
             <>
               {totalCount > notes.length && !activeCategory && (

@@ -42,6 +42,43 @@ function usePhoneLayout(): boolean {
   return phone;
 }
 
+/** The filter buttons that carry their count, on their own (e.g. above a sheet). */
+export function ListChips({
+  label,
+  chips,
+  activeChip,
+  onChipChange,
+  className,
+}: {
+  label: string;
+  chips: ListChip[];
+  activeChip?: string;
+  onChipChange?: (key: string) => void;
+  className?: string;
+}) {
+  return (
+    <div role="group" aria-label={label} className={className ? `tp-list-chips ${className}` : "tp-list-chips"}>
+      {chips.map((chip) => (
+        <button
+          key={chip.key}
+          type="button"
+          className="tp-list-chip"
+          data-tone={chip.tone}
+          aria-pressed={activeChip === chip.key}
+          title={chip.hint}
+          onClick={() => onChipChange?.(chip.key)}
+        >
+          {chip.tone ? <span className="tp-list-chip__dot" aria-hidden="true" /> : null}
+          <span>{chip.label}</span>
+          {chip.count !== undefined && chip.count !== null ? (
+            <span className="tp-list-chip__count">{chip.count}</span>
+          ) : null}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /**
  * The page's search line: the page's own search box (it keeps its Ctrl+F and
  * typing behaviour), «تصفية» for the less used filters, the page actions,
@@ -107,25 +144,7 @@ export function ListToolbar({
       </div>
 
       {chips && chips.length > 0 ? (
-        <div role="group" aria-label={chipsLabel} className="tp-list-chips">
-          {chips.map((chip) => (
-            <button
-              key={chip.key}
-              type="button"
-              className="tp-list-chip"
-              data-tone={chip.tone}
-              aria-pressed={activeChip === chip.key}
-              title={chip.hint}
-              onClick={() => onChipChange?.(chip.key)}
-            >
-              {chip.tone ? <span className="tp-list-chip__dot" aria-hidden="true" /> : null}
-              <span>{chip.label}</span>
-              {chip.count !== undefined && chip.count !== null ? (
-                <span className="tp-list-chip__count">{chip.count}</span>
-              ) : null}
-            </button>
-          ))}
-        </div>
+        <ListChips label={chipsLabel} chips={chips} activeChip={activeChip} onChipChange={onChipChange} />
       ) : null}
 
       {activeFilters && activeFilters.length > 0 ? (
