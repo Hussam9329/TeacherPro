@@ -39,10 +39,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription,
   AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import {
@@ -50,6 +47,9 @@ import {
   subscribeDismissedStudentFocus,
 } from "@/lib/dismissed-focus";
 import { ListToolbar } from "./list-toolbar";
+import { RowActionsMenu } from "./row-actions-menu";
+import { FormDialogHero } from "./form-dialog";
+import { EmptyState, LoadingState } from "./ui-kit";
 import { toLatinDigits } from "@/lib/format";
 import {
   getOpportunityBalance,
@@ -81,6 +81,8 @@ import {
 } from "lucide-react";
 
 const PAGE_SIZE = 24;
+/** How long the Telegram notice shows before the chat opens. */
+const TELEGRAM_NOTICE_PAUSE_MS = 1200;
 
 type TimelineEvent = {
   id: string;
@@ -699,26 +701,44 @@ export function DismissedManagementView() {
         return;
       }
 
+      // The system's own message (not the browser's alert box), shown a moment
+      // before the chat opens so it is read first.
+      const announceThenWait = (notify: () => void) => {
+        notify();
+        return new Promise((resolve) => window.setTimeout(resolve, TELEGRAM_NOTICE_PAUSE_MS));
+      };
+
       if (canUseSingleDismissedTelegramMessage(completeMessage)) {
+        let copied = false;
         try {
           await navigator.clipboard.writeText(completeMessage);
-          window.alert(
-            "تم نسخ التقرير. ستفتح محادثة الطالب الآن؛ الصق الرسالة ثم أرسلها.",
+          copied = true;
+        } catch {
+          copied = false;
+        }
+        if (copied) {
+          await announceThenWait(() =>
+            toast.success("تم نسخ التقرير. ستفتح محادثة الطالب الآن؛ الصق الرسالة ثم أرسلها.", {
+              duration: 9000,
+            }),
           );
           window.location.assign(
             `tg://resolve?domain=${encodeURIComponent(username)}`,
           );
           return;
-        } catch {
-          downloadOpportunityHtml(telegramStudent, details);
-          window.alert(
-            "تعذر نسخ التقرير، فتم تنزيله كملف HTML. ستفتح المحادثة الآن لإرفاقه.",
-          );
         }
+        downloadOpportunityHtml(telegramStudent, details);
+        await announceThenWait(() =>
+          toast.warning("تعذر نسخ التقرير، فتم تنزيله كملف HTML. ستفتح المحادثة الآن لإرفاقه.", {
+            duration: 9000,
+          }),
+        );
       } else {
         downloadOpportunityHtml(telegramStudent, details);
-        window.alert(
-          "التقرير أطول من حد رسالة تيليجرام، فتم تنزيله كملف HTML. ستفتح المحادثة الآن لإرفاقه.",
+        await announceThenWait(() =>
+          toast.warning("التقرير أطول من حد رسالة تيليجرام، فتم تنزيله كملف HTML. ستفتح المحادثة الآن لإرفاقه.", {
+            duration: 9000,
+          }),
         );
       }
 
@@ -996,11 +1016,7 @@ export function DismissedManagementView() {
         </div>
       ) : null}
 
-      {loading ? (
-        <div className="rounded-2xl border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
-          جاري تحميل الطلاب المفصولين...
-        </div>
-      ) : null}
+      {loading ? <LoadingState title="جاري تحميل الطلاب المفصولين..." /> : null}
 
       <ul className="tp-rcards" data-columns="2" aria-label="الطلاب المفصولون">
         {students.map((student) => {
@@ -1020,12 +1036,9 @@ export function DismissedManagementView() {
           const editingNote = canEditNote && Boolean(editingNoteIds[student.id]);
 
           return (
-            <li
-              key={student.id}
-              className="tp-rcard"
-              data-tone={tone}
-              data-dismissed={current || undefined}
-            >
+            // Every card here is a dismissed student, so only the status box
+            // and pill carry the colour, as in the registry and opportunities.
+            <li key={student.id} className="tp-rcard">
               <div className="tp-rcard__head">
                 <span className="tp-rcard__light" data-tone={tone} aria-hidden="true" />
                 <h3 className="tp-rcard__name">{student.name}</h3>
@@ -1186,38 +1199,29 @@ export function DismissedManagementView() {
                   <span className="tp-rcard__pill" data-tone="warning">ناقص {missingContacts.join(" و")}</span>
                 ) : null}
                 <span className="tp-rcard__foot-end">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={isOpen ? "secondary" : "ghost"}
-                    onClick={() => void toggleHistory(student.id)}
-                    disabled={historyLoading[student.id]}
-                    aria-expanded={isOpen}
-                  >
-                    {historyLoading[student.id] ? (
-                      "جاري تحميل السجل..."
-                    ) : isOpen ? (
-                      <>
-                        <ChevronUp className="size-4" />
-                        إخفاء السجل الكامل
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown className="size-4" />
-                        السجل الكامل
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void exportHtml(student)}
-                    disabled={historyLoading[student.id]}
-                  >
-                    <Download className="size-4" />
-                    تصدير HTML
-                  </Button>
+                  {historyLoading[student.id] ? (
+                    <span role="status" className="tp-rcard__label">جاري تحميل السجل...</span>
+                  ) : null}
+                  {/* The history and its HTML export are needed now and then, so they wait in «⋯». */}
+                  <RowActionsMenu
+                    label={`إجراءات ${student.name}`}
+                    actions={[
+                      {
+                        key: "history",
+                        label: isOpen ? "إخفاء السجل الكامل" : "السجل الكامل",
+                        icon: isOpen ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />,
+                        disabled: historyLoading[student.id],
+                        onSelect: () => void toggleHistory(student.id),
+                      },
+                      {
+                        key: "export",
+                        label: "تصدير HTML",
+                        icon: <Download aria-hidden="true" />,
+                        disabled: historyLoading[student.id],
+                        onSelect: () => void exportHtml(student),
+                      },
+                    ]}
+                  />
                 </span>
               </div>
 
@@ -1291,10 +1295,7 @@ export function DismissedManagementView() {
       </ul>
 
       {!loading && students.length === 0 && !error ? (
-        <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-          <Ban className="mx-auto mb-2 size-7" />
-          لا يوجد طلاب ضمن سجل الفصل حسب البحث والفلترة الحالية.
-        </div>
+        <EmptyState icon={Ban} title="لا يوجد طلاب ضمن سجل الفصل حسب البحث والفلترة الحالية." />
       ) : null}
 
       {totalPages > 1 ? (
@@ -1331,9 +1332,16 @@ export function DismissedManagementView() {
           }
         }}
       >
-        <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
-          <AlertDialogHeader>
-            <AlertDialogTitle>{restorationMode === "manual" ? "إرجاع برصيد تختاره" : "إرجاع بعد تعهّد"}</AlertDialogTitle>
+        <AlertDialogContent className="tp-form-dialog sm:max-w-xl">
+          <FormDialogHero
+            alert
+            icon={restorationMode === "manual" ? RotateCcw : Handshake}
+            title={restorationMode === "manual" ? "إرجاع برصيد تختاره" : "إرجاع بعد تعهّد"}
+            description={restorationMode === "manual"
+              ? `حدّد رصيد العودة النهائي وسبب إرجاع «${reactivateDialog.student?.name || "الطالب المحدد"}». يبقى سجل الفصل السابق محفوظاً.`
+              : `تأكيد تعهّد «${reactivateDialog.student?.name || "الطالب المحدد"}» وإرجاعه نشطاً. يصبح رصيده فرصتين، ويبقى سجل الفصل السابق محفوظاً.`}
+          />
+          <div className="tp-form-dialog__body">
             <div role="group" aria-label="طريقة الإرجاع" className="grid gap-2 sm:grid-cols-2">
               <button
                 type="button"
@@ -1361,12 +1369,6 @@ export function DismissedManagementView() {
                 <span className="text-xs text-muted-foreground">تحدد رصيد العودة النهائي وسبب الإرجاع.</span>
               </button>
             </div>
-            <AlertDialogDescription>
-              {restorationMode === "manual"
-                ? `حدّد رصيد العودة النهائي وسبب إرجاع «${reactivateDialog.student?.name || "الطالب المحدد"}». يبقى سجل الفصل السابق محفوظاً.`
-                : `تأكيد تعهّد «${reactivateDialog.student?.name || "الطالب المحدد"}» وإرجاعه نشطاً. يصبح رصيده فرصتين، ويبقى سجل الفصل السابق محفوظاً.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
           {restorationMode === "manual" && (
             <div className="min-w-0 space-y-4">
               <div className="space-y-2">
@@ -1413,6 +1415,7 @@ export function DismissedManagementView() {
             ) : (
               <p className="border-t pt-3 font-medium">{finalBalanceDescription} عند الإرجاع.</p>
             )}
+          </div>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isReactivating}>إلغاء</AlertDialogCancel>

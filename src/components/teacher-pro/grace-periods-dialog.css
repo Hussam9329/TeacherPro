@@ -149,18 +149,6 @@ a.tp-grace-card__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--t
 
 .tp-grace__add-more { justify-self: start; }
 
-.tp-grace__empty {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.9rem 1rem;
-  border: 1px dashed var(--tp-border-strong);
-  border-radius: 1rem;
-}
-.tp-grace__empty p { margin: 0; color: var(--tp-text-muted); font-weight: 650; }
-
 .tp-grace__period-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 
 /* History: the same period panels, a little smaller */

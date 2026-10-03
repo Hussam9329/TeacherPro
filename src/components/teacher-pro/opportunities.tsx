@@ -27,8 +27,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/lib/user-toast";
@@ -39,7 +37,9 @@ import { DEFAULT_MANUAL_RESTORATION_REASON, manualRestorationAmount } from "@/li
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { ExportDialog, buildStudentDetailsFromProfileLog, type ExportColumn, type StudentDetailsMap } from "./export-dialog";
 import { StudentProfileDialog } from "./student-profile-dialog";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, CircleMinus, CirclePlus, RotateCcw, Target } from "lucide-react";
+import { FormDialogHero } from "./form-dialog";
+import { EmptyState, LoadingState } from "./ui-kit";
 import { ListToolbar } from "./list-toolbar";
 import { RowActionsMenu } from "./row-actions-menu";
 import {
@@ -1018,9 +1018,9 @@ export function OpportunitiesView() {
       />
 
       {studentsLoading ? (
-        <p className="tp-list-empty">جاري تحميل الطلاب...</p>
+        <LoadingState title="جاري تحميل الطلاب..." />
       ) : paged.length === 0 ? (
-        <p className="tp-list-empty">لا يوجد طلاب مطابقون للفلاتر الحالية</p>
+        <EmptyState title="لا يوجد طلاب مطابقون للفلاتر الحالية" />
       ) : (
         <ul className="tp-rcards" data-columns="2" aria-label="فرص الطلاب">
           {paged.map((student) => {
@@ -1169,7 +1169,7 @@ export function OpportunitiesView() {
         <CardContent>
           <div className="space-y-2 max-h-80 overflow-y-auto">
             {opportunityLogs.length === 0 ? (
-              <p className="empty-state py-6">لا توجد حركات</p>
+              <EmptyState compact icon={Target} title="لا توجد حركات" />
             ) : (
               opportunityLogs.slice(0, 20).map((log) => {
                 const student = students.find((s) => s.id === log.studentId);
@@ -1231,15 +1231,13 @@ export function OpportunitiesView() {
         open={Boolean(detailsStudentId)}
         onOpenChange={(open) => !open && setDetailsStudentId("")}
       >
-        <DialogContent dir="rtl" className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>
-              تفاصيل فرص الطالب{" "}
-              {selectedDetailsStudent ? "- " + selectedDetailsStudent.name : ""}
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent dir="rtl" className="tp-form-dialog max-w-3xl">
+          <FormDialogHero
+            icon={Target}
+            title={`تفاصيل فرص الطالب${selectedDetailsStudent ? " - " + selectedDetailsStudent.name : ""}`}
+          />
           {selectedDetailsStudent ? (
-            <div className="space-y-4">
+            <div className="tp-form-dialog__body">
               <div className="grid gap-3 rounded-2xl border bg-muted/40 p-4 text-sm md:grid-cols-4">
                 <div>
                   <p className="text-xs text-muted-foreground">الكود</p>
@@ -1288,13 +1286,9 @@ export function OpportunitiesView() {
               </div>
               <div className="max-h-[55dvh] space-y-3 overflow-y-auto pe-1">
                 {detailsLogsLoading ? (
-                  <p className="empty-state py-8">
-                    جاري تحميل سجل الطالب...
-                  </p>
+                  <LoadingState title="جاري تحميل سجل الطالب..." />
                 ) : selectedDetailsLogs.length === 0 ? (
-                  <p className="empty-state py-8">
-                    لا توجد حركات فرص لهذا الطالب
-                  </p>
+                  <EmptyState compact icon={Target} title="لا توجد حركات فرص لهذا الطالب" />
                 ) : (
                   selectedDetailsLogs.map((log) => (
                     <div
@@ -1361,15 +1355,14 @@ export function OpportunitiesView() {
           setBulkActionDialog((current) => ({ ...current, open }))
         }
       >
-        <DialogContent dir="rtl">
-          <DialogHeader>
-            <DialogTitle>
-              {bulkActionDialog.type === "add"
-                ? "إضافة فرص لكل الطلاب المطابقين"
-                : "خصم فرص من كل الطلاب المطابقين"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
+        <DialogContent dir="rtl" className="tp-form-dialog">
+          <FormDialogHero
+            icon={bulkActionDialog.type === "add" ? CirclePlus : CircleMinus}
+            title={bulkActionDialog.type === "add"
+              ? "إضافة فرص لكل الطلاب المطابقين"
+              : "خصم فرص من كل الطلاب المطابقين"}
+          />
+          <div className="tp-form-dialog__body">
             <div className="rounded-2xl border bg-muted/50 p-3 text-sm leading-6">
               <p className="font-bold">
                 ستشمل العملية {bulkTargetCount} طالباً مطابقاً للفلاتر والاستثناءات في جميع الصفحات.
@@ -1551,18 +1544,16 @@ export function OpportunitiesView() {
         open={actionDialog.open}
         onOpenChange={(o) => setActionDialog({ ...actionDialog, open: o })}
       >
-        <DialogContent dir="rtl">
-          <DialogHeader>
-            <DialogTitle>
-              {actionDialog.type === "add"
-                ? "إضافة فرص"
-                : actionDialog.type === "deduct"
-                  ? "خصم فرص"
-                  : "إعادة تعيين الفرص"}
-              {" - "}
-              {selectedActionStudent?.name}
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent dir="rtl" className="tp-form-dialog">
+          <FormDialogHero
+            icon={actionDialog.type === "add" ? CirclePlus : actionDialog.type === "deduct" ? CircleMinus : RotateCcw}
+            title={`${actionDialog.type === "add"
+              ? "إضافة فرص"
+              : actionDialog.type === "deduct"
+                ? "خصم فرص"
+                : "إعادة تعيين الفرص"} - ${selectedActionStudent?.name ?? ""}`}
+          />
+          <div className="tp-form-dialog__body">
           {actionDialog.type === "add" && selectedActionStudent?.status === "مفصول" && (
             <p className="text-sm text-muted-foreground">
               ستعيد هذه الإضافة الطالب إلى الحالة النشطة بالعدد المحدد، ويُحفظ سبب الاستعادة في سجله.
@@ -1605,6 +1596,7 @@ export function OpportunitiesView() {
               </p>
             </>
           )}
+          </div>
           <DialogFooter>
             <Button
               variant="outline"

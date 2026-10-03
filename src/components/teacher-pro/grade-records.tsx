@@ -60,12 +60,15 @@ import {
   Loader2,
   PenLine,
   RotateCcw,
+  SearchX,
   UserX,
 } from "lucide-react";
 
 import { GradeNoteBanner } from "@/components/teacher-pro/grade-note-banner";
 import { editableGradeNote, resolveGradeNoteBanner, visibleGradeNote, withInternalGradeNotePrefix } from "@/lib/grade-note-banners";
 import { ListToolbar } from "./list-toolbar";
+import { FormDialogHero } from "./form-dialog";
+import { EmptyState, LoadingState } from "./ui-kit";
 import {
   examMatchesAcademicFilters,
   getAcademicCourseProgramFilterOptions,
@@ -265,6 +268,8 @@ function GradeStudentCard({
 
       <Button
         type="button"
+        variant="secondary"
+        size="sm"
         className="tp-grade-student__open"
         onClick={onOpen}
         aria-describedby={`grade-student-${student.id}`}
@@ -1281,17 +1286,15 @@ export function GradeRecordsView() {
           </div>
         )}
         {studentListLoading && !studentList && (
-          <p role="status" className="tp-grade-records__status">
-            <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            جاري تحميل سجل الدرجات...
-          </p>
+          <LoadingState title="جاري تحميل سجل الدرجات..." />
         )}
         {studentList && summaries.length === 0 && !studentListLoading && (
-          <p className="tp-grade-records__empty">
-            {hasActiveFilters
+          <EmptyState
+            icon={hasActiveFilters ? SearchX : ClipboardList}
+            title={hasActiveFilters
               ? "لا يوجد طلاب بدرجات تطابق الفلاتر الحالية."
               : "لا توجد درجات مسجلة بعد."}
-          </p>
+          />
         )}
         {summaries.length > 0 && (
           <ul className="tp-grade-students" aria-busy={studentListLoading}>
@@ -1385,13 +1388,15 @@ export function GradeRecordsView() {
                 </p>
               )}
               {studentGrades && visibleStudentGrades.length === 0 && (
-                <p className="tp-modal__empty-note">
-                  {studentGradesTab === "numeric"
+                <EmptyState
+                  compact
+                  icon={ClipboardList}
+                  title={studentGradesTab === "numeric"
                     ? "لا توجد درجات رقمية لهذا الطالب."
                     : studentGradesTab === "absent"
                       ? "لا يوجد غياب لهذا الطالب."
                       : "لا توجد درجات لهذا الطالب."}
-                </p>
+                />
               )}
               {visibleStudentGrades.length > 0 && openStudent && (
                 <ul className="tp-grade-dialog__list" aria-busy={studentGradesLoading}>
@@ -1476,11 +1481,9 @@ export function GradeRecordsView() {
         open={editDialog.open}
         onOpenChange={(open) => setEditDialog((prev) => ({ ...prev, open }))}
       >
-        <DialogContent dir="rtl">
-          <DialogHeader>
-            <DialogTitle>تعديل درجة الطالب</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
+        <DialogContent dir="rtl" className="tp-form-dialog">
+          <FormDialogHero icon={PenLine} title="تعديل درجة الطالب" />
+          <div className="tp-form-dialog__body gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label>الحالة</Label>
               <Select

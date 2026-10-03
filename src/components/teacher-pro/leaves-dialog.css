@@ -192,18 +192,6 @@ a.tp-leave-card__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--t
 .tp-leave-dates__one b { color: var(--tp-text); font-size: 1.05rem; font-weight: 850; font-variant-numeric: tabular-nums; }
 .tp-leave-dates__arrow { flex-shrink: 0; inline-size: 1rem; block-size: 1rem; color: var(--tone-ink); }
 
-.tp-leaves__empty {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.9rem 1rem;
-  border: 1px dashed var(--tp-border-strong);
-  border-radius: 1rem;
-}
-.tp-leaves__empty p { margin: 0; color: var(--tp-text-muted); font-weight: 650; }
-
 /* The small menu on each leave */
 .tp-leaves__menu { position: relative; }
 .tp-leaves .tp-leaves__menu-toggle { width: 2.5rem; height: 2.5rem; }

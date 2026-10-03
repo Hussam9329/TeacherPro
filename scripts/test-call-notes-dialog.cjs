@@ -152,6 +152,7 @@ function harness() {
     '@/lib/validation': validationContext.exports,
     '@/lib/call-contact-status': loadHelper('src/lib/call-contact-status.ts'),
     './student-registry-helpers': loadHelper('src/components/teacher-pro/student-registry-helpers.ts'),
+    './ui-kit': named(['EmptyState', 'LoadingState']),
   };
   const context = {
     exports: {},

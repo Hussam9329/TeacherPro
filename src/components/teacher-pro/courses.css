@@ -309,12 +309,6 @@
   color: var(--muted-foreground);
 }
 
-.tp-course-settings__footer {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 0.25rem;
-}
-
 .tp-course-settings .tp-course-card__facts {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
   gap: 0.4rem 1.25rem;

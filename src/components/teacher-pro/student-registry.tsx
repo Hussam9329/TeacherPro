@@ -34,8 +34,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
@@ -85,12 +83,14 @@ import {
   RotateCcw,
   Save,
   SearchX,
+  UserPen,
   UserPlus,
   UserRound,
   UserX,
   X,
 } from "lucide-react";
 import { EmptyState } from "./ui-kit";
+import { FormDialogHero } from "./form-dialog";
 import { ListToolbar } from "./list-toolbar";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import {
@@ -2419,11 +2419,9 @@ export function StudentRegistryView() {
           }
         }}
       >
-        <DialogContent dir="rtl" className="tp-registry-editor sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>تعديل بيانات الطالب</DialogTitle>
-          </DialogHeader>
-          <div className="tp-registry-editor__body">
+        <DialogContent dir="rtl" className="tp-form-dialog tp-registry-editor sm:max-w-3xl">
+          <FormDialogHero icon={UserPen} title="تعديل بيانات الطالب" />
+          <div className="tp-form-dialog__body tp-registry-editor__body">
             {editRecoveryReason && (
               <div
                 ref={editRecoveryPanel}
@@ -3349,13 +3347,9 @@ export function StudentRegistryView() {
           if (!o) closeDismissDialog();
         }}
       >
-        <DialogContent dir="rtl">
-          <DialogHeader>
-            <DialogTitle>
-              فصل الطالب - {dismissDialog.student?.name}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
+        <DialogContent dir="rtl" className="tp-form-dialog">
+          <FormDialogHero icon={UserX} title={`فصل الطالب - ${dismissDialog.student?.name ?? ""}`} />
+          <div className="tp-form-dialog__body">
             <div className="rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm leading-6 text-danger">
               عند تأكيد الفصل سيصبح الطالب <strong>مفصولاً</strong> ورصيد فرصه{" "}
               <strong>0</strong>. لا توجد أنواع أو درجات للفصل، وسجل الفصل

@@ -5,21 +5,32 @@ import { Loader2, SearchX } from 'lucide-react';
 
 type IconComponent = React.ComponentType<{ className?: string }>;
 
+/**
+ * «ماكو بيانات»: the one empty box of every page and window. `compact` is for
+ * a part of a card or window (a tab, a student's history), not a whole list.
+ */
 export function EmptyState({
   title = 'لا توجد بيانات',
   description,
   icon: Icon = SearchX,
   action,
+  compact = false,
+  className,
 }: {
-  title?: string;
-  description?: string;
+  title?: React.ReactNode;
+  description?: React.ReactNode;
   icon?: IconComponent;
   action?: React.ReactNode;
+  compact?: boolean;
+  className?: string;
 }) {
   return (
-    <div className="empty-state">
-      <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <Icon className="size-5" />
+    <div className={`empty-state${compact ? ' py-5' : ''}${className ? ` ${className}` : ''}`}>
+      <div
+        className={`mx-auto flex items-center justify-center rounded-full bg-primary/10 text-primary ${compact ? 'mb-2 size-9' : 'mb-3 size-12'}`}
+        aria-hidden="true"
+      >
+        <Icon className={compact ? 'size-4' : 'size-5'} />
       </div>
       <p className="font-bold text-foreground">{title}</p>
       {description && <p className="mx-auto mt-1 max-w-md text-xs leading-6 text-muted-foreground">{description}</p>}

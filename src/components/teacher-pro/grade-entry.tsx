@@ -59,11 +59,12 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
+import { AlertCircle, CalendarCheck, PenLine, ScanLine, SearchX } from "lucide-react";
+import { FormDialogHero } from "@/components/teacher-pro/form-dialog";
+import { EmptyState, LoadingState } from "@/components/teacher-pro/ui-kit";
+import { ListChips, type ListChip } from "@/components/teacher-pro/list-toolbar";
 import {
   Select,
   SelectContent,
@@ -115,7 +116,26 @@ type DraftGrade = {
   notes: string;
 };
 
-const statusOptions: DraftGrade["status"][] = ["درجة", "غائب", "غش"];
+/** The «حالة الدرجة» buttons above the sheet; «الكل» is no filter. */
+const GRADE_STATUS_CHIPS: ListChip[] = [
+  { key: "all", label: "الكل" },
+  { key: "غير مسجل", label: "غير مسجل", tone: "warning" },
+  { key: "درجة", label: "درجة", tone: "success" },
+  { key: "غائب", label: "غائب", tone: "danger" },
+  { key: "غش", label: "غش", tone: "danger" },
+  { key: "ضمن السماح", label: GRACE_PERIOD_EXCUSE_LABEL, tone: "info" },
+];
+
+/** Whether a student on the sheet matches a «حالة الدرجة» filter ("" = all). */
+function matchesGradeStatusFilter(
+  filter: string,
+  state: { hasLeave: boolean; hasGrace: boolean; entered: boolean; status?: string },
+) {
+  if (!filter) return true;
+  if (filter === "ضمن السماح") return state.hasGrace;
+  if (filter === "غير مسجل") return !state.entered && !state.hasLeave;
+  return !state.hasLeave && state.entered && !state.hasGrace && state.status === filter;
+}
 
 type GradeEntryNotice = {
   type: "success" | "error" | "info";
@@ -1023,7 +1043,9 @@ export function GradeEntryView() {
     setSavedRows((prev) => ({ ...prev, [studentId]: "تم إلغاء التعديل" }));
   };
 
-  const examStudents = useMemo(() => {
+  // The sheet's students before the «حالة الدرجة» buttons, with what each
+  // button checks; the buttons count inside this set.
+  const statusFilterBase = useMemo(() => {
     if (!selectedExam) return [];
     const selectedMainSites = splitSelection(selectedExam.mainSite);
 
@@ -1064,21 +1086,17 @@ export function GradeEntryView() {
             return false;
         }
 
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, "ar"))
+      .map((student) => {
+        const grade = gradeByStudentId.get(student.id);
         const hasLeave = leaveByStudentId.has(student.id);
         const hasGrace =
           !hasLeave && isExamInStudentGracePeriod(student, selectedExam);
         const entered = !hasLeave && isGradeEntered(grade, selectedExam);
-        if (filterStatus === "ضمن السماح" && !hasGrace) return false;
-        if (filterStatus === "غير مسجل" && (entered || hasLeave)) return false;
-        if (
-          filterStatus &&
-          !["غير مسجل", "ضمن السماح"].includes(filterStatus) &&
-          (hasLeave || !entered || hasGrace || grade?.status !== filterStatus)
-        )
-          return false;
-        return true;
-      })
-      .sort((a, b) => a.name.localeCompare(b.name, "ar"));
+        return { student, state: { hasLeave, hasGrace, entered, status: grade?.status } };
+      });
   }, [
     selectedExam,
     entryStudentsSource,
@@ -1092,8 +1110,30 @@ export function GradeEntryView() {
     filterCourseTerm,
     filterStudyType,
     filterLocation,
-    filterStatus,
   ]);
+
+  const examStudents = useMemo(
+    () =>
+      statusFilterBase
+        .filter((row) => matchesGradeStatusFilter(filterStatus, row.state))
+        .map((row) => row.student),
+    [statusFilterBase, filterStatus],
+  );
+
+  // «الكل · غير مسجل · درجة · غائب · غش · ضمن السماح», each with its count.
+  const statusChips = useMemo<ListChip[]>(() => {
+    const count = (key: string) =>
+      statusFilterBase.filter((row) => matchesGradeStatusFilter(key, row.state)).length;
+    const chips: ListChip[] = GRADE_STATUS_CHIPS.map((chip) => ({
+      ...chip,
+      count: count(chip.key === "all" ? "" : chip.key),
+    }));
+    // A status opened from the dashboard that has no button of its own stays visible.
+    if (filterStatus && !GRADE_STATUS_CHIPS.some((chip) => chip.key === filterStatus)) {
+      chips.push({ key: filterStatus, label: filterStatus, count: count(filterStatus), tone: "muted" });
+    }
+    return chips;
+  }, [statusFilterBase, filterStatus]);
 
   // «X من Y مسجّلة»: the sheet's roster (exam courses, active chapter, sites
   // and the course filters) whatever the search or status filter; a student
@@ -2449,15 +2489,13 @@ export function GradeEntryView() {
           if (!open && !leaveSaving) setLeaveRequest(null);
         }}
       >
-        <DialogContent dir="rtl">
-          <DialogHeader>
-            <DialogTitle>مجاز: {leaveRequestStudent?.name}</DialogTitle>
-            <DialogDescription>
-              تنسجل إجازة لهذا الامتحان بس ({selectedExam?.name}). إذا عنده درجة
-              عليه تنحفظ نسخة منها وترجع إذا انشالت الإجازة.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
+        <DialogContent dir="rtl" className="tp-form-dialog">
+          <FormDialogHero
+            icon={CalendarCheck}
+            title={<>مجاز: {leaveRequestStudent?.name}</>}
+            description={`تنسجل إجازة لهذا الامتحان بس (${selectedExam?.name || ""}). إذا عنده درجة عليه تنحفظ نسخة منها وترجع إذا انشالت الإجازة.`}
+          />
+          <div className="tp-form-dialog__body gap-2">
             <Label htmlFor="grade-entry-leave-reason">سبب الإجازة</Label>
             <Input
               id="grade-entry-leave-reason"
@@ -2484,22 +2522,24 @@ export function GradeEntryView() {
       </Dialog>
 
       <Dialog open={quickScanOpen} onOpenChange={setQuickScanOpen}>
-        <DialogContent dir="rtl">
-          <DialogHeader>
-            <DialogTitle>بحث / مسح QR</DialogTitle>
-            <DialogDescription>
-              امسح QR/باركود أو اكتب كود الطالب للبحث.
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            autoFocus
-            value={quickScanValue}
-            onChange={(event) => setQuickScanValue(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") submitQuickScan();
-            }}
-            placeholder="كود الطالب أو النص المقروء من الماسح"
+        <DialogContent dir="rtl" className="tp-form-dialog">
+          <FormDialogHero
+            icon={ScanLine}
+            title="بحث / مسح QR"
+            description="امسح QR/باركود أو اكتب كود الطالب للبحث."
           />
+          <div className="tp-form-dialog__body">
+            <Input
+              autoFocus
+              aria-label="كود الطالب"
+              value={quickScanValue}
+              onChange={(event) => setQuickScanValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") submitQuickScan();
+              }}
+              placeholder="كود الطالب أو النص المقروء من الماسح"
+            />
+          </div>
           <DialogFooter>
             <Button
               type="button"
@@ -2520,7 +2560,7 @@ export function GradeEntryView() {
           <CardTitle>تسجيل الدرجات</CardTitle>
         </CardHeader>
         <CardContent className="tp-filter-content">
-          <div className="tp-filter-grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+          <div className="tp-filter-grid grid-cols-1 md:grid-cols-3">
             <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="grade-entry-course">اسم الدورة</Label>
               <Select
@@ -2541,7 +2581,7 @@ export function GradeEntryView() {
               </Select>
             </div>
 
-            <div className="tp-filter-field tp-filter-primary lg:col-span-2">
+            <div className="tp-filter-field tp-filter-primary md:col-span-2">
               <Label htmlFor="grade-entry-exam">اختر الامتحان</Label>
               <Select
                 name="examId"
@@ -2561,27 +2601,6 @@ export function GradeEntryView() {
               </Select>
             </div>
 
-            <div className="tp-filter-field tp-filter-secondary">
-              <Label htmlFor="grade-entry-status-filter">حالة الدرجة</Label>
-              <Select
-                value={filterStatus || "all"}
-                onValueChange={(v) => setFilterStatus(v === "all" ? "" : v)}
-              >
-                <SelectTrigger id="grade-entry-status-filter">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  <SelectItem value="غير مسجل">غير مسجل</SelectItem>
-                  <SelectItem value="ضمن السماح">{GRACE_PERIOD_EXCUSE_LABEL}</SelectItem>
-                  {statusOptions.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
           {selectedExam && (
@@ -2661,6 +2680,14 @@ export function GradeEntryView() {
                     value={search}
                     onCommit={commitSearch}
                     onForwardTab={focusFirstGradeInput}
+                  />
+                  {/* «حالة الدرجة»: buttons that carry their count, like the system's lists. */}
+                  <ListChips
+                    label="حالة الدرجة"
+                    className="pt-1"
+                    chips={entrySheetLoading ? statusChips.map((chip) => ({ ...chip, count: null })) : statusChips}
+                    activeChip={filterStatus || "all"}
+                    onChipChange={(key) => setFilterStatus(key === "all" ? "" : key)}
                   />
                 </div>
                 <div
@@ -2847,9 +2874,7 @@ export function GradeEntryView() {
             <CardTitle>ورقة إدخال الدرجة</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="empty-state">
-              اختر امتحاناً لإدخال درجاته.
-            </p>
+            <EmptyState icon={PenLine} title="اختر امتحاناً لإدخال درجاته." />
           </CardContent>
         </Card>
       )}
@@ -2937,13 +2962,16 @@ export function GradeEntryView() {
             )}
             <div className="space-y-2">
               {examStudents.length === 0 ? (
-                <p className="empty-state">
-                  {entrySheetLoading
-                    ? "جاري تجهيز ورقة إدخال الدرجة..."
-                    : entrySheetError
+                entrySheetLoading ? (
+                  <LoadingState title="جاري تجهيز ورقة إدخال الدرجة..." />
+                ) : (
+                  <EmptyState
+                    icon={entrySheetError ? AlertCircle : SearchX}
+                    title={entrySheetError
                       ? "تعذر تحميل طلاب هذا الامتحان."
                       : "لا يوجد طلاب مطابقون للفلاتر أو للدورات المربوطة بفصل نشط."}
-                </p>
+                  />
+                )
               ) : (
                 visibleExamStudents.map((student) => {
                   const grade = getGrade(student.id);

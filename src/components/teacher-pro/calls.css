@@ -45,15 +45,6 @@
 .tp-calls__export { display: flex; flex: 0 0 auto; }
 .tp-calls__export [data-slot="button"] { min-block-size: 2.5rem; }
 
-.tp-calls__empty {
-  margin: 0;
-  padding: 1.5rem 1rem;
-  border: 1px dashed var(--border);
-  border-radius: var(--calls-radius);
-  color: var(--muted-foreground);
-  font-size: 0.9rem;
-  text-align: center;
-}
 
 /* Filters */
 .tp-calls__filters {

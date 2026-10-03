@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { AlertCircle, BookOpen, CalendarDays, CheckCheck, ChevronDown, Loader2, LockKeyhole, MessageCircle, Radiation, RefreshCw, Search, X } from "lucide-react";
+import { AlertCircle, BookOpen, CalendarDays, CheckCheck, ChevronDown, Loader2, LockKeyhole, MessageCircle, Radiation, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -23,6 +23,7 @@ import { describeTelegramHandle } from "./student-registry-helpers";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { formatAppDate } from "@/lib/format";
 import { displayReasonText } from "@/lib/reason-display";
+import { EmptyState, LoadingState } from "./ui-kit";
 import "./tp-modal.css";
 import "./code-closures-dialog.css";
 
@@ -33,6 +34,12 @@ type Props = {
 };
 
 type StatusFilter = "all" | "checked" | "unchecked";
+
+const STATUS_FILTERS: Array<{ key: StatusFilter; label: string; tone?: "success" | "warning" }> = [
+  { key: "all", label: "الكل" },
+  { key: "unchecked", label: "بانتظار الإغلاق", tone: "warning" },
+  { key: "checked", label: "مغلقة", tone: "success" },
+];
 
 export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
   const filterId = useId();
@@ -45,6 +52,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
   const [error, setError] = useState("");
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [selectedCourseName, setSelectedCourseName] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [expandedReasonIds, setExpandedReasonIds] = useState<Set<string>>(new Set());
   // Contact steps clicked here, shown at once while the shared mark is saved.
   const [clickedSteps, setClickedSteps] = useState<Record<string, number>>({});
@@ -95,6 +103,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
     setSearch("");
     setCourseId("");
     setStatusFilter("unchecked");
+    setFiltersOpen(false);
     setExpandedReasonIds(new Set());
     if (!open) return;
     void refresh();
@@ -247,44 +256,40 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
         </div>
 
         <div className="tp-modal__body">
-          <div className="tp-modal__controls">
-            <div role="group" aria-label="حالة اغلاق الكود" className="tp-modal__filters">
-              {([
-                ["all", "All", "الكل", undefined],
-                ["checked", "Checked", "مغلقة", "success"],
-                ["unchecked", "unChecked", "بانتظار الإغلاق", "warning"],
-              ] as const).map(([value, label, description, tone]) => (
-                <Button
-                  key={value}
-                  type="button"
-                  variant="ghost"
-                  aria-label={label}
-                  aria-describedby={`${filterId}-${value}-description ${filterId}-${value}-count`}
-                  aria-pressed={statusFilter === value}
-                  onClick={() => setStatusFilter(value)}
-                  data-closure-filter={value}
-                  data-tone={tone}
-                  className="tp-modal__filter"
-                >
-                  <span className="tp-modal__filter-label">{description}</span>
-                  <strong id={`${filterId}-${value}-count`} className="tp-modal__filter-count">{loaded ? counts[value] : "—"}</strong>
-                  <span id={`${filterId}-${value}-description`} className="tp-modal__filter-description" dir="ltr">{label}</span>
-                </Button>
-              ))}
+          <div className="tp-modal__searchbar">
+            <div className="tp-modal__input-wrap tp-modal__search">
+              <Search aria-hidden="true" />
+              <Input value={search} onChange={(event) => setSearch(event.target.value)} aria-label="بحث في اغلاق الكودات" placeholder="ابحث باسم الطالب أو الكود" />
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="tp-modal__filter-toggle"
+              aria-expanded={filtersOpen}
+              onClick={() => setFiltersOpen((value) => !value)}
+            >
+              <SlidersHorizontal className="size-4" aria-hidden="true" />
+              تصفية
+              {courseId && <span className="tp-modal__filter-badge">1</span>}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="تحديث اغلاق الكودات"
+              title="تحديث"
+              disabled={loading || pendingIds.size > 0}
+              onClick={() => void refresh()}
+            >
+              <RefreshCw className={`size-4 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />
+            </Button>
+          </div>
 
-            <div className="tp-modal__fields">
-              <label className="tp-modal__field">
-                <span>بحث عن طالب</span>
-                <div className="tp-modal__input-wrap">
-                  <Search aria-hidden="true" />
-                  <Input value={search} onChange={(event) => setSearch(event.target.value)} aria-label="بحث في اغلاق الكودات" placeholder="اسم الطالب أو الكود" />
-                </div>
-              </label>
+          {filtersOpen && (
+            <div className="tp-modal__fields tp-modal__panel">
               <label className="tp-modal__field">
                 <span>اسم الدورة</span>
-                <div className="tp-modal__select-wrap">
-                  <BookOpen aria-hidden="true" />
+                <div className="tp-modal__select-wrap" data-plain="true">
                   <select
                     aria-label="تصفية اغلاق الكودات حسب اسم الدورة"
                     value={courseId}
@@ -298,22 +303,38 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
                     {courseId && !courses.some(([id]) => id === courseId) && <option value={courseId}>{selectedCourseName}</option>}
                     {courses.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
                   </select>
-                  <ChevronDown className="tp-modal__chevron" aria-hidden="true" />
                 </div>
               </label>
             </div>
+          )}
+
+          <div role="group" aria-label="حالة اغلاق الكود" className="tp-modal__chips">
+            {STATUS_FILTERS.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                className="tp-modal__filter"
+                data-closure-filter={option.key}
+                data-tone={option.tone}
+                aria-pressed={statusFilter === option.key}
+                onClick={() => setStatusFilter(option.key)}
+              >
+                {option.tone && <span className="tp-modal__filter-dot" aria-hidden="true" />}
+                <span className="tp-modal__filter-label">{option.label}</span>
+                <span className="tp-modal__filter-count">{loaded ? counts[option.key] : "…"}</span>
+              </button>
+            ))}
           </div>
 
           <div className="tp-modal__toolbar">
             <span className="tp-modal__count" aria-live="polite">
               {loaded ? `المعروض ${visibleStudents.length} من ${scopedStudents.length} طالب مفصول` : "الطلاب المفصولون"}
             </span>
-            <div className="tp-modal__tools">
-              {hasFilters && <Button type="button" variant="ghost" size="sm" onClick={clearFilters}><X className="size-4" aria-hidden="true" />مسح الفلاتر</Button>}
-              <Button type="button" variant="outline" size="sm" disabled={loading || pendingIds.size > 0} onClick={() => void refresh()}>
-                <RefreshCw className={`size-4 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />تحديث
-              </Button>
-            </div>
+            {hasFilters && (
+              <div className="tp-modal__tools">
+                <Button type="button" variant="ghost" size="sm" onClick={clearFilters}><X className="size-4" aria-hidden="true" />مسح الفلاتر</Button>
+              </div>
+            )}
           </div>
 
           {error && <div role="alert" className="tp-modal__error"><AlertCircle aria-hidden="true" /><p>{error}</p></div>}
@@ -321,15 +342,12 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
 
           <section className="tp-modal__section" aria-label="الطلاب المفصولون">
             {!loaded && loading ? (
-              <div className="tp-modal__empty" role="status">
-                <span className="tp-modal__empty-icon"><Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden="true" /></span>
-                <p>جاري تحميل الطلاب...</p>
-              </div>
+              <LoadingState title="جاري تحميل الطلاب..." />
             ) : loaded && visibleStudents.length === 0 ? (
-              <div className="tp-modal__empty">
-                <span className="tp-modal__empty-icon">{search.trim() || courseId ? <Search aria-hidden="true" /> : <CheckCheck aria-hidden="true" />}</span>
-                <p>{pendingIds.size > 0 ? "جاري حفظ اغلاق الكود..." : search.trim() || courseId ? "لا يوجد طلاب يطابقون البحث والفلاتر" : statusFilter === "unchecked" ? "لا توجد كودات بانتظار الإغلاق" : statusFilter === "checked" ? "لا توجد كودات مغلقة" : "لا يوجد طلاب مفصولون"}</p>
-              </div>
+              <EmptyState
+                icon={search.trim() || courseId ? Search : CheckCheck}
+                title={pendingIds.size > 0 ? "جاري حفظ اغلاق الكود..." : search.trim() || courseId ? "لا يوجد طلاب يطابقون البحث والفلاتر" : statusFilter === "unchecked" ? "لا توجد كودات بانتظار الإغلاق" : statusFilter === "checked" ? "لا توجد كودات مغلقة" : "لا يوجد طلاب مفصولون"}
+              />
             ) : (
               <div className="tp-modal__cards" data-columns="1">
                 {visibleStudents.map((student) => {

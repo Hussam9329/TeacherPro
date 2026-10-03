@@ -123,9 +123,9 @@ must(
 
 must(
   editDialog.includes("tp-exam-edit-dialog") &&
+    editDialog.includes("tp-form-dialog") &&
     editDialog.includes("backdrop-blur-none") &&
-    editDialog.includes("[&>[data-slot=dialog-footer]]:backdrop-blur-none") &&
-    editDialog.includes("[&>[data-slot=dialog-header]]:backdrop-blur-none"),
+    editDialog.includes("[&>[data-slot=dialog-footer]]:backdrop-blur-none"),
   "تم تخفيف طبقات الـ backdrop blur الثقيلة داخل نافذة تعديل الامتحان فقط",
   "يجب أن يبقى تخفيف blur محصوراً في Dialog التعديل حتى لا يتغير تصميم النظام كله."
 );

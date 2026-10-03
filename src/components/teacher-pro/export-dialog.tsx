@@ -9,13 +9,11 @@ import { formatAppDate } from "@/lib/format";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
-  DialogHeader,
-  DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Download, FileCode, FileSpreadsheet, FileText, Printer, RotateCcw } from "lucide-react";
+import { Download, FileCode, FileDown, FileSpreadsheet, FileText, Printer, RotateCcw } from "lucide-react";
+import { FormDialogHero } from "@/components/teacher-pro/form-dialog";
 import { toast } from "@/lib/user-toast";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 import { buildProfessionalXlsx } from "@/lib/xlsx-export";
@@ -1892,17 +1890,18 @@ export function ExportDialog<T = Record<string, unknown>>({
           {triggerLabel}
         </Button>
       </DialogTrigger>
-      <DialogContent dir="rtl" className="max-h-[90dvh] min-w-0 overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{htmlExamSelectionOpen ? "اختر امتحانات تقرير HTML" : title}</DialogTitle>
-          {description || htmlExamSelectionOpen ? (
-            <DialogDescription>
+      <DialogContent dir="rtl" className="tp-form-dialog sm:max-w-2xl">
+        <FormDialogHero
+          icon={FileDown}
+          title={htmlExamSelectionOpen ? "اختر امتحانات تقرير HTML" : title}
+          description={description || htmlExamSelectionOpen ? (
+            <>
               {description}
               {htmlExamSelectionOpen ? <span className="block">إخفاء امتحان من التقرير لا يغيّر رصيد الفرص.</span> : null}
-            </DialogDescription>
+            </>
           ) : null}
-        </DialogHeader>
-        <div className="space-y-4 py-2">
+        />
+        <div className="tp-form-dialog__body">
           <div className="grid grid-cols-1 gap-2 rounded-xl border bg-muted/30 p-3 text-sm sm:grid-cols-2">
             <p className="text-muted-foreground">
               عدد النتائج التي ستُصدّر:{" "}

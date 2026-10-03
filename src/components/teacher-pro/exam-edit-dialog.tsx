@@ -10,10 +10,9 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { FilePen } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -30,6 +29,7 @@ import {
   validateExamForm,
   type ExamValidationResult,
 } from "@/lib/exam-form-validation";
+import { FormDialogHero } from "./form-dialog";
 
 export type ExamStatusMode = "نشط" | "تفعيل مجدول" | "معطل";
 
@@ -211,13 +211,11 @@ export function ExamEditDialog({
     >
       <DialogContent
         dir="rtl"
-        className="tp-exam-edit-dialog max-w-5xl backdrop-blur-none [&>[data-slot=dialog-footer]]:backdrop-blur-none [&>[data-slot=dialog-header]]:backdrop-blur-none"
+        className="tp-form-dialog tp-exam-edit-dialog max-w-5xl backdrop-blur-none [&>[data-slot=dialog-footer]]:backdrop-blur-none"
       >
-        <DialogHeader>
-          <DialogTitle>تعديل الامتحان بالكامل</DialogTitle>
-        </DialogHeader>
+        <FormDialogHero icon={FilePen} title="تعديل الامتحان بالكامل" />
 
-        <div className="min-h-0 max-h-[calc(100dvh-11rem)] space-y-4 overflow-y-auto pe-1 sm:max-h-[calc(100dvh-13rem)]">
+        <div className="tp-form-dialog__body">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-1 md:col-span-2">
               <Label htmlFor="edit-exam-name">اسم الامتحان</Label>
@@ -730,7 +728,7 @@ export function ExamEditDialog({
             id="edit-exam-validation-summary"
             role="alert"
             aria-live="polite"
-            className="rounded-xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft px-4 py-3 text-sm font-medium text-danger"
+            className="mx-4 mb-3 shrink-0 rounded-xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft px-4 py-3 text-sm font-medium text-danger sm:mx-5"
           >
             لا يمكن حفظ التعديل حالياً: {formValidation.firstError}
           </div>

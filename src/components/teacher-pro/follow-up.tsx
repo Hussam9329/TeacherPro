@@ -43,6 +43,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { callPhoneQrValue } from "@/lib/call-phone-qr";
+import { EmptyState } from "./ui-kit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1633,9 +1634,9 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                   ))}
                 </div>
                 {displayedGradeItems.length === 0 ? (
-                  <p className="tp-modal__empty-note">لا توجد درجات مسجلة لهذا الطالب ضمن امتحانات هذه الدورة.</p>
+                  <EmptyState compact icon={FileText} title="لا توجد درجات مسجلة لهذا الطالب ضمن امتحانات هذه الدورة." />
                 ) : historyGradeItems.length === 0 ? (
-                  <p className="tp-modal__empty-note">لا توجد امتحانات إضافية لعرضها غير الامتحان المختار.</p>
+                  <EmptyState compact icon={FileText} title="لا توجد امتحانات إضافية لعرضها غير الامتحان المختار." />
                 ) : (
                   <ul className="tp-call-exams">
                     {historyGradeItems.map((gradeItem) => renderCallGradeChip(row, gradeItem))}
@@ -1749,9 +1750,9 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       </section>
 
       {!callCourseSelected ? (
-        <p className="tp-calls__empty">اختر الدورة ثم الامتحان لعرض الطلاب.</p>
+        <EmptyState icon={PhoneCall} title="اختر الدورة ثم الامتحان لعرض الطلاب." />
       ) : !callExamSelected ? (
-        <p className="tp-calls__empty">اختر الامتحان لعرض الطلاب.</p>
+        <EmptyState icon={PhoneCall} title="اختر الامتحان لعرض الطلاب." />
       ) : (
         <>
           <section className="tp-calls__filters" aria-label="فلاتر المكالمات">
@@ -1903,7 +1904,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           </section>
 
           <p className="tp-calls__count" data-count-scope="filtered" aria-live="polite">
-            المطابقون للفلاتر: <b>{callStatValue(callDatabaseStats?.total)}</b>
+            المعروض <b>{visibleCallRows.length}</b> من <b>{callStatValue(callDatabaseStats?.total)}</b>
             {callLoading && visibleCallRows.length > 0 ? " · جاري التحديث…" : ""}
             {callUpdatesPending && (
               <>
@@ -1929,7 +1930,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             {callLoading && visibleCallRows.length === 0 ? (
               renderCallLoadingSkeleton()
             ) : visibleCallRows.length === 0 ? (
-              <p className="tp-calls__empty">لا يوجد طلاب مطابقون للدورة والامتحان والفلاتر الحالية.</p>
+              <EmptyState title="لا يوجد طلاب مطابقون للدورة والامتحان والفلاتر الحالية." />
             ) : (
               visibleCallRows.map(renderCallRow)
             )}

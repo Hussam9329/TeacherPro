@@ -42,7 +42,8 @@ export const codeClosuresApi = {
         signal: requestSignal,
         headers: ownerHeaders(),
       });
-      const data = await response.json();
+      // A cut or half-sent reply reads as the same Arabic message, never as a parser error.
+      const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "تعذر تحميل اغلاق الكودات. أعد المحاولة.");
       if (!Array.isArray(data?.students)) throw new Error("تعذر قراءة اغلاق الكودات. أعد المحاولة.");
       return data;

@@ -11,13 +11,18 @@ import { useTeacherStore } from "@/lib/teacher-store";
 import {
   BookOpen,
   ChevronDown,
+  FolderPlus,
   Link2,
   Pencil,
   Plus,
+  Power,
+  PowerOff,
   RefreshCw,
   Trash2,
 } from "lucide-react";
 import "./chapters.css";
+import { FormDialogHero } from "./form-dialog";
+import { EmptyState } from "./ui-kit";
 import { ListToolbar } from "./list-toolbar";
 import { RowActionsMenu } from "./row-actions-menu";
 import {
@@ -45,10 +50,7 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogFooter,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -1146,9 +1148,7 @@ export function ChaptersView() {
         {loading ? (
           renderLoadingSkeleton()
         ) : filteredChapters.length === 0 ? (
-          <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-            لا توجد فصول مطابقة للفلاتر.
-          </p>
+          <EmptyState icon={BookOpen} title="لا توجد فصول مطابقة للفلاتر." />
         ) : (
           <div className="tp-chapters__list">{filteredChapters.map(renderChapterRow)}</div>
         )}
@@ -1161,9 +1161,7 @@ export function ChaptersView() {
         {loading ? (
           renderLoadingSkeleton()
         ) : filteredCourses.length === 0 ? (
-          <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-            لا توجد دورات مطابقة للفلاتر.
-          </p>
+          <EmptyState title="لا توجد دورات مطابقة للفلاتر." />
         ) : (
           <div className="tp-chapters__list">{filteredCourses.map(renderCourseRow)}</div>
         )}
@@ -1202,21 +1200,21 @@ export function ChaptersView() {
         }}
       >
         <DialogContent
+          className="tp-form-dialog"
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             operationTriggerRef.current?.focus();
           }}
         >
-          <DialogHeader>
-            <DialogTitle>
-              {operationDialog === "create" ? "إضافة فصل" : "ربط فصل بدورة"}
-            </DialogTitle>
-          </DialogHeader>
+          <FormDialogHero
+            icon={operationDialog === "create" ? FolderPlus : Link2}
+            title={operationDialog === "create" ? "إضافة فصل" : "ربط فصل بدورة"}
+          />
           {operationDialog === "create" ? (
             <form
               id="chapter-create-form"
               onSubmit={handleAddChapter}
-              className="tp-chapters__form-body tp-validation-form"
+              className="tp-form-dialog__body tp-chapters__form-body tp-validation-form"
             >
               <div className="space-y-2">
                 <Label htmlFor="chapter-name">اسم الفصل</Label>
@@ -1249,7 +1247,7 @@ export function ChaptersView() {
             <form
               id="chapter-attach-form"
               onSubmit={handleAttachChapter}
-              className="tp-chapters__form-body tp-validation-form"
+              className="tp-form-dialog__body tp-chapters__form-body tp-validation-form"
             >
               <div className="space-y-2">
                 <Label htmlFor="attach-course">اسم الدورة</Label>
@@ -1363,14 +1361,13 @@ export function ChaptersView() {
           setEditChapterDialog((prev) => ({ ...prev, open }))
         }
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>تعديل الفصل</DialogTitle>
-            <DialogDescription>
-              إذا كان الفصل مرتبطاً بدورات، راجع الأثر الظاهر قبل تغيير عدد
-              الفرص.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="tp-form-dialog">
+          <FormDialogHero
+            icon={Pencil}
+            title="تعديل الفصل"
+            description="إذا كان الفصل مرتبطاً بدورات، راجع الأثر الظاهر قبل تغيير عدد الفرص."
+          />
+          <div className="tp-form-dialog__body">
           {editChapterDialog.row ? (
             <div className="rounded-xl border bg-muted/25 p-3 text-xs text-muted-foreground">
               مرتبط بـ {editChapterDialog.row.counts.linkedCourses} دورة · مفعل
@@ -1411,6 +1408,7 @@ export function ChaptersView() {
               />
             </div>
           </div>
+          </div>
           <DialogFooter>
             <Button
               variant="outline"
@@ -1440,16 +1438,14 @@ export function ChaptersView() {
             setChapterSyncDialog({ open: false, payload: null, preview: null });
         }}
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>معاينة أثر تغيير فرص الفصل</DialogTitle>
-            <DialogDescription>
-              عدد الفرص تغيّر، لذلك يجب اختيار هل تحفظ الفصل فقط أم تزامن أرصدة
-              الطلاب فوراً من القواعد الحالية.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="tp-form-dialog">
+          <FormDialogHero
+            icon={RefreshCw}
+            title="معاينة أثر تغيير فرص الفصل"
+            description="عدد الفرص تغيّر، لذلك يجب اختيار هل تحفظ الفصل فقط أم تزامن أرصدة الطلاب فوراً من القواعد الحالية."
+          />
           {chapterSyncDialog.preview ? (
-            <div className="space-y-3 text-sm">
+            <div className="tp-form-dialog__body text-sm">
               <div className="grid gap-2 sm:grid-cols-2">
                 {statCard(
                   "السقف القديم",
@@ -1679,19 +1675,14 @@ export function ChaptersView() {
           }
         }}
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {actionDialog.action === "activate"
-                ? "تفعيل فصل بأمان"
-                : "إلغاء تفعيل الفصل"}
-            </DialogTitle>
-            <DialogDescription>
-              سيتم أرشفة الفرص أو استرجاعها حسب الإجراء المختار.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="tp-form-dialog">
+          <FormDialogHero
+            icon={actionDialog.action === "activate" ? Power : PowerOff}
+            title={actionDialog.action === "activate" ? "تفعيل فصل بأمان" : "إلغاء تفعيل الفصل"}
+            description="سيتم أرشفة الفرص أو استرجاعها حسب الإجراء المختار."
+          />
           {actionCourse && actionLink ? (
-            <div className="space-y-3 text-sm">
+            <div className="tp-form-dialog__body text-sm">
               <div className="rounded-2xl border bg-muted/25 p-3">
                 <p className="font-black">{actionCourse.course.name}</p>
                 <p className="text-muted-foreground">

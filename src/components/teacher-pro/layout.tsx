@@ -46,6 +46,7 @@ import {
   ChevronDown,
   ChevronLeft,
   KeyRound,
+  Lock,
   Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -118,6 +119,8 @@ const familyItemIds = new Set<SectionId>(
 );
 
 const sectionsWithPageSearch = new Set<SectionId>([
+  "courses",
+  "chapters",
   "student-registry",
   "dismissed-management",
   "grade-entry",
@@ -125,6 +128,7 @@ const sectionsWithPageSearch = new Set<SectionId>([
   "grade-records",
   "opportunities",
   "follow-up-calls",
+  "accounts",
   "logs",
 ]);
 const sectionIds = new Set<SectionId>(menuItems.map((item) => item.id));
@@ -351,7 +355,7 @@ import { FollowUpCallsView } from "./follow-up";
 import { LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog";
 import { AccountsView } from "./accounts";
 import { LogsView } from "./logs";
-import { LoadingState } from "./ui-kit";
+import { EmptyState, LoadingState } from "./ui-kit";
 
 const sectionComponents: Record<SectionId, React.ComponentType> = {
   dashboard: DashboardView,
@@ -1637,7 +1641,7 @@ export function TeacherProLayout() {
                 <CurrentComponent />
               )
             ) : (
-              <div className="empty-state">لا توجد صلاحية لفتح هذا القسم.</div>
+              <EmptyState icon={Lock} title="لا توجد صلاحية لفتح هذا القسم." />
             )}
           </div>
         </div>
