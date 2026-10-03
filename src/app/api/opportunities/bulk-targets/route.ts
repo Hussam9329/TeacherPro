@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
       zeroOpportunityLimit: preview.zeroOpportunityLimit,
       invalidOpportunitySource: preview.invalidOpportunitySource,
       excludedDismissed: preview.excludedDismissed,
+      returningDismissed: preview.returningDismissed,
       excludedFullOpportunities: preview.excludedFullOpportunities,
       skipped: preview.skipped,
       targetCount: preview.targetCount,

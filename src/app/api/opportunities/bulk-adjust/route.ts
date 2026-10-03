@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermission } from "@/lib/server-auth";
+import { hasPermission, requirePermissionPrincipal, type AuthPrincipal } from "@/lib/server-auth";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
@@ -17,6 +17,8 @@ import {
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { buildBulkOpportunityPreview } from "@/lib/bulk-opportunity-preview-server";
 import { ZERO_BALANCE_VIOLATION_MARKER } from "@/lib/opportunity-balance";
+import { DEFAULT_MANUAL_RESTORATION_REASON } from "@/lib/manual-restoration";
+import { restoreDismissedStudentManually, StudentActionError } from "@/lib/manual-student-restoration-server";
 
 function chunks<T>(items: T[], size = 250): T[][] {
   const result: T[][] = [];
@@ -41,6 +43,7 @@ function normalizePositiveInt(value: unknown, fallback = 1): number {
 async function handleFilterBasedBulkAdjust(
   req: NextRequest,
   body: Record<string, unknown>,
+  principal: AuthPrincipal,
 ) {
   const actionType = body.actionType === "deduct" ? "deduct" : "add";
   const amount = normalizePositiveInt(body.amount, 1);
@@ -144,10 +147,16 @@ async function handleFilterBasedBulkAdjust(
           chapterNameSnapshot?: string | null;
         }> = [];
         const appliedStudentIds: string[] = [];
+        const dismissedToReturn: Array<{ id: string; cap: number }> = [];
         for (const student of targetRows) {
           const activeChapter = student.activeChapter;
           if (!activeChapter) continue;
-          if (student.status === "مفصول") continue;
+          if (student.status === "مفصول") {
+            // Adding to a dismissed student returns them to active with that
+            // balance, through the one restoration service the single add uses.
+            if (actionType === "add") dismissedToReturn.push({ id: student.id, cap: activeChapter.opportunities });
+            continue;
+          }
           const before = Math.max(0, student.opportunities);
           const applied = actionType === "add"
             ? Math.min(amount, Math.max(0, activeChapter.opportunities - before))
@@ -178,13 +187,30 @@ async function handleFilterBasedBulkAdjust(
         const academicRecalculation = appliedStudentIds.length
           ? await recalculateStudentsAcademicState(appliedStudentIds, { tx })
           : null;
-        const updatedStudents = academicRecalculation?.students.length || 0;
+
+        if (dismissedToReturn.length && !hasPermission(principal, "students.edit")) {
+          throw new StudentActionError("تحتاج إلى صلاحية تعديل الطلاب لإرجاع الطلاب المفصولين. ألغِ «عدا المفصولين» فقط إذا عندك الصلاحية.", 403);
+        }
+        const restorationReason = `${DEFAULT_MANUAL_RESTORATION_REASON} — ${reason}`.slice(0, 2000);
+        let restoredLogs = 0;
+        let restoredNotes = 0;
+        for (const student of dismissedToReturn) {
+          const restored = await restoreDismissedStudentManually(tx, {
+            studentId: student.id,
+            amount: Math.min(amount, student.cap),
+            reason: restorationReason,
+            actor: { id: principal.id, name: principal.name },
+          });
+          restoredLogs += restored.opportunityLogs.length;
+          restoredNotes += restored.studentNotes.length;
+        }
+        const updatedStudents = (academicRecalculation?.students.length || 0) + dismissedToReturn.length;
 
         return {
           updatedStudents,
-          savedOpportunityLogs: opportunityLogs.length,
-          savedStudentNotes: 0,
-          reactivatedStudents: 0,
+          savedOpportunityLogs: opportunityLogs.length + restoredLogs,
+          savedStudentNotes: restoredNotes,
+          reactivatedStudents: dismissedToReturn.length,
           migratedPendingGrades: 0,
           pendingGradeConflicts: 0,
           totalMatching,
@@ -193,7 +219,7 @@ async function handleFilterBasedBulkAdjust(
           activeChapterConflicts,
           zeroOpportunityLimit,
           invalidOpportunitySource,
-          skipped: Math.max(0, totalMatching - appliedStudentIds.length),
+          skipped: Math.max(0, totalMatching - appliedStudentIds.length - dismissedToReturn.length),
           targetCount,
           previewToken,
           requiresConfirmation: riskyBulkOpportunityTargetCount(targetCount),
@@ -256,6 +282,7 @@ async function handleFilterBasedBulkAdjust(
       invalidOpportunitySource: result.invalidOpportunitySource,
       targetCount: result.targetCount,
       updatedStudents: result.updatedStudents,
+      reactivatedStudents: "reactivatedStudents" in result ? result.reactivatedStudents : 0,
       savedOpportunityLogs: result.savedOpportunityLogs,
       skipped: result.skipped,
       excludeDismissed,
@@ -268,8 +295,8 @@ async function handleFilterBasedBulkAdjust(
 }
 
 export async function POST(req: NextRequest) {
-  const authError = await requirePermission(req, "opportunities.manage");
-  if (authError) return authError;
+  const principal = await requirePermissionPrincipal(req, "opportunities.manage");
+  if (principal instanceof NextResponse) return principal;
 
   const rateLimitError = await checkApiRateLimit(
     req,
@@ -284,11 +311,14 @@ export async function POST(req: NextRequest) {
       typeof body === "object" &&
       (body as Record<string, unknown>).mode === "filter"
     ) {
-      return handleFilterBasedBulkAdjust(req, body as Record<string, unknown>);
+      return await handleFilterBasedBulkAdjust(req, body as Record<string, unknown>, principal);
     }
     return NextResponse.json({ error: "أُوقف عقد المزامنة القديم؛ استخدم إجراء الفرص مع المعاينة.", code: "OPPORTUNITY_LEDGER_COMMAND_REQUIRED" },
       { status: 410, headers: { "x-teacherpro-retryable": "false" } });
   } catch (error) {
+    if (error instanceof StudentActionError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     if (
       (error as { code?: string } | null)?.code ===
       "RETIRED_BULK_STATUS_TRANSITION"

@@ -370,6 +370,7 @@ export function OpportunitiesView() {
       bulkActiveChapterConflictCount +
       bulkZeroOpportunityLimitCount;
   const bulkExcludedDismissedCount = bulkTargetStats?.excludedDismissed ?? 0;
+  const bulkReturningDismissedCount = bulkTargetStats?.returningDismissed ?? 0;
   const bulkExcludedFullOpportunitiesCount =
     bulkTargetStats?.excludedFullOpportunities ?? 0;
   const bulkSkippedCount = bulkTargetStats?.skipped ?? 0;
@@ -758,6 +759,10 @@ export function OpportunitiesView() {
       (result.data as { updatedStudents?: number } | undefined)
         ?.updatedStudents || 0,
     );
+    const returned = Number(
+      (result.data as { reactivatedStudents?: number } | undefined)
+        ?.reactivatedStudents || 0,
+    );
     if (affected === 0) {
       toast.error("لم يتم تطبيق العملية على أي طالب");
         setRefreshKey((key) => key + 1);
@@ -765,7 +770,7 @@ export function OpportunitiesView() {
     }
 
     toast.success(
-      `${bulkActionDialog.type === "deduct" ? "تم خصم" : "تمت إضافة"} ${normalizedAmount} فرصة لـ ${affected} طالب من جميع المطابقين للفلاتر${bulkSkippedCount ? `، وتم استثناء ${bulkSkippedCount}` : ""}`,
+      `${bulkActionDialog.type === "deduct" ? "تم خصم" : "تمت إضافة"} ${normalizedAmount} فرصة لـ ${affected} طالب من جميع المطابقين للفلاتر${returned ? `، منهم ${returned} مفصول رجع نشطاً` : ""}${bulkSkippedCount ? `، وتم استثناء ${bulkSkippedCount}` : ""}`,
     );
     setBulkActionDialog({ type: "add", open: false });
     setBulkReason("");
@@ -897,7 +902,8 @@ export function OpportunitiesView() {
                   label: "إضافة لكل المطابقين",
                   disabled: bulkTargetLoading || bulkEligibleWithActiveChapterCount === 0,
                   onSelect: () => {
-                    setBulkExcludeDismissed(true);
+                    // Filtered on «مفصول»: the add is for them, so they are included.
+                    setBulkExcludeDismissed(filterStatus !== "dismissed");
                     setBulkConfirmText("");
                     setBulkActionDialog({ type: "add", open: true });
                   },
@@ -1393,9 +1399,9 @@ export function OpportunitiesView() {
                       className="mt-0.5"
                     />
                     <span>
-                      عدا المفصولين: إذا بقيت محددة لا تُضاف لهم فرص. إذا
-                      ألغيتها تُضاف لهم الفرص فقط دون تغيير حالتهم؛ استرجاع
-                      المفصول يتم حصراً من صفحة إدارة المفصولين.
+                      عدا المفصولين: إذا بقيت محددة ما يتغير شي للمفصولين. إذا
+                      ألغيتها يرجعون نشطين بعدد الفرص المحدد، مثل إضافة فرصة
+                      لطالب مفصول وحده، وينحفظ السبب بسجل كل طالب.
                     </span>
                   </label>
                 </div>
@@ -1460,6 +1466,11 @@ export function OpportunitiesView() {
                 <p className="text-xs font-semibold text-warning">
                   سيتم استثناء {bulkExcludedDismissedCount} طالب مفصول حسب خيار
                   العدا.
+                </p>
+              ) : null}
+              {bulkActionDialog.type === "add" && bulkReturningDismissedCount > 0 ? (
+                <p className="text-xs font-semibold text-success">
+                  سيرجع {bulkReturningDismissedCount} طالب مفصول نشطاً برصيد {bulkAmount} (أو سقف فصله إذا أقل).
                 </p>
               ) : null}
               {bulkExcludedFullOpportunitiesCount > 0 ? (

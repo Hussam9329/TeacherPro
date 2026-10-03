@@ -65,7 +65,7 @@
     "maintenance:protected-grades": "node scripts/repair-protected-grade-integrity.mjs",
     "maintenance:zero-balance": "node scripts/repair-zero-balance-law.mjs",
     "test:single-dismissal-policy-integrity": "node scripts/test-single-dismissal-policy-integrity.mjs",
-    "test:reactivation-centralization-integrity": "node scripts/test-reactivation-centralization-integrity.mjs",
+    "test:reactivation-centralization-integrity": "node scripts/test-reactivation-centralization-integrity.mjs && node scripts/test-bulk-opportunity-dismissed-return.cjs",
     "test:retired-followup-removal-integrity": "node scripts/test-retired-followup-removal-integrity.mjs",
     "maintenance:call-history": "node scripts/migrate-call-history.mjs",
     "test:call-history-migration": "node --test scripts/test-call-history-migration-behavior.mjs",
