@@ -9,7 +9,7 @@ import { baghdadDateKey, parseBaghdadDateOnly, parseBaghdadDateTime } from '@/li
 import { getExamEntryAvailability } from '@/lib/exam-utils';
 import { assertDatabaseSchemaReady } from '@/lib/schema-readiness';
 import { canonicalCourseIds, parseCourseIds, syncExamCourseLinks } from '@/lib/exam-course-links';
-import { loadExamEditDismissalReviewState, loadExamEditHistoryState, recalculateStudentsForExam, toAcademicExam } from '@/lib/academic-recalculate-server';
+import { bonusDependentStudentIds, loadExamEditDismissalReviewState, loadExamEditHistoryState, recalculateStudentsAcademicState, recalculateStudentsForExam, toAcademicExam } from '@/lib/academic-recalculate-server';
 import { writeRequestAuditLog } from '@/lib/audit-log-server';
 import type { Prisma } from '@prisma/client';
 import { buildMutationPreviewToken } from '@/lib/mutation-preview-token';
@@ -834,9 +834,13 @@ export async function DELETE(req: NextRequest) {
       if (blockers.length > 0) {
         return { exam, blockers } as const;
       }
+      // An exam without grades can still hold a «فرصة مكافأة» that waits for
+      // its missing grade; those students are recalculated without it.
+      const bonusDependents = await bonusDependentStudentIds(tx, id);
       await tx.examCourse.deleteMany({ where: { examId: id } });
       await tx.exam.delete({ where: { id } });
-      return { exam, deleted: true } as const;
+      if (bonusDependents.length > 0) await recalculateStudentsAcademicState(bonusDependents, { tx });
+      return { exam, deleted: true, recalculatedStudents: bonusDependents.length } as const;
     });
     if ('notFound' in result) return validationError('الامتحان المطلوب غير موجود');
     if ('blockers' in result && result.blockers) {
@@ -846,13 +850,14 @@ export async function DELETE(req: NextRequest) {
         409,
       );
     }
+    const recalculatedStudents = 'recalculatedStudents' in result ? result.recalculatedStudents : 0;
     await writeRequestAuditLog(req, 'الامتحانات', 'حذف امتحان غير مرتبط بأي بيانات', {
       examId: id,
       examName: result.exam.name,
       affectedStudents: 0,
-      recalculatedStudents: 0,
+      recalculatedStudents,
     });
-    return NextResponse.json({ ok: true, affectedStudents: 0, recalculatedStudents: 0 });
+    return NextResponse.json({ ok: true, affectedStudents: 0, recalculatedStudents });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حذف الامتحان حالياً.');
   }

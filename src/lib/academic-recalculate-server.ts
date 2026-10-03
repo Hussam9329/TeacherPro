@@ -1146,6 +1146,42 @@ export async function previewStudentsAcademicState(
   };
 }
 
+/** Students whose «فرصة مكافأة» can change when an exam they have no grade
+ * on changes or disappears: those counting toward a bonus or holding one for
+ * a missing grade, and those who earned one on or after the exam's day. */
+export async function bonusDependentStudentIds(
+  client: PrismaClientLike,
+  examId: string,
+): Promise<string[]> {
+  const [exam, links] = await Promise.all([
+    client.exam.findUnique({ where: { id: examId }, select: { date: true } }),
+    client.examCourse.findMany({ where: { examId }, select: { courseId: true } }),
+  ]);
+  const courseIds = uniqueIds(links.map((link) => link.courseId));
+  if (!exam || courseIds.length === 0) return [];
+  const [counting, bonusLogs] = await Promise.all([
+    client.student.findMany({
+      where: { courseId: { in: courseIds }, status: { not: "مؤرشف" }, bonusProgress: { gte: 1 } },
+      select: { id: true },
+    }),
+    client.opportunityLog.findMany({
+      where: { action: BONUS_OPPORTUNITY_ACTION, date: { gte: exam.date } },
+      select: { studentId: true },
+    }),
+  ]);
+  const earners = bonusLogs.length > 0
+    ? await client.student.findMany({
+        where: {
+          id: { in: uniqueIds(bonusLogs.map((log) => log.studentId)) },
+          courseId: { in: courseIds },
+          status: { not: "مؤرشف" },
+        },
+        select: { id: true },
+      })
+    : [];
+  return uniqueIds([...counting, ...earners].map((student) => student.id));
+}
+
 export async function recalculateStudentsForExam(
   examId: string,
   options: {
@@ -1176,6 +1212,7 @@ export async function recalculateStudentsForExam(
     calls,
     opportunityLogs,
     leaveGradeBackups,
+    bonusDependents,
   ] = await Promise.all([
     client.grade.findMany({
       where: { examId: trimmedExamId },
@@ -1199,6 +1236,7 @@ export async function recalculateStudentsForExam(
       where: { examId: trimmedExamId },
       select: { studentId: true },
     }),
+    bonusDependentStudentIds(client, trimmedExamId),
   ]);
   return recalculateStudentsAcademicState(
     [
@@ -1207,6 +1245,7 @@ export async function recalculateStudentsForExam(
       ...calls.map((call) => call.studentId),
       ...opportunityLogs.map((log) => log.studentId),
       ...leaveGradeBackups.map((backup) => backup.studentId),
+      ...bonusDependents,
     ],
     {
       tx: options.tx,
