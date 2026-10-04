@@ -124,7 +124,10 @@ export function LogsView() {
   const [search, setSearch] = useState("");
   // Wait for a pause in typing so a name is one request, not one per letter.
   const debouncedSearch = useDebouncedValue(search, 350);
-  const [filterModule, setFilterModule] = useState("");
+  // «عرض بالسجلات» from another page arrives with ?module=… already chosen.
+  const [filterModule, setFilterModule] = useState(() =>
+    typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("module") || "",
+  );
   const [filterUser, setFilterUser] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);

@@ -11,7 +11,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/lib/user-toast';
 import { useActionLock } from '@/hooks/use-action-lock';
@@ -20,14 +19,16 @@ import {
   useTeacherProBackgroundSyncDetector,
   useTeacherProSyncKey,
 } from '@/hooks/use-teacherpro-sync';
-import { baghdadTodayKey } from '@/lib/baghdad-time';
-import { Download, FileUp, KeyRound, Lock, RefreshCw, ShieldAlert, ShieldCheck, ShieldPlus, Trash2, UserCheck, UserPen, UserPlus, UserRoundSearch, UserX } from 'lucide-react';
+import { baghdadTodayKey, formatBaghdadDateTime } from '@/lib/baghdad-time';
+import { ChevronDown, Download, FileUp, ScrollText, TriangleAlert, KeyRound, Lock, RefreshCw, ShieldAlert, ShieldCheck, ShieldPlus, Trash2, UserCheck, UserPen, UserPlus, UserRoundSearch, UserX } from 'lucide-react';
 import { RowActionsMenu, type RowAction } from './row-actions-menu';
 import { FormDialogHero } from './form-dialog';
 import { ListToolbar, type ListChip } from './list-toolbar';
 import { EmptyState, LoadingState } from './ui-kit';
 import { validatePasswordPolicy } from '@/lib/password-policy';
 import { searchAny } from '@/lib/validation';
+import { formatAuditLogDisplay } from '@/lib/audit-log-display';
+import { humanizeTeacherProText } from '@/lib/teacherpro-language';
 import './tp-list.css';
 
 // ─── Permission categories for grouping ──────────────────────────────────────
@@ -132,63 +133,6 @@ function selectedPermissionCategories(permissions: string[]) {
   });
 }
 
-function PermissionCategoryBadges({ permissions, limit = 5 }: { permissions: string[]; limit?: number }) {
-  const categories = selectedPermissionCategories(permissions);
-
-  if (categories.length === 0) {
-    return <Badge variant="outline" className="text-[10px]">بدون صلاحيات</Badge>;
-  }
-
-  return (
-    <div className="flex flex-wrap gap-1">
-      {categories.slice(0, limit).map(cat => (
-        <Badge key={cat} variant="outline" className="text-[10px]">{cat}</Badge>
-      ))}
-      {categories.length > limit && (
-        <Badge variant="outline" className="text-[10px]">+{categories.length - limit}</Badge>
-      )}
-    </div>
-  );
-}
-
-function PermissionCompactSummary({ permissions }: { permissions: string[] }) {
-  const normalized = normalizePermissionIds(permissions);
-  const selected = new Set(normalized);
-  const categoryRows = PERMISSION_CATEGORIES
-    .map(category => {
-      const categoryPermissions = PERMISSION_CATALOG.filter(permission => permission.category === category);
-      const count = categoryPermissions.filter(permission => selected.has(permission.id)).length;
-      return { category, count, total: categoryPermissions.length };
-    })
-    .filter(row => row.count > 0);
-
-  return (
-    <div className="rounded-xl border bg-muted/25 p-3 text-xs">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="font-semibold">تفصيل مختصر للصلاحيات</span>
-        <Badge variant="secondary" className="text-[10px]">{normalized.length} / {PERMISSION_CATALOG.length}</Badge>
-      </div>
-      {categoryRows.length === 0 ? (
-        <p className="text-muted-foreground">لا توجد صلاحيات مفعّلة لهذا الحساب.</p>
-      ) : (
-        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-          {categoryRows.slice(0, 6).map(row => (
-            <div key={row.category} className="flex items-center justify-between rounded-lg border bg-background/70 px-2 py-1">
-              <span className="font-medium">{row.category}</span>
-              <span className="text-muted-foreground">{row.count}/{row.total}</span>
-            </div>
-          ))}
-          {categoryRows.length > 6 && (
-            <div className="rounded-lg border bg-background/70 px-2 py-1 text-muted-foreground">
-              +{categoryRows.length - 6} أقسام أخرى
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function PermissionDetailsList({ permissions, showEmpty = false }: { permissions: string[]; showEmpty?: boolean }) {
   const selected = new Set(normalizePermissionIds(permissions));
   const catalogByCategory = getPermissionsByCategory(PERMISSION_CATALOG);
@@ -246,6 +190,7 @@ function PermissionChecklist({
   const catalogByCategory = useMemo(() => getPermissionsByCategory(PERMISSION_CATALOG), []);
   const locked = useMemo(() => new Set(lockedPerms), [lockedPerms]);
   const isOn = (permId: string) => locked.has(permId) || perms.includes(permId);
+  const [openCategories, setOpenCategories] = useState<Set<string>>(() => new Set());
 
   const togglePermission = (permId: string) => {
     if (readOnly || locked.has(permId)) return;
@@ -260,166 +205,82 @@ function PermissionChecklist({
     onChange(allChecked ? perms.filter(p => !catPerms.includes(p)) : [...new Set([...perms, ...catPerms])]);
   };
 
+  const toggleOpen = (category: string) => setOpenCategories(current => {
+    const next = new Set(current);
+    if (next.has(category)) next.delete(category);
+    else next.add(category);
+    return next;
+  });
+
+  // Each section is one line: tick it for all of it, open it for the details.
   return (
-    <ScrollArea className="max-h-[52dvh] rounded-xl border bg-muted/15 p-3">
-      <div className="space-y-4">
-        {PERMISSION_CATEGORIES.map(cat => {
-          const catPerms = catalogByCategory.get(cat);
-          if (!catPerms || catPerms.length === 0) return null;
-          const catIds = catPerms.map(p => p.id);
-          const allChecked = catIds.every(p => isOn(p));
-          const someChecked = catIds.some(p => isOn(p));
+    <div className="tp-perm-list">
+      {PERMISSION_CATEGORIES.map(cat => {
+        const catPerms = catalogByCategory.get(cat);
+        if (!catPerms || catPerms.length === 0) return null;
+        const catIds = catPerms.map(p => p.id);
+        const onCount = catIds.filter(p => isOn(p)).length;
+        const allChecked = onCount === catIds.length;
+        const open = openCategories.has(cat);
+        const groupId = `perm-group-${catIds[0]}`;
 
-          return (
-            <div key={cat} className="space-y-2 rounded-xl border bg-background p-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id={`perm-cat-${cat}`}
-                    name={`perm-cat-${cat}`}
-                    checked={allChecked ? true : someChecked ? 'indeterminate' : false}
-                    onCheckedChange={() => toggleCategory(cat)}
-                    disabled={readOnly}
-                  />
-                  <Label htmlFor={`perm-cat-${cat}`} className="font-semibold text-sm">{cat}</Label>
-                </div>
-                <Badge variant="outline" className="text-[10px]">{catIds.filter(p => isOn(p)).length}/{catIds.length}</Badge>
-              </div>
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                {catPerms.map(perm => (
-                  <div key={perm.id} className="flex items-start gap-2 rounded-lg border bg-muted/15 p-2">
-                    <Checkbox
-                      id={`perm-${perm.id}`}
-                      name={`perm-${perm.id}`}
-                      checked={isOn(perm.id)}
-                      onCheckedChange={() => togglePermission(perm.id)}
-                      disabled={readOnly || locked.has(perm.id)}
-                      className="mt-1 h-3.5 w-3.5"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Label htmlFor={`perm-${perm.id}`} className="text-xs font-semibold">{perm.label}</Label>
-                        <Badge variant="secondary" className="text-[9px]">{PERMISSION_LEVEL_LABELS[perm.level]}</Badge>
-                        {locked.has(perm.id) ? <Badge variant="outline" className="text-[9px]">من الدور</Badge> : null}
-                      </div>
-                      <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{perm.description}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </ScrollArea>
-  );
-}
-
-
-const PAGE_PERMISSION_BLUEPRINT = [
-  { page: 'مكالمات', view: 'follow-up.calls.view', manage: 'follow-up.calls.manage' },
-  { page: 'الإجازات', view: 'follow-up.leaves.view', manage: 'follow-up.leaves.manage' },
-  { page: 'إدارة الحسابات / المستخدمين', view: 'accounts.users.view', manage: 'accounts.users.add / edit / delete' },
-  { page: 'إدارة الحسابات / الأدوار', view: 'accounts.roles.view', manage: 'accounts.roles.add / edit / delete' },
-  { page: 'إدارة الحسابات / الصلاحيات', view: 'accounts.permissions.view', manage: 'accounts.permissions.assign' },
-  { page: 'السجلات', view: 'logs.view', manage: 'logs.delete' },
-  { page: 'تصفير الـ Log', view: 'logs.clear', manage: 'logs.restore' },
-];
-
-/** 'accounts.users.add / edit / delete' → the three permission ids it names. */
-function blueprintPermissionIds(value: string): string[] {
-  const [first = '', ...rest] = value.split('/').map(part => part.trim()).filter(Boolean);
-  const base = first.slice(0, first.lastIndexOf('.') + 1);
-  return [first, ...rest.map(part => (part.includes('.') ? part : base + part))];
-}
-
-/** The technical ids, folded away: they matter only to whoever adds a feature. */
-function TechnicalIds({ ids }: { ids: string[] }) {
-  return (
-    <details className="tp-account-tech">
-      <summary>تفاصيل تقنية</summary>
-      <p dir="ltr">{ids.join(' · ')}</p>
-    </details>
-  );
-}
-
-function PermissionsArchitectureTab() {
-  const grouped = getPermissionsByCategory(PERMISSION_CATALOG);
-  const totalByLevel = PERMISSION_CATALOG.reduce<Record<string, number>>((acc, permission) => {
-    acc[permission.level] = (acc[permission.level] || 0) + 1;
-    return acc;
-  }, {});
-  const counts = [
-    { label: 'إجمالي الصلاحيات', value: PERMISSION_CATALOG.length },
-    { label: 'عرض', value: totalByLevel.read || 0 },
-    { label: 'إضافة/تعديل', value: totalByLevel.write || 0 },
-    { label: 'إدارة/حذف', value: (totalByLevel.manage || 0) + (totalByLevel.delete || 0) },
-  ];
-
-  return (
-    <div className="tp-list">
-      <section className="tp-rcard" aria-labelledby="permissions-architecture-title">
-        <h3 id="permissions-architecture-title" className="tp-rcard__name">هيكلة الصلاحيات الذكية</h3>
-        <p className="tp-rcard__line">
-          أي ميزة جديدة تنضاف لأي صفحة لازم تنضاف هنا داخل قائمة الصلاحيات مع معرّف صلاحية واضح، وتُربط بإجراء الصفحة في مخطط الربط.
-        </p>
-        <dl className="tp-account-stats" aria-label="عدد الصلاحيات حسب النوع">
-          {counts.map((count) => (
-            <div key={count.label}>
-              <dt>{count.label}</dt>
-              <dd>{count.value}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      <section className="tp-rcard" aria-labelledby="permissions-blueprint-title">
-        <h3 id="permissions-blueprint-title" className="tp-rcard__name">ربط الصفحات والإجراءات</h3>
-        <ul className="tp-rcards" data-columns="2">
-          {PAGE_PERMISSION_BLUEPRINT.map((item) => {
-            const viewIds = blueprintPermissionIds(item.view);
-            const manageIds = blueprintPermissionIds(item.manage);
-            return (
-              <li key={item.page} className="tp-rcard__panel">
-                <span className="tp-rcard__title">{item.page}</span>
-                <span className="tp-rcard__line"><b>عرض:</b> {viewIds.map(permissionLabel).join('، ')}</span>
-                <span className="tp-rcard__line"><b>إجراء:</b> {manageIds.map(permissionLabel).join('، ')}</span>
-                <TechnicalIds ids={[...viewIds, ...manageIds]} />
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-
-      <ul className="tp-rcards" data-columns="2" aria-label="الصلاحيات حسب القسم">
-        {PERMISSION_CATEGORIES.map((category) => {
-          const permissions = grouped.get(category) || [];
-          if (permissions.length === 0) return null;
-          return (
-            <li key={category} className="tp-rcard">
-              <div className="tp-rcard__head">
-                <h3 className="tp-rcard__name">{category}</h3>
-                <span className="tp-rcard__head-end">
-                  <span className="tp-rcard__pill">{permissions.length} صلاحية</span>
+        return (
+          <div key={cat} className="tp-perm-group" data-open={open || undefined}>
+            <div className="tp-perm-group__head">
+              <Checkbox
+                id={`perm-cat-${cat}`}
+                name={`perm-cat-${cat}`}
+                aria-label={`كل صلاحيات ${cat}`}
+                checked={allChecked ? true : onCount > 0 ? 'indeterminate' : false}
+                onCheckedChange={() => toggleCategory(cat)}
+                disabled={readOnly}
+              />
+              <button
+                type="button"
+                className="tp-perm-group__toggle"
+                aria-expanded={open}
+                aria-controls={groupId}
+                onClick={() => toggleOpen(cat)}
+              >
+                <span className="tp-perm-group__name">{cat}</span>
+                <span className="tp-perm-group__count" data-state={allChecked ? 'all' : onCount > 0 ? 'some' : 'none'}>
+                  {onCount} من {catIds.length}
                 </span>
-              </div>
-              {permissions.map((permission) => (
-                <div key={permission.id} className="tp-rcard__panel">
-                  <span className="tp-rcard__title">
-                    {permission.label}{' '}
-                    <Badge variant="secondary" className="align-middle text-[10px]">{PERMISSION_LEVEL_LABELS[permission.level]}</Badge>
-                  </span>
-                  <span className="tp-rcard__line">{permission.description}</span>
-                </div>
-              ))}
-              <TechnicalIds ids={permissions.map((permission) => permission.id)} />
-            </li>
-          );
-        })}
-      </ul>
+                <ChevronDown aria-hidden="true" className="tp-perm-group__chevron" />
+              </button>
+            </div>
+            {open ? (
+              <ul id={groupId} className="tp-perm-group__items">
+                {catPerms.map(perm => (
+                  <li key={perm.id}>
+                    <label htmlFor={`perm-${perm.id}`} className="tp-perm-item" data-disabled={readOnly || locked.has(perm.id) || undefined}>
+                      <Checkbox
+                        id={`perm-${perm.id}`}
+                        name={`perm-${perm.id}`}
+                        checked={isOn(perm.id)}
+                        onCheckedChange={() => togglePermission(perm.id)}
+                        disabled={readOnly || locked.has(perm.id)}
+                      />
+                      <span className="tp-perm-item__text">
+                        <span className="tp-perm-item__name">
+                          {perm.label}
+                          <span className="tp-perm-item__level">{PERMISSION_LEVEL_LABELS[perm.level]}</span>
+                          {locked.has(perm.id) ? <span className="tp-perm-item__level">من الدور</span> : null}
+                        </span>
+                        <span className="tp-perm-item__hint">{perm.description}</span>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
+
 
 
 // ─── Roles Tab Component ─────────────────────────────────────────────────────
@@ -435,7 +296,7 @@ function RolesTab() {
   const [editRolePerms, setEditRolePerms] = useState<string[]>([]);
   const [editRoleName, setEditRoleName] = useState('');
 
-  const [deleteRoleDialog, setDeleteRoleDialog] = useState({ open: false, id: '', name: '' });
+  const [deleteRoleDialog, setDeleteRoleDialog] = useState({ open: false, id: '', name: '', users: 0 });
   const { locked: isAddingRole, runLocked: runAddRoleLocked } = useActionLock();
   const { locked: isSavingRole, runLocked: runSaveRoleLocked } = useActionLock();
   const { locked: isDeletingRole, runLocked: runDeleteRoleLocked } = useActionLock();
@@ -499,7 +360,7 @@ function RolesTab() {
       return;
     }
     toast.success('تم حذف الدور');
-    setDeleteRoleDialog({ open: false, id: '', name: '' });
+    setDeleteRoleDialog({ open: false, id: '', name: '', users: 0 });
   });
 
 
@@ -513,19 +374,22 @@ function RolesTab() {
             إضافة دور
           </Button>
         }
-        summary={<><b>{roles.length}</b> دور · كل دور يحدد صلاحيات الحسابات المرتبطة بيه</>}
+        summary={<><b>{roles.length}</b> دور</>}
       />
 
       <ul className="tp-rcards" data-columns="2" aria-label="الأدوار">
         {roles.map(role => {
           const userCount = users.filter(u => u.roleId === role.id).length;
           const displayedRolePermissions = role.id === 'role_admin' ? PERMISSION_CATALOG.map(p => p.id) : role.permissions;
+          const permissionCount = displayedRolePermissions.filter(id => PERMISSION_IDS.has(id)).length;
+          const permissionShare = PERMISSION_CATALOG.length ? permissionCount / PERMISSION_CATALOG.length : 0;
+          const categories = selectedPermissionCategories(displayedRolePermissions);
           return (
             <li key={role.id} className="tp-rcard">
               <div className="tp-rcard__head">
                 <h3 className="tp-rcard__name">{role.name}</h3>
                 <span className="tp-rcard__sep" aria-hidden="true" />
-                <span className="tp-rcard__sub">{displayedRolePermissions.length} صلاحية · {userCount} مستخدم</span>
+                <span className="tp-rcard__sub">{userCount ? `${userCount} مستخدم` : 'بدون مستخدمين'}</span>
                 {role.isDefault ? (
                   <span className="tp-rcard__head-end">
                     <span className="tp-rcard__pill">افتراضي</span>
@@ -533,16 +397,26 @@ function RolesTab() {
                 ) : null}
               </div>
 
-              <div className="tp-rcard__main">
-                <PermissionCategoryBadges permissions={displayedRolePermissions} limit={5} />
-                <PermissionCompactSummary permissions={displayedRolePermissions} />
+              <div className="tp-rcard__panel">
+                <span className="tp-rcard__eyebrow">الصلاحيات</span>
+                <span className="tp-account-card__bar" aria-hidden="true">
+                  <span style={{ inlineSize: `${Math.round(permissionShare * 100)}%` }} />
+                </span>
+                <span className="tp-rcard__line">
+                  <b>{permissionCount}</b> من <b>{PERMISSION_CATALOG.length}</b> صلاحية
+                  {role.id === 'role_admin'
+                    ? ' · كل الصلاحيات دائماً'
+                    : categories.length
+                      ? ` · ${categories.slice(0, 4).join('، ')}${categories.length === 5 ? ' وقسم ثاني' : categories.length > 5 ? ` و${categories.length - 4} أقسام ثانية` : ''}`
+                      : ''}
+                </span>
               </div>
 
               <div className="tp-rcard__foot">
                 <span className="tp-rcard__foot-end">
                   <Button variant="outline" size="sm" onClick={() => handleEditRole(role.id)}>
                     <ShieldCheck aria-hidden="true" />
-                    تعديل الصلاحيات
+                    تعديل
                   </Button>
                   {!role.isDefault ? (
                     <RowActionsMenu
@@ -552,7 +426,7 @@ function RolesTab() {
                         label: 'حذف الدور…',
                         icon: <Trash2 aria-hidden="true" />,
                         danger: true,
-                        onSelect: () => setDeleteRoleDialog({ open: true, id: role.id, name: role.name }),
+                        onSelect: () => setDeleteRoleDialog({ open: true, id: role.id, name: role.name, users: userCount }),
                       }]}
                     />
                   ) : null}
@@ -566,7 +440,7 @@ function RolesTab() {
       {/* Add Role Dialog */}
       <Dialog open={showAddRoleDialog} onOpenChange={setShowAddRoleDialog}>
         <DialogContent dir="rtl" className={ACCOUNT_DIALOG_CONTENT_CLASS}>
-          <FormDialogHero icon={ShieldPlus} title="إضافة دور جديد" description="أنشئ دوراً جديداً وحدد الصلاحيات المطلوبة" />
+          <FormDialogHero icon={ShieldPlus} title="إضافة دور جديد" />
           <div className={ACCOUNT_DIALOG_BODY_CLASS}>
             <div className="space-y-2">
               <Label htmlFor="role-name">اسم الدور</Label>
@@ -614,14 +488,16 @@ function RolesTab() {
       <AlertDialog open={deleteRoleDialog.open} onOpenChange={o => setDeleteRoleDialog(prev => ({ ...prev, open: o }))}>
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد حذف الدور</AlertDialogTitle>
+            <AlertDialogTitle>حذف الدور «{deleteRoleDialog.name}»؟</AlertDialogTitle>
             <AlertDialogDescription>
-              ينحذف الدور &quot;{deleteRoleDialog.name}&quot; نهائياً. إذا بيه حسابات مرتبطة، انقلها لدور ثاني أولاً (من «تعديل» بكل حساب)؛ الحذف ما يصير وهي مرتبطة.
+              {deleteRoleDialog.users > 0
+                ? `مربوط بيه ${deleteRoleDialog.users} مستخدم. انقلهم لدور ثاني أولاً (من «تعديل» بكل حساب)؛ الحذف ما يصير وهم مربوطين.`
+                : 'ما مربوط بيه أي مستخدم. ينحذف الدور نهائياً.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteRole} disabled={isDeletingRole} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction onClick={handleDeleteRole} disabled={isDeletingRole || deleteRoleDialog.users > 0} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {isDeletingRole ? 'جاري الحذف...' : 'حذف'}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1200,10 +1076,7 @@ type SecurityOverview = {
 };
 
 function formatSecurityTime(value: string) {
-  if (!value) return 'غير محدد';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString('en-US', { hour12: false });
+  return formatBaghdadDateTime(value, 'غير محدد');
 }
 
 function SecurityTab() {
@@ -1267,14 +1140,21 @@ function SecurityTab() {
 
   if (!overview) return null;
 
-  const counts: Array<{ label: string; value: number; tone?: 'success' | 'danger' | 'warning' }> = [
-    { label: 'المستخدمين', value: overview.summary.users },
-    { label: 'فعالين', value: overview.summary.activeUsers, tone: 'success' },
-    { label: 'معطلين', value: overview.summary.disabledUsers, tone: 'danger' },
-    { label: 'الأدوار', value: overview.summary.roles },
-    { label: 'مستخدمين حساسين', value: overview.summary.riskyUsers, tone: 'warning' },
-    { label: 'أدوار حساسة', value: overview.summary.riskyRoles, tone: 'warning' },
+  // One line instead of a strip of number boxes.
+  const summaryParts = [
+    `${overview.summary.users} مستخدم`,
+    `${overview.summary.activeUsers} فعّال`,
+    ...(overview.summary.disabledUsers ? [`${overview.summary.disabledUsers} معطّل`] : []),
+    `${overview.summary.roles} أدوار`,
+    ...(overview.summary.riskyRoles ? [`${overview.summary.riskyRoles} أدوار حساسة`] : []),
   ];
+
+  const openSecurityLogs = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    window.history.pushState({}, '', event.currentTarget.href);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
 
   return (
     <div className="tp-list">
@@ -1286,17 +1166,8 @@ function SecurityTab() {
             {refreshing ? 'جارٍ التحديث...' : 'تحديث الفحص'}
           </Button>
         }
-        summary={<>آخر فحص: <b>{formatSecurityTime(overview.generatedAt)}</b></>}
+        summary={<>{summaryParts.join(' · ')} · آخر فحص: <b>{formatSecurityTime(overview.generatedAt)}</b></>}
       />
-
-      <dl className="tp-account-stats" aria-label="ملخص الحسابات">
-        {counts.map((count) => (
-          <div key={count.label} data-tone={count.tone}>
-            <dt>{count.label}</dt>
-            <dd>{count.value}</dd>
-          </div>
-        ))}
-      </dl>
 
       <ul className="tp-rcards" data-columns="2" aria-label="فحوصات الأمان">
         {overview.checks.map((check) => {
@@ -1357,33 +1228,37 @@ function SecurityTab() {
       </div>
 
       <section className="tp-rcard" aria-labelledby="security-recent-logs">
-        <h3 id="security-recent-logs" className="tp-rcard__name">آخر تدقيق للحسابات والصلاحيات</h3>
-        <div className="table-wrap" tabIndex={0} aria-label="جدول الحسابات؛ يمكن تمريره أفقياً عند الحاجة">
-          <table className="responsive-table min-w-[760px] text-sm">
-            <thead>
-              <tr className="border-b text-xs text-muted-foreground">
-                <th className="p-2 text-right">الوقت</th>
-                <th className="p-2 text-right">المستخدم</th>
-                <th className="p-2 text-right">القسم</th>
-                <th className="p-2 text-right">الإجراء</th>
-                <th className="p-2 text-right">التفاصيل</th>
-              </tr>
-            </thead>
-            <tbody>
-              {overview.recentLogs.length === 0 ? (
-                <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">لا توجد عمليات حديثة.</td></tr>
-              ) : overview.recentLogs.slice(0, 30).map((log) => (
-                <tr key={log.id} className="border-b last:border-0">
-                  <td className="p-2 text-xs text-muted-foreground">{formatSecurityTime(log.time)}</td>
-                  <td className="p-2">{log.userName}</td>
-                  <td className="p-2">{log.module}</td>
-                  <td className="p-2 font-medium">{log.action}</td>
-                  <td className="max-w-md truncate p-2 text-xs text-muted-foreground" title={log.details}>{log.details || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="tp-rcard__head">
+          <h3 id="security-recent-logs" className="tp-rcard__name">آخر عمليات الحسابات</h3>
+          <span className="tp-rcard__head-end">
+            <Button asChild variant="outline" size="sm">
+              <a href={`/?section=logs&module=${encodeURIComponent('أمان الحسابات')}`} onClick={openSecurityLogs}>
+                <ScrollText aria-hidden="true" />
+                عرض بالسجلات
+              </a>
+            </Button>
+          </span>
         </div>
+        {overview.recentLogs.length === 0 ? (
+          <p className="tp-rcard__line">ماكو عمليات حديثة.</p>
+        ) : (
+          <ol className="tp-logs-list">
+            {overview.recentLogs.slice(0, 10).map((log) => (
+              <li key={log.id} className="tp-logs-row">
+                <div className="tp-logs-row__plain">
+                  <span className="tp-logs-row__icon" data-tone="muted" aria-hidden="true">أ</span>
+                  <span className="tp-logs-row__text">
+                    <span className="tp-logs-row__summary">{humanizeTeacherProText(formatAuditLogDisplay(log).summary)}</span>
+                    <span className="tp-logs-row__meta">
+                      {log.userName || 'النظام'} · {log.action || '—'}
+                    </span>
+                  </span>
+                  <time className="tp-logs-row__time" dateTime={log.time}>{formatSecurityTime(log.time)}</time>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
       </section>
     </div>
   );
@@ -1425,11 +1300,35 @@ type RestoreResponse = {
   code?: string;
 };
 
+/** The word typed to confirm a restore; the server still receives RESTORE. */
+const RESTORE_WORD = 'استعادة';
+
+const BACKUP_TABLE_LABELS: Record<string, string> = {
+  courses: 'الدورات',
+  chapters: 'الفصول',
+  courseChapters: 'روابط الفصول',
+  students: 'الطلاب',
+  exams: 'الامتحانات',
+  examCourses: 'دورات الامتحانات',
+  grades: 'الدرجات',
+  opportunityLogs: 'حركات الفرص',
+  studentLeaves: 'الإجازات',
+  studentCalls: 'المكالمات',
+  studentNotes: 'الملاحظات',
+  users: 'المستخدمين',
+  roles: 'الأدوار',
+  logs: 'السجلات',
+  studentLeaveGradeBackups: 'درجات الإجازات',
+  studentEnrollmentArchives: 'أرشيف الاشتراكات',
+  permissionCatalog: 'الصلاحيات',
+};
+
 function BackupTab() {
   const [exporting, setExporting] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [restoreMode, setRestoreMode] = useState<'merge' | 'replace'>('merge');
   const [confirmText, setConfirmText] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [parsedBackup, setParsedBackup] = useState<BackupExport | null>(null);
   const [parseError, setParseError] = useState('');
@@ -1494,10 +1393,11 @@ function BackupTab() {
       toast.error('يرجى اختيار ملف نسخة احتياطية صالح أولاً');
       return;
     }
-    if (confirmText !== 'RESTORE') {
-      toast.error('يرجى كتابة كلمة RESTORE لتأكيد العملية');
+    if (confirmText.trim() !== RESTORE_WORD) {
+      toast.error(`اكتب «${RESTORE_WORD}» حتى تأكد الاستعادة`);
       return;
     }
+    setConfirmOpen(false);
     setRestoring(true);
     setRestoreResult(null);
     try {
@@ -1532,29 +1432,28 @@ function BackupTab() {
 
   return (
     <div className="tp-list">
-      {/* Export section */}
       <section className="tp-rcard" aria-labelledby="backup-export-title">
-        <h3 id="backup-export-title" className="tp-rcard__name">تصدير نسخة احتياطية</h3>
+        <h3 id="backup-export-title" className="tp-rcard__name">تصدير نسخة</h3>
+        <p className="tp-rcard__line">ملف واحد بيه كل بيانات النظام، تحتفظ بيه عندك.</p>
         <div className="tp-rcard__foot">
           <Button onClick={handleExport} disabled={exporting || exportLocked}>
             <Download aria-hidden="true" />
-            {exporting ? 'جارٍ التصدير...' : 'تصدير النسخة الاحتياطية (JSON)'}
+            {exporting ? 'جارٍ التصدير...' : 'تصدير نسخة'}
           </Button>
         </div>
       </section>
 
-      {/* Restore section */}
       <section className="tp-rcard" aria-labelledby="backup-restore-title">
-        <h3 id="backup-restore-title" className="tp-rcard__name">استعادة نسخة احتياطية</h3>
+        <h3 id="backup-restore-title" className="tp-rcard__name">استعادة نسخة</h3>
         <div className="grid gap-4">
-          <div className="rounded-xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 text-sm leading-relaxed text-warning">
-            <strong>⚠️ تحذير:</strong> الاستعادة عملية حساسة قد تستبدل أو تدمج البيانات الحالية.
-            يُنصح بشدة بأخذ نسخة احتياطية جديدة قبل الاستعادة، وتجربتها على نسخة تجريبية من النظام أولاً.
+          <div role="note" className="flex items-start gap-2 rounded-xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 text-sm leading-relaxed text-warning">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>الاستعادة تغيّر بيانات النظام الحالية. صدّر نسخة جديدة قبلها.</span>
           </div>
 
           {/* File picker: the system's own button, not the browser's English «Choose File». */}
           <div className="space-y-2">
-            <Label htmlFor="backup-file">ملف النسخة الاحتياطية (.json)</Label>
+            <Label htmlFor="backup-file">ملف النسخة</Label>
             <input
               id="backup-file"
               ref={fileInputRef}
@@ -1567,152 +1466,126 @@ function BackupTab() {
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={restoring}>
                 <FileUp aria-hidden="true" />
-                اختيار ملف
+                اختر ملف النسخة
               </Button>
               <span className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                 {selectedFile
-                  ? <>الملف: <bdi>{selectedFile.name}</bdi> ({(selectedFile.size / 1024).toFixed(1)} KB)</>
+                  ? <><bdi>{selectedFile.name}</bdi> · {(selectedFile.size / 1024).toFixed(1)} كيلوبايت</>
                   : 'ما اخترت ملف بعد'}
               </span>
             </div>
           </div>
 
-          {/* Parse error */}
           {parseError && (
             <div className="tp-field-feedback tp-field-feedback-error">
               {parseError}
             </div>
           )}
 
-          {/* Parsed backup summary */}
           {parsedBackup && (
-            <div className="rounded-md bg-muted/50 border p-3 space-y-2">
-              <div className="flex items-center gap-3 text-sm">
-                <Badge variant="outline">الإصدار: {parsedBackup.version}</Badge>
-                <Badge variant="outline">الجداول: {parsedBackup.tableCount ?? '؟'}</Badge>
-                {parsedBackup.exportedAt && (
-                  <span className="text-xs text-muted-foreground">
-                    تاريخ التصدير: {new Date(parsedBackup.exportedAt).toLocaleString('ar-IQ')}
-                  </span>
-                )}
-              </div>
+            <div className="tp-rcard__panel">
+              <span className="tp-rcard__title">
+                {parsedBackup.exportedAt ? `نسخة ${formatBaghdadDateTime(parsedBackup.exportedAt)}` : 'نسخة بدون تاريخ'}
+              </span>
               {recordCountEntries.length > 0 && (
-                <div className="text-xs text-muted-foreground">
-                  <strong>السجلات:</strong>{' '}
-                  {recordCountEntries.map(([k, v]) => `${k}=${v}`).join(' • ')}
-                </div>
+                <span className="tp-rcard__line">
+                  {recordCountEntries.map(([k, v]) => `${BACKUP_TABLE_LABELS[k] || k} ${v}`).join(' · ')}
+                </span>
               )}
             </div>
           )}
 
-          {/* Mode selection */}
           {parsedBackup && (
             <div className="space-y-2">
-              <Label>وضع الاستعادة</Label>
+              <Label htmlFor="backup-mode">طريقة الاستعادة</Label>
               <Select value={restoreMode} onValueChange={(v) => setRestoreMode(v as 'merge' | 'replace')}>
-                <SelectTrigger>
+                <SelectTrigger id="backup-mode">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="merge">
-                    دمج (merge) — إضافة وتحديث السجلات بدون حذف الموجود
-                  </SelectItem>
-                  <SelectItem value="replace">
-                    استبدال (replace) — تفريغ الجداول قبل الاستيراد (مدمر!)
-                  </SelectItem>
+                  <SelectItem value="merge">دمج: يضيف ويحدّث بدون ما يحذف شي</SelectItem>
+                  <SelectItem value="replace">استبدال: يمسح البيانات الحالية ويحط النسخة مكانها</SelectItem>
                 </SelectContent>
               </Select>
-              {restoreMode === 'replace' && (
-                <p className="text-xs text-danger leading-relaxed">
-                  ⚠️ وضع الاستبدال يحذف كل البيانات غير الموجودة في النسخة. قد يكون محظوراً في بيئة الإنتاج.
-                </p>
-              )}
             </div>
           )}
 
-          {/* Confirmation input */}
-          {parsedBackup && (
-            <div className="space-y-2">
-              <Label>تأكيد العملية — اكتب <code className="bg-muted px-1.5 py-0.5 rounded">RESTORE</code> بالأحرف اللاتينية الكبيرة</Label>
-              <Input
-                value={confirmText}
-                onChange={(e) => setConfirmText(e.target.value)}
-                placeholder="RESTORE"
-                dir="ltr"
-                className="text-center font-mono"
-                disabled={restoring}
-              />
-            </div>
-          )}
+          <div>
+            <Button
+              onClick={() => { setConfirmText(''); setConfirmOpen(true); }}
+              disabled={restoring || !parsedBackup}
+              variant={restoreMode === 'replace' ? 'destructive' : 'default'}
+            >
+              {restoring ? 'جارٍ الاستعادة... (قد تاخذ دقائق)' : 'استعادة النسخة…'}
+            </Button>
+          </div>
 
-          {/* Restore button */}
-          <Button
-            onClick={handleRestore}
-            disabled={restoring || !parsedBackup || confirmText !== 'RESTORE'}
-            variant={restoreMode === 'replace' ? 'destructive' : 'default'}
-          >
-            {restoring
-              ? 'جارٍ الاستعادة... (قد يستغرق دقائق)'
-              : restoreMode === 'replace'
-              ? 'استعادة بوضع الاستبدال (مدمر)'
-              : 'استعادة بوضع الدمج'}
-          </Button>
-
-          {/* Restore result */}
           {restoreResult && (
-            <div className="rounded-md bg-success-soft border border-success-line p-4 space-y-3 text-sm">
-              <div className="font-semibold text-success">
-                ✅ تمت الاستعادة بنجاح
+            <div className="rounded-xl border border-success-line border-s-4 border-s-success-vivid bg-success-soft p-4 space-y-3 text-sm">
+              <div className="flex items-center gap-2 font-semibold text-success">
+                <ShieldCheck className="size-4" aria-hidden="true" />
+                تمت الاستعادة
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
-                {restoreResult.inserted && Object.entries(restoreResult.inserted).filter(([, v]) => v > 0).length > 0 && (
-                  <div>
-                    <div className="font-semibold text-success">إضافات جديدة:</div>
-                    <ul className="mt-1 space-y-0.5">
-                      {Object.entries(restoreResult.inserted).filter(([, v]) => v > 0).map(([k, v]) => (
-                        <li key={k}>{k}: {v}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {restoreResult.updated && Object.entries(restoreResult.updated).filter(([, v]) => v > 0).length > 0 && (
-                  <div>
-                    <div className="font-semibold text-success">تحديثات:</div>
-                    <ul className="mt-1 space-y-0.5">
-                      {Object.entries(restoreResult.updated).filter(([, v]) => v > 0).map(([k, v]) => (
-                        <li key={k}>{k}: {v}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {restoreResult.skipped && Object.entries(restoreResult.skipped).filter(([, v]) => v > 0).length > 0 && (
-                  <div>
-                    <div className="font-semibold text-muted-foreground">تخطّيات:</div>
-                    <ul className="mt-1 space-y-0.5">
-                      {Object.entries(restoreResult.skipped).filter(([, v]) => v > 0).map(([k, v]) => (
-                        <li key={k}>{k}: {v}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
+              {[
+                ['انضاف', restoreResult.inserted],
+                ['تحدّث', restoreResult.updated],
+                ['تخطّى', restoreResult.skipped],
+              ].map(([label, counts]) => {
+                const rows = Object.entries((counts || {}) as Record<string, number>).filter(([, v]) => v > 0);
+                if (!rows.length) return null;
+                return (
+                  <p key={label as string} className="text-xs">
+                    <b>{label as string}:</b> {rows.map(([k, v]) => `${BACKUP_TABLE_LABELS[k] || k} ${v}`).join(' · ')}
+                  </p>
+                );
+              })}
               {restoreResult.errors && restoreResult.errors.length > 0 && (
                 <div className="text-xs text-warning">
-                  <strong>أخطاء (تم تجاوزها):</strong>
+                  <strong>سجلات ما انستعادت:</strong>
                   <ul className="mt-1 space-y-0.5">
                     {restoreResult.errors.slice(0, 5).map((e, i) => (
-                      <li key={i}>{e.table}: {e.message}</li>
+                      <li key={i}>{BACKUP_TABLE_LABELS[e.table] || e.table}: {e.message}</li>
                     ))}
                   </ul>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">
-                يُنصح بإعادة تحميل الصفحة لرؤية البيانات المُحدّثة في كل الأقسام.
-              </p>
+              <p className="text-xs text-muted-foreground">حدّث الصفحة حتى تشوف البيانات الجديدة بكل الأقسام.</p>
             </div>
           )}
         </div>
       </section>
+
+      <AlertDialog open={confirmOpen} onOpenChange={(open) => { if (!restoring) setConfirmOpen(open); }}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>استعادة النسخة؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              {restoreMode === 'replace'
+                ? 'طريقة الاستبدال تمسح البيانات الحالية وتحط النسخة مكانها، وما تنرجع.'
+                : 'طريقة الدمج تضيف وتحدّث السجلات من النسخة، والبيانات الحالية تبقى.'}
+              {' '}حتى تأكد، اكتب «{RESTORE_WORD}».
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            aria-label={`اكتب ${RESTORE_WORD}`}
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder={RESTORE_WORD}
+            className="text-center"
+            disabled={restoring}
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={restoring}>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => { event.preventDefault(); void handleRestore(); }}
+              disabled={restoring || confirmText.trim() !== RESTORE_WORD}
+              className={restoreMode === 'replace' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : undefined}
+            >
+              {restoring ? 'جارٍ الاستعادة...' : 'استعادة'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -1767,7 +1640,6 @@ export function AccountsView() {
           <TabsTrigger value="roles" className="flex-1">الأدوار والصلاحيات</TabsTrigger>
           <TabsTrigger value="security" className="flex-1">الأمان</TabsTrigger>
           <TabsTrigger value="backup" className="flex-1">النسخ الاحتياطي</TabsTrigger>
-          <TabsTrigger value="architecture" className="flex-1">هيكلة الصلاحيات</TabsTrigger>
         </TabsList>
         <TabsContent value="users" className="mt-4">
           <UsersTab />
@@ -1780,9 +1652,6 @@ export function AccountsView() {
         </TabsContent>
         <TabsContent value="backup" className="mt-4">
           <BackupTab />
-        </TabsContent>
-        <TabsContent value="architecture" className="mt-4">
-          <PermissionsArchitectureTab />
         </TabsContent>
       </Tabs>
     </div>

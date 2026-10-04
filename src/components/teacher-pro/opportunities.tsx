@@ -438,10 +438,9 @@ export function OpportunitiesView() {
           acc.deducted += Number(log.appliedAmount ?? log.amount) || 0;
         if (isOpportunityCreditAction(log.action))
           acc.added += Number(log.amount) || 0;
-        if (log.examId) acc.examLinked += 1;
         return acc;
       },
-      { deducted: 0, added: 0, examLinked: 0 },
+      { deducted: 0, added: 0 },
     );
   }, [selectedDetailsLogs]);
 
@@ -516,110 +515,42 @@ export function OpportunitiesView() {
     return text || "بدون سبب مكتوب";
   };
 
-  const reasonLabel = (part: string) => {
-    const separatorIndex = part.indexOf(":");
-    if (separatorIndex < 0) return { label: "السبب", value: part.trim() };
-    return {
-      label: part.slice(0, separatorIndex).trim(),
-      value: part.slice(separatorIndex + 1).trim() || "—",
-    };
-  };
-
-  const renderOpportunityReason = (log: OpportunityLogWithRelations | (typeof opportunityLogs)[number]) => {
-    const cleaned = cleanOpportunityReason(log.reason);
-    const hasHiddenLink = String(log.reason || "").includes(
-      "[academic-reactivation-link:",
-    );
-    const parts = cleaned
+  /** One movement as one row: what changed, why, and where it came from. */
+  const renderOpportunityMove = (log: OpportunityLogWithRelations | (typeof opportunityLogs)[number]) => {
+    const reasonText = cleanOpportunityReason(log.reason)
       .split(/\s+-\s+(?=النطاق:|الحالة:|عدد الفرص:|البحث:|السبب:)/g)
-      .map((part) => part.trim())
-      .filter(Boolean);
-    const shouldSplit =
-      parts.length > 1 ||
-      /^النطاق:|^الحالة:|^عدد الفرص:|^البحث:|^السبب:/.test(cleaned);
-
-    if (!shouldSplit) {
-      return (
-        <div className="rounded-xl bg-muted/40 p-3 text-sm leading-6">
-          <span className="font-bold text-foreground">السبب: </span>
-          <span className="break-words text-muted-foreground">{cleaned}</span>
-          {hasHiddenLink ? (
-            <Badge variant="outline" className="ms-2 align-middle">
-              مرتبط بإرجاع الطالب
-            </Badge>
-          ) : null}
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-2 rounded-xl bg-muted/40 p-3 text-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-bold text-foreground">تفاصيل السبب</span>
-          {hasHiddenLink ? (
-            <Badge variant="outline">مرتبط بإرجاع الطالب</Badge>
-          ) : null}
-        </div>
-        <div className="grid gap-2 md:grid-cols-2">
-          {parts.map((part, index) => {
-            const item = reasonLabel(part);
-            return (
-              <div
-                key={`${log.id}-reason-${index}`}
-                className="rounded-lg border bg-card/80 px-3 py-2"
-              >
-                <p className="text-[11px] font-bold text-muted-foreground">
-                  {item.label}
-                </p>
-                <p className="break-words text-xs leading-5 text-foreground">
-                  {item.value}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  const renderLogExamDetails = (log: OpportunityLogWithRelations | (typeof opportunityLogs)[number]) => {
+      .map((part) => part.replace(/^السبب:\s*/, "").trim())
+      .filter(Boolean)
+      .join(" · ");
+    const linkedToReturn = String(log.reason || "").includes("[academic-reactivation-link:");
     const relatedExam = (log as OpportunityLogWithRelations).exam;
     const exam = relatedExam || exams.find((item) => item.id === log.examId);
-    if (!log.examId)
-      return (
-        <div className="rounded-xl border bg-muted/40 p-3 text-xs text-muted-foreground">
-          حركة يدوية من إدارة الفرص، وليست مرتبطة بامتحان محدد.
-        </div>
-      );
-    if (!exam)
-      return (
-        <div className="rounded-xl border bg-muted/40 p-3 text-xs text-muted-foreground">
-          الامتحان المرتبط بهذه الحركة غير موجود حالياً أو تم حذفه.
-        </div>
-      );
+    const tone =
+      log.action === "خصم" || log.action === "خصم تلقائي"
+        ? "danger"
+        : isOpportunityCreditAction(log.action)
+          ? "success"
+          : "muted";
+    const source = !log.examId
+      ? "حركة يدوية"
+      : exam
+        ? `امتحان ${exam.name}`
+        : "امتحان محذوف";
+    const chapter = log.chapterNameSnapshot || "";
     return (
-      <div className="grid gap-2 rounded-xl border bg-muted/40 p-3 text-xs leading-6 md:grid-cols-2">
-        <div>
-          <span className="font-bold text-foreground">الامتحان: </span>
-          <span className="text-muted-foreground">{exam.name}</span>
-        </div>
-        <div>
-          <span className="font-bold text-foreground">التاريخ: </span>
-          <span className="text-muted-foreground">
-            {formatAppDate(exam.date)}
+      <li key={log.id} className="tp-opp-move" data-tone={tone}>
+        <span className="tp-opp-move__amount">
+          {displayOpportunityAction(log.action)} {log.amount}
+        </span>
+        <span className="tp-opp-move__text">
+          <span className="tp-opp-move__reason">{reasonText}</span>
+          <span className="tp-opp-move__meta">
+            <b>{formatAppDate(log.date)}</b> · {source}
+            {chapter ? ` · ${chapter}` : ""}
+            {linkedToReturn ? " · مرتبط بإرجاع الطالب" : ""}
           </span>
-        </div>
-        <div>
-          <span className="font-bold text-foreground">النوع: </span>
-          <span className="text-muted-foreground">{exam.type}</span>
-        </div>
-        <div>
-          <span className="font-bold text-foreground">درجة الطالب: </span>
-          <span className="text-muted-foreground">
-            تُعرض من سجل الدرجات عند فتح تفاصيل الامتحان
-          </span>
-        </div>
-      </div>
+        </span>
+      </li>
     );
   };
 
@@ -1254,93 +1185,20 @@ export function OpportunitiesView() {
           />
           {selectedDetailsStudent ? (
             <div className="tp-form-dialog__body">
-              <div className="grid gap-3 rounded-2xl border bg-muted/40 p-4 text-sm md:grid-cols-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">الكود</p>
-                  <p className="font-bold">{selectedDetailsStudent.code}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">اسم الدورة</p>
-                  <p className="font-bold">
-                    {courseName(selectedDetailsStudent.courseId)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">فرص محفوظة</p>
-                  <p className="font-bold">
-                    {formatOpportunityBalance(selectedDetailsStudent)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">الحالة</p>
-                  <p className="font-bold">{selectedDetailsStudent.status}</p>
-                </div>
-              </div>
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-2xl border bg-card p-3 text-center">
-                  <p className="text-xl font-black text-danger">
-                    {selectedDetailsStats.deducted}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    إجمالي المخصوم
-                  </p>
-                </div>
-                <div className="rounded-2xl border bg-card p-3 text-center">
-                  <p className="text-xl font-black text-success">
-                    {selectedDetailsStats.added}
-                  </p>
-                  <p className="text-xs text-muted-foreground">إجمالي المضاف</p>
-                </div>
-                <div className="rounded-2xl border bg-card p-3 text-center">
-                  <p className="text-xl font-black text-primary">
-                    {selectedDetailsStats.examLinked}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    حركات مرتبطة بامتحان
-                  </p>
-                </div>
-              </div>
-              <div className="max-h-[55dvh] space-y-3 overflow-y-auto pe-1">
-                {detailsLogsLoading ? (
-                  <LoadingState title="جاري تحميل سجل الطالب..." />
-                ) : selectedDetailsLogs.length === 0 ? (
-                  <EmptyState compact icon={Target} title="لا توجد حركات فرص لهذا الطالب" />
-                ) : (
-                  selectedDetailsLogs.map((log) => (
-                    <div
-                      key={log.id}
-                      className="space-y-3 rounded-2xl border bg-card p-4"
-                    >
-                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant={
-                              log.action === "خصم"
-                                ? "destructive"
-                                : isOpportunityCreditAction(log.action)
-                                  ? "default"
-                                  : "secondary"
-                            }
-                          >
-                            {displayOpportunityAction(log.action)} {log.amount}
-                          </Badge>
-                          <span className="text-sm font-bold text-foreground">
-                            {formatAppDate(log.date)}
-                          </span>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          الفصل:{" "}
-                          {log.chapterNameSnapshot ||
-                            log.chapterId ||
-                            "غير محدد"}
-                        </span>
-                      </div>
-                      {renderOpportunityReason(log)}
-                      {renderLogExamDetails(log)}
-                    </div>
-                  ))
-                )}
-              </div>
+              <p className="tp-opp-details__summary">
+                <b>{selectedDetailsStudent.code}</b> · {courseName(selectedDetailsStudent.courseId)} · {selectedDetailsStudent.status}
+                <span className="tp-opp-details__sep" aria-hidden="true">—</span>
+                خُصم <b>{selectedDetailsStats.deducted}</b> · انضاف <b>{selectedDetailsStats.added}</b> · الفرص <b>{formatOpportunityBalance(selectedDetailsStudent)}</b>
+              </p>
+              {detailsLogsLoading ? (
+                <LoadingState title="جاري تحميل سجل الطالب..." />
+              ) : selectedDetailsLogs.length === 0 ? (
+                <EmptyState compact icon={Target} title="لا توجد حركات فرص لهذا الطالب" />
+              ) : (
+                <ol className="tp-opp-moves">
+                  {selectedDetailsLogs.map((log) => renderOpportunityMove(log))}
+                </ol>
+              )}
             </div>
           ) : null}
         </DialogContent>

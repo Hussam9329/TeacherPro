@@ -2,6 +2,9 @@
  * The permission catalog and the default roles, in one plain module that the
  * server routes and the browser both read (the store file is browser-only, so
  * a server route importing from it received an empty object).
+ *
+ * أي ميزة جديدة تنضاف لأي صفحة لازم تنضاف هنا داخل قائمة الصلاحيات بمعرّف
+ * واضح واسم ووصف عربي؛ نافذة تعديل الدور تعرضها للمستخدم من هنا.
  */
 
 export interface PermissionEntry {
