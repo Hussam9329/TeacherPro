@@ -509,7 +509,11 @@ export function recalculateAcademicState(
     // replaying at zero here could invent a dismissal and an unscoped log.
     if (!activeChapter) {
       studentsWithoutActiveChapter.add(student.id);
-      return student;
+      // No chapter, no «فرصة مكافأة» to count toward. Clear stale progress
+      // only; anything else stays exactly as stored.
+      return student.bonusProgress || student.bonusWaitingExamName
+        ? { ...student, bonusProgress: 0, bonusWaitingExamName: null }
+        : student;
     }
 
     const manualDismissal =
@@ -914,13 +918,22 @@ export function recalculateAcademicState(
         : a.ledgerDate.localeCompare(b.ledgerDate);
     });
 
-    // «فرصة مكافأة» streak. Bonuses earned in this chapter before a return
-    // still count toward the chapter's limit.
-    let bonusCount = reactivationStartDate
-      ? state.opportunityLogs.filter((log) =>
-          log.studentId === student.id && isBonusOpportunityLog(log) &&
-          log.chapterId === activeChapter?.id && dayKey(log.date) < reactivationStartDate).length
-      : 0;
+    // «فرصة مكافأة» streak. Bonuses earned in this chapter that this replay
+    // does not regenerate (their grade was settled by a reset or a return, or
+    // falls before the balance's opening) still count toward the limit.
+    const replayedBonusExamIds = new Set(studentGrades
+      .filter((grade) => {
+        const exam = examsById.get(grade.examId);
+        if (!exam || settledGradeIds.has(grade.id)) return false;
+        if (examChapterExclusion(exam, student.courseId, activeChapter?.id)) return false;
+        const examDay = dayKey(exam.date || "");
+        if (reactivationStartDate && examDay < reactivationStartDate) return false;
+        return !historicalGradeExclusion(grade, exam, historicalSettlementDate);
+      })
+      .map((grade) => grade.examId));
+    let bonusCount = state.opportunityLogs.filter((log) =>
+      log.studentId === student.id && isBonusOpportunityLog(log) &&
+      log.chapterId === activeChapter?.id && !replayedBonusExamIds.has(log.examId)).length;
     let bonusStreak = 0;
     let bonusFirstPass: { exam: AcademicExam; score: number } | null = null;
     let bonusWaitingExam: AcademicExam | null = null;
@@ -933,6 +946,10 @@ export function recalculateAcademicState(
     // Missing grades before the student's current balance window cannot
     // change a streak that starts after it.
     let bonusWindowKey = bonusOpeningDays.length ? `${bonusOpeningDays[bonusOpeningDays.length - 1]}\uffff` : "";
+    // The streak follows exam dates. The replay can visit a late-entered older
+    // result after newer ones; such a pass never counts and never moves the
+    // streak backwards, while a late loss or fail still breaks it.
+    let bonusLastKey = bonusWindowKey;
     const enteredExamIds = new Set(studentGrades
       .filter((grade) => {
         const exam = examsById.get(grade.examId);
@@ -957,10 +974,13 @@ export function recalculateAcademicState(
       bonusStreak = 0;
       bonusFirstPass = null;
       bonusWaitingExam = null;
-      bonusWindowKey = examOrderKey(exam);
+      const key = examOrderKey(exam);
+      if (key > bonusWindowKey) bonusWindowKey = key;
+      if (key > bonusLastKey) bonusLastKey = key;
     };
     const countBonusPass = (exam: AcademicExam, grade: AcademicGrade, score: number) => {
       if (dismissed || dayKey(exam.date) < BONUS_START_DAY) return;
+      if (examOrderKey(exam) <= bonusLastKey) return;
       // A full balance has nothing to earn back, and passes before a loss
       // never count toward it.
       if (bonusCount >= BONUS_LIMIT_PER_CHAPTER || bonusRecoverable() <= 0) {
@@ -970,6 +990,7 @@ export function recalculateAcademicState(
       if (bonusStreak === 0) {
         bonusStreak = 1;
         bonusFirstPass = { exam, score };
+        bonusLastKey = examOrderKey(exam);
         return;
       }
       const missing = bonusMissingExams.find((item) =>
@@ -977,6 +998,7 @@ export function recalculateAcademicState(
       if (missing) {
         bonusStreak = BONUS_PASSES_REQUIRED;
         bonusWaitingExam = missing;
+        bonusLastKey = examOrderKey(exam);
         return;
       }
       const first = bonusFirstPass;
@@ -1227,27 +1249,32 @@ export function recalculateAcademicState(
     // inconsistency. All maintenance, chapter-settlement, grade, and
     // opportunity replays see the stored dismissed status and preserve it
     // here together with the zero balance.
-    const bonusProgress = dismissed
+    const canEarnBonus = !dismissed && bonusRecoverable() > 0 && bonusCount < BONUS_LIMIT_PER_CHAPTER;
+    const bonusProgress = !canEarnBonus
       ? 0
       : bonusWaitingExam
         ? BONUS_PROGRESS_WAITING
-        : bonusStreak === 1 && bonusRecoverable() > 0 && bonusCount < BONUS_LIMIT_PER_CHAPTER
+        : bonusStreak === 1
           ? 1
           : 0;
-    const bonusWaitingExamName = dismissed ? null : (bonusWaitingExam as AcademicExam | null)?.name || null;
+    const bonusWaitingExamName = bonusProgress === BONUS_PROGRESS_WAITING
+      ? (bonusWaitingExam as AcademicExam | null)?.name || null
+      : null;
 
     if (student.status === "مفصول" && !dismissed) {
       // The one implicit return: a «فرصة مكافأة» earned before the stored
       // automatic dismissal kept the student above zero, so that dismissal
       // never happens in this replay. Manual dismissals never return here.
+      const storedReason = String(student.dismissalReason || "").trim();
       const storedDismissal = state.opportunityLogs
         .filter((log) => log.studentId === student.id && log.action === "فصل تلقائي" &&
-          isAutomaticOpportunityLog(log) && (!log.chapterId || log.chapterId === activeChapter?.id))
+          isAutomaticOpportunityLog(log) && (!log.chapterId || log.chapterId === activeChapter?.id) &&
+          String(log.reason || "").replace(/^تلقائي:\s*/, "").trim() === storedReason)
         .sort((a, b) => String(a.date).localeCompare(String(b.date)))
         .at(-1);
       const savedByBonus = storedDismissal
         ? bonusSavedAt.has(storedDismissal.examId)
-        : String(student.dismissalReason || "").includes("خصم يدوي") && bonusSavedAt.has("manual-deduction");
+        : storedReason.includes("خصم يدوي") && bonusSavedAt.has("manual-deduction");
       if (savedByBonus && isRuleManagedDismissal(student)) {
         return {
           ...student,

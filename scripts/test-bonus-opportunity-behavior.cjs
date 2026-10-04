@@ -294,4 +294,34 @@ scenario("34 a replay is deterministic: same input, same bonus log ids", () => {
   assert.equal(again.students[0].opportunities, 3);
   assert.equal(again.opportunityLogs.filter((log) => log.action === BONUS_OPPORTUNITY_ACTION).length, 1);
 });
+scenario("35 an administrator's reset in the chapter does not renew the limit of two", () => {
+  const settledIds = ["g1", "g2", "g3", "g4", "g5", "g6"];
+  const before = run([["s", 10], ["a"], ["s", 70], ["s", 75], ["s", 80], ["s", 85]]);
+  assert.equal(before.bonuses.length, 2);
+  const r = run([["s", 10, { day: 1 }], ["a", null, { day: 2 }], ["s", 70, { day: 3 }], ["s", 75, { day: 4 }], ["s", 80, { day: 5 }], ["s", 85, { day: 6 }],
+    ["a", null, { day: 8 }], ["s", 90, { day: 9 }], ["s", 95, { day: 10 }]], {
+    logs: [...before.bonuses, settlement(3, 7, "إعادة تعيين الفرص من إدارة الفرص [قبل: 3 → بعد: 3، فرق: +0]", settledIds)],
+  });
+  assert.equal(r.bonuses.filter((b) => b.examId === "e8" || b.examId === "e9").length, 0);
+  assert.equal(balance(r), 2);
+});
+scenario("36 a held bonus is no longer shown once nothing is left to earn back", () => {
+  const r = run([["s", 12, { day: 1 }], ["s", 77, { day: 2 }], ["missing", null, { day: 3 }], ["s", 69, { day: 4 }]], {
+    logs: [command("add", "إضافة", 1, 5, "تعويض")],
+  });
+  assert.equal(balance(r), 3); assert.equal(r.student.bonusProgress, 0); assert.equal(r.student.bonusWaitingExamName, null);
+});
+scenario("37 an automatic return needs the student's own stored dismissal", () => {
+  const r = run([["a"], ["a"], ["a"], ["s", 70], ["s", 80], ["a"]], {
+    status: "مفصول", dismissalReason: "غش في امتحان: امتحان سابق", logs: [storedDismissal],
+  });
+  assert.equal(r.student.status, "مفصول"); assert.equal(r.student.bonusAutoReturned, undefined);
+});
+scenario("38 without an active chapter there is no progress to show", () => {
+  const state = build([["s", 12], ["s", 77]]);
+  state.courseChapters = [];
+  state.students[0].bonusProgress = 1;
+  const result = recalculateAcademicState(state, new Set(["student"]));
+  assert.equal(result.students[0].bonusProgress, 0);
+});
 console.log(`bonus opportunity behavior: ${count} scenarios passed`);

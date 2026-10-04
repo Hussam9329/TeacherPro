@@ -319,6 +319,10 @@ export async function POST(req: NextRequest) {
       });
       await syncExamCourseLinks(tx, createdExam.id, parsedCourseIds);
       await ensureProtectedGradeMarkers(tx, { examIds: [createdExam.id] });
+      // A back-dated exam without grades can sit inside a «فرصة مكافأة»
+      // streak; recalculate those students now, not at their next grade.
+      const bonusDependents = await bonusDependentStudentIds(tx, createdExam.id);
+      if (bonusDependents.length > 0) await recalculateStudentsAcademicState(bonusDependents, { tx });
       return createdExam;
     });
     await writeRequestAuditLog(req, 'الامتحانات', 'إضافة امتحان من بيانات النظام', {
@@ -410,6 +414,9 @@ export async function PUT(req: NextRequest) {
 
     const result = await withSerializableTransaction(async (tx) => {
       const existingExam = await tx.exam.findUnique({ where: { id } });
+      // Read before the edit: a course the edit removes keeps students whose
+      // «فرصة مكافأة» depended on this exam.
+      const bonusDependentsBefore = existingExam ? await bonusDependentStudentIds(tx, id) : [];
       if (!existingExam) {
         return { validationMessage: 'الامتحان المطلوب غير موجود' } as const;
       }
@@ -701,6 +708,7 @@ export async function PUT(req: NextRequest) {
               ? toAcademicExam(existingExam)
               : undefined,
             examEditReview: dismissalReviewState ? { beforeState: dismissalReviewState, examId: exam.id } : undefined,
+            bonusDependentsBefore,
           })
         : null;
       return {

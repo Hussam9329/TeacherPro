@@ -983,6 +983,7 @@ export async function recalculateStudentsAcademicState(
       automaticOpportunityLogs: [],
     };
   }
+  const examEditRestoredIds = new Set<string>();
   let result = options.graceReview
     ? recalculateWithGraceReview(state, new Set(recalculableStudentIds), options.graceReview)
     : recalculateWithLeaveReview(
@@ -997,6 +998,7 @@ export async function recalculateStudentsAcademicState(
     );
     const previouslyDismissed = new Set(state.students.filter(student => student.status === "مفصول").map(student => student.id));
     const restored = result.students.filter(student => previouslyDismissed.has(student.id) && student.status === "نشط");
+    for (const student of restored) examEditRestoredIds.add(student.id);
     const examName = state.exams.find(exam => exam.id === options.examEditReview?.examId)?.name || "الامتحان";
     for (const group of chunks(restored, 500)) {
       await client.studentNote.createMany({ data: group.map(student => ({
@@ -1054,12 +1056,13 @@ export async function recalculateStudentsAcademicState(
   // note, no grant, and grades held while dismissed stay pending smart notes.
   const storedDismissed = new Set(state.students.filter(student => student.status === "مفصول").map(student => student.id));
   const bonusReturned = result.students.filter(student =>
-    student.bonusAutoReturned && student.status === "نشط" && storedDismissed.has(student.id));
+    student.bonusAutoReturned && student.status === "نشط" && storedDismissed.has(student.id) &&
+    !examEditRestoredIds.has(student.id));
   for (const group of chunks(bonusReturned, 500)) {
     await client.studentNote.createMany({ data: group.map(student => ({
       studentId: student.id,
       kind: "إجراء",
-      text: `رجع الطالب تلقائياً: «${BONUS_OPPORTUNITY_ACTION}» حسبت قبل الامتحان اللي فصله، فما وصل للصفر. الرصيد المحسوب: ${student.opportunities}.`,
+      text: `رجع الطالب تلقائياً: «${BONUS_OPPORTUNITY_ACTION}» انحسبت قبل الامتحان اللي فصله، فوقت ذاك الامتحان كان عنده فرصة وما انفصل. الرصيد الحالي: ${student.opportunities}.`,
       date: new Date(),
     })) });
   }
@@ -1100,12 +1103,14 @@ export async function bonusReturnsDismissedStudent(
     createdAt: existing?.createdAt || now,
     updatedAt: now,
   };
-  const result = recalculateAcademicState({
-    ...state,
-    grades: [...state.grades.filter((grade) => grade !== existing), attempted],
-  }, new Set([studentId]));
-  const replayed = result.students.find((student) => student.id === studentId);
-  return Boolean(replayed?.bonusAutoReturned && replayed.status === "نشط");
+  const returns = (grades: AcademicStateInput["grades"]) => {
+    const replayed = recalculateAcademicState({ ...state, grades }, new Set([studentId]))
+      .students.find((student) => student.id === studentId);
+    return Boolean(replayed?.bonusAutoReturned && replayed.status === "نشط");
+  };
+  // This score must be the cause: a replay without it keeps the dismissal.
+  if (returns(state.grades)) return false;
+  return returns([...state.grades.filter((grade) => grade !== existing), attempted]);
 }
 
 /** Pure multi-student preview used by guarded maintenance routes. It reads the
@@ -1165,21 +1170,18 @@ export async function bonusDependentStudentIds(
       select: { id: true },
     }),
     client.opportunityLog.findMany({
-      where: { action: BONUS_OPPORTUNITY_ACTION, date: { gte: exam.date } },
+      where: {
+        action: BONUS_OPPORTUNITY_ACTION,
+        date: { gte: exam.date },
+        student: { courseId: { in: courseIds }, status: { not: "مؤرشف" } },
+      },
       select: { studentId: true },
     }),
   ]);
-  const earners = bonusLogs.length > 0
-    ? await client.student.findMany({
-        where: {
-          id: { in: uniqueIds(bonusLogs.map((log) => log.studentId)) },
-          courseId: { in: courseIds },
-          status: { not: "مؤرشف" },
-        },
-        select: { id: true },
-      })
-    : [];
-  return uniqueIds([...counting, ...earners].map((student) => student.id));
+  return uniqueIds([
+    ...counting.map((student) => student.id),
+    ...bonusLogs.map((log) => log.studentId),
+  ]);
 }
 
 export async function recalculateStudentsForExam(
@@ -1191,6 +1193,9 @@ export async function recalculateStudentsForExam(
     previousPolicyExam?: AcademicExam;
     previousExamState?: AcademicStateInput;
     examEditReview?: { beforeState: AcademicStateInput; examId: string };
+    /** «فرصة مكافأة» dependents read before an edit changed the exam's
+     * courses or date; the ones after the edit are added here. */
+    bonusDependentsBefore?: string[];
   } = {},
 ): Promise<AcademicServerRecalculationResult> {
   const trimmedExamId = String(examId || "").trim();
@@ -1246,6 +1251,7 @@ export async function recalculateStudentsForExam(
       ...opportunityLogs.map((log) => log.studentId),
       ...leaveGradeBackups.map((backup) => backup.studentId),
       ...bonusDependents,
+      ...(options.bonusDependentsBefore || []),
     ],
     {
       tx: options.tx,

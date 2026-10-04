@@ -280,11 +280,16 @@ function numericGradeScore(value: unknown, fullMark: number): number {
   return score;
 }
 
+/** A late pass expected to return a dismissed student through «فرصة مكافأة»
+ * whose real recalculation did not: the attempt is rolled back and held. */
+class BonusReturnNotConfirmedError extends Error {}
+
 async function inspectNumericGradeAttempt(
   tx: Prisma.TransactionClient,
   studentId: string,
   examId: string,
   scoreValue: unknown,
+  allowBonusReturn = true,
 ): Promise<NumericGradeAttemptContext & { score: number }> {
   const [student, exam] = await Promise.all([
     tx.student.findUnique({
@@ -366,7 +371,7 @@ async function inspectNumericGradeAttempt(
   if (!beforeRegistration && student.status === "مفصول") {
     // «فرصة مكافأة»: a late pass for an exam before the dismissal that would
     // have kept the student above zero is a real grade, and returns them.
-    bonusReturn = await bonusReturnsDismissedStudent(tx, student.id, exam.id, score);
+    bonusReturn = allowBonusReturn && await bonusReturnsDismissedStudent(tx, student.id, exam.id, score);
     if (!bonusReturn) {
       category = "DISMISSED_PENDING";
       // نص قصير بطلب صاحب النظام — بدل العبارة الطويلة القديمة
@@ -709,7 +714,7 @@ export async function POST(req: NextRequest) {
     // (e.g. teacher edits a grade while admin adds an opportunity) would
     // otherwise race in READ COMMITTED and the last writer wins, silently
     // corrupting the student's opportunity balance and dismissal status.
-    const result = await withSerializableTransaction(
+    const attemptGradeWrite = (allowBonusReturn: boolean) => withSerializableTransaction(
       async (tx) => {
         const existingGrade = await tx.grade.findUnique({
           where: { studentId_examId: { studentId, examId } },
@@ -727,6 +732,7 @@ export async function POST(req: NextRequest) {
                 studentId,
                 examId,
                 body.score,
+                allowBonusReturn,
               )
             : null;
         if (numericAttempt?.category) {
@@ -819,9 +825,22 @@ export async function POST(req: NextRequest) {
           );
         }
 
+        // The real recalculation decides. If it did not return the student,
+        // nothing of this attempt is kept and it is held like any other.
+        if (numericAttempt?.bonusReturn) {
+          const after = await tx.student.findUnique({ where: { id: studentId }, select: { status: true } });
+          if (after?.status !== "نشط") throw new BonusReturnNotConfirmedError();
+        }
         return { ...writeback, capturedAsSmartNote: false as const };
       },
     );
+    let result: Awaited<ReturnType<typeof attemptGradeWrite>>;
+    try {
+      result = await attemptGradeWrite(true);
+    } catch (error) {
+      if (!(error instanceof BonusReturnNotConfirmedError)) throw error;
+      result = await attemptGradeWrite(false);
+    }
 
     if (result.capturedAsSmartNote) {
       await writeRequestAuditLog(
