@@ -272,6 +272,9 @@ const SERVER_PERMISSION_EQUIVALENTS: Record<string, string[]> = {
   // It must be granted explicitly — it does NOT alias to students.edit.
   "system.maintenance": [],
   "system.settings": [],
+
+  // «مشاكل البوت»: one permission for the whole window; never implied.
+  "bot-problems.manage": [],
 };
 
 export function hasPermission(principal: AuthPrincipal, permission: string): boolean {

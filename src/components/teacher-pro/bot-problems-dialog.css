@@ -1,0 +1,86 @@
+/* «مشاكل البوت»: the add form and one row per problem with its tick. */
+.tp-bot-add { display: grid; gap: 0.85rem; }
+.tp-bot-add__label { color: var(--tp-text); font-size: 0.85rem; font-weight: 750; }
+.tp-bot-add__results { display: grid; gap: 0.35rem; max-block-size: 16rem; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.tp-bot-add__result,
+.tp-bot-add__chosen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.75rem;
+  inline-size: 100%;
+  min-block-size: 2.75rem;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--tp-border);
+  border-radius: 0.85rem;
+  background: var(--tp-surface);
+  color: var(--tp-text);
+  font: inherit;
+  text-align: start;
+}
+.tp-bot-add__result { cursor: pointer; }
+.tp-bot-add__result:hover { border-color: var(--tp-border-strong); background: var(--tp-panel); }
+.tp-bot-add__result:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
+.tp-bot-add__result > span,
+.tp-bot-add__chosen-text > span { color: var(--tp-text-muted); font-size: 0.8rem; }
+.tp-bot-add__chosen { justify-content: space-between; border-color: var(--status-info-border); background: var(--status-info-bg); }
+.tp-bot-add__chosen-text { display: grid; gap: 0.1rem; min-inline-size: 0; }
+.tp-bot-add__reason {
+  inline-size: 100%;
+  min-block-size: 5.5rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 0.9rem;
+  background: var(--tp-surface);
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.8;
+  resize: vertical;
+}
+.tp-bot-add__reason:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
+
+.tp-bot-problem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--tp-border);
+  border-inline-start: 4px solid var(--status-warning-vivid);
+  border-radius: 1.1rem;
+  background: var(--tp-surface);
+}
+.tp-bot-problem[data-resolved="true"] { border-inline-start-color: var(--status-success-vivid); background: var(--tp-panel); }
+.tp-bot-problem__main { display: grid; gap: 0.35rem; min-inline-size: 0; }
+.tp-bot-problem__head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.65rem; min-inline-size: 0; }
+.tp-bot-problem__name { color: var(--tp-text); font-size: 1.02rem; font-weight: 800; overflow-wrap: anywhere; }
+.tp-bot-problem__course { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--tp-text-muted); font-size: 0.8rem; }
+.tp-bot-problem__course svg { inline-size: 0.95rem; block-size: 0.95rem; }
+.tp-bot-problem__reason { margin: 0; color: var(--tp-text); font-size: 0.92rem; font-weight: 650; line-height: 1.8; overflow-wrap: anywhere; white-space: pre-line; }
+.tp-bot-problem__meta { margin: 0; color: var(--tp-text-muted); font-size: 0.76rem; line-height: 1.7; }
+.tp-bot-problem__done {
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  min-inline-size: 4.5rem;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--status-warning-border);
+  border-radius: 0.9rem;
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
+  font-size: 0.76rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.tp-bot-problem__done[data-checked="true"] { border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success-fg); }
+.tp-bot-problem__done[data-busy] { cursor: progress; opacity: 0.7; }
+.tp-bot-problem__done:has(:focus-visible) { box-shadow: 0 0 0 3px var(--tp-focus); }
+.tp-bot-problem__done [data-slot="checkbox"] { border-color: currentColor; background: var(--tp-surface); }
+.tp-bot-problem__done [data-slot="checkbox"][data-state="checked"] { border-color: var(--status-success-solid); background: var(--status-success-solid); color: var(--status-success-on); }
+.tp-bot-problems__list { list-style: none; }
+
+@media (max-width: 30rem) {
+  .tp-bot-problem { padding: 0.75rem 0.8rem; }
+  .tp-bot-problem__done { min-inline-size: 3.75rem; }
+}

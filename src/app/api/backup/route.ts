@@ -28,9 +28,10 @@ type AnyDelegate = { upsert: (args: any) => Promise<any>; createMany: (args: any
 //  - v7: operational tables only; restore skips unknown tables.
 //  - v8: prior complete operational backup contract.
 //  - v9: Exam Telegram submission-window timestamps round-trip.
-//  - v10 (current): GracePeriod rows (the only source of grace periods).
+//  - v10: GracePeriod rows (the only source of grace periods).
+//  - v11 (current): BotProblem rows («مشاكل البوت» notebook).
 // ============================================================================
-const BACKUP_VERSION = 10;
+const BACKUP_VERSION = 11;
 
 const RESTORE_CONFIRMATION_TOKEN = 'RESTORE';
 
@@ -60,6 +61,7 @@ const RESTORE_ORDER = [
   'studentCallHistoryMigrationRuns',
   'studentCallHistoryBackups',
   'gradeEntryMissingNotes',
+  'botProblems',
 ] as const;
 
 // ============================================================================
@@ -611,6 +613,7 @@ async function restoreTable(
       case 'studentCallHistoryMigrationRuns':
       case 'studentCallHistoryBackups':
       case 'gradeEntryMissingNotes':
+      case 'botProblems':
         for (const row of batch) {
           await upsertRecord(tx[MODEL_NAMES[table]] as unknown as AnyDelegate, row as Record<string, unknown>, mode);
           updated++;
@@ -660,6 +663,7 @@ const PRISMA_TABLE_NAMES: Record<string, string> = {
   studentCallHistoryMigrationRuns: 'StudentCallHistoryMigrationRun',
   studentCallHistoryBackups: 'StudentCallHistoryBackup',
   gradeEntryMissingNotes: 'GradeEntryMissingNote',
+  botProblems: 'BotProblem',
 };
 
 const MODEL_NAMES = {
@@ -672,6 +676,7 @@ const MODEL_NAMES = {
   logs: 'auditLog', logClearBackups: 'logClearBackup',
   studentCallHistoryMigrationRuns: 'studentCallHistoryMigrationRun',
   studentCallHistoryBackups: 'studentCallHistoryBackup', gradeEntryMissingNotes: 'gradeEntryMissingNote',
+  botProblems: 'botProblem',
 } as const;
 
 async function upsertRecord(delegate: AnyDelegate, row: Record<string, unknown>, _mode: 'merge' | 'replace'): Promise<'inserted' | 'updated' | 'skipped'> {
