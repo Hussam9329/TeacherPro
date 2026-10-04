@@ -708,6 +708,16 @@ export function TeacherProLayout() {
     };
   }, [restoreSession]);
 
+  // Browser tab: «TP - <the page you are on>».
+  useEffect(() => {
+    const pageTitle = !authChecked
+      ? ""
+      : !isAuthenticated
+        ? "تسجيل الدخول"
+        : menuItems.find((item) => item.id === currentSection)?.title || "لوحة النظام";
+    document.title = pageTitle ? `TP - ${pageTitle}` : "TP";
+  }, [authChecked, isAuthenticated, currentSection]);
+
   // تحميل البيانات من النظام عند بدء التطبيق
   const [initDone, setInitDone] = useState(false);
   useEffect(() => {
