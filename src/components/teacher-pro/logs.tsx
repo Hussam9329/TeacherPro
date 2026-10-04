@@ -24,7 +24,8 @@ import {
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import { ListToolbar, type ListChipTone } from "./list-toolbar";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
-import { formatAppDate } from "@/lib/format";
+import { formatAppDate, formatAppTime } from "@/lib/format";
+import { formatBaghdadDateTime, toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
 
 type AuditLogDisplayItem = {
   label: string;
@@ -60,10 +61,7 @@ const logExportColumns: ExportColumn<AuditLogRow>[] = [
 ];
 
 function formatLogTime(value: string) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("en-US", { hour12: false });
+  return formatBaghdadDateTime(value);
 }
 
 const LOG_CHIP_LIMIT = 5;
@@ -83,9 +81,7 @@ function moduleInitial(module: string) {
 }
 
 function formatLogClock(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return formatAppTime(toBaghdadDateTimeLocal(value).slice(11, 16));
 }
 
 function localDayKey(date: Date) {

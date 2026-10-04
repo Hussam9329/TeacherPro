@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useId, useMemo, useRef, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   COURSE_PROGRAMS,
   COURSE_TERMS,
@@ -299,7 +299,12 @@ export function CourseBuilderForm({
 }) {
   const formId = useId();
   const [step, setStep] = useState(0);
+  // The furthest step reached: a step earns its ✓ only once reached.
+  const [furthestStep, setFurthestStep] = useState(0);
   const [showStepError, setShowStepError] = useState(false);
+  useEffect(() => {
+    setFurthestStep((value) => Math.max(value, step));
+  }, [step]);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const lastStep = COURSE_BUILDER_STEPS.length - 1;
 
@@ -499,14 +504,15 @@ export function CourseBuilderForm({
     <div className="tp-course-builder" data-step={step}>
       <ol className="tp-course-builder__steps" aria-label="خطوات إعداد الدورة">
         {COURSE_BUILDER_STEPS.map((item, index) => {
+          const reached = mode === "edit" || index <= furthestStep;
           const state =
             index === step
               ? "current"
-              : stepErrors[index]
-                ? index < step || mode === "edit"
+              : !reached
+                ? "todo"
+                : stepErrors[index]
                   ? "incomplete"
-                  : "todo"
-                : "done";
+                  : "done";
           return (
             <li key={item.title}>
               <button

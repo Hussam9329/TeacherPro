@@ -815,18 +815,7 @@ export function CoursesView() {
           <p className="text-muted-foreground">
             إيقاف التسجيل لا يغيّر بيانات الطلاب الحاليين.
           </p>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setSettingsCourseId(null);
-              openDeleteDialog(row);
-            }}
-            className="text-danger hover:text-destructive"
-            aria-label={`حذف نهائي للدورة ${row.course.name}`}
-          >
-            <Trash2 aria-hidden="true" />
-            حذف نهائي
-          </Button>
+          <p className="text-muted-foreground">الحذف النهائي من قائمة ⋯ ببطاقة الدورة.</p>
         </section>
       </div>
     );

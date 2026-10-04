@@ -1,5 +1,7 @@
 "use client";
 
+import { toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
+import { formatAppDate, formatAppTime } from "@/lib/format";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, CheckCheck, ClipboardList, RefreshCw, Search, Send, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,29 +22,14 @@ type Props = {
 };
 
 const GENERAL_NOTES = "__general__";
-const noteDateFormatter = new Intl.DateTimeFormat("ar-EG", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-  numberingSystem: "latn",
-  timeZone: "Asia/Baghdad",
-});
-const noteTimeFormatter = new Intl.DateTimeFormat("ar-EG", {
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-  numberingSystem: "latn",
-  timeZone: "Asia/Baghdad",
-});
-
 function formatNoteDate(createdAt: string) {
-  const date = new Date(createdAt);
-  return Number.isFinite(date.getTime()) ? noteDateFormatter.format(date) : "—";
+  const local = toBaghdadDateTimeLocal(createdAt);
+  return local ? formatAppDate(local.slice(0, 10)) : "—";
 }
 
 function formatNoteTime(createdAt: string) {
-  const date = new Date(createdAt);
-  return Number.isFinite(date.getTime()) ? noteTimeFormatter.format(date) : "—";
+  const local = toBaghdadDateTimeLocal(createdAt);
+  return local ? formatAppTime(local.slice(11, 16)) : "—";
 }
 
 /** Signal tone of a contact status: reached = green, no answer = amber, wrong number = red. */
@@ -438,7 +425,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                                 </span>
                                 <span className="tp-notes__when">
                                   <time dateTime={note.createdAt}>{formatNoteDate(note.createdAt)}</time>
-                                  {"، "}
+                                  {" · "}
                                   <time dateTime={note.createdAt}>{formatNoteTime(note.createdAt)}</time>
                                 </span>
                                 {canManage && (

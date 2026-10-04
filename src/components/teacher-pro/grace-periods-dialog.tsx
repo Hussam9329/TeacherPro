@@ -24,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import {
   describeGraceRemaining,
   formatGraceDate,
@@ -767,22 +768,20 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                       <div className="tp-modal__fields">
                         <label className="tp-modal__field">
                           <span>من</span>
-                          <Input
-                            type="date"
+                          <DateInput
                             value={editor.startDate}
                             max={today || undefined}
-                            onChange={(event) => setEditor({ ...editor, startDate: event.target.value })}
+                            onChange={(value) => setEditor({ ...editor, startDate: value })}
                             disabled={Boolean(preview) || busy}
                           />
                         </label>
                         {editor.mode === "range" ? (
                           <label className="tp-modal__field">
                             <span>إلى</span>
-                            <Input
-                              type="date"
+                            <DateInput
                               value={editor.endDate}
                               min={editor.startDate || undefined}
-                              onChange={(event) => setEditor({ ...editor, endDate: event.target.value })}
+                              onChange={(value) => setEditor({ ...editor, endDate: value })}
                               disabled={Boolean(preview) || busy}
                             />
                           </label>

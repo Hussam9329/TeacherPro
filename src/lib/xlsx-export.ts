@@ -1,4 +1,5 @@
 import { strToU8, zipSync } from "fflate";
+import { formatBaghdadDateTime } from "./baghdad-time";
 
 export type XlsxExportColumn<T> = {
   label: string;
@@ -84,10 +85,7 @@ export function buildProfessionalXlsx<T>(
   const title = String(options.title || "تقرير").trim() || "تقرير";
   const sheetName = safeSheetName(title);
   const generatedAt = options.generatedAt || new Date();
-  const generatedLabel = new Intl.DateTimeFormat("en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(generatedAt);
+  const generatedLabel = formatBaghdadDateTime(generatedAt);
   const lastColumn = columnName(Math.max(0, columns.length - 1));
   const lastRow = rows.length + 3;
   const widths = estimateColumnWidths(rows, columns);

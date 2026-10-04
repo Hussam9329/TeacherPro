@@ -334,12 +334,12 @@ function resolveActiveChapterLogScope(
   };
 }
 
-/** «28 سبتمبر 2026، 3:45 م» in Baghdad time, for the report's opening page. */
+/** «28 سبتمبر 2026 · 3:45 م» in Baghdad time, for the report's opening page. */
 function reportGeneratedText(date: Date): string {
   try {
     const day = date.toLocaleDateString("ar-EG-u-nu-latn", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Baghdad" });
     const time = date.toLocaleTimeString("ar-EG-u-nu-latn", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Baghdad" });
-    return `${day}، ${time}`;
+    return `${day} · ${time}`;
   } catch {
     return date.toISOString();
   }
@@ -960,7 +960,7 @@ const DETAILS_MODAL_JS = `
     var d = new Date(s);
     if (isNaN(d.getTime())) return date;
     try {
-      return date + '، ' + d.toLocaleTimeString('ar-EG-u-nu-latn', {hour:'numeric',minute:'2-digit',timeZone:'Asia/Baghdad'});
+      return date + ' · ' + d.toLocaleTimeString('ar-EG-u-nu-latn', {hour:'numeric',minute:'2-digit',timeZone:'Asia/Baghdad'});
     } catch(e){ return date; }
   }
 

@@ -151,6 +151,8 @@ function harness() {
     '@/lib/user-toast': { toast: { error: (error) => errors.push(error), success: (message, options) => toasts.push({ message, options }) } },
     '@/lib/validation': validationContext.exports,
     '@/lib/call-contact-status': loadHelper('src/lib/call-contact-status.ts'),
+    '@/lib/baghdad-time': loadHelper('src/lib/baghdad-time.ts'),
+    '@/lib/format': loadHelper('src/lib/format.ts'),
     './student-registry-helpers': loadHelper('src/components/teacher-pro/student-registry-helpers.ts'),
     './ui-kit': named(['EmptyState', 'LoadingState']),
   };

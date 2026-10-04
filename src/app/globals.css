@@ -1644,6 +1644,12 @@
       box-shadow: 0 0 0 3px var(--tp-validation-ring) !important;
     }
 
+    .tp-validation-form [data-slot="date-input"] > input:user-invalid + div {
+      border-color: var(--tp-validation-border) !important;
+      background: var(--tp-validation-surface) !important;
+      box-shadow: 0 0 0 3px var(--tp-validation-ring) !important;
+    }
+
     .tp-validation-form input[type="radio"]:user-invalid {
       outline: 2px solid var(--tp-validation-border);
       outline-offset: 2px;

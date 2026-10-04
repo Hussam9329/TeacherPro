@@ -73,13 +73,11 @@ import { useActionLock } from "@/hooks/use-action-lock";
 import {
   Archive,
   AlertTriangle,
-  CalendarDays,
+  BookOpen,
   ChevronLeft,
   ChevronRight,
   Eye,
-  GraduationCap,
-  MapPin,
-  Phone,
+  PhoneCall,
   RotateCcw,
   Save,
   SearchX,
@@ -2495,7 +2493,7 @@ export function StudentRegistryView() {
                   <div className="mb-4 flex items-center gap-2">
                     <UserRound className="size-5 text-primary" />
                     <div>
-                      <h3 className="font-black">البيانات الأساسية</h3>
+                      <h3 className="font-black">بيانات الطالب</h3>
                     </div>
                   </div>
                   <div className="tp-registry-editor__fields">
@@ -2546,91 +2544,164 @@ export function StudentRegistryView() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2 tp-registry-editor__wide">
-                      <Label htmlFor="edit-telegram">Telegram ID</Label>
-                      <Input
-                        id="edit-telegram"
-                        name="telegram"
-                        autoComplete="off"
-                        value={editDialog.form.telegram}
-                        onChange={(e) => updateEditTelegram(e.target.value)}
-                        disabled={!isAdmin}
-                        placeholder="اختياري - username بدون @"
-                        className="h-11 rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-2 tp-registry-editor__wide">
-                      <Label htmlFor="edit-username">
-                        Tele Username
-                      </Label>
-                      <Input
-                        id="edit-username"
-                        name="username"
-                        autoComplete="off"
-                        value={editDialog.form.username}
-                        onChange={(e) => updateEditUsername(e.target.value)}
-                        placeholder="اختياري - يوزر إضافي بدون @"
-                        className="h-11 rounded-xl"
-                      />
-                      <p className="text-[11px] text-muted-foreground">
-                        يستخدم للبحث ولفتح المحادثة داخل تطبيق تيليجرام.
-                      </p>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="tp-registry-editor__section">
-                  <div className="mb-4 flex items-center gap-2">
-                    <Phone className="size-5 text-primary" />
-                    <div>
-                      <h3 className="font-black">بيانات الاتصال</h3>
-                    </div>
                   </div>
                   <div className="tp-registry-editor__fields">
                     <div className="space-y-2">
-                      <Label htmlFor="edit-phone">رقم الطالب</Label>
-                      <Input
-                        id="edit-phone"
-                        name="phone"
+                      <Label htmlFor="edit-createdAt">
+                        تاريخ إضافة الطالب
+                      </Label>
+                      <DateInput
+                        id="edit-createdAt"
+                        name="createdAt"
                         autoComplete="off"
-                        value={editDialog.form.phone}
-                        onChange={(e) =>
-                          updateEditPhone("phone", e.target.value)
-                        }
-                        inputMode="numeric"
-                        maxLength={11}
-                        pattern="07[0-9]{9}"
-                        dir="ltr"
+                        value={editDialog.form.createdAt}
+                        onChange={(value) => updateEditForm("createdAt", value)}
                         required
-                        className="h-12 rounded-2xl text-left"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-parentPhone">رقم ولي الأمر</Label>
-                      <Input
-                        id="edit-parentPhone"
-                        name="parentPhone"
-                        autoComplete="off"
-                        value={editDialog.form.parentPhone}
-                        onChange={(e) =>
-                          updateEditPhone("parentPhone", e.target.value)
-                        }
-                        inputMode="numeric"
-                        maxLength={11}
-                        pattern="07[0-9]{9}"
-                        dir="ltr"
-                        required
-                        className="h-12 rounded-2xl text-left"
                       />
                     </div>
                   </div>
+
+                  {editOriginalGraceText && (
+                    <p className="mt-4 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-6">
+                      {editOriginalGraceText}. تُعدّل فترة السماح من شاشة «إدارة
+                      فترة السماح».
+                    </p>
+                  )}
+
+                  {editNeedsAcademicImpactPreview && (
+                    <div className="mt-4 rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-4 text-sm text-warning">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-black">
+                            تغيير تاريخ التسجيل يعيد تفسير الامتحانات القديمة
+                          </p>
+                          {!hasCurrentAcademicImpactPreview ? (
+                            <p className="mt-1 text-xs leading-6 opacity-90">
+                              سيظهر أثر التعديل على الدرجات والفرص قبل الحفظ
+                              لتأكيده.
+                            </p>
+                          ) : academicImpactPreview ? (
+                            <div className="mt-3 space-y-3">
+                              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                                <div className="rounded-xl bg-background/80 p-3 text-foreground">
+                                  <p className="text-xs text-muted-foreground">
+                                    درجات تغير تفسيرها
+                                  </p>
+                                  <p className="mt-1 text-xl font-black">
+                                    {academicImpactPreview.impact.changedGrades}
+                                  </p>
+                                </div>
+                                <div className="rounded-xl bg-background/80 p-3 text-foreground">
+                                  <p className="text-xs text-muted-foreground">
+                                    أصبحت محمية
+                                  </p>
+                                  <p className="mt-1 text-xl font-black">
+                                    {
+                                      academicImpactPreview.impact
+                                        .becameProtected
+                                    }
+                                  </p>
+                                </div>
+                                <div className="rounded-xl bg-background/80 p-3 text-foreground">
+                                  <p className="text-xs text-muted-foreground">
+                                    عادت للمحاسبة
+                                  </p>
+                                  <p className="mt-1 text-xl font-black">
+                                    {
+                                      academicImpactPreview.impact
+                                        .becameChargeable
+                                    }
+                                  </p>
+                                </div>
+                                <div className="rounded-xl bg-background/80 p-3 text-foreground">
+                                  <p className="text-xs text-muted-foreground">
+                                    الفرص المتوقعة
+                                  </p>
+                                  <p className="mt-1 text-xl font-black">
+                                    {academicImpactPreview.projection?.current
+                                      .opportunities ?? "—"}{" "}
+                                    ←{" "}
+                                    {academicImpactPreview.projection?.projected
+                                      .opportunities ?? "—"}
+                                  </p>
+                                </div>
+                              </div>
+                              {academicImpactPreview.projection && (
+                                <p className="rounded-xl bg-background/80 p-3 text-xs leading-6 text-foreground">
+                                  الحالة المتوقعة:{" "}
+                                  {
+                                    academicImpactPreview.projection.current
+                                      .status
+                                  }{" "}
+                                  ←{" "}
+                                  {
+                                    academicImpactPreview.projection.projected
+                                      .status
+                                  }
+                                  {academicImpactPreview.projection.projected
+                                    .dismissalReason
+                                    ? ` — ${displayReasonText(academicImpactPreview.projection.projected.dismissalReason)}`
+                                    : ""}
+                                </p>
+                              )}
+                              {academicImpactPreview.impact.sample.length >
+                                0 && (
+                                <div className="max-h-48 space-y-2 overflow-y-auto">
+                                  {academicImpactPreview.impact.sample.map(
+                                    (item) => (
+                                      <div
+                                        key={item.examId}
+                                        className="rounded-xl bg-background/80 p-3 text-xs text-foreground"
+                                      >
+                                        <p className="font-bold">
+                                          {item.examName} —{" "}
+                                          {formatAppDate(item.examDate)}
+                                        </p>
+                                        <p className="mt-1 text-muted-foreground">
+                                          {academicImpactKindLabel(item.before)}{" "}
+                                          ←{" "}
+                                          {academicImpactKindLabel(item.after)}
+                                        </p>
+                                      </div>
+                                    ),
+                                  )}
+                                </div>
+                              )}
+                              <Button
+                                type="button"
+                                variant={
+                                  academicImpactConfirmed
+                                    ? "default"
+                                    : "outline"
+                                }
+                                onClick={() =>
+                                  setAcademicImpactConfirmed((value) => !value)
+                                }
+                                className="min-h-11 w-full rounded-xl sm:w-auto"
+                              >
+                                {academicImpactConfirmed
+                                  ? "تم تأكيد الأثر — يمكن الحفظ"
+                                  : "أؤكد تطبيق هذا الأثر عند الحفظ"}
+                              </Button>
+                            </div>
+                          ) : null}
+                          {academicImpactLoading && (
+                            <p className="mt-2 text-xs font-bold">
+                              جاري حساب أثر التعديل…
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </section>
 
                 <section className="tp-registry-editor__section">
                   <div className="mb-4 flex items-center gap-2">
-                    <GraduationCap className="size-5 text-primary" />
+                    <BookOpen className="size-5 text-primary" />
                     <div>
-                      <h3 className="font-black">الدورة ونظام الدراسة</h3>
+                      <h3 className="font-black">الاشتراك</h3>
                     </div>
                   </div>
                   <div className="tp-registry-editor__fields">
@@ -2840,16 +2911,7 @@ export function StudentRegistryView() {
                         </div>
                       )}
                   </div>
-                </section>
-
-                <section className="tp-registry-editor__section">
-                  <div className="mb-4 flex items-center gap-2">
-                    <MapPin className="size-5 text-primary" />
-                    <div>
-                      <h3 className="font-black">الموقع</h3>
-                    </div>
-                  </div>
-                  <div className="tp-registry-editor__fields">
+                  <div className="tp-registry-editor__fields mt-4">
                     {editDialog.form.studyType &&
                     editLocationScopes.length > 0 ? (
                       <div className="space-y-2">
@@ -2963,161 +3025,76 @@ export function StudentRegistryView() {
 
                 <section className="tp-registry-editor__section">
                   <div className="mb-4 flex items-center gap-2">
-                    <CalendarDays className="size-5 text-primary" />
+                    <PhoneCall className="size-5 text-primary" />
                     <div>
-                      <h3 className="font-black">التسجيل</h3>
+                      <h3 className="font-black">التواصل</h3>
                     </div>
                   </div>
                   <div className="tp-registry-editor__fields">
                     <div className="space-y-2">
-                      <Label htmlFor="edit-createdAt">
-                        تاريخ إضافة الطالب
-                      </Label>
-                      <DateInput
-                        id="edit-createdAt"
-                        name="createdAt"
+                      <Label htmlFor="edit-telegram">معرف التيليجرام</Label>
+                      <Input
+                        id="edit-telegram"
+                        name="telegram"
                         autoComplete="off"
-                        value={editDialog.form.createdAt}
-                        onChange={(value) => updateEditForm("createdAt", value)}
+                        value={editDialog.form.telegram}
+                        onChange={(e) => updateEditTelegram(e.target.value)}
+                        disabled={!isAdmin}
+                        placeholder="username بدون @"
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-username">
+                        يوزر التيليجرام (المستعاد)
+                      </Label>
+                      <Input
+                        id="edit-username"
+                        name="username"
+                        autoComplete="off"
+                        value={editDialog.form.username}
+                        onChange={(e) => updateEditUsername(e.target.value)}
+                        placeholder="يوزر إضافي بدون @ (اختياري)"
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-phone">رقم هاتف الطالب</Label>
+                      <Input
+                        id="edit-phone"
+                        name="phone"
+                        autoComplete="off"
+                        value={editDialog.form.phone}
+                        onChange={(e) =>
+                          updateEditPhone("phone", e.target.value)
+                        }
+                        inputMode="numeric"
+                        maxLength={11}
+                        pattern="07[0-9]{9}"
+                        dir="ltr"
                         required
+                        className="h-12 rounded-2xl text-left"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-parentPhone">رقم هاتف ولي الأمر</Label>
+                      <Input
+                        id="edit-parentPhone"
+                        name="parentPhone"
+                        autoComplete="off"
+                        value={editDialog.form.parentPhone}
+                        onChange={(e) =>
+                          updateEditPhone("parentPhone", e.target.value)
+                        }
+                        inputMode="numeric"
+                        maxLength={11}
+                        pattern="07[0-9]{9}"
+                        dir="ltr"
+                        required
+                        className="h-12 rounded-2xl text-left"
                       />
                     </div>
                   </div>
-
-                  {editOriginalGraceText && (
-                    <p className="mt-4 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-6">
-                      {editOriginalGraceText}. تُعدّل فترة السماح من شاشة «إدارة
-                      فترة السماح».
-                    </p>
-                  )}
-
-                  {editNeedsAcademicImpactPreview && (
-                    <div className="mt-4 rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-4 text-sm text-warning">
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle className="mt-0.5 size-5 shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-black">
-                            تغيير تاريخ التسجيل يعيد تفسير الامتحانات القديمة
-                          </p>
-                          {!hasCurrentAcademicImpactPreview ? (
-                            <p className="mt-1 text-xs leading-6 opacity-90">
-                              سيظهر أثر التعديل على الدرجات والفرص قبل الحفظ
-                              لتأكيده.
-                            </p>
-                          ) : academicImpactPreview ? (
-                            <div className="mt-3 space-y-3">
-                              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                                <div className="rounded-xl bg-background/80 p-3 text-foreground">
-                                  <p className="text-xs text-muted-foreground">
-                                    درجات تغير تفسيرها
-                                  </p>
-                                  <p className="mt-1 text-xl font-black">
-                                    {academicImpactPreview.impact.changedGrades}
-                                  </p>
-                                </div>
-                                <div className="rounded-xl bg-background/80 p-3 text-foreground">
-                                  <p className="text-xs text-muted-foreground">
-                                    أصبحت محمية
-                                  </p>
-                                  <p className="mt-1 text-xl font-black">
-                                    {
-                                      academicImpactPreview.impact
-                                        .becameProtected
-                                    }
-                                  </p>
-                                </div>
-                                <div className="rounded-xl bg-background/80 p-3 text-foreground">
-                                  <p className="text-xs text-muted-foreground">
-                                    عادت للمحاسبة
-                                  </p>
-                                  <p className="mt-1 text-xl font-black">
-                                    {
-                                      academicImpactPreview.impact
-                                        .becameChargeable
-                                    }
-                                  </p>
-                                </div>
-                                <div className="rounded-xl bg-background/80 p-3 text-foreground">
-                                  <p className="text-xs text-muted-foreground">
-                                    الفرص المتوقعة
-                                  </p>
-                                  <p className="mt-1 text-xl font-black">
-                                    {academicImpactPreview.projection?.current
-                                      .opportunities ?? "—"}{" "}
-                                    ←{" "}
-                                    {academicImpactPreview.projection?.projected
-                                      .opportunities ?? "—"}
-                                  </p>
-                                </div>
-                              </div>
-                              {academicImpactPreview.projection && (
-                                <p className="rounded-xl bg-background/80 p-3 text-xs leading-6 text-foreground">
-                                  الحالة المتوقعة:{" "}
-                                  {
-                                    academicImpactPreview.projection.current
-                                      .status
-                                  }{" "}
-                                  ←{" "}
-                                  {
-                                    academicImpactPreview.projection.projected
-                                      .status
-                                  }
-                                  {academicImpactPreview.projection.projected
-                                    .dismissalReason
-                                    ? ` — ${displayReasonText(academicImpactPreview.projection.projected.dismissalReason)}`
-                                    : ""}
-                                </p>
-                              )}
-                              {academicImpactPreview.impact.sample.length >
-                                0 && (
-                                <div className="max-h-48 space-y-2 overflow-y-auto">
-                                  {academicImpactPreview.impact.sample.map(
-                                    (item) => (
-                                      <div
-                                        key={item.examId}
-                                        className="rounded-xl bg-background/80 p-3 text-xs text-foreground"
-                                      >
-                                        <p className="font-bold">
-                                          {item.examName} —{" "}
-                                          {formatAppDate(item.examDate)}
-                                        </p>
-                                        <p className="mt-1 text-muted-foreground">
-                                          {academicImpactKindLabel(item.before)}{" "}
-                                          ←{" "}
-                                          {academicImpactKindLabel(item.after)}
-                                        </p>
-                                      </div>
-                                    ),
-                                  )}
-                                </div>
-                              )}
-                              <Button
-                                type="button"
-                                variant={
-                                  academicImpactConfirmed
-                                    ? "default"
-                                    : "outline"
-                                }
-                                onClick={() =>
-                                  setAcademicImpactConfirmed((value) => !value)
-                                }
-                                className="min-h-11 w-full rounded-xl sm:w-auto"
-                              >
-                                {academicImpactConfirmed
-                                  ? "تم تأكيد الأثر — يمكن الحفظ"
-                                  : "أؤكد تطبيق هذا الأثر عند الحفظ"}
-                              </Button>
-                            </div>
-                          ) : null}
-                          {academicImpactLoading && (
-                            <p className="mt-2 text-xs font-bold">
-                              جاري حساب أثر التعديل…
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </section>
               </fieldset>
             </div>

@@ -1,4 +1,4 @@
-import { formatAppDate } from './format';
+import { formatAppDate, formatAppTime } from './format';
 
 const BAGHDAD_OFFSET_HOURS = 3;
 const BAGHDAD_OFFSET_MS = BAGHDAD_OFFSET_HOURS * 60 * 60 * 1000;
@@ -98,9 +98,10 @@ export function toBaghdadDateTimeLocal(value?: string | Date | null): string {
   return `${baghdad.getUTCFullYear()}-${pad(baghdad.getUTCMonth() + 1)}-${pad(baghdad.getUTCDate())}T${pad(baghdad.getUTCHours())}:${pad(baghdad.getUTCMinutes())}`;
 }
 
-export function formatBaghdadDateTime(value?: string | Date | null): string {
+/** The one way the system writes a moment: «8 أكتوبر 2026 · 1:54 م», Baghdad time. */
+export function formatBaghdadDateTime(value?: string | Date | null, fallback = '—'): string {
   const local = toBaghdadDateTimeLocal(value);
-  if (!local) return '—';
+  if (!local) return fallback;
   const [date, time] = local.split('T');
-  return `${formatAppDate(date, date)} ${time}`;
+  return `${formatAppDate(date, date)} · ${formatAppTime(time)}`;
 }

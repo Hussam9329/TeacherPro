@@ -21,7 +21,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DateInput } from "@/components/ui/date-input";
+import { DateInput, DateTimeInput } from "@/components/ui/date-input";
 import {
   BookOpen,
   CalendarClock,
@@ -706,10 +706,8 @@ export function ExamNewView() {
           className="tp-exam-new__field"
         >
           <Label htmlFor={`${prefix}-activate`}>تاريخ ووقت التفعيل</Label>
-          <Input
+          <DateTimeInput
             id={`${prefix}-activate`}
-            type="datetime-local"
-            dir="ltr"
             value={state.scheduledActivateAt}
             aria-invalid={Boolean(visibleFieldErrors.scheduledActivateAt)}
             aria-describedby={
@@ -717,8 +715,8 @@ export function ExamNewView() {
                 ? `${prefix}-activate-error`
                 : undefined
             }
-            onChange={(e) =>
-              setState((p) => ({ ...p, scheduledActivateAt: e.target.value }))
+            onChange={(value) =>
+              setState((p) => ({ ...p, scheduledActivateAt: value }))
             }
           />
           <ExamFieldError
@@ -1190,10 +1188,8 @@ export function ExamNewView() {
                     <Label htmlFor={`${prefix}-telegram-open-at`}>
                       فتح التسليم عبر تيليجرام
                     </Label>
-                    <Input
+                    <DateTimeInput
                       id={`${prefix}-telegram-open-at`}
-                      type="datetime-local"
-                      dir="ltr"
                       value={state.telegramOpenAt}
                       required
                       aria-invalid={Boolean(fieldErrors.telegramOpenAt)}
@@ -1202,10 +1198,10 @@ export function ExamNewView() {
                           ? `${prefix}-telegram-open-at-error`
                           : undefined
                       }
-                      onChange={(e) =>
+                      onChange={(value) =>
                         setState((prev) => ({
                           ...prev,
-                          telegramOpenAt: e.target.value,
+                          telegramOpenAt: value,
                         }))
                       }
                     />
@@ -1221,10 +1217,8 @@ export function ExamNewView() {
                     <Label htmlFor={`${prefix}-telegram-close-at`}>
                       إغلاق التسليم عبر تيليجرام
                     </Label>
-                    <Input
+                    <DateTimeInput
                       id={`${prefix}-telegram-close-at`}
-                      type="datetime-local"
-                      dir="ltr"
                       min={state.telegramOpenAt || undefined}
                       value={state.telegramCloseAt}
                       required
@@ -1234,10 +1228,10 @@ export function ExamNewView() {
                           ? `${prefix}-telegram-close-at-error`
                           : undefined
                       }
-                      onChange={(e) =>
+                      onChange={(value) =>
                         setState((prev) => ({
                           ...prev,
-                          telegramCloseAt: e.target.value,
+                          telegramCloseAt: value,
                         }))
                       }
                     />

@@ -86,11 +86,12 @@ must(
 must(
   editDialog.includes("validateExamForm") &&
     editDialog.includes("const isFormValid = formValidation.isValid") &&
-    editDialog.includes("disabled={isMutating || !isFormValid}") &&
+    editDialog.includes("if (isFormValid) void onSave(editDialog);") &&
+    editDialog.includes("saveAttempted || field === \"form\" || touchedFields[field]") &&
     editDialog.includes('id="edit-exam-validation-summary"') &&
     editDialog.includes("aria-invalid") &&
     page.includes("validateFullExamEditState("),
-  "نافذة التعديل تعرض أخطاء لحظية وتعطل زر الحفظ بنفس المدقق المستخدم عند التنفيذ",
+  "نافذة التعديل تعرض الأخطاء بعد ترك الحقل أو الضغط على الحفظ، ولا تحفظ إلا بنفس المدقق المستخدم عند التنفيذ",
   "يجب أن تتطابق صلاحية زر التعديل مع التحقق الدفاعي عند الحفظ."
 );
 

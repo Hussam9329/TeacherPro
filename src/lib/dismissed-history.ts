@@ -539,14 +539,14 @@ function opportunityReportNumber(value: unknown): string {
   return Number.isFinite(numeric) ? String(numeric) : "—";
 }
 
-/** نفس تنسيق تاريخ تقرير HTML (ar-IQ-u-nu-latn بتوقيت بغداد) مع احتياط النص الخام. */
+/** نفس تنسيق تاريخ تقرير HTML («8 أكتوبر 2026» بتوقيت بغداد) مع احتياط النص الخام. */
 function opportunityReportDate(value: unknown): string {
   const raw = cleanText(value);
   if (!raw) return "—";
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return raw;
   try {
-    return parsed.toLocaleDateString("ar-IQ-u-nu-latn", {
+    return parsed.toLocaleDateString("ar-EG-u-nu-latn", {
       day: "numeric",
       month: "long",
       year: "numeric",
@@ -757,7 +757,7 @@ export function buildOpportunityTelegramHtml(
     if (Number.isNaN(parsed.getTime())) return escape(raw);
     try {
       return escape(
-        parsed.toLocaleDateString("ar-IQ-u-nu-latn", {
+        parsed.toLocaleDateString("ar-EG-u-nu-latn", {
           day: "numeric",
           month: "long",
           year: "numeric",

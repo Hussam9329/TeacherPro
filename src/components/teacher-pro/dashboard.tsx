@@ -1,5 +1,6 @@
 "use client";
 
+import { formatBaghdadDateTime } from "@/lib/baghdad-time";
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -68,17 +69,7 @@ function ShortcutAlert({ count, tone, label }: { count: number | null | undefine
 }
 
 function formatStatsTime(value?: string) {
-  if (!value) return "—";
-  try {
-    return new Intl.DateTimeFormat("ar-IQ", {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: "Asia/Baghdad",
-      numberingSystem: "latn",
-    }).format(new Date(value));
-  } catch {
-    return value;
-  }
+  return formatBaghdadDateTime(value);
 }
 
 export function DashboardView({

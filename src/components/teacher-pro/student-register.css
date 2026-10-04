@@ -18,57 +18,6 @@
   );
 }
 
-.tp-register__intro {
-  gap: 0;
-  padding-block: 0;
-}
-
-.tp-register__intro > [data-slot="card-header"] {
-  padding: 0.9rem 1rem 0;
-}
-
-.tp-register__progress {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.tp-register__progress > li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.625rem;
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  color: var(--muted-foreground);
-  background: color-mix(in srgb, var(--muted) 20%, var(--card));
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1.5;
-}
-
-.tp-register__progress > li[data-complete="true"] {
-  border-color: color-mix(in srgb, var(--primary) 25%, var(--border));
-  color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 5%, var(--card));
-}
-
-.tp-register__step-number {
-  display: inline-flex;
-  flex: 0 0 1rem;
-  align-items: center;
-  justify-content: center;
-  block-size: 1rem;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  font-size: 0.625rem;
-  line-height: 1;
-}
-
 /* A flex column (not a grid) so the form itself is the save bar's sticky
    containing block rather than the bar's own grid row. */
 .tp-register__form {

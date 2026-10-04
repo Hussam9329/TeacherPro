@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { CalendarDays } from "lucide-react";
+import { CalendarClock, CalendarDays } from "lucide-react";
 
-import { parseAppDateInput } from "@/lib/format";
+import { formatAppDate, formatAppTime, parseAppDateInput } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type NativeDateInputProps = Omit<
@@ -24,79 +24,116 @@ function isoDateValue(value: DateInputProps["value"]): string {
   return parseAppDateInput(String(value), "");
 }
 
-function DateInput({
+function isoDateTimeValue(value: DateInputProps["value"]): string {
+  if (!value) return "";
+  const raw = String(value).trim();
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw) ? raw.slice(0, 16) : "";
+}
+
+/**
+ * One date field for the whole system: it shows «20 سبتمبر 2026» with one
+ * calendar icon, and the browser's own picker (calendar on a computer, wheel
+ * on a phone) opens from anywhere on the field. The browser input sits on
+ * top, invisible, so typing and the keyboard still work.
+ */
+function PickerField({
+  kind,
   value,
-  onChange,
+  shown,
+  onValue,
   className,
-  placeholder = "اختر التاريخ",
+  placeholder,
   disabled,
-  name,
   id,
-  min,
-  max,
   "aria-label": ariaLabel,
   ...props
-}: DateInputProps) {
-  const inputRef = React.useRef<HTMLInputElement | null>(null);
-  const normalizedValue = isoDateValue(value);
+}: NativeDateInputProps & {
+  kind: "date" | "datetime-local";
+  value: string;
+  shown: string;
+  onValue: (value: string) => void;
+}) {
   const generatedId = React.useId();
   const controlId = id || generatedId;
+  const Icon = kind === "date" ? CalendarDays : CalendarClock;
 
-  const openPicker = React.useCallback(() => {
+  const openPicker = (event: React.MouseEvent<HTMLInputElement>) => {
     if (disabled) return;
-    const input = inputRef.current;
-    if (!input) return;
-
-    const pickerInput = input as HTMLInputElement & { showPicker?: () => void };
-    input.focus();
-
+    const input = event.currentTarget as HTMLInputElement & { showPicker?: () => void };
     try {
-      if (typeof pickerInput.showPicker === "function") {
-        pickerInput.showPicker();
-      }
+      input.showPicker?.();
     } catch {
-      // بعض المتصفحات لا تسمح بفتح المنتقي إلا من تفاعل مباشر؛ يبقى الإدخال اليدوي متاحاً.
+      // بعض المتصفحات ما تسمح بفتح المنتقي؛ يبقى الإدخال بالكيبورد متاحاً.
     }
-  }, [disabled]);
+  };
 
   return (
-    <div className="relative w-full max-w-full min-w-0">
+    <div data-slot="date-input" className="relative w-full max-w-full min-w-0">
       <input
         {...props}
-        ref={inputRef}
         id={controlId}
-        name={name}
-        type="date"
+        type={kind}
         autoComplete="off"
-        value={normalizedValue}
-        min={min}
-        max={max}
+        value={value}
         disabled={disabled}
         aria-label={ariaLabel || placeholder}
-        onChange={(event) => {
-          const nextValue = event.target.value;
-          onChange?.(/^\d{4}-\d{2}-\d{2}$/.test(nextValue) ? nextValue : "");
-        }}
+        onClick={openPicker}
+        onChange={(event) => onValue(event.target.value)}
+        className="peer absolute inset-0 z-10 h-full w-full min-w-0 cursor-pointer appearance-none opacity-0 disabled:cursor-not-allowed [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+      />
+      <div
+        aria-hidden="true"
         className={cn(
-          "border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive flex h-11 w-full max-w-full min-w-0 rounded-xl border bg-background/70 px-3.5 py-2 pl-12 text-sm shadow-xs backdrop-blur transition-[color,box-shadow,border-color,background-color] outline-none focus-visible:ring-[3px] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
+          "border-input flex h-11 w-full max-w-full min-w-0 items-center gap-2 rounded-xl border bg-background/70 py-2 pe-1 ps-3.5 text-start text-sm shadow-xs transition-[color,box-shadow,border-color,background-color] peer-hover:border-ring/60 peer-focus-visible:border-ring peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring/50 peer-aria-invalid:border-destructive peer-aria-invalid:ring-destructive/20 peer-disabled:opacity-50 dark:bg-input/30",
           className,
           props["aria-invalid"] && "border-destructive ring-destructive/20",
         )}
-      />
-      <button
-        type="button"
-        data-slot="date-input-trigger"
-        tabIndex={-1}
-        disabled={disabled}
-        aria-label={ariaLabel || placeholder}
-        aria-controls={controlId}
-        onClick={openPicker}
-        className="touch-target absolute left-0 top-1/2 inline-flex size-11 touch-manipulation -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
       >
-        <CalendarDays className="size-4" aria-hidden="true" />
-      </button>
+        <span className={cn("min-w-0 flex-1 truncate", !shown && "text-muted-foreground")}>
+          {shown || placeholder}
+        </span>
+        <span
+          data-slot="date-input-trigger"
+          className="touch-target inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground"
+        >
+          <Icon className="size-4" />
+        </span>
+      </div>
     </div>
   );
 }
 
-export { DateInput };
+function DateInput({ value, onChange, placeholder = "اختر التاريخ", ...props }: DateInputProps) {
+  const normalizedValue = isoDateValue(value);
+  return (
+    <PickerField
+      {...props}
+      kind="date"
+      placeholder={placeholder}
+      value={normalizedValue}
+      shown={normalizedValue ? formatAppDate(normalizedValue, "") : ""}
+      onValue={(next) => onChange?.(/^\d{4}-\d{2}-\d{2}$/.test(next) ? next : "")}
+    />
+  );
+}
+
+/** «8 أكتوبر 2026 · 1:54 م»; the value stays the browser's 2026-10-08T13:54. */
+function DateTimeInput({ value, onChange, placeholder = "اختر التاريخ والوقت", ...props }: DateInputProps) {
+  const normalizedValue = isoDateTimeValue(value);
+  return (
+    <PickerField
+      {...props}
+      kind="datetime-local"
+      placeholder={placeholder}
+      value={normalizedValue}
+      shown={
+        normalizedValue
+          ? `${formatAppDate(normalizedValue.slice(0, 10), "")} · ${formatAppTime(normalizedValue.slice(11, 16))}`
+          : ""
+      }
+      onValue={(next) => onChange?.(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(next) ? next.slice(0, 16) : "")}
+    />
+  );
+}
+
+export { DateInput, DateTimeInput };

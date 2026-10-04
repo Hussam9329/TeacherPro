@@ -12,7 +12,7 @@ import {
   type StudentRegisterContextResponse,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
@@ -67,7 +67,6 @@ import {
   ShieldCheck,
   Smartphone,
   User,
-  CheckCircle2,
   WifiOff,
 } from "lucide-react";
 import { Send } from "lucide-react";
@@ -450,43 +449,6 @@ export function StudentRegisterView() {
     });
   }, [courseAvailableStudyTypes, form.studyType]);
 
-  const formSteps = useMemo(
-    () => [
-      {
-        label: "بيانات الطالب",
-        complete: Boolean(
-          form.name.trim() && form.school.trim() && form.gender && form.createdAt,
-        ),
-      },
-      {
-        label: "الاشتراك",
-        complete: Boolean(
-          form.courseId &&
-            !selectedCourseCannotRegister &&
-            effectiveCourseProgram &&
-            (effectiveCourseProgram !== "كورسات" || form.courseTerm) &&
-            (courseAvailableStudyTypes.length === 0 || form.studyType) &&
-            (courseLocationScopes.length === 0 || form.locationScope) &&
-            (!isOutOfCountry || Boolean(form.subSite.trim())) &&
-            (subSiteOptions.length === 0 || effectiveSubSite),
-        ),
-      },
-      {
-        label: "التواصل",
-        complete: Boolean(form.phone.trim() && form.parentPhone.trim()),
-      },
-    ],
-    [
-      form,
-      courseAvailableStudyTypes,
-      courseLocationScopes,
-      subSiteOptions.length,
-      effectiveCourseProgram,
-      effectiveSubSite,
-      isOutOfCountry,
-      selectedCourseCannotRegister,
-    ],
-  );
   const hasDraftData = useMemo(
     () =>
       hasMeaningfulDraftValue(form, [
@@ -695,35 +657,6 @@ export function StudentRegisterView() {
 
   return (
     <div className="tp-management-page tp-register-page space-y-4">
-      <Card className="tp-management-action-card tp-register__intro">
-        <CardHeader>
-          <CardTitle className="text-base">إضافة طالب جديد</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ol className="tp-register__progress" aria-label="تقدم التسجيل">
-            {formSteps.map((step, index) => (
-              <li key={step.label} data-complete={step.complete}>
-                {step.complete ? (
-                  <CheckCircle2
-                    className="size-4 shrink-0"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <span className="tp-register__step-number" aria-hidden="true">
-                    {index + 1}
-                  </span>
-                )}
-                <span>
-                  {step.label}
-                  <span className="sr-only">
-                    {step.complete ? "، مكتملة" : "، غير مكتملة"}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ol>
-        </CardContent>
-      </Card>
       <section
         className="tp-management-main-flow"
         aria-label="نموذج تسجيل الطالب"

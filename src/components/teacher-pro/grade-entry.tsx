@@ -77,7 +77,7 @@ import { editableGradeNote, isAutomaticGradeNote, withInternalGradeNotePrefix } 
 import { toast } from "@/lib/user-toast";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { normalizeForSearch } from "@/lib/validation";
-import { baghdadTodayKey } from "@/lib/baghdad-time";
+import { baghdadTodayKey, formatBaghdadDateTime } from "@/lib/baghdad-time";
 import { GradeSmartNotesPanel } from "@/components/teacher-pro/grade-smart-notes-panel";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { studentMatchesListFilters } from "@/lib/student-list-filters";
@@ -244,24 +244,7 @@ function draftMatchesOfflineDesired(
 }
 
 function formatGradeEntryTimestamp(value?: string | Date | null): string {
-  if (!value) return "غير معروف";
-  // حوّل القيمة إلى كائن Date أولاً.
-  const date = value instanceof Date ? value : new Date(value);
-  if (!Number.isFinite(date.getTime())) return "غير معروف";
-  // احسب وقت بغداد بإضافة فرق التوقيت (+3 ساعات) إلى UTC، ثم استخدم
-  // en-GB لتنسيق التاريخ والوقت بالإنكليزية بدل ar-IQ الذي يعطي
-  // أرقاماً عربية ومحررات سياق RTL.
-  // التحويل اليدوي يضمن أن الناتج دائماً بتوقيت بغداد بصرف النظر
-  // عن منطقة زمن المتصفح.
-  const BAGHDAD_OFFSET_MS = 3 * 60 * 60 * 1000;
-  const baghdad = new Date(date.getTime() + BAGHDAD_OFFSET_MS);
-  const y = baghdad.getUTCFullYear();
-  const m = String(baghdad.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(baghdad.getUTCDate()).padStart(2, "0");
-  const hh = String(baghdad.getUTCHours()).padStart(2, "0");
-  const mm = String(baghdad.getUTCMinutes()).padStart(2, "0");
-  // صيغة: 2026-07-05 03:00 ( Baghdad )
-  return `${y}-${m}-${d} ${hh}:${mm}`;
+  return formatBaghdadDateTime(value, "غير معروف");
 }
 
 export function GradeEntryView() {

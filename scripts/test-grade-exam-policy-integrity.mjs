@@ -83,7 +83,7 @@ must(
 must(
   examFormValidation.includes("passMark > fullMark") &&
     examNew.includes("disabled={isAddingExam || !isFormValid}") &&
-    examEditDialog.includes("disabled={isMutating || !isFormValid}") &&
+    examEditDialog.includes("if (isFormValid) void onSave(editDialog);") &&
     examRecords.includes("validateFullExamEditState") &&
     examRoute.includes("validatedGradeValues"),
   "حدود درجة النجاح موحدة في الإضافة والتعديل وAPI مع تعطيل الحفظ غير الصالح",

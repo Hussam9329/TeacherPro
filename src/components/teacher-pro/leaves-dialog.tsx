@@ -29,6 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import type { StudentLeave } from "@/lib/teacher-store";
 import { studentLeaveApi } from "@/lib/api";
 import { formatAppDate } from "@/lib/format";
@@ -1125,11 +1126,11 @@ export function LeavesDialog({ open, onOpenChange, canManage }: Props) {
             <div className="tp-modal__fields">
               <label className="tp-modal__field">
                 <span>من تاريخ</span>
-                <Input type="date" value={form.dateFrom} onChange={(event) => updateForm({ dateFrom: event.target.value })} />
+                <DateInput value={form.dateFrom} onChange={(value) => updateForm({ dateFrom: value })} />
               </label>
               <label className="tp-modal__field">
                 <span>إلى تاريخ</span>
-                <Input type="date" value={form.dateTo} min={form.dateFrom || undefined} onChange={(event) => updateForm({ dateTo: event.target.value })} />
+                <DateInput value={form.dateTo} min={form.dateFrom || undefined} onChange={(value) => updateForm({ dateTo: value })} />
               </label>
             </div>
           )}
@@ -1171,7 +1172,7 @@ export function LeavesDialog({ open, onOpenChange, canManage }: Props) {
               {form.mode === "exam" && (
                 <label className="tp-modal__field">
                   <span>تاريخ توثيق الإجازة</span>
-                  <Input type="date" value={form.documentDate} onChange={(event) => updateForm({ documentDate: event.target.value })} aria-describedby="tp-leaves-document-help" />
+                  <DateInput value={form.documentDate} onChange={(value) => updateForm({ documentDate: value })} aria-describedby="tp-leaves-document-help" />
                   <small id="tp-leaves-document-help" className="tp-modal__muted">تاريخ إداري فقط؛ لا يغيّر الامتحان المشمول.</small>
                 </label>
               )}

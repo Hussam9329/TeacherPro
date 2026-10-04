@@ -90,6 +90,15 @@ export function formatAppDate(value: string | Date | null | undefined, fallback 
   return `${parts.day} ${APP_MONTHS[parts.month - 1]} ${parts.year}`;
 }
 
+/** «14:20» → «2:20 م». */
+export function formatAppTime(hhmm: string | null | undefined): string {
+  const match = /^(\d{1,2}):(\d{2})/.exec(toLatinDigits(hhmm).trim());
+  if (!match) return '';
+  const hours = Number(match[1]);
+  if (hours > 23) return '';
+  return `${hours % 12 || 12}:${match[2]} ${hours < 12 ? 'ص' : 'م'}`;
+}
+
 /** The numeric form, 2026/6/11, for text that is sorted or read back. */
 export function formatNumericAppDate(value: string | Date | null | undefined, fallback = '—'): string {
   const parts = getDateParts(value);

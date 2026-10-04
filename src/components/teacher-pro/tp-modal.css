@@ -655,3 +655,16 @@ a.tp-modal__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-foc
 .tp-modal [data-tone="warning"] { --tone: var(--status-warning-vivid); --tone-ink: var(--status-warning-fg); --tone-tint: var(--status-warning-bg); --tone-line: var(--status-warning-border); --tone-solid: var(--status-warning-solid); --tone-on: var(--status-warning-on); }
 .tp-modal [data-tone="danger"] { --tone: var(--status-danger-vivid); --tone-ink: var(--status-danger-fg); --tone-tint: var(--status-danger-bg); --tone-line: var(--status-danger-border); --tone-solid: var(--status-danger-solid); --tone-on: var(--status-danger-on); }
 .tp-modal [data-tone="info"] { --tone: var(--status-info-vivid); --tone-ink: var(--status-info-fg); --tone-tint: var(--status-info-bg); --tone-line: var(--status-info-border); --tone-solid: var(--status-info-solid); --tone-on: var(--status-info-on); }
+
+/* ── Confirmations ──────────────────────────────────────────────────────
+   The small form of the window frame: the question in the dark band, what
+   will happen underneath, the buttons in one bar. Destructive actions keep
+   their red button and get a warning icon. */
+.tp-confirm-dialog > .tp-modal__hero { min-height: 3.75rem; padding-inline-end: 1.25rem; }
+.tp-confirm-dialog .tp-modal__heading [data-slot="alert-dialog-title"] { font-size: 1.05rem; }
+.tp-confirm-dialog[data-tone="danger"] .tp-modal__hero-icon {
+  color: color-mix(in srgb, var(--status-danger-vivid) 55%, var(--tp-on-hero));
+  border-color: color-mix(in srgb, var(--status-danger-vivid) 45%, transparent);
+  background: color-mix(in srgb, var(--status-danger-vivid) 18%, transparent);
+}
+.tp-confirm-dialog .tp-form-dialog__body > [data-slot="alert-dialog-description"] { color: var(--foreground); font-size: 0.9rem; line-height: 1.8; }

@@ -3,8 +3,11 @@
 import * as React from "react"
 import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
 
+import { CircleHelp, TriangleAlert } from "lucide-react"
+
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
+import "@/components/teacher-pro/tp-modal.css"
 
 function AlertDialog({
   ...props
@@ -44,11 +47,66 @@ function AlertDialogOverlay({
   )
 }
 
+const isElementOf = (type: unknown) => (node: React.ReactNode): node is React.ReactElement<{ children?: React.ReactNode; className?: string }> =>
+  React.isValidElement(node) && node.type === type
+
+/**
+ * Every confirmation wears the system's window frame: a dark band with an
+ * icon and the question, the explanation underneath, and the buttons in a
+ * full-width bar. A window that brings its own frame (`tp-form-dialog`) is
+ * left as it is. The icon warns when the action is destructive.
+ */
 function AlertDialogContent({
   className,
   dir,
+  children,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
+  const ownFrame = String(className || "").includes("tp-form-dialog")
+  if (!ownFrame) {
+    const items = React.Children.toArray(children)
+    const header = items.find(isElementOf(AlertDialogHeader))
+    const footer = items.find(isElementOf(AlertDialogFooter))
+    const rest = items.filter((item) => item !== header && item !== footer)
+    const headerItems = header ? React.Children.toArray(header.props.children) : []
+    const titles = headerItems.filter(isElementOf(AlertDialogTitle))
+    const explanation = headerItems.filter((item) => !isElementOf(AlertDialogTitle)(item))
+    const destructive = footer
+      ? React.Children.toArray(footer.props.children).some(
+          (item) => isElementOf(AlertDialogAction)(item) && /destructive/.test(String(item.props.className || "")),
+        )
+      : false
+    const Icon = destructive ? TriangleAlert : CircleHelp
+    return (
+      <AlertDialogPortal>
+        <AlertDialogOverlay />
+        <AlertDialogPrimitive.Content
+          data-slot="alert-dialog-content"
+          dir={dir ?? "rtl"}
+          data-tone={destructive ? "danger" : undefined}
+          className={cn(
+            "tp-form-dialog tp-confirm-dialog text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-1/2 left-1/2 z-50 max-h-[calc(100dvh-1rem)] w-[calc(100dvw-1rem)] max-w-lg min-w-0 -translate-x-1/2 -translate-y-1/2 border border-border/80 shadow-2xl duration-200 sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100dvw-2rem)]",
+            className
+          )}
+          {...props}
+        >
+          <div className="tp-modal__hero">
+            <span className="tp-modal__hero-icon" aria-hidden="true">
+              <Icon />
+            </span>
+            <div data-slot="alert-dialog-header" className="tp-modal__heading">
+              {titles}
+            </div>
+          </div>
+          <div className="tp-form-dialog__body">
+            {explanation}
+            {rest}
+          </div>
+          {footer}
+        </AlertDialogPrimitive.Content>
+      </AlertDialogPortal>
+    )
+  }
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
@@ -60,7 +118,9 @@ function AlertDialogContent({
           className
         )}
         {...props}
-      />
+      >
+        {children}
+      </AlertDialogPrimitive.Content>
     </AlertDialogPortal>
   )
 }

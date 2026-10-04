@@ -1,5 +1,5 @@
 import { toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
-import { APP_MONTHS } from "@/lib/format";
+import { APP_MONTHS, formatAppTime } from "@/lib/format";
 
 /** Gregorian month names as people say them here: «8 أكتوبر 2026». */
 export const STORY_MONTHS = APP_MONTHS;
@@ -17,10 +17,7 @@ export function storyDay(dayKey: string): string {
 
 /** «14:20» → «2:20 م». */
 export function storyTime(hhmm: string): string {
-  const match = /^(\d{2}):(\d{2})/.exec(String(hhmm || ""));
-  if (!match) return "";
-  const hours = Number(match[1]);
-  return `${hours % 12 || 12}:${match[2]} ${hours < 12 ? "ص" : "م"}`;
+  return formatAppTime(hhmm);
 }
 
 /** The Baghdad day and minute of a stored timestamp. */

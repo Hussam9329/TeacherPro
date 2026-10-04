@@ -1,5 +1,6 @@
 "use client";
 
+import { formatBaghdadDateTime } from "@/lib/baghdad-time";
 import { useMemo, useState } from "react";
 import {
   CalendarClock,
@@ -86,17 +87,7 @@ const STATUS_VARIANTS: Record<
 const DEFAULT_VISIBLE_NOTES_COUNT = 5;
 
 function formatSmartNoteTime(value: string): string {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "وقت غير معروف";
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Baghdad",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date);
+  return formatBaghdadDateTime(value, "وقت غير معروف");
 }
 
 export function GradeSmartNotesPanel({
