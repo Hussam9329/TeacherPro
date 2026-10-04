@@ -1506,6 +1506,8 @@ export function ExportDialog<T = Record<string, unknown>>({
   fetchStudentDetails,
   getRowId,
   selectHtmlExams = false,
+  open: controlledOpen,
+  onOpenChange: onControlledOpenChange,
 }: {
   title: string;
   fileName: string;
@@ -1532,8 +1534,17 @@ export function ExportDialog<T = Record<string, unknown>>({
   getRowId?: (row: T) => string;
   /** Ask which exams to include in this HTML file; other formats are unaffected. */
   selectHtmlExams?: boolean;
+  /** Opened from elsewhere (e.g. a ⋯ menu): no button of its own. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlled ? controlledOpen : uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (controlled) onControlledOpenChange?.(next);
+    else setUncontrolledOpen(next);
+  };
   const [selectedColumnKeys, setSelectedColumnKeys] = useState<string[]>(() =>
     defaultColumnKeys(columns, defaultSelectedColumnKeys),
   );
@@ -1905,12 +1916,14 @@ export function ExportDialog<T = Record<string, unknown>>({
         setOpen(nextOpen);
       }}
     >
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2" disabled={disabled}>
-          <Download className="h-4 w-4" />
-          {triggerLabel}
-        </Button>
-      </DialogTrigger>
+      {controlled ? null : (
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-2" disabled={disabled}>
+            <Download className="h-4 w-4" />
+            {triggerLabel}
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent dir="rtl" className="tp-form-dialog sm:max-w-2xl">
         <FormDialogHero
           icon={FileDown}

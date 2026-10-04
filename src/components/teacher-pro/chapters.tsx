@@ -869,24 +869,10 @@ export function ChaptersView() {
           <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
         </summary>
         <div className="space-y-3 pt-3">
-          <dl className="tp-chapters__metrics">
-            <div>
-              <dt>فصول نشطة</dt>
-              <dd>{row.counts.activeLinks}</dd>
-            </div>
-            <div>
-              <dt>مؤرشفون</dt>
-              <dd>{row.counts.archivedStudents}</dd>
-            </div>
-            <div>
-              <dt>فرص 0/0</dt>
-              <dd>{row.counts.zeroZeroWithActive}</dd>
-            </div>
-            <div>
-              <dt>فوق سقف الفرص</dt>
-              <dd>{row.counts.aboveCap}</dd>
-            </div>
-          </dl>
+          <p className="tp-chapters__links-summary">
+            فصول نشطة <b>{row.counts.activeLinks}</b> · مؤرشفون <b>{row.counts.archivedStudents}</b> · فرص 0/0{" "}
+            <b>{row.counts.zeroZeroWithActive}</b> · فوق سقف الفرص <b>{row.counts.aboveCap}</b>
+          </p>
           {row.links.length === 0 ? (
             <p className="text-xs text-muted-foreground">
               لا يوجد أي فصل مربوط بهذه الدورة.
@@ -916,29 +902,27 @@ export function ChaptersView() {
                           : ""}
                       </p>
                     </div>
-                    <div className="tp-chapters__actions">
-                      <Button
-                        size="sm"
-                        variant={link.active ? "outline" : "default"}
-                        aria-label={`${link.active ? "إلغاء تفعيل" : "تفعيل آمن"} ${link.chapter.name} — ${row.course.name}`}
-                        onClick={() => openActionDialog(row, link)}
-                      >
-                        {link.active ? "إلغاء التفعيل" : "تفعيل آمن"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-danger"
-                        aria-label={`حذف ربط ${link.chapter.name} — ${row.course.name}`}
-                        onClick={() =>
-                          setDeleteLinkDialog({ open: true, link, course: row })
-                        }
-                        disabled={!link.deleteSafety.canDelete}
-                      >
-                        <Trash2 className="size-4" aria-hidden="true" />
-                        حذف الربط
-                      </Button>
-                    </div>
+                    {/* Changing or removing a link changes students' opportunities:
+                        both wait in «⋯», each behind a window that says the effect. */}
+                    <RowActionsMenu
+                      label={`إجراءات ${link.chapter.name} — ${row.course.name}`}
+                      actions={[
+                        {
+                          key: "toggle",
+                          label: link.active ? "إلغاء التفعيل…" : "تفعيل آمن…",
+                          danger: link.active,
+                          onSelect: () => openActionDialog(row, link),
+                        },
+                        {
+                          key: "delete",
+                          label: link.deleteSafety.canDelete ? "حذف الربط…" : "حذف الربط (محمي)",
+                          icon: <Trash2 className="size-4" aria-hidden="true" />,
+                          danger: true,
+                          disabled: !link.deleteSafety.canDelete,
+                          onSelect: () => setDeleteLinkDialog({ open: true, link, course: row }),
+                        },
+                      ]}
+                    />
                   </div>
                   {link.deleteSafety.blockers.length > 0 ? (
                     <details className="tp-chapters__blockers">

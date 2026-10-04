@@ -515,3 +515,12 @@ a.tp-qr-tile:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in s
 .tp-call-info__item { min-width: 0; }
 .tp-call-info dt { color: var(--muted-foreground); font-size: 0.75rem; }
 .tp-call-info dd { margin: 0; font-weight: 650; overflow-wrap: anywhere; }
+
+/* The less used call filters, inside «تصفية». */
+.tp-calls__panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  align-items: end;
+  gap: 0.75rem;
+}
+.tp-calls__panel > .tp-calls__hint { grid-column: 1 / -1; margin: 0; }

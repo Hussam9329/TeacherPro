@@ -174,7 +174,7 @@ check(
     (dialog.match(/disabled=\{busy \|\| Boolean\(lock\)\}/g) || []).length === 2 &&
     dialog.includes('"مؤرشف": { kind: "archived"') &&
     dialog.includes('"مفصول": { kind: "dismissed"') &&
-    dialog.includes("الطالب مفصول — يجب أن يوقع تعهداً"),
+    dialog.includes("الطالب مفصول — يحتاج إرجاع أولاً"),
   "الطالب المؤرشف والمفصول يظهران معطلَين (بلونين مختلفين) في البحث والقائمة وأزرار الإضافة والتعديل",
 );
 

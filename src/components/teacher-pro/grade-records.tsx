@@ -61,12 +61,14 @@ import {
   PenLine,
   RotateCcw,
   SearchX,
+  Trash2,
   UserX,
 } from "lucide-react";
 
 import { GradeNoteBanner } from "@/components/teacher-pro/grade-note-banner";
 import { editableGradeNote, resolveGradeNoteBanner, visibleGradeNote, withInternalGradeNotePrefix } from "@/lib/grade-note-banners";
-import { ListToolbar } from "./list-toolbar";
+import { ListChips, ListToolbar } from "./list-toolbar";
+import { RowActionsMenu } from "./row-actions-menu";
 import { FormDialogHero } from "./form-dialog";
 import { EmptyState, LoadingState } from "./ui-kit";
 import {
@@ -325,6 +327,7 @@ export function GradeRecordsView() {
     open: false,
     id: "",
     label: "",
+    impact: "",
   });
   const [editDialog, setEditDialog] = useState({
     open: false,
@@ -911,7 +914,7 @@ export function GradeRecordsView() {
     void saveEditGradeUnchecked();
   };
 
-  const openDeleteGradeDialog = (gradeId: string) => {
+  const openDeleteGradeDialog = (gradeId: string, impact = "") => {
     if (!canRunGradeRecordActions) {
       toast.error("انتظر تحميل سجل الدرجات قبل حذف الدرجة.");
       return;
@@ -923,6 +926,7 @@ export function GradeRecordsView() {
       open: true,
       id: gradeId,
       label: [student?.name, exam?.name].filter(Boolean).join(" - "),
+      impact,
     });
   };
 
@@ -953,7 +957,7 @@ export function GradeRecordsView() {
     );
     refreshGradeRecordsAfterMutation("grade-records-delete");
     toast.success("تم حذف الدرجة");
-    setDeleteDialog({ open: false, id: "", label: "" });
+    setDeleteDialog({ open: false, id: "", label: "", impact: "" });
   });
 
   const fetchGradeExportRows = async (): Promise<GradeExportRow[]> => {
@@ -1362,22 +1366,17 @@ export function GradeRecordsView() {
                 </h3>
                 <span className="tp-modal__muted">من الأحدث إلى الأقدم</span>
               </div>
-              <div role="group" aria-label="تصفية درجات الطالب" className="tp-modal__filters tp-grade-dialog__tabs">
-                {STUDENT_GRADES_TABS.map((tab) => (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    className="tp-modal__filter"
-                    aria-pressed={studentGradesTab === tab.value}
-                    data-tone={tab.tone}
-                    onClick={() => setStudentGradesTab(tab.value)}
-                  >
-                    {tab.tone && <span className="tp-modal__filter-dot" aria-hidden="true" />}
-                    <span className="tp-modal__filter-label">{tab.label}</span>
-                    <span className="tp-modal__filter-count">{studentGrades ? tabCounts[tab.value] : "…"}</span>
-                  </button>
-                ))}
-              </div>
+              <ListChips
+                label="تصفية درجات الطالب"
+                chips={STUDENT_GRADES_TABS.map((tab) => ({
+                  key: tab.value,
+                  label: tab.label,
+                  tone: tab.tone,
+                  count: studentGrades ? tabCounts[tab.value] : null,
+                }))}
+                activeChip={studentGradesTab}
+                onChipChange={(key) => setStudentGradesTab(key as StudentGradesTab)}
+              />
 
               {studentGradesError && (
                 <p role="alert" className="tp-modal__error"><AlertCircle aria-hidden="true" />{studentGradesError}</p>
@@ -1458,14 +1457,19 @@ export function GradeRecordsView() {
                           >
                             تعديل
                           </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => openDeleteGradeDialog(grade.id)}
-                            disabled={!canRunGradeRecordActions}
-                          >
-                            حذف
-                          </Button>
+                          <RowActionsMenu
+                            label={`إجراءات ${exam.name}`}
+                            actions={[
+                              {
+                                key: "delete",
+                                label: "حذف الدرجة…",
+                                icon: <Trash2 aria-hidden="true" />,
+                                danger: true,
+                                disabled: !canRunGradeRecordActions,
+                                onSelect: () => openDeleteGradeDialog(grade.id, grade.recordedOpportunityImpact?.text || ""),
+                              },
+                            ]}
+                          />
                         </div>
                       </li>
                     );
@@ -1621,11 +1625,10 @@ export function GradeRecordsView() {
       >
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+            <AlertDialogTitle>حذف الدرجة{deleteDialog.label ? ` (${deleteDialog.label})` : ""}؟</AlertDialogTitle>
             <AlertDialogDescription>
-              هل أنت متأكد من حذف سجل الدرجة
-              {deleteDialog.label ? ` (${deleteDialog.label})` : ""}؟ لا يمكن
-              التراجع عن هذه العملية.
+              {deleteDialog.impact ? `أثرها هسه على الفرص: ${deleteDialog.impact}. ` : ""}
+              بعد الحذف تنحسب فرص الطالب من جديد كأن الامتحان ما انسجل له، والحذف ما يرجع.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

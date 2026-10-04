@@ -100,7 +100,7 @@ type StudentLock = { kind: "archived" | "dismissed"; tag: string; hint: string }
 /** Students whose grace can never be changed from this screen, and why. */
 const STUDENT_LOCKS: Record<string, StudentLock> = {
   "مؤرشف": { kind: "archived", tag: "مؤرشف", hint: "الطالب مؤرشف — لا يمكن إضافة فترة سماح أو تعديلها" },
-  "مفصول": { kind: "dismissed", tag: "مفصول", hint: "الطالب مفصول — يجب أن يوقع تعهداً" },
+  "مفصول": { kind: "dismissed", tag: "مفصول", hint: "الطالب مفصول — يحتاج إرجاع أولاً" },
 };
 
 function studentLock(status: string | null | undefined): StudentLock | null {
@@ -196,7 +196,7 @@ function StudentFacts({ name, telegram, username, createdAt }: StudentFactsProps
       </div>
       <div className="tp-grace-card__fact">
         <span className="tp-grace-card__fact-label"><CalendarDays aria-hidden="true" />تاريخ التسجيل</span>
-        <b className="tp-grace-card__date" dir="ltr">{registrationDateLabel(createdAt)}</b>
+        <b className="tp-grace-card__date">{registrationDateLabel(createdAt)}</b>
       </div>
     </div>
   );
@@ -206,9 +206,9 @@ function StudentFacts({ name, telegram, username, createdAt }: StudentFactsProps
 function PeriodDates({ period }: { period: Pick<GracePeriodRecord, "startDate" | "endDate"> }) {
   return (
     <span className="tp-grace-dates">
-      <span className="tp-grace-dates__one"><small>من</small><b dir="ltr">{formatGraceDate(period.startDate)}</b></span>
+      <span className="tp-grace-dates__one"><small>من</small><b>{formatGraceDate(period.startDate)}</b></span>
       <ArrowLeft className="tp-grace-dates__arrow" aria-hidden="true" />
-      <span className="tp-grace-dates__one"><small>إلى</small><b dir="ltr">{formatGraceDate(period.endDate)}</b></span>
+      <span className="tp-grace-dates__one"><small>إلى</small><b>{formatGraceDate(period.endDate)}</b></span>
     </span>
   );
 }
@@ -220,7 +220,7 @@ function OpenTile({ lock, canManage }: { lock: StudentLock | null; canManage: bo
       <span className="tp-grace-card__open-icon">{lock ? <Lock /> : <ChevronLeft />}</span>
       <span className="tp-grace-card__open-text">{lock ? "مقفل" : "فترات الطالب"}</span>
       <span className="tp-grace-card__open-hint">
-        {lock ? (lock.kind === "dismissed" ? "يجب أن يوقع تعهداً" : "لا يمكن التعديل") : canManage ? "عرض وإضافة وتعديل" : "عرض الفترات"}
+        {lock ? (lock.kind === "dismissed" ? "يحتاج إرجاع أولاً" : "لا يمكن التعديل") : canManage ? "عرض وإضافة وتعديل" : "عرض الفترات"}
       </span>
     </span>
   );
@@ -802,7 +802,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                             </label>
                             <div className="tp-modal__field">
                               <span>إلى</span>
-                              <p className="tp-grace__computed" dir="ltr">{proposed?.endDate ? formatGraceDate(proposed.endDate) : "—"}</p>
+                              <p className="tp-grace__computed">{proposed?.endDate ? formatGraceDate(proposed.endDate) : "—"}</p>
                             </div>
                           </>
                         )}
@@ -811,8 +811,8 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                         <p role="alert" className="tp-modal__error"><AlertCircle aria-hidden="true" />{validation}</p>
                       ) : proposedDays > 0 && proposed && !preview ? (
                         <p className="tp-modal__summary">
-                          الطالب سيكون ضمن فترة السماح من <span dir="ltr">{formatGraceDate(proposed.startDate)}</span> إلى{" "}
-                          <span dir="ltr">{formatGraceDate(proposed.endDate)}</span> — {formatGraceDays(proposedDays)}.
+                          الطالب سيكون ضمن فترة السماح من <span>{formatGraceDate(proposed.startDate)}</span> إلى{" "}
+                          <span>{formatGraceDate(proposed.endDate)}</span> — {formatGraceDays(proposedDays)}.
                         </p>
                       ) : null}
                     </>
@@ -832,7 +832,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                             {preview.affectedExams.map((exam) => (
                               <li key={exam.examId} data-change={exam.change}>
                                 <span className="tp-grace__impact-name">{exam.examName}</span>
-                                <span className="tp-modal__muted" dir="ltr">{examDateLabel(exam.examDate)}</span>
+                                <span className="tp-modal__muted">{examDateLabel(exam.examDate)}</span>
                                 <span className="tp-modal__muted">النتيجة المسجلة: {exam.result}</span>
                                 <span className="tp-grace__impact-change">
                                   {exam.change === "enters" ? "سيصبح مجازاً — فترة سماح" : "سيخرج من فترة السماح ويعود للمحاسبة الطبيعية"}

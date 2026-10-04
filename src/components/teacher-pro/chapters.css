@@ -258,3 +258,12 @@ details[open] > .tp-chapters__disclosure > svg {
   line-height: 1.7;
 }
 .tp-chapters__banner p { margin: 0; min-inline-size: 0; flex: 1 1 18rem; }
+
+/* The linked chapters' counts as one line of text. */
+.tp-chapters__links-summary {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+  line-height: 1.8;
+}
+.tp-chapters__links-summary b { color: var(--foreground); font-variant-numeric: tabular-nums; }

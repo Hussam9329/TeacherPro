@@ -124,7 +124,7 @@ export async function planGraceChange(
   }
   // A dismissed student comes back through the pledge, never through grace.
   if (student.status === DISMISSED_STATUS) {
-    throw new GraceChangeError("الطالب مفصول؛ يجب أن يوقع تعهداً قبل إضافة فترة سماح.", 409);
+    throw new GraceChangeError("الطالب مفصول؛ ارجعه أولاً قبل إضافة فترة سماح.", 409);
   }
 
   const records = await listStudentGracePeriods(tx, studentId);

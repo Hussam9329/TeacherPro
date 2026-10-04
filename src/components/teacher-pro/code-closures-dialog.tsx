@@ -387,7 +387,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
                           <span className="tp-closure-card__when">
                             <span className="tp-closure-card__eyebrow">تاريخ الفصل</span>
                             {student.lastDismissalAt ? (
-                              <time className="tp-closure-card__date" dateTime={student.lastDismissalAt} dir="ltr">
+                              <time className="tp-closure-card__date" dateTime={student.lastDismissalAt}>
                                 {formatAppDate(baghdadDateKey(student.lastDismissalAt), "غير مسجل")}
                               </time>
                             ) : <span className="tp-closure-card__date" data-missing="true">غير مسجل</span>}

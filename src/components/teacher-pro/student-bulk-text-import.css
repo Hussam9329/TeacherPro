@@ -286,3 +286,54 @@
     inline-size: 100%;
   }
 }
+
+/* The expected columns as numbered chips that wrap, no sideways scrolling. */
+.tp-bulk-import__column-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tp-bulk-import__column-chips > li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.65rem 0.2rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+/* Preview result: one small card per line, its problem in its colour. */
+.tp-bulk-rows { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.tp-bulk-row {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-inline-start: 4px solid var(--tone, var(--border));
+  border-radius: 0.85rem;
+  background: var(--card);
+}
+.tp-bulk-row__head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; }
+.tp-bulk-row__number { color: var(--muted-foreground); font-size: 0.72rem; font-weight: 700; }
+.tp-bulk-row__name { min-inline-size: 0; font-size: 0.92rem; overflow-wrap: anywhere; }
+.tp-bulk-row__badge {
+  margin-inline-start: auto;
+  padding: 0.05rem 0.6rem;
+  border: 1px solid var(--tone-line, var(--border));
+  border-radius: 999px;
+  background: var(--tone-tint, var(--muted));
+  color: var(--tone-ink, var(--muted-foreground));
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.tp-bulk-row__line { margin: 0; color: var(--muted-foreground); font-size: 0.8rem; line-height: 1.7; overflow-wrap: anywhere; }
+.tp-bulk-row__problems { display: grid; gap: 0.1rem; margin: 0; padding-inline-start: 1rem; color: var(--tone-ink); font-size: 0.78rem; line-height: 1.7; }
+
+/* The preview no longer has a statistics column beside it. */
+.tp-management-page.tp-bulk-import-page .tp-management-workspace { grid-template-columns: minmax(0, 1fr); }

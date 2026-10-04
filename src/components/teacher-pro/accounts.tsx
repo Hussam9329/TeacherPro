@@ -50,7 +50,7 @@ const PREFERRED_PERMISSION_CATEGORIES = [
   'إدارة الحسابات / الأمان',
   'الحسابات',
   'السجلات',
-  'تصفير الـ Log',
+  'تصفير السجلات',
   'المواقع',
   'واتساب',
   'نسخ الديمو',
@@ -1451,7 +1451,7 @@ function BackupTab() {
             <span>الاستعادة تغيّر بيانات النظام الحالية. صدّر نسخة جديدة قبلها.</span>
           </div>
 
-          {/* File picker: the system's own button, not the browser's English «Choose File». */}
+          {/* File picker: the system's own Arabic button, not the browser's own one. */}
           <div className="space-y-2">
             <Label htmlFor="backup-file">ملف النسخة</Label>
             <input

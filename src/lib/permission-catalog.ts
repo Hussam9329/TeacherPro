@@ -363,14 +363,14 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
   {
     id: "logs.clear",
     label: "تصفير السجلات",
-    category: "تصفير الـ Log",
+    category: "تصفير السجلات",
     level: "manage",
     description: "تصفير نطاقات محددة من السجلات بعد كلمة مرور الأدمن ونسخة استعادة.",
   },
   {
     id: "logs.restore",
     label: "استعادة آخر تصفير",
-    category: "تصفير الـ Log",
+    category: "تصفير السجلات",
     level: "manage",
     description: "استعادة آخر نسخة احتياطية أنشئت قبل تصفير السجلات.",
   },

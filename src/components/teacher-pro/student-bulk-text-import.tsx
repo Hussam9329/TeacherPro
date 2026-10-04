@@ -23,7 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { ListChips } from "./list-toolbar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,7 +36,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/lib/user-toast";
 import {
-  ClipboardCheck,
   Copy,
   Eye,
   Loader2,
@@ -366,6 +365,7 @@ export function StudentBulkTextImportView() {
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importPolicy, setImportPolicy] = useState<ImportPolicy>("valid-only");
+  const [previewFilter, setPreviewFilter] = useState<PreviewCategory | "all">("all");
   const [registerContext, setRegisterContext] =
     useState<StudentRegisterContextResponse | null>(null);
   const [contextLoading, setContextLoading] = useState(true);
@@ -869,86 +869,41 @@ export function StudentBulkTextImportView() {
   const renderPreviewRow = (row: PreviewRow) => {
     const courseName = row.rawCells[3] || "—";
     const category = getPreviewCategory(row);
+    const tone =
+      row.errors.length === 0
+        ? row.warnings.length > 0 ? "warning" : "success"
+        : category === "duplicate" || category === "unknownCourseOrLocation"
+          ? "danger"
+          : "warning";
+    const site = row.student
+      ? `${row.student.locationScope} - ${row.student.subSite}`
+      : row.rawCells[8] || row.rawCells[7] || "—";
 
     return (
-      <tr key={row.rowNumber} className="border-b align-top last:border-b-0">
-        <td className="p-3 font-bold">{row.rowNumber}</td>
-        <td className="p-3">
-          <div className="font-bold">
-            {row.student?.name || row.rawCells[0] || "—"}
-          </div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {row.student?.school || row.rawCells[1] || "—"}
-          </div>
-        </td>
-        <td className="p-3">{courseName}</td>
-        <td className="p-3">
-          {row.student?.courseProgram || row.rawCells[4] || "—"}
-        </td>
-        <td className="p-3">
-          {row.student?.studyType || row.rawCells[6] || "—"}
-        </td>
-        <td className="p-3">
-          {row.student
-            ? `${row.student.locationScope} - ${row.student.subSite}`
-            : row.rawCells[8] || row.rawCells[7] || "—"}
-        </td>
-        <td className="p-3">
-          <div className="font-black">
-            {row.student ? formatOpportunityBalance(row.student) : "—"}
-          </div>
-          {row.activeChapterName && (
-            <div className="text-[11px] text-muted-foreground">
-              {row.activeChapterName}
-            </div>
-          )}
-        </td>
-        <td className="p-3 dir-ltr text-left">
-          {row.student?.phone || normalizePhone(row.rawCells[11] || "") || "—"}
-        </td>
-        <td className="p-3">{row.student?.status || row.rawCells[9] || "—"}</td>
-        <td className="p-3">
-          {row.errors.length === 0 ? (
-            <div className="space-y-2">
-              <Badge variant="secondary">
-                <ClipboardCheck className="size-3" />
-                {PREVIEW_CATEGORY_COPY.ready.badge}
-              </Badge>
-              {row.warnings.map((warning, index) => (
-                <div
-                  key={index}
-                  className="text-xs leading-5 text-warning"
-                >
-                  {warning}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Badge
-                variant={
-                  category === "duplicate" ||
-                  category === "unknownCourseOrLocation"
-                    ? "destructive"
-                    : "outline"
-                }
-              >
-                {PREVIEW_CATEGORY_COPY[category].badge}
-              </Badge>
-              <div className="space-y-1">
-                {row.errors.map((error, index) => (
-                  <div
-                    key={index}
-                    className="text-xs leading-5 text-danger"
-                  >
-                    • {error}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </td>
-      </tr>
+      <li key={row.rowNumber} className="tp-bulk-row" data-tone={tone}>
+        <div className="tp-bulk-row__head">
+          <span className="tp-bulk-row__number">سطر {row.rowNumber}</span>
+          <b className="tp-bulk-row__name">{row.student?.name || row.rawCells[0] || "—"}</b>
+          <span className="tp-bulk-row__badge">
+            {row.errors.length === 0 ? PREVIEW_CATEGORY_COPY.ready.badge : PREVIEW_CATEGORY_COPY[category].badge}
+          </span>
+        </div>
+        <p className="tp-bulk-row__line">
+          {courseName} · {site}
+          {row.student ? ` · فرص البداية ${formatOpportunityBalance(row.student)}` : ""}
+          {row.activeChapterName ? ` (${row.activeChapterName})` : ""}
+        </p>
+        {row.errors.length > 0 ? (
+          <ul className="tp-bulk-row__problems" data-tone="danger">
+            {row.errors.map((error, index) => <li key={index}>{error}</li>)}
+          </ul>
+        ) : null}
+        {row.warnings.length > 0 ? (
+          <ul className="tp-bulk-row__problems" data-tone="warning">
+            {row.warnings.map((warning, index) => <li key={index}>{warning}</li>)}
+          </ul>
+        ) : null}
+      </li>
     );
   };
 
@@ -994,37 +949,14 @@ export function StudentBulkTextImportView() {
                 نسخ صف العناوين
               </Button>
             </div>
-            <div
-              className="table-wrap tp-bulk-import__columns-scroll"
-              tabIndex={0}
-              role="region"
-              aria-label="جدول ترتيب الأعمدة؛ يمكن تمريره أفقياً"
-            >
-              <table className="tp-bulk-import__columns-table">
-                <caption className="sr-only">
-                  أسماء الأعمدة بالترتيب، وتحتها صف مثال
-                </caption>
-                <thead>
-                  <tr>
-                    {COLUMN_NAMES.map((name, index) => (
-                      <th key={name} scope="col">
-                        <span className="tp-bulk-import__column-number">
-                          {index + 1}
-                        </span>
-                        {name}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    {COLUMN_NAMES.map((name, index) => (
-                      <td key={name}>{COLUMN_GUIDE_EXAMPLE_ROW[index] ?? ""}</td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <ol className="tp-bulk-import__column-chips" aria-label="أسماء الأعمدة بالترتيب">
+              {COLUMN_NAMES.map((name, index) => (
+                <li key={name} title={COLUMN_GUIDE_EXAMPLE_ROW[index] ? `مثال: ${COLUMN_GUIDE_EXAMPLE_ROW[index]}` : undefined}>
+                  <span className="tp-bulk-import__column-number">{index + 1}</span>
+                  {name}
+                </li>
+              ))}
+            </ol>
             <p className="tp-bulk-import__columns-note">
               التسجيل الجماعي لا يعتمد على عمود الفرص المكتوب بالنص؛ فرص البداية
               تُحسب من الفصل النشط للدورة، والدورة الموقوفة أو ذات تعارض الفصول
@@ -1163,85 +1095,27 @@ export function StudentBulkTextImportView() {
                   </div>
                 )}
 
-                {(
-                  [
-                    "ready",
-                    "needsEdit",
-                    "duplicate",
-                    "unknownCourseOrLocation",
-                  ] as PreviewCategory[]
-                ).map((category) => {
-                  const rows = groupedPreviewRows[category];
-                  if (rows.length === 0) return null;
-                  const copy = PREVIEW_CATEGORY_COPY[category];
-
-                  return (
-                    <section
-                      key={category}
-                      className="tp-bulk-import__group"
-                      aria-labelledby={`bulk-preview-${category}`}
-                    >
-                      <div className="tp-bulk-import__group-header">
-                        <h3
-                          id={`bulk-preview-${category}`}
-                          className="text-sm font-bold"
-                        >
-                          {copy.title}
-                        </h3>
-                        <span className="text-xs text-muted-foreground">
-                          {rows.length} سطر
-                        </span>
-                      </div>
-                      <div
-                        className="table-wrap tp-bulk-import__table-scroll max-h-[min(26rem,55dvh)] overflow-auto"
-                        tabIndex={0}
-                        role="region"
-                        aria-label={`معاينة ${copy.title}؛ يمكن تمريرها أفقياً وعمودياً`}
-                      >
-                        <table className="responsive-table min-w-[980px] text-right text-sm">
-                          <caption className="sr-only">
-                            {copy.title}: {copy.description}
-                          </caption>
-                          <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
-                            <tr className="border-b">
-                              <th scope="col" className="p-3">
-                                السطر
-                              </th>
-                              <th scope="col" className="p-3">
-                                الطالب
-                              </th>
-                              <th scope="col" className="p-3">
-                                اسم الدورة
-                              </th>
-                              <th scope="col" className="p-3">
-                                نظام الاشتراك
-                              </th>
-                              <th scope="col" className="p-3">
-                                نظام الدراسة
-                              </th>
-                              <th scope="col" className="p-3">
-                                الموقع
-                              </th>
-                              <th scope="col" className="p-3">
-                                فرص البداية
-                              </th>
-                              <th scope="col" className="p-3">
-                                هاتف الطالب
-                              </th>
-                              <th scope="col" className="p-3">
-                                الحالة
-                              </th>
-                              <th scope="col" className="p-3">
-                                الفحص
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>{rows.map(renderPreviewRow)}</tbody>
-                        </table>
-                      </div>
-                    </section>
-                  );
-                })}
+                <ListChips
+                  label="تصفية نتيجة المعاينة"
+                  chips={[
+                    { key: "all", label: "الكل", count: summary.total },
+                    { key: "ready", label: "جاهز", tone: "success", count: groupedPreviewRows.ready.length },
+                    { key: "needsEdit", label: "يحتاج تعديل", tone: "warning", count: groupedPreviewRows.needsEdit.length },
+                    { key: "duplicate", label: "مكرر", tone: "danger", count: groupedPreviewRows.duplicate.length },
+                    { key: "unknownCourseOrLocation", label: "دورة أو موقع غير معروف", tone: "danger", count: groupedPreviewRows.unknownCourseOrLocation.length },
+                  ]}
+                  activeChip={previewFilter}
+                  onChipChange={(key) => setPreviewFilter(key as PreviewCategory | "all")}
+                />
+                {summary.warningRows > 0 ? (
+                  <p className="text-xs text-warning">{summary.warningRows} سطر بيه تنبيه (ما يمنع الإضافة).</p>
+                ) : null}
+                <ol className="tp-bulk-rows" aria-label="نتيجة المعاينة">
+                  {(previewFilter === "all"
+                    ? previewRows
+                    : groupedPreviewRows[previewFilter]
+                  ).map(renderPreviewRow)}
+                </ol>
 
                 <div className="tp-bulk-import__save-bar">
                   <p className="text-xs leading-6 text-muted-foreground">
@@ -1263,64 +1137,6 @@ export function StudentBulkTextImportView() {
               </CardContent>
             </Card>
           </section>
-          <aside
-            className="tp-management-stats-rail"
-            aria-label="إحصائيات المعاينة"
-          >
-            <div className="space-y-2">
-              <h3 className="text-sm font-black">إحصائيات المعاينة</h3>
-              <div
-                className="grid"
-                role="group"
-                aria-label="إحصائيات المعاينة"
-                tabIndex={0}
-              >
-                {[
-                  {
-                    label: "الأسطر",
-                    value: summary.total,
-                    color: "text-primary",
-                  },
-                  {
-                    label: "جاهز للاستيراد",
-                    value: summary.ready,
-                    color: "text-success",
-                  },
-                  {
-                    label: "يحتاج تعديل",
-                    value: summary.needsEdit,
-                    color: "text-warning",
-                  },
-                  {
-                    label: "مكرر",
-                    value: summary.duplicate,
-                    color: "text-danger",
-                  },
-                  {
-                    label: "دورة أو موقع غير معروف",
-                    value: summary.unknownCourseOrLocation,
-                    color: "text-warning",
-                  },
-                  {
-                    label: "أسطر مع تحذيرات",
-                    value: summary.warningRows,
-                    color: "text-warning",
-                  },
-                ].map((stat) => (
-                  <Card key={stat.label}>
-                    <CardContent className="p-4 text-center">
-                      <p className={`text-2xl font-bold ${stat.color}`}>
-                        {stat.value}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {stat.label}
-                      </p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          </aside>
         </div>
       )}
 

@@ -37,7 +37,7 @@ const FIELD_LABELS: Record<string, string> = {
   completed: "اكتمل الاتصال",
   completedAt: "وقت إكمال الاتصال",
   phone: "رقم التواصل",
-  target: "سبب المتابعة",
+  target: "الجهة",
   notes: "الملاحظات",
   category: "التصنيف",
   ok: "النتيجة",
@@ -60,6 +60,21 @@ const FIELD_LABELS: Record<string, string> = {
   newStatus: "الحالة الجديدة",
   oldValue: "القيمة السابقة",
   newValue: "القيمة الجديدة",
+};
+
+/** Stored codes said in words: no DISMISSED_PENDING or student on screen. */
+const CODE_VALUE_LABELS: Record<string, string> = {
+  DISMISSED_PENDING: "مفصول بانتظار القرار",
+  GRACE_SCORED: "درجة سماح قديمة",
+  BEFORE_REGISTRATION_PENDING: "امتحان قبل التسجيل",
+  LEAVE_PENDING: "سجل إجازة قديم",
+  PENDING: "معلّقة",
+  PROCESSED: "معالجة",
+  CONFLICT: "فيها تعارض",
+  REJECTED: "مرفوضة",
+  student: "الطالب",
+  parent: "ولي الأمر",
+  role_admin: "مدير عام",
 };
 
 const TECHNICAL_ID_KEYS = new Set([
@@ -120,6 +135,8 @@ function formatValue(key: string, value: unknown, labels: AuditLogEntityLabels):
     if (value === "exam") return "إجازة امتحان";
     if (value === "period") return "إجازة لمدة زمنية";
   }
+  const code = CODE_VALUE_LABELS[String(value)];
+  if (code) return code;
   return String(value);
 }
 

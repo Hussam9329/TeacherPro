@@ -29,7 +29,6 @@ import {
   PencilLine,
   Phone,
   PhoneCall,
-  RotateCcw,
   Search,
   Send,
   ShieldAlert,
@@ -44,6 +43,7 @@ import {
 } from "lucide-react";
 import { callPhoneQrValue } from "@/lib/call-phone-qr";
 import { EmptyState } from "./ui-kit";
+import { ListToolbar } from "./list-toolbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1755,8 +1755,9 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
         <EmptyState icon={PhoneCall} title="اختر الامتحان لعرض الطلاب." />
       ) : (
         <>
-          <section className="tp-calls__filters" aria-label="فلاتر المكالمات">
-            <div className="tp-calls__filter-row">
+          <ListToolbar
+            label="فلاتر المكالمات"
+            search={
               <div className="tp-calls__search">
                 <Search aria-hidden="true" />
                 <Input
@@ -1773,88 +1774,61 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                   title="كل الكلمات المكتوبة لازم تنطبق"
                 />
               </div>
-              <div className="tp-calls__field tp-calls__status">
-                <Label htmlFor={`calls-status-${variant}`}>حالة الطالب في الامتحان</Label>
-                <Select
-                  value={callStatusFilter}
-                  onValueChange={(value) => {
-                    setCallStatusFilter(value as CallStatusFilter);
-                    setCallGradePage(1);
-                  }}
-                >
-                  <SelectTrigger id={`calls-status-${variant}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {callStatusFilterOptions.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {callStatusFilterLabels[option]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="tp-calls__field tp-calls__status">
-                <Label htmlFor={`calls-share-${variant}`}>تقسيم العمل</Label>
-                <Select value={callWorkShare || "all"} onValueChange={chooseCallWorkShare}>
-                  <SelectTrigger
-                    id={`calls-share-${variant}`}
-                    title="لكل جهاز قسم ثابت من الطلاب لا يتداخل مع الأجهزة الأخرى"
+            }
+            chipsLabel="حالة التواصل"
+            chips={callContactFilterChips.map((chip) => ({
+              key: chip.value,
+              label: chip.label,
+              tone: chip.tone,
+              count: contactCounts?.[chip.countKey] ?? null,
+            }))}
+            activeChip={callContactStatusFilter}
+            onChipChange={(key) => {
+              setCallContactStatusFilter(key as CallContactStatusFilter);
+              setCallGradePage(1);
+            }}
+            filters={
+              <div className="tp-calls__panel">
+                <div className="tp-calls__field">
+                  <Label htmlFor={`calls-status-${variant}`}>حالة الطالب في الامتحان</Label>
+                  <Select
+                    value={callStatusFilter}
+                    onValueChange={(value) => {
+                      setCallStatusFilter(value as CallStatusFilter);
+                      setCallGradePage(1);
+                    }}
                   >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">كل الطلاب</SelectItem>
-                    {callWorkShareChoices.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {callWorkShareLabel(option)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <button
-                type="button"
-                className="tp-calls__toggle"
-                aria-pressed={callNotesFilter === "with-notes"}
-                aria-label="إظهار أصحاب الملاحظات فقط"
-                onClick={() => {
-                  setCallNotesFilter((current) => (current === "with-notes" ? "all" : "with-notes"));
-                  setCallGradePage(1);
-                }}
-              >
-                <StickyNote aria-hidden="true" />لديهم ملاحظات
-              </button>
-              {callFiltersActive && (
-                <Button type="button" variant="ghost" size="sm" className="tp-calls__reset" onClick={resetCallFilters}>
-                  <RotateCcw className="size-4" aria-hidden="true" />تصفير الفلاتر
-                </Button>
-              )}
-            </div>
-
-            <div role="group" aria-label="حالة التواصل" className="tp-calls__contact-filters">
-              {callContactFilterChips.map((chip) => (
-                <button
-                  key={chip.value}
-                  type="button"
-                  className="tp-calls__chip"
-                  data-tone={chip.tone}
-                  aria-pressed={callContactStatusFilter === chip.value}
-                  onClick={() => {
-                    setCallContactStatusFilter(chip.value);
-                    setCallGradePage(1);
-                  }}
-                >
-                  {chip.tone && <span className="tp-calls__chip-dot" aria-hidden="true" />}
-                  <span>{chip.label}</span>
-                  <b>{callStatValue(contactCounts?.[chip.countKey])}</b>
-                </button>
-              ))}
-            </div>
-
-            <details className="tp-calls__more" open={Boolean(callGradeFrom || callGradeTo) || undefined}>
-              <summary>فلاتر إضافية</summary>
-              <div className="tp-calls__range">
+                    <SelectTrigger id={`calls-status-${variant}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {callStatusFilterOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {callStatusFilterLabels[option]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="tp-calls__field">
+                  <Label htmlFor={`calls-share-${variant}`}>تقسيم العمل</Label>
+                  <Select value={callWorkShare || "all"} onValueChange={chooseCallWorkShare}>
+                    <SelectTrigger
+                      id={`calls-share-${variant}`}
+                      title="لكل جهاز قسم ثابت من الطلاب لا يتداخل مع الأجهزة الأخرى"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">كل الطلاب</SelectItem>
+                      {callWorkShareChoices.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {callWorkShareLabel(option)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="tp-calls__field">
                   <Label htmlFor={`follow-up-calls-grade-from-${variant}`}>الدرجة من</Label>
                   <Input
@@ -1891,19 +1865,51 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                     placeholder={`حتى ${selectedCallExam?.fullMark ?? "الدرجة الكاملة"}`}
                   />
                 </div>
+                <button
+                  type="button"
+                  className="tp-calls__toggle"
+                  aria-pressed={callNotesFilter === "with-notes"}
+                  aria-label="إظهار أصحاب الملاحظات فقط"
+                  onClick={() => {
+                    setCallNotesFilter((current) => (current === "with-notes" ? "all" : "with-notes"));
+                    setCallGradePage(1);
+                  }}
+                >
+                  <StickyNote aria-hidden="true" />لديهم ملاحظات
+                </button>
+                {callGradeRangeInvalid ? (
+                  <p className="tp-calls__hint" data-tone="danger" role="alert">
+                    درجة «من» يجب ألا تكون أكبر من درجة «إلى».
+                  </p>
+                ) : null}
               </div>
-            </details>
-
-            {callGradeRangeInvalid ? (
-              <p className="tp-calls__hint" data-tone="danger" role="alert">
-                درجة «من» يجب ألا تكون أكبر من درجة «إلى».
-              </p>
-            ) : callGradeFrom || callGradeTo ? (
-              <p className="tp-calls__hint">نطاق الدرجة شامل للحدّين، وعند استخدامه تظهر الدرجات الرقمية فقط.</p>
-            ) : null}
-          </section>
-
-          <p className="tp-calls__count" data-count-scope="filtered" aria-live="polite">
+            }
+            activeFilterCount={
+              (callStatusFilter !== "all" ? 1 : 0) +
+              (callWorkShare ? 1 : 0) +
+              (callNotesFilter !== "all" ? 1 : 0) +
+              (callGradeFrom || callGradeTo ? 1 : 0)
+            }
+            onClearFilters={callFiltersActive ? resetCallFilters : undefined}
+            activeFilters={[
+              ...(callStatusFilter !== "all"
+                ? [{ key: "status", label: callStatusFilterLabels[callStatusFilter], onClear: () => { setCallStatusFilter("all"); setCallGradePage(1); } }]
+                : []),
+              ...(callWorkShare
+                ? [{ key: "share", label: callWorkShareLabel(callWorkShare), onClear: () => chooseCallWorkShare("all") }]
+                : []),
+              ...(callNotesFilter !== "all"
+                ? [{ key: "notes", label: "لديهم ملاحظات", onClear: () => { setCallNotesFilter("all"); setCallGradePage(1); } }]
+                : []),
+              ...(callGradeFrom || callGradeTo
+                ? [{
+                    key: "range",
+                    label: `الدرجة ${callGradeFrom || "0"}–${callGradeTo || selectedCallExam?.fullMark || "∞"}`,
+                    onClear: () => { setCallGradeFrom(""); setCallGradeTo(""); setCallGradePage(1); },
+                  }]
+                : []),
+            ]}
+            summary={<span data-count-scope="filtered">
             المعروض <b>{visibleCallRows.length}</b> من <b>{callStatValue(callDatabaseStats?.total)}</b>
             {callLoading && visibleCallRows.length > 0 ? " · جاري التحديث…" : ""}
             {callUpdatesPending && (
@@ -1924,7 +1930,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                 {" "}· {callDepartedCount} تم إجراؤهم في هذه الصفحة ويبقون ظاهرين حتى «التالي»
               </span>
             )}
-          </p>
+            </span>}
+          />
 
           <div className="tp-calls__list">
             {callLoading && visibleCallRows.length === 0 ? (

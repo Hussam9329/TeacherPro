@@ -42,7 +42,7 @@ import {
   type OfflineGradeDesired,
 } from "@/lib/grade-entry-offline-outbox";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -62,9 +62,10 @@ import {
   DialogContent,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { AlertCircle, CalendarCheck, PenLine, ScanLine, SearchX } from "lucide-react";
+import { AlertCircle, CalendarCheck, ChevronLeft, ChevronRight, PenLine, ScanLine, SearchX } from "lucide-react";
 import { FormDialogHero } from "@/components/teacher-pro/form-dialog";
 import { EmptyState, LoadingState } from "@/components/teacher-pro/ui-kit";
+import { RowActionsMenu } from "@/components/teacher-pro/row-actions-menu";
 import { ListChips, type ListChip } from "@/components/teacher-pro/list-toolbar";
 import {
   Select,
@@ -2541,13 +2542,10 @@ export function GradeEntryView() {
       </Dialog>
 
       <Card className="tp-filter-card">
-        <CardHeader>
-          <CardTitle>تسجيل الدرجات</CardTitle>
-        </CardHeader>
         <CardContent className="tp-filter-content">
-          <div className="tp-filter-grid grid-cols-1 md:grid-cols-3">
+          <div className="tp-filter-grid tp-grade-entry-pick grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
             <div className="tp-filter-field tp-filter-primary">
-              <Label htmlFor="grade-entry-course">اسم الدورة</Label>
+              <Label htmlFor="grade-entry-course">الدورة</Label>
               <Select
                 value={filterCourseId || "all"}
                 onValueChange={(v) => setFilterCourseId(v === "all" ? "" : v)}
@@ -2566,8 +2564,8 @@ export function GradeEntryView() {
               </Select>
             </div>
 
-            <div className="tp-filter-field tp-filter-primary md:col-span-2">
-              <Label htmlFor="grade-entry-exam">اختر الامتحان</Label>
+            <div className="tp-filter-field tp-filter-primary">
+              <Label htmlFor="grade-entry-exam">الامتحان</Label>
               <Select
                 name="examId"
                 value={selectedExamId}
@@ -2689,7 +2687,6 @@ export function GradeEntryView() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="flex min-w-0 items-center gap-1.5 text-xs font-black leading-5 text-success">
-                      <span aria-hidden="true">📊</span>
                       <span>الأوراق المدخلة يدوياً</span>
                     </p>
                     <div className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-muted-foreground">
@@ -2798,12 +2795,32 @@ export function GradeEntryView() {
                 clearingAbsentGrades
               }
               title="يلغي غياب الطلاب النشطين فقط؛ تبقى سجلات المفصولين والمؤرشفين محفوظة"
-              className="border-warning-line text-warning hover:bg-warning-soft"
+              className="hidden border-warning-line text-warning hover:bg-warning-soft sm:inline-flex"
             >
               {clearingAbsentGrades
                 ? "جاري الإلغاء..."
                 : `إلغاء حالة غائب (${absentGradesForSelectedExam.length})`}
             </Button>
+            {/* On a phone the rarely used action folds under «المزيد». */}
+            <span className="sm:hidden">
+              <RowActionsMenu
+                label="إجراءات أخرى للامتحان"
+                triggerText="المزيد"
+                actions={[
+                  {
+                    key: "clear-absent",
+                    label: clearingAbsentGrades
+                      ? "جاري الإلغاء..."
+                      : `إلغاء حالة غائب (${absentGradesForSelectedExam.length})`,
+                    disabled:
+                      !selectedExam ||
+                      absentGradesForSelectedExam.length === 0 ||
+                      clearingAbsentGrades,
+                    onSelect: () => void handleClearAbsentGrades(),
+                  },
+                ]}
+              />
+            </span>
           </div>
 
           {missingChapterCourses.length > 0 && (
@@ -2854,24 +2871,11 @@ export function GradeEntryView() {
         ) : null)}
 
       {!selectedExam && (
-        <Card>
-          <CardHeader>
-            <CardTitle>ورقة إدخال الدرجة</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <EmptyState icon={PenLine} title="اختر امتحاناً لإدخال درجاته." />
-          </CardContent>
-        </Card>
+        <EmptyState icon={PenLine} title="اختر امتحاناً لإدخال درجاته." />
       )}
 
       {selectedExam && (
-        <Card>
-          <CardHeader className="gap-3">
-            <CardTitle>
-              ورقة إدخال الدرجة - {examStudents.length} طالب
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <section className="tp-grade-sheet" aria-label={`ورقة إدخال الدرجة - ${examStudents.length} طالب`}>
             {entrySheetLoading && (
               <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary">
                 جاري تحميل ورقة إدخال الدرجات...
@@ -2883,67 +2887,17 @@ export function GradeEntryView() {
               </div>
             )}
             {examStudents.length > 0 && (
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-                <p data-count-scope="page">
-                  المعروض{" "}
-                  <strong className="tabular-nums text-foreground">
-                    {visibleExamStudents.length}
-                  </strong>{" "}
-                  من{" "}
-                  <strong className="tabular-nums text-foreground">
-                    {examStudents.length}
-                  </strong>
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Label htmlFor="grade-entry-page-size" className="text-xs">
-                    حجم الصفحة
-                  </Label>
-                  <Select
-                    value={String(entryPageSize)}
-                    onValueChange={(value) => {
-                      setEntryPageSize(Number(value));
-                      setEntryPage(1);
-                    }}
-                  >
-                    <SelectTrigger
-                      id="grade-entry-page-size"
-                      className="h-8 w-auto min-w-24 tabular-nums"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="25">25</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                      <SelectItem value="100">100</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={safeEntryPage <= 1}
-                    onClick={() =>
-                      setEntryPage((page) => Math.max(1, page - 1))
-                    }
-                  >
-                    السابق
-                  </Button>
-                  <span className="text-xs">
-                    صفحة {safeEntryPage} / {entryTotalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={safeEntryPage >= entryTotalPages}
-                    onClick={() =>
-                      setEntryPage((page) =>
-                        Math.min(entryTotalPages, page + 1),
-                      )
-                    }
-                  >
-                    التالي
-                  </Button>
-                </div>
-              </div>
+              <p className="mb-3 text-sm text-muted-foreground" data-count-scope="page">
+                المعروض{" "}
+                <strong className="tabular-nums text-foreground">
+                  {visibleExamStudents.length}
+                </strong>{" "}
+                من{" "}
+                <strong className="tabular-nums text-foreground">
+                  {examStudents.length}
+                </strong>{" "}
+                طالب
+              </p>
             )}
             <div className="space-y-2">
               {examStudents.length === 0 ? (
@@ -3344,8 +3298,51 @@ export function GradeEntryView() {
                 })
               )}
             </div>
-          </CardContent>
-        </Card>
+            {examStudents.length > 0 && (entryTotalPages > 1 || examStudents.length > 25) && (
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2" data-grade-entry-pager="true">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={safeEntryPage <= 1}
+                  onClick={() => setEntryPage((page) => Math.max(1, page - 1))}
+                >
+                  <ChevronRight className="size-4" aria-hidden="true" />
+                  السابق
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  صفحة {safeEntryPage} من {entryTotalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={safeEntryPage >= entryTotalPages}
+                  onClick={() => setEntryPage((page) => Math.min(entryTotalPages, page + 1))}
+                >
+                  التالي
+                  <ChevronLeft className="size-4" aria-hidden="true" />
+                </Button>
+                <Select
+                  value={String(entryPageSize)}
+                  onValueChange={(value) => {
+                    setEntryPageSize(Number(value));
+                    setEntryPage(1);
+                  }}
+                >
+                  <SelectTrigger
+                    aria-label="عدد الطلاب بالصفحة"
+                    className="h-8 w-auto min-w-24 tabular-nums"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25 بالصفحة</SelectItem>
+                    <SelectItem value="50">50 بالصفحة</SelectItem>
+                    <SelectItem value="100">100 بالصفحة</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+        </section>
       )}
     </div>
   );

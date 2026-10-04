@@ -3,7 +3,7 @@ import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type Exam } from "@/lib/teacher-store";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChevronDown, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -258,40 +258,28 @@ const ExamRecordActions = React.memo(function ExamRecordActions({
   | "onEdit"
   | "onDelete"
 >) {
+  const [exportOpen, setExportOpen] = React.useState(false);
   return (
-    <div className="flex flex-wrap gap-1">
-      <div className="min-w-32">
-        <ExportDialog
-          title={`تصدير درجات ${exam.name}`}
-          fileName={`exam-${exam.name}`}
-          rows={[]}
-          fetchRows={async ({ signal, onProgress }) => {
-            if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-            if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-            const exportRows = buildExamExportRows(exam);
-            onProgress(exportRows.length, exportRows.length);
-            return exportRows;
-          }}
-          totalRowCount={totalRowCount}
-          columns={examGradeExportColumns}
-          triggerLabel="تصدير"
-          description={`تقرير درجات امتحان ${exam.name}`}
-        />
-      </div>
+    <span className="tp-rcard__foot-end">
       <Button
-        variant="secondary"
+        variant="outline"
         size="sm"
         onClick={() => onEdit(exam.id)}
         disabled={mutating}
       >
         تعديل
       </Button>
-      {/* Disabling and deleting change what counts, so they wait in «⋯»,
-          last and in red, each behind a confirmation that says the effect. */}
+      {/* Export sits with the rest in «⋯»; disabling and deleting change what
+          counts, so they come last and in red, each behind a confirmation. */}
       <RowActionsMenu
         label={`إجراءات ${exam.name}`}
         actions={[
+          {
+            key: "export",
+            label: "تصدير الدرجات…",
+            icon: <Download aria-hidden="true" />,
+            onSelect: () => setExportOpen(true),
+          },
           exam.active
             ? {
                 key: "disable",
@@ -315,7 +303,28 @@ const ExamRecordActions = React.memo(function ExamRecordActions({
           },
         ]}
       />
-    </div>
+      {exportOpen ? (
+        <ExportDialog
+          open={exportOpen}
+          onOpenChange={setExportOpen}
+          title={`تصدير درجات ${exam.name}`}
+          fileName={`exam-${exam.name}`}
+          rows={[]}
+          fetchRows={async ({ signal, onProgress }) => {
+            if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+            if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+            const exportRows = buildExamExportRows(exam);
+            onProgress(exportRows.length, exportRows.length);
+            return exportRows;
+          }}
+          totalRowCount={totalRowCount}
+          columns={examGradeExportColumns}
+          triggerLabel="تصدير"
+          description={`تقرير درجات امتحان ${exam.name}`}
+        />
+      ) : null}
+    </span>
   );
 });
 
@@ -340,61 +349,59 @@ const ExamRecordCard = React.memo(function ExamRecordCard(props: ExamRecordVisua
     buildExamExportRows,
   } = props;
   const details = detailsOpen ? buildExamDetails(props) : [];
+  const tone = status === "نشط" ? "success" : status === "تفعيل مجدول" ? "warning" : "danger";
 
   return (
-    <Card
-      className={`transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-xl hover:shadow-primary/10 ${
-        detailsOpen ? "" : "tp-exam-record-card-collapsed"
-      }`}
+    <article
+      className={`tp-rcard tp-exam-card ${detailsOpen ? "" : "tp-exam-record-card-collapsed"}`}
+      data-tone={tone}
+      aria-label={exam.name}
     >
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-base">{exam.name}</CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {formatAppDate(exam.date)} - {courseLabel}
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1">
-              <Badge>{exam.type}</Badge>
-              <Badge variant={status === "نشط" ? "success" : status === "تفعيل مجدول" ? "warning" : "danger"}>{status}</Badge>
-              <Badge variant={entryAvailable ? "success" : "destructive"}>
-                متاح للإدخال: {entryAnswer}
-              </Badge>
-              <Badge variant="outline">سجلات: {totalStat}</Badge>
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <Button
-              type="button"
-              variant={detailsOpen ? "secondary" : "outline"}
-              size="sm"
-              onClick={() => onToggleDetails(exam.id)}
-            >
-              {detailsOpen ? "إخفاء التفاصيل" : "إظهار التفاصيل"}
-            </Button>
-            <ExamRecordActions
-              exam={exam}
-              mutating={mutating}
-              totalRowCount={totalRowCount}
-              buildExamExportRows={buildExamExportRows}
-              onToggleActive={onToggleActive}
-              onEdit={onEdit}
-              onDelete={onDelete}
-            />
-          </div>
-        </div>
-      </CardHeader>
+      <div className="tp-rcard__head">
+        <span className="tp-rcard__light" aria-hidden="true" />
+        <h3 className="tp-rcard__name">{exam.name}</h3>
+        <span className="tp-rcard__sep" aria-hidden="true" />
+        <span className="tp-rcard__sub">{formatAppDate(exam.date)} · {courseLabel || "—"}</span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        <span className="tp-rcard__pill">{exam.type}</span>
+        <span className="tp-rcard__pill" data-tone={tone}>{status}</span>
+        <span className="tp-rcard__pill" data-tone={entryAvailable ? "success" : "danger"}>
+          متاح للإدخال: {entryAnswer}
+        </span>
+        <span className="tp-rcard__pill">سجلات: {totalStat}</span>
+      </div>
+      <div className="tp-rcard__foot">
+        <button
+          type="button"
+          className="tp-exam-card__more"
+          aria-expanded={detailsOpen}
+          onClick={() => onToggleDetails(exam.id)}
+        >
+          <ChevronDown aria-hidden="true" />
+          {detailsOpen ? "إخفاء التفاصيل" : "إظهار التفاصيل"}
+        </button>
+        <ExamRecordActions
+          exam={exam}
+          mutating={mutating}
+          totalRowCount={totalRowCount}
+          buildExamExportRows={buildExamExportRows}
+          onToggleActive={onToggleActive}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      </div>
       {detailsOpen && (
-        <CardContent>
+        <div className="tp-exam-card__details">
           {renderExamDetailsPanel(details, {
             pass: passStat,
             notPassed: notPassedStat,
             protected: protectedStat,
             total: totalStat,
           })}
-        </CardContent>
+        </div>
       )}
-    </Card>
+    </article>
   );
 });
 

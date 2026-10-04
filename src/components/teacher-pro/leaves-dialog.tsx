@@ -1323,7 +1323,7 @@ export function LeavesDialog({ open, onOpenChange, canManage }: Props) {
         )}
         {dismissed && !form && (
           <p role="note" className="tp-modal__note">
-            يمكن اعتماد إجازة لامتحان سابق. يُلغى الفصل إذا زال سببه بعد احتساب الإجازة، دون منحه فرص تعهد.
+            يمكن اعتماد إجازة لامتحان سابق. يُلغى الفصل إذا زال سببه بعد احتساب الإجازة، دون منحه فرص إرجاع.
           </p>
         )}
 

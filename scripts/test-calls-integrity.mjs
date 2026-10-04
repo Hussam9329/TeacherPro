@@ -287,7 +287,7 @@ assert(
   'نطاق الدرجة شامل للحدين ويستبعد الحالات غير الرقمية عند تفعيله',
 );
 assert(
-  followUp.includes('<summary>فلاتر إضافية</summary>') &&
+  followUp.includes('<Label htmlFor={`follow-up-calls-grade-from-${variant}`}>الدرجة من</Label>') &&
     !followUp.includes('callStatusSupportsGradeRange') &&
     !followUp.includes('callGradeRangeEnabled') &&
     followUp.includes('gradeFrom: debouncedCallGradeFrom') &&
@@ -399,7 +399,7 @@ assert(
     followUp.includes('renderNoteArea(row, "window")') &&
     followUp.includes('renderNoteArea(row, "card")') &&
     followUp.includes('ملف الطالب') &&
-    followUp.includes('تصفير الفلاتر') &&
+    followUp.includes('onClearFilters={callFiltersActive ? resetCallFilters : undefined}') &&
     followUp.includes('لديهم ملاحظات'),
   'كارت الطالب مختصر، والتفاصيل (السجل، QR، محرر الملاحظة، ملف الطالب) بنافذة',
 );
