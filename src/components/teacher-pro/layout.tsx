@@ -1140,12 +1140,10 @@ export function TeacherProLayout() {
   );
   const CurrentMenuIcon = currentMenu?.icon || LayoutDashboard;
   // Numbers beside a page only when something there waits for someone.
+  // Grade entry deliberately has none.
   const sectionAlerts: Partial<Record<SectionId, { count: number; label: string }>> = {
     ...(shortcutAlerts?.callNotesPending
       ? { "follow-up-calls": { count: shortcutAlerts.callNotesPending, label: `${shortcutAlerts.callNotesPending} ملاحظة مكالمة بانتظار الإنجاز` } }
-      : {}),
-    ...(shortcutAlerts?.gradeReviewsPending
-      ? { "grade-entry": { count: shortcutAlerts.gradeReviewsPending, label: `${shortcutAlerts.gradeReviewsPending} درجة تنتظر المراجعة` } }
       : {}),
   };
   const connectionVisualStatus = dbLoading
