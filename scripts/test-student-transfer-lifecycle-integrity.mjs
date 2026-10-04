@@ -58,7 +58,17 @@ check(
     studentsRoute.includes("النقل إلى دورة مختلفة يبدأ ملفاً جديداً دائماً") &&
     registry.includes("نقل إلى دورة جديدة — سيبدأ الطالب بملف نظيف") &&
     registry.includes("تأكيد النقل كطالب جديد") &&
-    !registry.includes('<RadioGroupItem value="keep" className="mt-1" />\n                            </label>'),
+    registry.includes('{!editCourseChanged && (\n                            <label') &&
+    registry.includes("(editCourseChanged && courseTransferPolicy === \"keep\")"),
+);
+check(
+  "اختيار الإبقاء/طالب جديد يبقى عند تغيير خيار ثاني بالدورة أو النظام، وبدون شرح طويل",
+  !registry.includes("courseTransferPolicySignature") &&
+    !registry.includes("editTransferSignature") &&
+    !registry.includes("لا يعاد احتساب الرصيد") &&
+    !registry.includes("يُحفظ الملف الحالي للقراءة فقط") &&
+    registry.includes("الإبقاء على ملفه") &&
+    registry.includes("اعتباره طالباً جديداً"),
 );
 check(
   "اختيار طالب جديد داخل نفس الدورة يستخدم نفس الأرشفة والتصفير الكامل",
@@ -78,8 +88,7 @@ check(
     studentsRoute.includes("transactionKeepEnrollment") &&
     studentsRoute.includes("delete transactionData.opportunities") &&
     studentsRoute.includes("delete transactionData.baseOpportunities") &&
-    registry.includes("الإبقاء على الملف كما هو حرفياً") &&
-    registry.includes("لا يعاد احتساب الرصيد"),
+    registry.includes('<RadioGroupItem value="keep" />'),
 );
 check(
   "مسار تعديل بيانات الطالب يمنع الرصيد والحالة والفصل المباشر",

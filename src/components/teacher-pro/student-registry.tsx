@@ -440,8 +440,6 @@ export function StudentRegistryView() {
   const [courseTransferPolicy, setCourseTransferPolicy] = useState<
     CourseTransferPolicy | ""
   >("");
-  const [courseTransferPolicySignature, setCourseTransferPolicySignature] =
-    useState("");
   const [academicImpactPreview, setAcademicImpactPreview] =
     useState<StudentAcademicUpdateImpactResponse | null>(null);
   const [academicImpactPreviewSignature, setAcademicImpactPreviewSignature] =
@@ -954,9 +952,6 @@ export function StudentRegistryView() {
   }, [editDialog.form.courseId, editDialog.open]);
 
   const editTargetActiveChapter = editTargetActiveChapterFromServer;
-  const editTargetOpportunities = Number(
-    editTargetActiveChapter?.opportunities || 0,
-  );
 
   const editAvailablePrograms = useMemo(
     () => (editSelectedCourse ? getAvailablePrograms(editSelectedCourse) : []),
@@ -1001,19 +996,13 @@ export function StudentRegistryView() {
       editLocationChanged);
   const editNeedsTransferPolicy =
     editCourseChanged || editSameCourseContextChanged;
-  const editTransferSignature = JSON.stringify([
-    editDialog.form.courseId,
-    editEffectiveCourseProgram,
-    editDialog.form.courseTerm,
-    editDialog.form.studyType,
-    editDialog.form.locationScope,
-    editDialog.form.baghdadMode,
-    editDialog.form.subSite,
-  ]);
-  const effectiveCourseTransferPolicy =
-    courseTransferPolicySignature === editTransferSignature
-      ? courseTransferPolicy
-      : "";
+  // The choice stays while other course fields change; only a move to
+  // another course drops «الإبقاء», which a transfer does not offer.
+  const effectiveCourseTransferPolicy: CourseTransferPolicy | "" =
+    !editNeedsTransferPolicy ||
+    (editCourseChanged && courseTransferPolicy === "keep")
+      ? ""
+      : courseTransferPolicy;
   const editRegistrationDateChanged = Boolean(
     editOriginalStudent &&
       editDialog.form.createdAt !==
@@ -1199,7 +1188,6 @@ export function StudentRegistryView() {
     setEditRecoveryChoices({});
     setEditRecoveryLoading(false);
     setCourseTransferPolicy("");
-    setCourseTransferPolicySignature("");
     setAcademicImpactPreview(null);
     setAcademicImpactPreviewSignature("");
     setAcademicImpactConfirmed(false);
@@ -1266,7 +1254,6 @@ export function StudentRegistryView() {
     setAcademicImpactPreviewSignature("");
     setAcademicImpactConfirmed(false);
     setCourseTransferPolicy("");
-    setCourseTransferPolicySignature("");
     setEditRecoveryReason(null);
     setEditRecovery(null);
     setEditRecoveryChoices({});
@@ -1326,8 +1313,8 @@ export function StudentRegistryView() {
 
     if (editNeedsTransferPolicy && !effectiveCourseTransferPolicy) {
       return editCourseChanged
-        ? "نقل الطالب إلى دورة جديدة يحتاج تأكيد بدء ملف جديد وتصفير الإجراءات الحالية"
-        : "عند تغيير نظام الدراسة/الكورس المطلوب/الموقع داخل نفس الدورة اختر الإبقاء على الملف أو البدء كطالب جديد";
+        ? "أكّد نقل الطالب كطالب جديد"
+        : "اختر: الإبقاء على ملفه أو اعتباره طالباً جديداً";
     }
 
     if (editResetChapterUnresolved) {
@@ -1514,7 +1501,6 @@ export function StudentRegistryView() {
     setEditDialog({ open: false, id: "", form: emptyEditForm });
     setEditOriginalStudent(null);
     setCourseTransferPolicy("");
-    setCourseTransferPolicySignature("");
     setAcademicImpactPreview(null);
     setAcademicImpactPreviewSignature("");
     setAcademicImpactConfirmed(false);
@@ -1522,9 +1508,9 @@ export function StudentRegistryView() {
     toast.success("تم تعديل بيانات الطالب", {
       description:
         effectiveCourseTransferPolicy === "reset"
-          ? "تم حفظ الملف السابق للقراءة فقط وبدء ملف نظيف للطالب."
+          ? "بدأ الطالب بملف جديد."
           : effectiveCourseTransferPolicy === "keep"
-            ? "تم تعديل الإعدادات مع إبقاء الدرجات والفرص والإجراءات كما هي حرفياً."
+            ? "بقي ملفه كما هو."
             : "تم تحديث بيانات الطالب بنجاح.",
     });
   });
@@ -2660,7 +2646,6 @@ export function StudentRegistryView() {
                         name="courseId"
                         value={editDialog.form.courseId}
                         onValueChange={(v) => {
-                          setCourseTransferPolicy("");
                           setEditDialog((prev) => ({
                             ...prev,
                             form: {
@@ -2710,111 +2695,52 @@ export function StudentRegistryView() {
                     </div>
 
                     {editNeedsTransferPolicy && editOriginalStudent && (
-                      <div className="tp-registry-editor__wide rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-4 text-sm text-warning">
-                        <div className="mb-3 flex items-start gap-2">
-                          <AlertTriangle className="mt-0.5 size-5 shrink-0" />
-                          <div>
-                            <p className="font-black">
-                              {editCourseChanged
-                                ? "نقل إلى دورة جديدة — سيبدأ الطالب بملف نظيف"
-                                : "تغيير داخل نفس الدورة — اختر طريقة التعامل مع الملف"}
-                            </p>
-                            <p className="mt-1 text-xs leading-6 opacity-90">
-                              رصيد الطالب الحالي:{" "}
-                              {formatOpportunityBalance(editOriginalStudent)}.
-                              {editCourseChanged
-                                ? ` سيتم حفظ كل درجاته وفرصه وإجازاته ومكالماته وملاحظاته الحالية داخل ملف سابق للقراءة فقط، ثم تصفير الملف الحي وبدء التسجيل في ${courseName(editDialog.form.courseId)}.`
-                                : " يمكنك إبقاء كل الدرجات والفرص والإجراءات حرفياً كما هي، أو أرشفتها والبدء كطالب جديد داخل الدورة نفسها."}
-                            </p>
-                          </div>
-                        </div>
-
+                      <div className="tp-registry-editor__wide rounded-2xl border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 text-sm text-warning">
+                        {editCourseChanged && (
+                          <p className="mb-2 flex items-center gap-2 font-black">
+                            <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+                            نقل إلى دورة جديدة — سيبدأ الطالب بملف نظيف
+                          </p>
+                        )}
                         <RadioGroup
                           value={effectiveCourseTransferPolicy}
                           onValueChange={(value) => {
                             setCourseTransferPolicy(
                               value as CourseTransferPolicy,
                             );
-                            setCourseTransferPolicySignature(
-                              editTransferSignature,
-                            );
                             setAcademicImpactConfirmed(false);
                           }}
-                          className={
-                            editCourseChanged
-                              ? "grid gap-3"
-                              : "tp-registry-editor__fields"
-                          }
+                          className="flex flex-wrap gap-2"
                         >
-                          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border bg-background/80 p-3 text-foreground shadow-sm transition hover:border-primary/50">
-                            <RadioGroupItem value="reset" className="mt-1" />
-                            <span>
-                              <span className="block font-bold">
-                                {editCourseChanged
-                                  ? "تأكيد النقل كطالب جديد"
-                                  : "اعتباره طالباً جديداً داخل الدورة"}
-                              </span>
-                              <span className="mt-1 block text-xs leading-6 text-muted-foreground">
-                                يُحفظ الملف الحالي للقراءة فقط، ثم تُزال الدرجات
-                                والخصومات والإجازات والمكالمات والملاحظات من
-                                الملف الحي. يبدأ برصيد {editTargetOpportunities}{" "}
-                                / {editTargetOpportunities} وتاريخ تسجيل جديد
-                                لحظة الحفظ.
-                              </span>
-                            </span>
-                          </label>
-
                           {!editCourseChanged && (
-                            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border bg-background/80 p-3 text-foreground shadow-sm transition hover:border-primary/50">
-                              <RadioGroupItem value="keep" className="mt-1" />
-                              <span>
-                                <span className="block font-bold">
-                                  الإبقاء على الملف كما هو حرفياً
-                                </span>
-                                <span className="mt-1 block text-xs leading-6 text-muted-foreground">
-                                  تتغير خيارات نظام الدراسة/الكورس المطلوب/الموقع فقط.
-                                  لا يعاد احتساب الرصيد، ولا تُقيّد الفرص بسقف
-                                  جديد، ولا تتغير الدرجات أو الخصومات أو الحالة
-                                  الأكاديمية.
-                                </span>
-                              </span>
+                            <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border bg-background/80 px-3 font-bold text-foreground transition hover:border-primary/50">
+                              <RadioGroupItem value="keep" />
+                              الإبقاء على ملفه
                             </label>
                           )}
+                          <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border bg-background/80 px-3 font-bold text-foreground transition hover:border-primary/50">
+                            <RadioGroupItem value="reset" />
+                            {editCourseChanged
+                              ? "تأكيد النقل كطالب جديد"
+                              : "اعتباره طالباً جديداً"}
+                          </label>
                         </RadioGroup>
 
-                        {effectiveCourseTransferPolicy === "reset" && (
-                          <div className="mt-3" aria-live="polite">
-                            {editTargetActiveChapterLoading ? (
-                              <p className="rounded-xl border border-info-line border-s-4 border-s-info-vivid bg-info-soft px-3 py-2 text-xs font-bold text-info">
-                                جاري التحقق من الفصل النشط ورصيد البداية… انتظر
-                                قبل الحفظ.
-                              </p>
-                            ) : editTargetActiveChapterLookupFailed ? (
-                              <p className="rounded-xl border border-danger-line bg-danger-soft px-3 py-2 text-xs font-bold text-danger">
-                                تعذر التحقق من الفصل النشط. أعد المحاولة قبل بدء
-                                ملف جديد.
-                              </p>
-                            ) : editTargetActiveChapterConflict ? (
-                              <p className="rounded-xl border border-danger-line bg-danger-soft px-3 py-2 text-xs font-bold text-danger">
-                                يوجد أكثر من فصل نشط مرتبط بهذه الدورة. يجب حل
-                                التعارض أولاً؛ تم إيقاف بدء الملف الجديد لحماية
-                                رصيد الطالب.
-                              </p>
-                            ) : !editTargetActiveChapter ? (
-                              <p className="rounded-xl border border-danger-line bg-danger-soft px-3 py-2 text-xs font-bold text-danger">
-                                لا يوجد فصل نشط لهذه الدورة. لن يبدأ الطالب
-                                برصيد 0 ولن يُسمح بالحفظ حتى يتم تفعيل فصل واحد.
-                              </p>
-                            ) : (
-                              <p className="rounded-xl border border-success-line border-s-4 border-s-success-vivid bg-success-soft px-3 py-2 text-xs font-bold text-success">
-                                تم التحقق: الفصل النشط «
-                                {editTargetActiveChapter.name}» ورصيد البداية{" "}
-                                {editTargetOpportunities} /{" "}
-                                {editTargetOpportunities}.
-                              </p>
-                            )}
-                          </div>
-                        )}
+                        {effectiveCourseTransferPolicy === "reset" &&
+                          editResetChapterUnresolved && (
+                            <p
+                              className="mt-2 text-xs font-bold"
+                              aria-live="polite"
+                            >
+                              {editTargetActiveChapterLoading
+                                ? "جاري التحقق من الفصل النشط…"
+                                : editTargetActiveChapterLookupFailed
+                                  ? "تعذر التحقق من الفصل النشط. أعد المحاولة."
+                                  : editTargetActiveChapterConflict
+                                    ? "للدورة أكثر من فصل نشط؛ حلّ التعارض أولاً."
+                                    : "لا يوجد فصل نشط لهذه الدورة؛ فعّل فصلاً أولاً."}
+                            </p>
+                          )}
                       </div>
                     )}
 
