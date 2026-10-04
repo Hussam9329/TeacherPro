@@ -2304,6 +2304,8 @@
 .tp-grade-entry-page > .tp-filter-card { padding-block: 0; gap: 0; }
 .tp-grade-entry-pick { align-items: end; }
 .tp-grade-entry-pick [data-slot="select-trigger"] > [data-slot="select-value"] {
+  direction: rtl;
+  text-align: start;
   display: block;
   min-inline-size: 0;
   overflow: hidden;
@@ -2380,6 +2382,11 @@
   .tp-exam-records-page .tp-exam-record-card-collapsed {
     content-visibility: auto;
     contain-intrinsic-size: auto 250px;
+  }
+
+  /* An open ⋯ menu spills outside its card; skipping paint would cut it. */
+  .tp-exam-records-page .tp-exam-record-card-collapsed:has(.tp-row-menu__list) {
+    content-visibility: visible;
   }
 }
 

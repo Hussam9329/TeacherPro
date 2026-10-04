@@ -2577,7 +2577,7 @@ export function GradeEntryView() {
                 <SelectContent>
                   {filteredActiveExams.map((e) => (
                     <SelectItem key={e.id} value={e.id}>
-                      {e.name} ({e.type}) - {formatAppDate(e.date)}
+                      {e.name} · {formatAppDate(e.date)}
                     </SelectItem>
                   ))}
                 </SelectContent>
