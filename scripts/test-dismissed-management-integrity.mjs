@@ -188,11 +188,11 @@ must(
     page.includes("canReactivate") &&
     page.includes("useActionLock") &&
     page.includes("إرجاع بعد تعهّد") &&
-    page.includes("إرجاع برصيد تختاره") &&
-    page.includes("يصبح رصيده فرصتين") &&
+    page.includes("إرجاع بفرص تختارها") &&
+    page.includes("يرجع بفرصتين") &&
     page.includes("الحالة الحالية") &&
     page.includes("الحالة بعد الإرجاع") &&
-    page.includes("رصيد العودة النهائي") &&
+    page.includes("عدد الفرص بعد الإرجاع") &&
     page.includes("Boolean(restorationValidation)"),
   "إدارة المفصولين هي واجهة تعهد المفصول وتستخدم status-action مع قفل وصلاحية وSnapshot",
   "يجب أن يكون زر تعهد المفصول داخل إدارة المفصولين فقط وبآلية خادمية محمية.",

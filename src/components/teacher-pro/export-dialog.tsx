@@ -1918,7 +1918,7 @@ export function ExportDialog<T = Record<string, unknown>>({
           description={description || htmlExamSelectionOpen ? (
             <>
               {description}
-              {htmlExamSelectionOpen ? <span className="block">إخفاء امتحان من التقرير لا يغيّر رصيد الفرص.</span> : null}
+              {htmlExamSelectionOpen ? <span className="block">إخفاء امتحان من التقرير ما يغيّر الفرص.</span> : null}
             </>
           ) : null}
         />

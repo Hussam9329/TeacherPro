@@ -141,7 +141,7 @@ export function GradeSmartNotesPanel({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <CardTitle id="grade-smart-notes-title" className="text-lg">
-              لوحة الدرجات الذكية لهذا الامتحان
+              الدرجات المعلّقة بهذا الامتحان
             </CardTitle>
           </div>
           <div className="flex items-center gap-2">
@@ -154,7 +154,7 @@ export function GradeSmartNotesPanel({
               size="sm"
               onClick={onRetry}
               disabled={loading}
-              aria-label="تحديث لوحة الدرجات الذكية"
+              aria-label="تحديث الدرجات المعلّقة"
             >
               <RefreshCw
                 className={`ms-1 h-4 w-4 ${loading ? "animate-spin" : ""}`}
@@ -248,7 +248,7 @@ export function GradeSmartNotesPanel({
               </Button>
             </div>
           ) : loading && notes.length === 0 ? (
-            <LoadingState title="جاري تحميل الدرجات الذكية..." />
+            <LoadingState title="جاري تحميل الدرجات المعلّقة..." />
           ) : filteredNotes.length === 0 ? (
             <EmptyState compact icon={CheckCircle2} title="لا توجد حالات من هذا النوع لهذا الامتحان." />
           ) : (
@@ -259,7 +259,7 @@ export function GradeSmartNotesPanel({
                   بطاقات الملخص لمعرفة العدد الكامل.
                 </p>
               )}
-              <ul className="space-y-3" aria-label="سجل الدرجات الذكية">
+              <ul className="space-y-3" aria-label="الدرجات المعلّقة">
                 {visibleNotes.map((note) => {
                 const meta = CATEGORY_META[note.category];
                 return (

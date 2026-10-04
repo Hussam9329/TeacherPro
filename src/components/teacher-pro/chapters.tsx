@@ -1175,7 +1175,7 @@ export function ChaptersView() {
         <div className="space-y-3 pt-3">
           <p className="text-xs leading-6 text-muted-foreground">
             يوقف الفصل النشط السابق، ويفعّل «الفصل الثاني - الانسجة» بثلاث
-            فرص، ويضبط رصيد الطلاب النشطين في الدورتين إلى 3/3. يبقى
+            فرص، ويضبط فرص الطلاب النشطين في الدورتين إلى 3/3. يبقى
             المفصولون والمؤرشفون بحالاتهم وأرصدتهم. إذا لم يكن الفصل موجوداً
             فسينشئه التنفيذ بثلاث فرص. لا تشمل العملية «الدورة الصيفية
             الثانية».
@@ -1537,7 +1537,7 @@ export function ChaptersView() {
               <div className="grid gap-2 sm:grid-cols-2">
                 {statCard("كل الطلاب", transitionPreview.impact.totalStudents)}
                 {statCard(
-                  "نشطون سيُعاد ضبط رصيدهم",
+                  "نشطون تنضبط فرصهم من جديد",
                   transitionPreview.impact.activeStudentsToReset,
                 )}
                 {statCard(

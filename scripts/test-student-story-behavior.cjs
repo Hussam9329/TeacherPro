@@ -219,16 +219,16 @@ scenario("the parent and student messages use WhatsApp bold and standard Arabic"
 
 scenario("stored dismissal reasons read as one plain sentence", () => {
   const plain = (raw) => storyDismissalReason(raw).replace(/\*\*/g, "");
-  assert.equal(plain("تلقائي: مخالفة بعد انتهاء الفرص - غياب في امتحان يومي: امتحان يومي 10"), "غاب بـامتحان يومي 10 وهو بدون فرص");
+  assert.equal(plain("تلقائي: مخالفة بعد انتهاء الفرص - غياب في امتحان يومي: امتحان يومي 10"), "غاب بامتحان يومي 10 وهو بدون فرص");
   assert.equal(plain("مخالفة بعد انتهاء الفرص - درجة خصم (12) في امتحان: الامتحان الشامل"), "جاب 12 بالامتحان الشامل وهو بدون فرص");
-  assert.equal(plain("غش أول في امتحان: امتحان 4 - خصم جميع الفرص"), "غش بـامتحان 4");
-  assert.equal(plain("مخالفة بعد انتهاء الفرص - خصم يدوي: مخالفة سلوكية"), "انخصمت عليه فرصة يدوياً (مخالفة سلوكية) وهو بدون فرص");
+  assert.equal(plain("غش أول في امتحان: امتحان 4 - خصم جميع الفرص"), "غش بامتحان 4");
+  assert.equal(plain("مخالفة بعد انتهاء الفرص - خصم يدوي: مخالفة سلوكية"), "انخصمت عليه فرصة يدوياً وهو بدون فرص: مخالفة سلوكية");
   assert.equal(plain("فصل الطالب: غياب متكرر بدون عذر"), "غياب متكرر بدون عذر");
   const zero = buildStudentStory({ ...input, student: { ...input.student, opportunities: 0 } });
   assert.equal(zero.summary[0].map((part) => part.t).join(""), "مصطفى كريم جاسم هسه نشط بالفصل الأول، وما باقي عنده فرص (0 من 3). أي خصم ثاني يفصله.");
   const dismissed = buildStudentStory({ ...input, student: { ...input.student, status: "مفصول", opportunities: 0,
     dismissalReason: "مخالفة بعد انتهاء الفرص - درجة خصم (12) في امتحان: امتحان أسبوعي 11", dismissedChecked: false } });
-  assert.equal(dismissed.summary[0].map((part) => part.t).join(""), "مصطفى كريم جاسم مفصول من 4 نوفمبر 2026: جاب 12 بـامتحان أسبوعي 11 وهو بدون فرص.");
+  assert.equal(dismissed.summary[0].map((part) => part.t).join(""), "مصطفى كريم جاسم مفصول من 4 نوفمبر 2026: جاب 12 بامتحان أسبوعي 11 وهو بدون فرص.");
   assert.equal(dismissed.openItems[0].map((part) => part.t).join(""), "مفصول وكوده ما انقفل لهسه.");
   assert.match(dismissed.parentMessage, /الطالب مفصول منذ \*4 نوفمبر 2026\*\./);
 });

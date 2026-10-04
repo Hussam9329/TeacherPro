@@ -222,7 +222,7 @@ function pushOpportunityEvents(
       details: [
         sourceCourseDetail(courseName),
         action ? `الإجراء المسجل: ${action}` : "",
-        `التغيير في الرصيد: ${amount > 0 ? "+" : ""}${amount}`,
+        `التغيير بالفرص: ${amount > 0 ? "+" : ""}${amount}`,
         reason ? `السبب: ${reason}` : "",
         chapterName ? `الفصل: ${chapterName}` : "",
         text(exam.name) ? `الامتحان: ${text(exam.name)}` : "",

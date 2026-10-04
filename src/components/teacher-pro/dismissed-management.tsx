@@ -437,17 +437,17 @@ export function DismissedManagementView() {
   const restorationValidation = restorationLimit === null || restorationLimit < 1
     ? "يتطلب الإرجاع فصلاً نشطاً واحداً بسقف فرص صالح. حدّث الصفحة بعد مراجعة إعدادات الفصل."
     : finalRestorationAmount === null
-      ? "أدخل رصيد عودة صحيحاً: فرصة واحدة على الأقل."
+      ? "اكتب عدد فرص صحيح: فرصة وحدة على الأقل."
       : finalRestorationAmount > restorationLimit
         ? restorationMode === "pledge"
           ? "الإرجاع بعد تعهّد يتطلب سقف فصل لا يقل عن فرصتين."
-          : `رصيد العودة يجب ألا يتجاوز سقف الفصل (${restorationLimit}).`
+          : `عدد الفرص ما يتجاوز سقف الفصل (${restorationLimit}).`
         : "";
   const finalBalanceDescription = finalRestorationAmount === 2
-    ? "يصبح رصيده فرصتين"
+    ? "يرجع بفرصتين"
     : finalRestorationAmount === 1
-      ? "يصبح رصيده فرصة واحدة"
-      : `يصبح رصيده ${finalRestorationAmount} من الفرص`;
+      ? "يرجع بفرصة وحدة"
+      : `يرجع بـ${finalRestorationAmount} فرص`;
   const { locked: isReactivating, runLocked: runReactivateLocked } = useActionLock();
   const actor = currentUser();
   const canReactivate = Boolean(
@@ -681,11 +681,13 @@ export function DismissedManagementView() {
         status: String(profileStudent.status ?? student.status ?? ""),
         dismissalDate:
           dismissalDateTime === "—" ? "" : dismissalDateTime.split(" ")[0],
+        // The Telegram message speaks standard Arabic: keep the stored wording.
         dismissalReason: displayReasonText(
           profileStudent.dismissalReason ??
             managed.lastDismissalReason ??
             student.dismissalReason ??
             "",
+          { sentence: false },
         ),
         dismissalNotes: String(profileStudent.dismissalNotes ?? ""),
       };
@@ -844,7 +846,7 @@ export function DismissedManagementView() {
     }
     const requestedAmount = manualRestorationAmount(restorationAmount);
     if (isManual && (requestedAmount === null || !restorationReason.trim())) {
-      toast.error("أدخل رصيد عودة صحيحاً، فرصة واحدة على الأقل، مع سبب الإرجاع.");
+      toast.error("اكتب عدد فرص صحيح (فرصة وحدة على الأقل) وسبب الإرجاع.");
       return;
     }
     const limit = getOpportunityLimit(student);
@@ -900,8 +902,8 @@ export function DismissedManagementView() {
       scopes: ["students", "grades", "opportunities", "dismissed", "dashboard", "follow-up"],
       dispatchLocal: true,
     });
-    toast.success(isManual ? "تم إرجاع الطالب بالرصيد المحدد" : "تم إرجاع الطالب بعد تعهّد", {
-      description: `أصبح الطالب نشطاً برصيد ${updatedStudent.opportunities} من الفرص. بقي سجل الفصل السابق محفوظاً.`,
+    toast.success(isManual ? "رجع الطالب بالفرص اللي حددتها" : "تم إرجاع الطالب بعد تعهّد", {
+      description: `صار نشط وعنده ${updatedStudent.opportunities} فرص. سجل الفصل السابق باقي محفوظ.`,
     });
   });
 
@@ -1164,7 +1166,7 @@ export function DismissedManagementView() {
                       <RotateCcw />
                     </span>
                     <span className="tp-rcard__tile-text">إرجاع الطالب</span>
-                    <span className="tp-rcard__tile-hint">بعد تعهّد أو برصيد تختاره</span>
+                    <span className="tp-rcard__tile-hint">بتعهّد أو بفرص تختارها</span>
                   </button>
                 ) : null}
               </div>
@@ -1336,10 +1338,10 @@ export function DismissedManagementView() {
           <FormDialogHero
             alert
             icon={restorationMode === "manual" ? RotateCcw : Handshake}
-            title={restorationMode === "manual" ? "إرجاع برصيد تختاره" : "إرجاع بعد تعهّد"}
+            title={restorationMode === "manual" ? "إرجاع بفرص تختارها" : "إرجاع بعد تعهّد"}
             description={restorationMode === "manual"
-              ? `حدّد رصيد العودة النهائي وسبب إرجاع «${reactivateDialog.student?.name || "الطالب المحدد"}». يبقى سجل الفصل السابق محفوظاً.`
-              : `تأكيد تعهّد «${reactivateDialog.student?.name || "الطالب المحدد"}» وإرجاعه نشطاً. يصبح رصيده فرصتين، ويبقى سجل الفصل السابق محفوظاً.`}
+              ? `حدّد عدد الفرص وسبب إرجاع «${reactivateDialog.student?.name || "الطالب المحدد"}». يبقى سجل الفصل السابق محفوظاً.`
+              : `تأكيد تعهّد «${reactivateDialog.student?.name || "الطالب المحدد"}» وإرجاعه نشط بفرصتين. سجل الفصل السابق يبقى محفوظ.`}
           />
           <div className="tp-form-dialog__body">
             <div role="group" aria-label="طريقة الإرجاع" className="grid gap-2 sm:grid-cols-2">
@@ -1351,7 +1353,7 @@ export function DismissedManagementView() {
                 onClick={() => setRestorationMode("pledge")}
               >
                 <span className="flex items-center gap-2 text-sm font-bold"><Handshake className="size-4" aria-hidden="true" />إرجاع بعد تعهّد</span>
-                <span className="text-xs text-muted-foreground">يعود نشطاً ويصبح رصيده فرصتين.</span>
+                <span className="text-xs text-muted-foreground">يرجع نشط وعنده فرصتين.</span>
               </button>
               <button
                 type="button"
@@ -1365,14 +1367,14 @@ export function DismissedManagementView() {
                   setRestorationReason("");
                 }}
               >
-                <span className="flex items-center gap-2 text-sm font-bold"><RotateCcw className="size-4" aria-hidden="true" />إرجاع برصيد تختاره</span>
-                <span className="text-xs text-muted-foreground">تحدد رصيد العودة النهائي وسبب الإرجاع.</span>
+                <span className="flex items-center gap-2 text-sm font-bold"><RotateCcw className="size-4" aria-hidden="true" />إرجاع بفرص تختارها</span>
+                <span className="text-xs text-muted-foreground">تحدد عدد الفرص وسبب الإرجاع.</span>
               </button>
             </div>
           {restorationMode === "manual" && (
             <div className="min-w-0 space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="restore-opportunity-count">رصيد العودة النهائي</Label>
+                <Label htmlFor="restore-opportunity-count">عدد الفرص بعد الإرجاع</Label>
                 <Input
                   id="restore-opportunity-count" type="text" inputMode="numeric" autoComplete="off"
                   value={restorationAmount} disabled={isReactivating}
@@ -1399,14 +1401,14 @@ export function DismissedManagementView() {
               <div className="min-w-0 space-y-1">
                 <p className="text-xs text-muted-foreground">الحالة الحالية</p>
                 <p className="font-semibold">{reactivateDialog.student?.status || "—"}</p>
-                <p className="text-xs text-muted-foreground">الرصيد: {getOpportunityBalance(reactivateDialog.student)}</p>
+                <p className="text-xs text-muted-foreground">الفرص: {getOpportunityBalance(reactivateDialog.student)}</p>
               </div>
               <span aria-hidden="true">←</span>
               <div className="min-w-0 space-y-1">
                 <p className="text-xs text-muted-foreground">الحالة بعد الإرجاع</p>
                 <p className="font-semibold">نشط</p>
                 <p className="text-xs text-muted-foreground">
-                  رصيد العودة: {restorationValidation ? "—" : finalRestorationAmount}
+                  الفرص: {restorationValidation ? "—" : finalRestorationAmount}
                 </p>
               </div>
             </div>

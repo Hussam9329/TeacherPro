@@ -85,7 +85,7 @@ check(
 check(
   engine.includes('log.action === "رصيد بعد تعهد"') &&
     compatibility.includes("displayOpportunityAction") &&
-    language.includes('[/تعهد/g, "إعادة تفعيل"]'),
+    language.includes('[/تعهد/g, "إرجاع"]'),
   "التوافق الحسابي القديم محفوظ مع تنقية النصوص المعروضة للمستخدم",
 );
 

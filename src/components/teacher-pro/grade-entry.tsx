@@ -677,7 +677,7 @@ export function GradeEntryView() {
         if (controller.signal.aborted) return;
         if (!result) {
           setGradeSmartNotesError(
-            "تعذر تحميل الدرجات الذكية لهذا الامتحان.",
+            "تعذر تحميل الدرجات المعلّقة لهذا الامتحان.",
           );
           return;
         }
@@ -689,7 +689,7 @@ export function GradeEntryView() {
       .catch(() => {
         if (!controller.signal.aborted) {
           setGradeSmartNotesError(
-            "تعذر تحميل الدرجات الذكية لهذا الامتحان.",
+            "تعذر تحميل الدرجات المعلّقة لهذا الامتحان.",
           );
         }
       })
@@ -2840,7 +2840,7 @@ export function GradeEntryView() {
           <span>
             {smartPendingCount > 0
               ? `${smartPendingCount} درجة تحتاج مراجعة لهذا الامتحان`
-              : `${gradeSmartNotesTotal} حالة بالسجل الذكي لهذا الامتحان`}
+              : `${gradeSmartNotesTotal} درجة معلّقة بهذا الامتحان`}
           </span>
           <Button
             type="button"
@@ -3075,7 +3075,7 @@ export function GradeEntryView() {
                             <Badge
                               variant="destructive"
                               className="text-[10px]"
-                              title="أي رقم يُدخل لهذا الطالب يُعلّق للمراجعة حتى إعادة تفعيله يدوياً من الإدارة."
+                              title="أي درجة تنكتب لهذا الطالب تبقى معلّقة لحد ما ترجّعه الإدارة."
                             >
                               مفصول
                             </Badge>
@@ -3084,9 +3084,9 @@ export function GradeEntryView() {
                             <Badge
                               variant="outline"
                               className="text-[10px]"
-                              title="عاد هذا الطالب عبر إعادة تفعيل يدوية من الإدارة؛ إعادته للفصل تحتاج قراراً يدوياً."
+                              title="رجّعته الإدارة بقرار يدوي؛ فصله مرة ثانية يحتاج قرار يدوي."
                             >
-                              إعادة تفعيل يدوي
+                              إرجاع يدوي
                             </Badge>
                           )}
                           {rowSmartNote?.status === "PENDING" && (

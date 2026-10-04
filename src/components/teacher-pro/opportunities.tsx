@@ -545,7 +545,7 @@ export function OpportunitiesView() {
           <span className="break-words text-muted-foreground">{cleaned}</span>
           {hasHiddenLink ? (
             <Badge variant="outline" className="ms-2 align-middle">
-              مرتبط بإعادة التفعيل
+              مرتبط بإرجاع الطالب
             </Badge>
           ) : null}
         </div>
@@ -557,7 +557,7 @@ export function OpportunitiesView() {
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-bold text-foreground">تفاصيل السبب</span>
           {hasHiddenLink ? (
-            <Badge variant="outline">مرتبط بإعادة التفعيل</Badge>
+            <Badge variant="outline">مرتبط بإرجاع الطالب</Badge>
           ) : null}
         </div>
         <div className="grid gap-2 md:grid-cols-2">
@@ -670,7 +670,7 @@ export function OpportunitiesView() {
     }
 
     toast.success(
-      result.data?.reactivated ? `تمت استعادة الطالب نشطاً برصيد ${updatedStudent?.opportunities} من الفرص وتسجيل السبب` : actionDialog.type === "deduct"
+      result.data?.reactivated ? `رجع الطالب نشط وعنده ${updatedStudent?.opportunities} فرص، وانسجل السبب` : actionDialog.type === "deduct"
         ? "تم خصم الفرص وإعادة الاحتساب"
         : actionDialog.type === "add"
           ? "تمت إضافة الفرص وإعادة الاحتساب"
@@ -1480,7 +1480,7 @@ export function OpportunitiesView() {
               ) : null}
               {bulkActionDialog.type === "add" && bulkReturningDismissedCount > 0 ? (
                 <p className="text-xs font-semibold text-success">
-                  سيرجع {bulkReturningDismissedCount} طالب مفصول نشطاً برصيد {bulkAmount} (أو سقف فصله إذا أقل).
+                  سيرجع {bulkReturningDismissedCount} طالب مفصول نشط بـ{bulkAmount} فرص (أو سقف فصله إذا أقل).
                 </p>
               ) : null}
               {bulkExcludedFullOpportunitiesCount > 0 ? (

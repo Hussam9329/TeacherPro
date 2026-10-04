@@ -12,6 +12,7 @@ import { BONUS_OPPORTUNITY_ACTION } from "@/lib/bonus-opportunity";
 import { classifyGradeAcademicImpact, type GradeClassificationKind } from "@/lib/grade-classification";
 import { findExamGracePeriod, type GracePeriodRange } from "@/lib/grace-periods";
 import { displayOpportunityReason } from "@/lib/retired-followup-compat";
+import { dismissalReasonSentence } from "@/lib/reason-display";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import type { StoryAuditFacts } from "@/lib/student-story-audit";
 import {
@@ -88,7 +89,7 @@ const n = (value: unknown): number | null => {
 };
 const bold = (value: unknown) => `**${storyValue(value)}**`;
 /** «ب» before a name: «بالفصل الأول», «بـفصل 2». */
-const bi = (value: unknown) => (storyValue(value).startsWith("ال") ? `ب${bold(value)}` : `بـ${bold(value)}`);
+const bi = (value: unknown) => (/^[\u0600-\u06FF]/u.test(storyValue(value)) ? `ب${bold(value)}` : `بـ${bold(value)}`);
 
 const DISMISSAL_NOTE = /^(?:تم )?فصل الطالب/u;
 const AUTOMATIC_ACTIONS = new Set(["خصم تلقائي", "فصل تلقائي", BONUS_OPPORTUNITY_ACTION]);
@@ -752,16 +753,7 @@ export function buildStudentStory(input: StudentStoryInput): StudentStory {
  */
 export function storyDismissalReason(raw: unknown): string {
   const reason = storyValue(displayOpportunityReason(raw)).replace(/^فصل الطالب:?\s*/u, "");
-  const exam = (name: string) => (name.trim().startsWith("ال") ? `ب${bold(name.trim())}` : `بـ${bold(name.trim())}`);
-  let match: RegExpExecArray | null;
-  if ((match = /^مخالفة بعد انتهاء الفرص - غياب في امتحان[^:]*:\s*(.+)$/u.exec(reason))) return `غاب ${exam(match[1])} وهو بدون فرص`;
-  if ((match = /^مخالفة بعد انتهاء الفرص - درجة خصم \((\d+)\) في امتحان:\s*(.+)$/u.exec(reason))) return `جاب ${bold(match[1])} ${exam(match[2])} وهو بدون فرص`;
-  if ((match = /^مخالفة بعد انتهاء الفرص - خصم يدوي:\s*(.+)$/u.exec(reason))) return `انخصمت عليه فرصة يدوياً (${match[1].trim()}) وهو بدون فرص`;
-  if ((match = /^غش(?: أول| متكرر)? في امتحان:\s*(.+?)(?: - خصم جميع الفرص)?$/u.exec(reason))) return `غش ${exam(match[1])}`;
-  if ((match = /^غياب ضمن درجة الفصل في امتحان[^:]*:\s*(.+)$/u.exec(reason))) return `غاب ${exam(match[1])}، وغياب هذا الامتحان يفصل`;
-  if ((match = /^درجة صفر في امتحان[^:]*:\s*(.+)$/u.exec(reason))) return `جاب صفر ${exam(match[1])}`;
-  if ((match = /^درجة فصل \((\d+)\):\s*(.+)$/u.exec(reason))) return `جاب ${bold(match[1])} ${exam(match[2])}، وهاي درجة فصل`;
-  return reason;
+  return dismissalReasonSentence(reason, (value) => bold(value));
 }
 
 /** Staff wording of a decision → the student's own (second person, standard Arabic). */

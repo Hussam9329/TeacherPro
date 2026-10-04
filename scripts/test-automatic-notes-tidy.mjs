@@ -70,11 +70,11 @@ test("opportunity and dismissal reasons are shown without technical markers", ()
   assert.equal(displayReasonText("تلقائي: غياب في امتحان شهري: امتحان 4"), "غياب في امتحان شهري: امتحان 4");
   assert.equal(
     displayReasonText("إعادة تعيين الفرص من إدارة الفرص [قبل: 1 → بعد: 3، فرق: +2]"),
-    "إعادة تعيين الفرص من إدارة الفرص (الرصيد من 1 إلى 3)",
+    "إعادة تعيين الفرص من إدارة الفرص (الفرص من 1 إلى 3)",
   );
   assert.equal(
     displayReasonText("خصم يدوي [مطلوب: 2، مطبّق: 1، قبل: 1 → بعد: 0] [zero-balance-violation]"),
-    "خصم يدوي (المطلوب 2، المطبّق 1، الرصيد من 1 إلى 0) (خصم والرصيد صفر)",
+    "خصم يدوي (المطلوب 2، المطبّق 1، الفرص من 1 إلى 0) (خصم والفرص صفر)",
   );
   assert.equal(displayReasonText("تراجع موثق عن خصم: سبب قديم [undo-ref:log_1]"), "تراجع موثق عن خصم: سبب قديم");
   assert.equal(
@@ -83,7 +83,7 @@ test("opportunity and dismissal reasons are shown without technical markers", ()
   );
   assert.equal(
     displayReasonText("مخالفة بعد انتهاء الفرص - خصم يدوي: تأخير [zero-balance-violation]"),
-    "مخالفة بعد انتهاء الفرص - خصم يدوي: تأخير (خصم والرصيد صفر)",
+    "انخصمت عليه فرصة يدوياً وهو بدون فرص: تأخير",
   );
   assert.equal(displayReasonText("فصل الطالب: غياب متكرر"), "فصل الطالب: غياب متكرر");
   assert.equal(displayReasonText(null), "");
@@ -93,9 +93,9 @@ test("the pledge re-activation reason no longer reads garbled", () => {
   const shown = displayOpportunityReason(
     "تثبيت إعادة التفعيل بعد تعهد الطالب: الطالب نشط برصيد فرصتين؛ الوصول إلى 0 لا يفصله",
   );
-  assert.equal(shown, "تثبيت إعادة التفعيل: الطالب نشط برصيد فرصتين؛ الوصول إلى 0 لا يفصله");
-  assert.doesNotMatch(shown, /بعد إعادة التفعيل الطالب/);
-  assert.equal(displayOpportunityReason("تلقائي: غش في امتحان: امتحان 2"), "غش في امتحان: امتحان 2");
+  assert.equal(shown, "تثبيت الإرجاع: الطالب نشط بفرصتين؛ الوصول إلى 0 لا يفصله");
+  assert.doesNotMatch(shown, /بعد الإرجاع الطالب|رصيد/);
+  assert.equal(displayOpportunityReason("تلقائي: غش في امتحان: امتحان 2"), "غش بامتحان 2");
 });
 
 test("internal grade-note prefixes are hidden but always saved back", () => {

@@ -150,7 +150,7 @@ function buildJudgmentPreview(state: ExamFormState): JudgmentPreviewItem[] {
     items.push({
       title: "الغش",
       description:
-        "يبقى إجراءً خطيراً: الغش يؤدي إلى فصل الطالب ويصفر رصيد الفرص.",
+        "يبقى إجراءً خطيراً: الغش يفصل الطالب وتروح كل فرصه.",
       tone: "danger",
     });
     return items;
@@ -200,7 +200,7 @@ function buildJudgmentPreview(state: ExamFormState): JudgmentPreviewItem[] {
     });
     items.push({
       title: "الغش",
-      description: "الغش يؤدي إلى فصل الطالب ويصفر رصيد الفرص.",
+      description: "الغش يفصل الطالب وتروح كل فرصه.",
       tone: "danger",
     });
     return items;
@@ -228,7 +228,7 @@ function buildJudgmentPreview(state: ExamFormState): JudgmentPreviewItem[] {
   });
   items.push({
     title: "الغش",
-    description: "الغش يؤدي إلى فصل الطالب ويصفر رصيد الفرص.",
+    description: "الغش يفصل الطالب وتروح كل فرصه.",
     tone: "danger",
   });
   return items;

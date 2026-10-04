@@ -3039,7 +3039,7 @@ export function StudentRegistryView() {
                                 </div>
                                 <div className="rounded-xl bg-background/80 p-3 text-foreground">
                                   <p className="text-xs text-muted-foreground">
-                                    الرصيد المتوقع
+                                    الفرص المتوقعة
                                   </p>
                                   <p className="mt-1 text-xl font-black">
                                     {academicImpactPreview.projection?.current
@@ -3150,7 +3150,7 @@ export function StudentRegistryView() {
                 {isSavingEdit
                   ? "جاري الحفظ..."
                   : editResetChapterUnresolved
-                    ? "الحفظ متوقف لحماية الرصيد"
+                    ? "الحفظ متوقف لحماية الفرص"
                     : "حفظ التعديلات"}
               </Button>
             </div>
@@ -3268,7 +3268,7 @@ export function StudentRegistryView() {
           <FormDialogHero icon={UserX} title={`فصل الطالب - ${dismissDialog.student?.name ?? ""}`} />
           <div className="tp-form-dialog__body">
             <div className="rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm leading-6 text-danger">
-              عند تأكيد الفصل سيصبح الطالب <strong>مفصولاً</strong> ورصيد فرصه{" "}
+              عند تأكيد الفصل سيصبح الطالب <strong>مفصولاً</strong> وفرصه{" "}
               <strong>0</strong>. لا توجد أنواع أو درجات للفصل، وسجل الفصل
               السابق لا يغيّر هذا القرار.
             </div>
