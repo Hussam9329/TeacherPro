@@ -75,7 +75,7 @@ const menuItems: {
     title: "الدورات",
     icon: BookOpen,
   },
-  { id: "chapters", title: "الفصول والفرص", icon: BookMarked },
+  { id: "chapters", title: "الفصول", icon: BookMarked },
   {
     id: "student-register",
     title: "تسجيل الطلاب",
@@ -96,9 +96,9 @@ const menuItems: {
   { id: "grade-entry", title: "تسجيل الدرجات", icon: PenTool },
   { id: "exam-records", title: "الامتحانات", icon: FileCheck },
   { id: "grade-records", title: "سجل الدرجات", icon: BarChart3 },
-  { id: "opportunities", title: "الفرص والمفصولين", icon: Target },
+  { id: "opportunities", title: "الفرص", icon: Target },
   { id: "follow-up-calls", title: "المكالمات", icon: PhoneCall },
-  { id: "accounts", title: "إدارة الحسابات", icon: Shield },
+  { id: "accounts", title: "الحسابات", icon: Shield },
   { id: "logs", title: "السجلات", icon: ScrollText },
 ];
 
