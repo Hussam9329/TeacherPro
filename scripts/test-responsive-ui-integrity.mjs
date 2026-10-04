@@ -214,7 +214,7 @@ includesAll(layout, [
   "<SidebarAlertBadge",
 ], "Sidebar alert badge alignment");
 if (layout.includes("{family.items.length}")) failures.push("Sidebar must not show the number of pages in a group as a badge");
-includesAll(profileDialog, ["min-h-11 max-w-full touch-manipulation", "tp-student-profile__control", "tp-student-profile__stat"], "Student profile raw controls");
+includesAll(profileDialog, ["min-h-11 max-w-full touch-manipulation", "tp-student-profile__control", "tp-story__filters"], "Student profile raw controls");
 const profileControlCss = profileCss.match(/\.tp-student-profile__control\s*\{([^}]*)\}/)?.[1] || "";
 includesAll(profileControlCss, ["min-height: 2.75rem", "max-width: 100%", "touch-action: manipulation"], "Student profile control ergonomics");
 const profileStatCss = profileCss.match(/\.tp-student-profile__stat\s*\{([^}]*)\}/)?.[1] || "";

@@ -279,31 +279,23 @@ must(
 );
 
 must(
-  profileDialog.includes('type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "followup" | "actions" | "archives" | "timeline"') &&
-    profileDialog.includes('label: "المكالمات"') &&
-    profileDialog.includes('label: "الإجازات"') &&
+  profileDialog.includes("buildStudentStory(") &&
+    profileDialog.includes('["grades", "الدرجات"]') &&
+    profileDialog.includes('["decisions", "الفرص والقرارات"]') &&
+    profileDialog.includes('["follow", "المتابعة"]') &&
     !profileDialog.includes('label: "التعهدات"') &&
-    profileDialog.includes('label: "السجل الزمني"'),
-  "ملف الطالب يملك مسارات واضحة للدرجات والغيابات والفرص والمكالمات والإجازات والسجل الزمني",
-  "ملف الطالب يجب أن يحتوي تبويبات/كروت صريحة لكل مسار منطقي للطالب.",
+    !profileDialog.includes("تعهدات ولي الأمر"),
+  "ملف الطالب قصة وحدة: الدرجات والفرص والقرارات والمتابعة والبيانات بفلترة داخلها",
+  "ملف الطالب يجب أن يعرض كل شي صار ويه الطالب بقصة وحدة مع أزرار فلترة.",
 );
 
 must(
-    profileDialog.includes('tab === "followup"') &&
-    profileDialog.includes("مكالمات الطالب") &&
-    profileDialog.includes("إجازات الطالب") &&
-    !profileDialog.includes("تعهدات ولي الأمر") &&
-    profileDialog.includes("ملاحظات الطالب"),
-  "ملف الطالب يعرض المكالمات والإجازات والملاحظات دون الميزة القديمة",
-  "يجب أن تكون المكالمات والإجازات والملاحظات ظاهرة داخل ملف الطالب دون قسم متقاعد.",
-);
-
-must(
-  profileDialog.includes('tab === "timeline"') &&
-    profileDialog.includes('{ tab: "timeline", label: "السجل"') &&
-    profileDialog.includes("fullStudentLog"),
-  "ملف الطالب يحتوي السجل الزمني الكامل داخل تبويب مستقل",
-  "السجل الزمني الكامل يجب أن يكون مساراً مستقلاً داخل ملف الطالب.",
+  profileDialog.includes("visibleStudentLog.map") &&
+    profileDialog.includes("storyEvents") &&
+    profileDialog.includes("رسالة لولي الأمر") &&
+    profileDialog.includes("تقرير كامل للطالب"),
+  "ملف الطالب يبين القصة كاملة مع رسالة ولي الأمر وتقرير الطالب",
+  "القصة الكاملة ورسائل الواتساب لازم تبقى داخل ملف الطالب.",
 );
 
 must(

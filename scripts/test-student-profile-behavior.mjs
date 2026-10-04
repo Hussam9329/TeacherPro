@@ -33,6 +33,7 @@ const profile = loadPureTypeScriptModule("src/lib/student-profile-state.ts");
 const profileServer = loadPureTypeScriptModule(
   "src/lib/student-profile-server.ts",
   new Map([
+    ["@/lib/student-story-audit", loadPureTypeScriptModule("src/lib/student-story-audit.ts")],
     [
       "@/lib/server-auth",
       {
@@ -199,16 +200,20 @@ test("profile archive sections are removed according to the viewer's permissions
     },
     access,
   );
+  // Whoever opens the profile reads the whole story; only the technical
+  // system log stays with logs.view.
   assert.deepEqual(Object.keys(sanitized).sort(), [
     "counts",
     "gradeSmartNotes",
     "grades",
+    "opportunityLogs",
     "student",
+    "studentCalls",
   ]);
-  assert.deepEqual(sanitized.counts, { grades: 1, gradeSmartNotes: 1 });
+  assert.deepEqual(sanitized.counts, { grades: 1, gradeSmartNotes: 1, opportunityLogs: 1, studentCalls: 1 });
 });
 
-test("profile student fields are redacted without students.view", () => {
+test("every profile viewer reads the student's full story, read-only", () => {
   const restrictedAccess = profileServer.studentProfileSectionAccess({
     isAdmin: false,
     permissions: ["grades.view"],
@@ -228,9 +233,13 @@ test("profile student fields are redacted without students.view", () => {
   assert.deepEqual(redacted, {
     id: "student-a",
     courseId: "course-a",
+    name: "اسم خاص",
+    phone: "07000000000",
+    parentPhone: "07111111111",
     opportunities: 2,
     opportunityLimit: 3,
   });
+  assert.equal(restrictedAccess.logs, false, "the technical log stays with logs.view");
 });
 
 test("the fullscreen profile exposes loading, failure, and modal semantics", () => {

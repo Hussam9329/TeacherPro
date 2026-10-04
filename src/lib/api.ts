@@ -1,3 +1,4 @@
+import type { StoryAuditFacts } from "@/lib/student-story-audit";
 import { withReadDeadline } from "./read-deadline";
 import { getOutboxOwner, ownerHeaders, requestSessionCheck } from "./outbox-session";
 import {
@@ -893,6 +894,13 @@ export interface StudentProfileLogResponse {
   logs: Array<Record<string, unknown>>;
   enrollmentArchives?: StudentEnrollmentArchiveRecord[];
   audit?: StudentProfileAuditMetadata;
+  /** What «ملف الطالب» needs beyond the rows above to tell the story. */
+  story?: {
+    audit: StoryAuditFacts;
+    gracePeriods: Array<Record<string, unknown>>;
+    pendingGrades: Array<Record<string, unknown>>;
+  };
+  allCourseExams?: Array<Record<string, unknown>>;
   sections?: StudentProfileSectionAccess;
   snapshotVersion?: string;
   source: "database";

@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { hasPermission, type AuthPrincipal } from "@/lib/server-auth";
+import {
+  buildStoryAuditFacts,
+  STORY_AUDIT_MODULES,
+  type StoryAuditFacts,
+} from "@/lib/student-story-audit";
 
 export const STUDENT_PROFILE_AUDIT_LIMIT = 100;
 
@@ -28,28 +33,18 @@ export type StudentProfileSectionAccess = {
 export function studentProfileSectionAccess(
   principal: AuthPrincipal,
 ): StudentProfileSectionAccess {
-  // Calls staff open «ملف الطالب» from a call: they read the student's details,
-  // grades and opportunities there (read-only) to explain a deduction.
-  const callsStaff = hasPermission(principal, "follow-up.calls.view");
-  const students = callsStaff || hasPermission(principal, "students.view");
-  const grades = callsStaff || ["grades.view", "grades.add", "grades.edit"].some(
-    (permission) => hasPermission(principal, permission),
-  );
-  const opportunities = callsStaff || hasPermission(principal, "opportunities.view");
-  const followUp = [
-    "follow-up.view",
-    "follow-up.calls.view",
-    "follow-up.leaves.view",
-  ].some((permission) => hasPermission(principal, permission));
+  // Whoever can open «ملف الطالب» reads the whole story, read-only: grades,
+  // opportunities, follow-up, data and earlier files. Only the technical
+  // system log stays with those who may read the logs.
   const logs = hasPermission(principal, "logs.view");
 
   return {
-    students,
-    grades,
-    opportunities,
-    followUp,
+    students: true,
+    grades: true,
+    opportunities: true,
+    followUp: true,
     logs,
-    archives: students,
+    archives: true,
   };
 }
 
@@ -103,6 +98,10 @@ export const STUDENT_PROFILE_STUDENT_SELECT = {
   baseOpportunities: true,
   createdAt: true,
   courseId: true,
+  username: true,
+  dismissedChecked: true,
+  bonusProgress: true,
+  bonusWaitingExamName: true,
 } satisfies Prisma.StudentSelect;
 
 function escapeRegExp(value: string): string {
@@ -164,6 +163,35 @@ export async function loadStudentProfileAuditLogs(
       matchSource: "student-id-or-exact-code" as const,
     },
   };
+}
+
+/**
+ * The audit rows the story reads for everyone who can open the profile: who
+ * did each manual action and the events only the audit log keeps. Grade
+ * saves are not read here; the raw rows never leave the server.
+ */
+export async function loadStudentStoryAuditFacts(
+  client: Pick<Prisma.TransactionClient, "auditLog">,
+  student: { id: string; code: string },
+  options: { from?: Date | null } = {},
+): Promise<StoryAuditFacts> {
+  const candidates = await client.auditLog.findMany({
+    where: {
+      module: { in: [...STORY_AUDIT_MODULES] },
+      ...(options.from ? { time: { gte: options.from } } : {}),
+      OR: [
+        { details: { contains: student.id, mode: "insensitive" } },
+        ...(student.code ? [{ details: { contains: student.code, mode: "insensitive" as const } }] : []),
+      ],
+    },
+    orderBy: [{ time: "desc" }, { id: "desc" }],
+    take: 2000,
+    select: { id: true, module: true, action: true, details: true, time: true, userName: true },
+  });
+  return buildStoryAuditFacts(
+    candidates.filter((row) => auditDetailsMatchStudent(row.details, student)),
+    student,
+  );
 }
 
 function stableValue(value: unknown): unknown {

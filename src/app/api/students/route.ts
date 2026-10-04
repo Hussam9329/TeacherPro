@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { studentEditChanges, studentEditChangesSuffix } from "@/lib/student-edit-changes";
 import { NextRequest, NextResponse } from "next/server";
 import {
   requireAnyPermission,
@@ -1184,7 +1185,7 @@ export async function PUT(req: NextRequest) {
             : transactionKeepEnrollment
               ? "تعديل إعدادات الطالب مع إبقاء الملف"
               : "تعديل بيانات طالب",
-          details: `${student.name} - ${student.code} - ${archiveSummary ? `أرشيف ${archiveSummary.archiveId}` : "بدون تصفير"}`,
+          details: `${student.name} - ${student.code} - ${archiveSummary ? `أرشيف ${archiveSummary.archiveId}` : "بدون تصفير"}${studentEditChangesSuffix(studentEditChanges(lockedStudent, student))}`,
           userId: principal.id,
           userName: principal.name,
         },

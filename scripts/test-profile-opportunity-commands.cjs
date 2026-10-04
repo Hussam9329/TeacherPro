@@ -51,7 +51,10 @@ const logs = [
     reason: "تلقائي: غياب", date: date("2026-09-16T00:00:00Z"),
     chapterId: "chapter", chapterNameSnapshot: "الفصل الحالي" },
 ];
-const grace = { id: "grace", studentId: "student", startDate: date("2026-09-20"), endDate: date("2026-09-22") };
+const grace = { id: "grace", studentId: "student", startDate: date("2026-09-20"), endDate: date("2026-09-22"),
+  source: "manual", note: "", createdById: null, createdByName: "", createdAt: date("2026-09-19"),
+  updatedById: null, updatedByName: "", updatedAt: date("2026-09-19"), cancelledAt: null, cancelledById: null,
+  cancelledByName: "", cancelReason: "" };
 const activeLink = { id: "link", courseId: "course", chapterId: "chapter", active: true, archived: false, chapter };
 let links = [activeLink];
 let permissions = ["grades.view", "opportunities.view"];
@@ -86,6 +89,7 @@ const tx = {
   studentNote: { findMany: findMany("studentNote", () => []) },
   studentCall: { findMany: findMany("studentCall", () => []) },
   studentEnrollmentArchive: { findMany: findMany("studentEnrollmentArchive", () => []) },
+  auditLog: { findMany: findMany("auditLog", () => []) },
 };
 const fakeDb = {
   $transaction: async (callback, options) => {
@@ -159,9 +163,10 @@ const { NextRequest } = require("next/server");
   assert.equal(reads.find((read) => read.name === "exam").args.select.telegramOpenAt, true);
   assert.equal(reads.find((read) => read.name === "exam").args.select.telegramCloseAt, true);
 
+  // Whoever can open «ملف الطالب» reads its whole story, explanation included.
   for (const access of [["grades.view"], ["opportunities.view"], ["students.view"]]) {
     permissions = access;
-    assert.deepEqual((await response()).opportunityCommandEffects, [], "both section permissions are required");
+    assert.deepEqual((await response()).opportunityCommandEffects, expected, "every profile viewer gets the same explanation");
   }
   permissions = ["grades.view", "opportunities.view"];
   student.opportunities = 2;

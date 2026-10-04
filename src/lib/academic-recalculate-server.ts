@@ -984,6 +984,20 @@ export async function recalculateStudentsAcademicState(
     };
   }
   const examEditRestoredIds = new Set<string>();
+  // The dismissal a return cancels, kept on the return note so the student's
+  // story still shows it (struck) instead of losing it.
+  const cancelledDismissal = (studentId: string) => {
+    const stored = state.students.find(student => student.id === studentId);
+    const dismissalLog = state.opportunityLogs
+      .filter(log => log.studentId === studentId && log.action === "فصل تلقائي")
+      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+      .pop();
+    const date = dismissalLog?.date ? new Date(String(dismissalLog.date)) : null;
+    return {
+      dismissalReason: String(stored?.dismissalReason || "").trim(),
+      dismissalDate: date && Number.isFinite(date.getTime()) ? date : null,
+    };
+  };
   let result = options.graceReview
     ? recalculateWithGraceReview(state, new Set(recalculableStudentIds), options.graceReview)
     : recalculateWithLeaveReview(
@@ -1006,6 +1020,7 @@ export async function recalculateStudentsAcademicState(
         kind: "إجراء",
         text: `استعادة الطالب بعد تعديل الامتحان «${examName}» وزوال سبب الفصل المرتبط به. الرصيد المحسوب: ${student.opportunities}؛ دون منح فرص إضافية.`,
         date: new Date(),
+        ...cancelledDismissal(student.id),
       })) });
     }
   }
@@ -1064,6 +1079,7 @@ export async function recalculateStudentsAcademicState(
       kind: "إجراء",
       text: `رجع الطالب تلقائياً: «${BONUS_OPPORTUNITY_ACTION}» انحسبت قبل الامتحان اللي فصله، فوقت ذاك الامتحان كان عنده فرصة وما انفصل. الرصيد الحالي: ${student.opportunities}.`,
       date: new Date(),
+      ...cancelledDismissal(student.id),
     })) });
   }
   // Explicit leave/exam edits may remove only a proved obsolete exam dismissal.

@@ -473,7 +473,8 @@ assert(
         source.includes('await requireAnyPermission(req, CALLS_VIEW_PERMISSIONS);') &&
         !source.includes('requirePermission(req, "follow-up.view")')) &&
       bootstrap.includes('["courses.view", ...CALLS_VIEW_PERMISSIONS]') &&
-      profileAccess.includes('const callsStaff = hasPermission(principal, "follow-up.calls.view");'),
+      profileAccess.includes('const logs = hasPermission(principal, "logs.view");') &&
+      profileAccess.includes("    grades: true,\n    opportunities: true,\n    followUp: true,"),
     'دور «موظف مكالمات» يكفي لفتح المكالمات واختيار الدورة والامتحان وقراءة ملف الطالب من المكالمة',
   );
   assert(

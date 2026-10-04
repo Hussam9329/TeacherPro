@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { attachGracePeriods } from "@/lib/grace-periods-server";
+import { attachGracePeriods, listStudentGracePeriods } from "@/lib/grace-periods-server";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { requireAnyPermissionPrincipal } from "@/lib/server-auth";
 import { attachStudentOpportunitySnapshotsWithClient } from "@/lib/student-opportunity-snapshot-server";
@@ -17,6 +17,7 @@ import {
 import {
   buildStudentProfileDataVersion,
   loadStudentProfileAuditLogs,
+  loadStudentStoryAuditFacts,
   sanitizeEnrollmentArchiveSnapshot,
   STUDENT_PROFILE_ACCESS_PERMISSIONS,
   STUDENT_PROFILE_STUDENT_SELECT,
@@ -84,6 +85,7 @@ const CALL_SELECT = {
   completed: true,
   completedAt: true,
   notes: true,
+  noteResolved: true,
   createdAt: true,
 } as const;
 
@@ -194,7 +196,7 @@ export async function GET(req: NextRequest) {
             // before registration) waits here, never as a Grade row.
             tx.gradeSmartNote.findMany({
               where: { studentId, status: "PENDING", score: { not: null } },
-              select: { examId: true, score: true, category: true, attemptedAt: true },
+              select: { id: true, examId: true, score: true, category: true, attemptedAt: true },
               orderBy: [{ attemptedAt: "desc" }, { id: "desc" }],
             }),
           ]);
@@ -256,6 +258,12 @@ export async function GET(req: NextRequest) {
               studentNotes,
             }), studentId)
           : [];
+        // The story reads who did each manual action for every viewer; the
+        // raw audit rows below stay with those who may read the logs.
+        const [storyAudit, gracePeriodRecords] = await Promise.all([
+          loadStudentStoryAuditFacts(tx, student, { from: currentEnrollmentStartedAt }),
+          listStudentGracePeriods(tx, studentId),
+        ]);
         const auditResult = access.logs
           ? await loadStudentProfileAuditLogs(tx, student, {
               from: currentEnrollmentStartedAt,
@@ -285,6 +293,8 @@ export async function GET(req: NextRequest) {
           pendingGradeNotes,
           enrollmentArchives,
           auditResult,
+          storyAudit,
+          gracePeriodRecords,
         };
       },
       { isolationLevel: "RepeatableRead" },
@@ -307,6 +317,8 @@ export async function GET(req: NextRequest) {
       pendingGradeNotes,
       enrollmentArchives,
       auditResult,
+      storyAudit,
+      gracePeriodRecords,
     } = snapshot;
     const examById = new Map(exams.map((exam) => [exam.id, exam]));
     const gradesForVersion = grades.map((grade) => ({
@@ -387,6 +399,11 @@ export async function GET(req: NextRequest) {
           }))
         : [],
       audit: auditResult.metadata,
+      story: {
+        audit: storyAudit,
+        gracePeriods: gracePeriodRecords,
+        pendingGrades: pendingGradeNotes,
+      },
       // What the student report needs to compute a correct result, whatever
       // sections the exporter may read: the status, the registration day,
       // the days of each leave and the recorded dismissals. Only facts used

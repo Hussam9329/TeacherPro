@@ -1,6 +1,4 @@
 "use client";
-import { BONUS_OPPORTUNITY_ACTION } from "@/lib/bonus-opportunity";
-import { isCurrentChapterOpportunityLog } from "@/lib/opportunity-chapter-scope";
 import { Button } from "@/components/ui/button";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,49 +15,28 @@ import {
   useTeacherStore,
 } from "@/lib/teacher-store";
 import { requestDismissedStudentFocus } from "@/lib/dismissed-focus";
-import { baghdadDateKey } from "@/lib/baghdad-time";
+import { baghdadDateKey, baghdadTodayKey } from "@/lib/baghdad-time";
 import { Badge } from "@/components/ui/badge";
-import { formatAppDate } from "@/lib/format";
-import { formatGradeScore } from "@/lib/exam-utils";
 import {
   studentProfileLogApi,
   studentProfileStatsApi,
   type StudentEnrollmentArchiveRecord,
+  type StudentProfileLogResponse,
   type StudentProfileStatsResponse,
 } from "@/lib/api";
-import { classifyGradeAcademicImpact, type GradeClassificationKind } from "@/lib/grade-classification";
 import { AlertCircle, ArrowRightIcon, XIcon } from "lucide-react";
 import { EmptyState, LoadingState } from "./ui-kit";
 
-import { GradeNoteBanner } from "@/components/teacher-pro/grade-note-banner";
 import { displayReasonText } from "@/lib/reason-display";
 import { shortGradeNoteText } from "@/lib/grade-note-banners";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
-import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { formatAuditLogDisplay } from "@/lib/audit-log-display";
+import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
-import {
-  GRACE_PERIOD_EXCUSE_LABEL,
-  describeExamGraceExclusion,
-  findExamGracePeriod,
-} from "@/lib/grace-periods";
-import { formatStudentCurrentGrace } from "./student-registry-helpers";
-import {
-  filterStudentProfileGrades,
-  getStudentProfileCardTarget,
-  resolveStudentProfileActiveChapter,
-  type StudentProfileCardKey,
-  type StudentProfileGradeFilter,
-} from "@/lib/student-profile-state";
-import {
-  displayOpportunityAction,
-  displayOpportunityReason,
-  isRetiredFollowupNote,
-} from "@/lib/retired-followup-compat";
-
-type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "followup" | "actions" | "archives" | "timeline";
-type StudentProfileAnchor = "calls" | "leaves" | "notes" | null;
+import { displayOpportunityAction, isRetiredFollowupNote } from "@/lib/retired-followup-compat";
+import { buildStudentStory, type StoryCategory, type StoryEvent, type StoryStripKind } from "@/lib/student-story";
+import { storyDay, storyStamp, storyTime, type StoryPart } from "@/lib/student-story-format";
 
 type StudentProfileDialogProps = {
   student: Student | null;
@@ -78,6 +55,24 @@ type StudentProfileDialogProps = {
   telegramLink: (telegram: string) => string;
 };
 
+type StoryFilter = "all" | StoryCategory;
+const STORY_FILTERS: Array<[StoryFilter, string]> = [
+  ["all", "كلشي"],
+  ["grades", "الدرجات"],
+  ["decisions", "الفرص والقرارات"],
+  ["follow", "المتابعة"],
+  ["data", "البيانات"],
+];
+const STORY_PAGE = 60;
+
+const STRIP_LEGEND: Array<[StoryStripKind, string]> = [
+  ["pass", "نجح"],
+  ["fail", "راسب بدون خصم"],
+  ["loss", "غياب أو خصم"],
+  ["neutral", "ما انحسب"],
+  ["pending", "معلّقة"],
+  ["missing", "ما انكتبت"],
+];
 
 function archiveSnapshotList(
   archive: StudentEnrollmentArchiveRecord,
@@ -134,12 +129,10 @@ function formatStudentLocation(student: Student): string {
 function ProfileLoadNotice({
   loading,
   error,
-  hasFallback,
   onRetry,
 }: {
   loading: boolean;
   error: string | null;
-  hasFallback: boolean;
   onRetry: () => void;
 }) {
   if (loading) {
@@ -152,34 +145,12 @@ function ProfileLoadNotice({
   if (!error) return null;
   return (
     <div role="alert" aria-live="assertive" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft px-4 py-3 text-sm">
-      <p className="min-w-0 flex-1 break-words font-bold text-danger">
-        {error}{hasFallback ? " المعروض أدناه نسخة محلية احتياطية وقد تكون غير مكتملة." : ""}
-      </p>
+      <p className="min-w-0 flex-1 break-words font-bold text-danger">{error}</p>
       <button type="button" onClick={onRetry} className="min-h-11 max-w-full touch-manipulation rounded-xl border border-destructive/30 px-3 py-2 font-black text-danger [overflow-wrap:anywhere] focus:outline-none focus:ring-2 focus:ring-destructive/30">
         إعادة المحاولة
       </button>
     </div>
   );
-}
-
-function ProfileCollectionEmpty({
-  loading,
-  error,
-  emptyText,
-}: {
-  loading: boolean;
-  error: string | null;
-  emptyText: string;
-}) {
-  if (loading) return <LoadingState title="جاري تحميل البيانات…" />;
-  if (error) {
-    return (
-      <div role="alert">
-        <EmptyState compact icon={AlertCircle} title="تعذر تحميل هذه البيانات." />
-      </div>
-    );
-  }
-  return <EmptyState compact title={emptyText} />;
 }
 
 function InfoBox({ label, value }: { label: string; value: React.ReactNode }) {
@@ -196,65 +167,6 @@ function profileGradeStatus(status: string | null | undefined): string {
   return status === LEGACY_GRACE_PLACEHOLDER_STATUS ? "لا توجد نتيجة" : String(status || "");
 }
 
-function formatScore(grade: Grade, exam?: Exam) {
-  if (grade.status === LEGACY_GRACE_PLACEHOLDER_STATUS) return "—";
-  return formatGradeScore(grade, exam, "—");
-}
-
-function compactDate(value: string | undefined | null) {
-  return String(value || "").slice(0, 10);
-}
-
-type StudentActionRow = {
-  id: string;
-  date: string;
-  title: string;
-  details: string;
-  tone: "default" | "danger" | "success" | "secondary";
-};
-
-type StudentLogRow = {
-  id: string;
-  date: string;
-  source: string;
-  title: string;
-  details: string;
-  tone: "default" | "danger" | "success" | "secondary" | "info";
-};
-
-/** The Baghdad calendar day of a stored date or timestamp, e.g. 2026/9/27. */
-function profileDay(value?: string | null): string {
-  if (!value) return "—";
-  return formatAppDate(baghdadDateKey(value) || compactDate(value) || value);
-}
-
-function opportunityActionTone(action: string): StudentActionRow["tone"] {
-  if (action.includes("فصل") || action === "خصم" || action === "خصم تلقائي") return "danger";
-  if (action.includes("إعادة تفعيل") || action.includes("فرصة") || action === "إضافة") return "success";
-  return "default";
-}
-
-
-function gradeLogDetails(grade: Grade, exam?: Exam) {
-  const examName = exam?.name || "امتحان محذوف";
-  const examDate = exam?.date ? ` - ${formatAppDate(exam.date)}` : "";
-  return `${examName}${examDate} - النتيجة: ${formatScore(grade, exam)} - الحالة: ${profileGradeStatus(grade.status)}${grade.notes ? ` - ملاحظة: ${shortGradeNoteText(grade.notes)}` : ""}`;
-}
-
-function leaveLogDetails(leave: StudentLeave, exam?: Exam) {
-  const isPeriod = (leave.leaveType || "exam") === "period";
-  const scope = isPeriod
-    ? `فترة من ${formatAppDate(leave.dateFrom || leave.date)} إلى ${formatAppDate(leave.dateTo || leave.dateFrom || leave.date)}`
-    : `امتحان: ${exam?.name || "امتحان محذوف"}`;
-  return `${scope} - السبب: ${leave.reason || "—"}${leave.notes ? ` - ملاحظات: ${leave.notes}` : ""}`;
-}
-
-function callLogDetails(call: StudentCall, exam?: Exam) {
-  const status = call.status || (call.completed ? "تم الاتصال" : "لم يرد");
-  const target = call.target ? ` - الجهة: ${call.target}` : "";
-  return `${exam?.name || "كل الامتحانات / امتحان محذوف"} - ${status}${target}${call.phone ? ` - الهاتف: ${call.phone}` : ""}${call.notes ? ` - ملاحظات: ${call.notes}` : ""}`;
-}
-
 function humanizeProfileText(value: unknown): string {
   return humanizeTeacherProText(String(value || ""))
     .replace(/\[academic-reactivation-link:[^\]]+\]/giu, "")
@@ -262,129 +174,59 @@ function humanizeProfileText(value: unknown): string {
     .trim();
 }
 
-function examPenaltyText(exam?: Exam): string {
-  if (!exam || exam.noDiscount) return "0";
-  if (exam.type === "فاينل") return "فصل/تصفير الفرص حسب القاعدة";
-  const penalty = Number(exam.opportunitiesPenalty || 0);
-  return Number.isFinite(penalty) && penalty > 0 ? String(Math.trunc(penalty)) : "1";
+/** A stored timestamp as «8 أكتوبر 2026». */
+function profileDay(value?: string | null): string {
+  if (!value) return "—";
+  return storyDay(baghdadDateKey(value)) || "—";
 }
 
-function gradeImpactLabel(kind: GradeClassificationKind, grade: Grade, student: Student, exam?: Exam): string {
-  if (!exam) return "تعذر تحديد قاعدة الامتحان لأن الامتحان محذوف.";
-  if (kind === "academic-effect-excluded")
-    return "لا خصم ولا محاسبة: الدرجة محفوظة للمراجعة فقط.";
-  if (kind === "excused") return "لم يتم الخصم: الطالب لديه إجازة تغطي هذا الامتحان.";
-  if (kind === "before-registration") return "لم يتم الخصم: الامتحان قبل تاريخ تسجيل الطالب.";
-  if (kind === "unavailable-exam") return "لم يتم الاحتساب: الامتحان غير متاح حالياً بحسب التفعيل أو الموعد.";
-  if (kind === "grace-period") {
-    const period = findExamGracePeriod(student, exam);
-    return period ? `${describeExamGraceExclusion(period)}.` : `لم يتم الخصم: ${GRACE_PERIOD_EXCUSE_LABEL}.`;
-  }
-  if (kind === "no-discount-protected") return "لم يتم الخصم: هذا الامتحان مضبوط كـ بدون خصم.";
-  if (kind === "missing") return "لا توجد محاسبة لأن الدرجة غير مكتملة.";
-  if (kind === "cheating") return "غش: يؤدي إلى فصل الطالب وتصفير رصيد الفرص.";
-  if (kind === "absent-dismissal") return "غائب: يؤدي إلى فصل الطالب لأنه غياب في امتحان فاينل.";
-  if (kind === "absent-deducted") return `غائب: تم احتسابه كغياب مخصوم، مقدار الخصم ${examPenaltyText(exam)} فرصة.`;
-  if (kind === "discounted") return `درجة ضمن الخصم: تم خصم ${examPenaltyText(exam)} فرصة.`;
-  if (kind === "dismissal") return "درجة فصل/صفر: تؤدي إلى فصل الطالب وتصفير رصيد الفرص.";
-  if (kind === "academic-accounting") return "راسب غير مخصوم: محسوب أكاديمياً بدون خصم فرص مباشر.";
-  if (kind === "failed") return "راسب بدون خصم فرص مباشر.";
-  if (kind === "passed" || kind === "full-mark") return "ناجح: لا يوجد خصم.";
-  return grade.status === "غائب" ? "غائب: راجع سجل الفرص لمعرفة هل تم الخصم." : "لا يوجد أثر فرص مباشر.";
-}
-
-function relatedOpportunityLogsForGrade(
-  grade: Grade,
-  exam: Exam | undefined,
-  opportunityLogs: OpportunityLog[],
-): OpportunityLog[] {
-  return opportunityLogs.filter((log) => {
-    if (log.examId !== grade.examId) return false;
-    const reason = String(log.reason || "");
-    if (log.id.includes(grade.id)) return true;
-    if (exam?.name && reason.includes(exam.name)) return true;
-    if (grade.status === "غائب" && reason.includes("غياب")) return true;
-    if (grade.status === "غش" && reason.includes("غش")) return true;
-    if (grade.status === "درجة" && (reason.includes("درجة") || reason.includes("انتهاء الفرص"))) return true;
-    return false;
-  });
-}
-
-function gradeLogDetailsWithAccounting(
-  grade: Grade,
-  student: Student,
-  exam: Exam | undefined,
-  leaves: StudentLeave[],
-  opportunityLogs: OpportunityLog[],
-) {
-  const base = gradeLogDetails(grade, exam);
-  if (!exam) return base;
-  const kind = classifyGradeAcademicImpact(grade, exam, { student, leaves, opportunityLogs, chapterId: student.activeChapter?.id });
-  const relatedLogs = relatedOpportunityLogsForGrade(grade, exam, opportunityLogs);
-  const logSummary = relatedLogs.length
-    ? ` | سجل الفرص المرتبط: ${relatedLogs
-        .map((log) => `${displayOpportunityAction(log.action)}${log.amount ? ` ${log.amount}` : ""}`)
-        .join("، ")}`
-    : " | لا يوجد سجل خصم مرتبط بهذا الامتحان";
-  return `${base} | تصنيف الدرجة وفق التسويات: ${gradeImpactLabel(kind, grade, student, exam)}${logSummary}`;
-}
-
-type OpportunityTraceRow = {
-  log: OpportunityLog;
-  deltaText: string;
-  details: string;
-};
-
-function buildOpportunityTraceRows(logs: OpportunityLog[]): OpportunityTraceRow[] {
-  return [...logs]
-    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.id || "").localeCompare(String(b.id || "")))
-    .map((log) => {
-      const amount = Math.max(0, Math.trunc(Number(log.amount || 0)));
-      const action = String(log.action || "");
-      let deltaText = "بدون تغيير مباشر";
-
-      if (action === "إضافة" || action === BONUS_OPPORTUNITY_ACTION || action.includes("إعادة تفعيل")) {
-        deltaText = `+${amount}`;
-      } else if (action === "خصم" || action === "خصم تلقائي") {
-        deltaText = `-${amount}`;
-      } else if (action === "إعادة تعيين") {
-        deltaText = "إعادة تعيين وفق إعداد الفصل وقت الإجراء";
-      } else if (
-        action === "رصيد بعد تعهد" ||
-        action === "رصيد إعادة التفعيل"
-      ) {
-        deltaText = `رصيد إعادة التفعيل: ${amount || 2}`;
-      }
-
-      return {
-        log,
-        deltaText,
-        details: `${humanizeProfileText(displayOpportunityReason(log.reason)) || "—"} | أثر الحركة المسجل: ${deltaText}`,
-      };
-    });
-}
-
-/**
- * يبني خريطة بين examId وسجل الخصم المرتبط به (إن وُجد). تُستخدم لعرض بادج
- * «خصم N فرصة» على كل درجة تسببت بخصم فعلي بتبويب الدرجات.
- * نأخذ آخر سجل خصم لكل امتحان ترتيباً زمنياً حتى لو تكرر.
- */
-function buildDeductionLogByExamId(
-  logs: OpportunityLog[],
-): Map<string, OpportunityLog> {
-  const map = new Map<string, OpportunityLog>();
-  const sorted = [...logs].sort(
-    (a, b) =>
-      String(a.date || "").localeCompare(String(b.date || "")) ||
-      String(a.id || "").localeCompare(String(b.id || "")),
+/** Story text: bold grades, exam names and dates; struck cancelled events. */
+function StoryText({ parts }: { parts: StoryPart[] }) {
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.b ? <b key={index}>{part.t}</b> : part.s ? <s key={index}>{part.t}</s> : <React.Fragment key={index}>{part.t}</React.Fragment>,
+      )}
+    </>
   );
-  for (const log of sorted) {
-    if (!log.examId) continue;
-    const action = String(log.action || "");
-    if (action !== "خصم" && action !== "خصم تلقائي" && action !== "خصم يدوي") continue;
-    map.set(log.examId, log);
-  }
-  return map;
+}
+
+function storyMeta(time: string, by: string): string {
+  return [storyTime(time), by].filter(Boolean).join(" · ");
+}
+
+function StoryRow({ event }: { event: StoryEvent }) {
+  const meta = storyMeta(event.time, event.by);
+  const balance = event.balance;
+  return (
+    <li className="tp-story__event" data-tone={event.tone}>
+      <span className="tp-story__dot" aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="tp-story__text"><StoryText parts={event.parts} /></p>
+        {meta ? <p className="tp-story__meta">{meta}</p> : null}
+        {event.subs.length ? (
+          <ul className="tp-story__subs">
+            {event.subs.map((sub) => (
+              <li key={sub.id}>
+                <StoryText parts={sub.parts} />
+                <span className="tp-story__meta"> {[storyDay(sub.dayKey), storyMeta(sub.time, sub.by)].filter(Boolean).join(" · ")}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+      {balance ? (
+        <span className="tp-story__balance" data-zero={balance.dismissed || balance.after === 0 ? "true" : undefined} title="الفرص بعد هالشي">
+          {balance.dismissed ? "مفصول" : balance.limit !== null ? `${balance.after} من ${balance.limit}` : `باقي ${balance.after}`}
+        </span>
+      ) : null}
+    </li>
+  );
+}
+
+function withWhatsAppText(link: string, text: string): string {
+  if (!link || link === "#") return "";
+  return `${link}${link.includes("?") ? "&" : "?"}text=${encodeURIComponent(text)}`;
 }
 
 export function StudentProfileDialog({
@@ -392,7 +234,6 @@ export function StudentProfileDialog({
   open,
   onOpenChange,
   courseName,
-  activeChapterForCourse,
   whatsappLink,
   telegramLink,
 }: StudentProfileDialogProps) {
@@ -400,20 +241,20 @@ export function StudentProfileDialog({
   const setSection = useTeacherStore((state) => state.setSection);
   const canAccessSection = useTeacherStore((state) => state.canAccess);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
-  const [tab, setTab] = useState<StudentFileTab>("timeline");
-  const [gradeViewFilter, setGradeViewFilter] = useState<StudentProfileGradeFilter>("all");
-  const [profileAnchor, setProfileAnchor] = useState<StudentProfileAnchor>(null);
   const [databaseStats, setDatabaseStats] = useState<StudentProfileStatsResponse | null>(null);
   const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
   const [databaseStatsError, setDatabaseStatsError] = useState<string | null>(null);
   const [databaseStudent, setDatabaseStudent] = useState<Student | null>(null);
   const [databaseGrades, setDatabaseGrades] = useState<Grade[]>([]);
   const [databaseExams, setDatabaseExams] = useState<Exam[]>([]);
+  const [databaseCourseExams, setDatabaseCourseExams] = useState<Exam[]>([]);
   const [databaseOpportunityLogs, setDatabaseOpportunityLogs] = useState<OpportunityLog[]>([]);
   const [databaseStudentLeaves, setDatabaseStudentLeaves] = useState<StudentLeave[]>([]);
   const [databaseStudentCalls, setDatabaseStudentCalls] = useState<StudentCall[]>([]);
   const [databaseStudentNotes, setDatabaseStudentNotes] = useState<StudentNote[]>([]);
   const [databaseLogs, setDatabaseLogs] = useState<LogEntry[]>([]);
+  const [databaseStory, setDatabaseStory] = useState<StudentProfileLogResponse["story"] | null>(null);
+  const [databaseCanReadLogs, setDatabaseCanReadLogs] = useState(false);
   const [databaseEnrollmentArchives, setDatabaseEnrollmentArchives] = useState<
     StudentEnrollmentArchiveRecord[]
   >([]);
@@ -423,19 +264,18 @@ export function StudentProfileDialog({
   const [databaseProfileStudentId, setDatabaseProfileStudentId] = useState("");
   const [databaseStatsSnapshotVersion, setDatabaseStatsSnapshotVersion] = useState("");
   const [databaseProfileSnapshotVersion, setDatabaseProfileSnapshotVersion] = useState("");
-  const [timelineVisibleCount, setTimelineVisibleCount] = useState(100);
-  // The technical system log repeats what the timeline already says; it
-  // stays one tap away instead of mixed in.
+  const [storyVisibleCount, setStoryVisibleCount] = useState(STORY_PAGE);
+  const [storyFilter, setStoryFilter] = useState<StoryFilter>("all");
+  // The technical system log stays out of the story: one link at the bottom,
+  // for those who may read the logs.
   const [showSystemLog, setShowSystemLog] = useState(false);
+  const [shareStatus, setShareStatus] = useState("");
   const [manualRefreshKey, setManualRefreshKey] = useState(0);
-  const [profileNavigationVersion, setProfileNavigationVersion] = useState(0);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
-  const profilePanelRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
   const initialFocusRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const onOpenChangeRef = useRef(onOpenChange);
-  const sectionRefs = useRef<Partial<Record<Exclude<StudentProfileAnchor, null>, HTMLDivElement | null>>>({});
   const [isMounted, setIsMounted] = useState(false);
   const retryProfile = useCallback(() => setManualRefreshKey((value) => value + 1), []);
 
@@ -454,193 +294,58 @@ export function StudentProfileDialog({
   const effectiveStudent = useMemo<Student | null>(() => {
     if (!student) return null;
     const remoteStudent = databaseStudent?.id === student.id ? databaseStudent : null;
-    const statsStudent = databaseStats?.studentId === student.id && databaseStats.student
-      ? databaseStats.student as unknown as Student
-      : null;
-    return {
-      ...student,
-      ...(statsStudent || {}),
-      ...(remoteStudent || {}),
-      ...(databaseStats?.studentId === student.id
-        ? {
-            opportunities: databaseStats.opportunities,
-            baseOpportunities: databaseStats.baseOpportunities,
-            opportunityLimit: databaseStats.opportunityLimit,
-            opportunitySource: databaseStats.opportunitySource,
-            opportunityLimitSource: databaseStats.opportunityLimitSource,
-            opportunityHealth: databaseStats.opportunityHealth,
-            hasActiveChapter: databaseStats.hasActiveChapter,
-            activeChapterConflictCount: databaseStats.activeChapterConflictCount,
-            activeChapter: databaseStats.activeChapter,
-            isOpportunityFull: databaseStats.isOpportunityFull,
-            isOpportunityOverLimit: databaseStats.isOpportunityOverLimit,
-          }
-        : {}),
-    };
-  }, [student, databaseStudent, databaseStats]);
+    return { ...student, ...(remoteStudent || {}) };
+  }, [student, databaseStudent]);
 
   const profileExams = useMemo(
     () => (hasAuthoritativeProfile ? [...databaseExams] : []),
     [hasAuthoritativeProfile, databaseExams],
   );
-  const profileExamById = useMemo(
-    () => new Map(profileExams.map((exam) => [exam.id, exam])),
-    [profileExams],
-  );
 
-  const studentGrades = useMemo(() => {
-    const source = hasAuthoritativeProfile ? databaseGrades : [];
-    return [...source].sort((a, b) =>
-      String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")),
-    );
-  }, [hasAuthoritativeProfile, databaseGrades]);
-
-  const studentOpportunities = useMemo(() => {
-    if (!student) return [];
-    const source = hasAuthoritativeProfile ? databaseOpportunityLogs : [];
-    return [...source].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-  }, [hasAuthoritativeProfile, databaseOpportunityLogs, student]);
-
-  const studentLeavesForProfile = useMemo(() => {
-    if (!student) return [];
-    const source = hasAuthoritativeProfile ? databaseStudentLeaves : [];
-    return [...source].sort((a, b) => String(b.date || b.dateFrom || "").localeCompare(String(a.date || a.dateFrom || "")));
-  }, [hasAuthoritativeProfile, databaseStudentLeaves, student]);
-
-  const studentCallsForProfile = useMemo(() => {
-    if (!student) return [];
-    const source = hasAuthoritativeProfile ? databaseStudentCalls : [];
-    return [...source].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
-  }, [hasAuthoritativeProfile, databaseStudentCalls, student]);
-
-  const allStudentNotes = useMemo(() => {
-    if (!student) return [];
-    const source = hasAuthoritativeProfile ? databaseStudentNotes : [];
-    return [...source].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-  }, [hasAuthoritativeProfile, databaseStudentNotes, student]);
-
-  const profileSystemLogs = useMemo(() => {
-    if (!student) return [];
-    const source = hasAuthoritativeProfile ? databaseLogs : [];
-    return [...source].sort((a, b) => String(b.time || "").localeCompare(String(a.time || "")));
-  }, [hasAuthoritativeProfile, databaseLogs, student]);
-
-  const studentGeneralNotes = useMemo(
-    () => allStudentNotes.filter((note) => !isRetiredFollowupNote(note) && note.kind !== "إجراء"),
-    [allStudentNotes],
-  );
-
-  const opportunityTraceRows = useMemo(() => {
-    return buildOpportunityTraceRows(studentOpportunities);
-  }, [studentOpportunities]);
-
-  const opportunityTraceByLogId = useMemo(() => {
-    const map = new Map<string, OpportunityTraceRow>();
-    opportunityTraceRows.forEach((row) => map.set(row.log.id, row));
-    return map;
-  }, [opportunityTraceRows]);
-
-  // خريطة بين examId وسجل الخصم الأخير المرتبط به. تُستخدم لعرض بادج أحمر
-  // «خصم N فرصة» على كل درجة سببت خصماً فعلياً بتبويب الدرجات.
-  const deductionLogByExamId = useMemo(
-    () => buildDeductionLogByExamId(studentOpportunities),
-    [studentOpportunities],
-  );
-
-  const fullStudentLog = useMemo<StudentLogRow[]>(() => {
-    if (!effectiveStudent) return [];
-    const auditLabels = {
-      students: { [effectiveStudent.id]: effectiveStudent.name },
-      exams: Object.fromEntries(profileExams.map((exam) => [exam.id, exam.name])),
+  const story = useMemo(() => {
+    if (!hasAuthoritativeProfile || !effectiveStudent) return null;
+    const remote = effectiveStudent as Student & {
+      activeChapter?: { id?: string; name?: string; opportunities?: number | null } | null;
+      opportunityLimit?: number | null;
     };
-    const rows: StudentLogRow[] = [
-      {
-        id: `student-created-${effectiveStudent.id}`,
-        date: effectiveStudent.createdAt,
-        source: "الطلاب",
-        title: "تسجيل الطالب",
-        details: `${effectiveStudent.name} - ${effectiveStudent.code} - ${courseName(effectiveStudent.courseId)}`,
-        tone: "info",
-      },
-      ...studentGrades.map((grade) => ({
-        id: `grade-${grade.id}`,
-        date: grade.updatedAt || grade.createdAt,
-        source: "الدرجات",
-        title: grade.status === "درجة" ? "درجة مسجلة" : profileGradeStatus(grade.status),
-        details: gradeLogDetailsWithAccounting(grade, effectiveStudent, profileExamById.get(grade.examId), studentLeavesForProfile, studentOpportunities),
-        tone: grade.status === "درجة" ? "default" as const : grade.status === "غائب" ? "danger" as const : "secondary" as const,
-      })),
-      ...studentOpportunities.map((log) => {
-        const trace = opportunityTraceByLogId.get(log.id);
-        return {
-          id: `opp-${log.id}`,
-          date: log.date,
-          source: "الفرص",
-          title: `${displayOpportunityAction(log.action)}${log.amount ? ` ${log.amount}` : ""}`,
-          details: trace?.details || displayOpportunityReason(log.reason) || "—",
-          tone: opportunityActionTone(log.action),
-        };
-      }),
-      ...studentLeavesForProfile.map((leave) => ({
-        id: `leave-${leave.id}`,
-        date: leave.date || leave.dateFrom,
-        source: "الإجازات",
-        title: (leave.leaveType || "exam") === "period" ? "إجازة فترة" : "إجازة امتحان",
-        details: leaveLogDetails(leave, profileExamById.get(leave.examId)),
-        tone: "info" as const,
-      })),
-      ...studentCallsForProfile.map((call) => ({
-        id: `call-${call.id}`,
-        date: call.completedAt || call.createdAt,
-        source: "المكالمات",
-        title: call.status || (call.completed ? "تم الاتصال" : "لم يرد"),
-        details: callLogDetails(call, profileExamById.get(call.examId)),
-        tone: call.completed ? "success" as const : "secondary" as const,
-      })),
-      ...allStudentNotes
-        .filter((note) => !isRetiredFollowupNote(note))
-        .map((note) => {
-          // «فصل الطالب: غياب متكرر…» reads as its own title and reason.
-          const [head, ...rest] = note.kind === "إجراء" ? note.text.split(":") : [];
-          const titled = note.kind === "إجراء" && head && rest.length && head.length <= 40;
-          return {
-            id: `note-${note.id}`,
-            date: note.date,
-            source: note.kind === "إجراء" ? "قرار" : "الملاحظات",
-            title: titled ? head.trim() : note.kind || "ملاحظة",
-            details: titled ? rest.join(":").trim() : note.text,
-            tone: note.kind === "إجراء" ? (note.text.includes("فصل") ? "danger" as const : "secondary" as const) : "info" as const,
-          };
-        }),
-      ...profileSystemLogs.map((log) => {
-        const display = formatAuditLogDisplay(log, auditLabels);
-        return {
-          id: `sys-${log.id}`,
-          date: log.time,
-          source: humanizeProfileText(log.module || "النظام"),
-          title: humanizeProfileText(log.action || "سجل نظام"),
-          details: humanizeProfileText(display.summary || "تم تنفيذ إجراء في النظام."),
-          tone: log.action?.includes("حذف") || log.action?.includes("فصل") ? "danger" as const : "secondary" as const,
-        };
-      }),
-    ];
+    const chapter = remote.activeChapter && remote.activeChapter.id
+      ? { id: String(remote.activeChapter.id), name: String(remote.activeChapter.name || ""), opportunities: remote.activeChapter.opportunities ?? null }
+      : null;
+    return buildStudentStory({
+      student: effectiveStudent as unknown as Record<string, unknown> & { id: string },
+      courseName: courseName(effectiveStudent.courseId),
+      activeChapter: chapter,
+      opportunityLimit: typeof remote.opportunityLimit === "number" ? remote.opportunityLimit : chapter?.opportunities ?? null,
+      exams: profileExams as unknown as Array<Record<string, unknown>>,
+      courseExams: databaseCourseExams as unknown as Array<Record<string, unknown>>,
+      grades: databaseGrades as unknown as Array<Record<string, unknown>>,
+      opportunityLogs: databaseOpportunityLogs as unknown as Array<Record<string, unknown>>,
+      leaves: databaseStudentLeaves as unknown as Array<Record<string, unknown>>,
+      calls: databaseStudentCalls as unknown as Array<Record<string, unknown>>,
+      notes: databaseStudentNotes.filter((note) => !isRetiredFollowupNote(note)) as unknown as Array<Record<string, unknown>>,
+      gracePeriods: databaseStory?.gracePeriods || [],
+      pendingGrades: databaseStory?.pendingGrades || [],
+      audit: databaseStory?.audit || null,
+      todayKey: baghdadTodayKey(),
+    });
+  }, [
+    hasAuthoritativeProfile, effectiveStudent, courseName, profileExams, databaseCourseExams, databaseGrades,
+    databaseOpportunityLogs, databaseStudentLeaves, databaseStudentCalls, databaseStudentNotes, databaseStory,
+  ]);
 
-    return rows
-      .filter((row) => row.date || row.details)
-      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-  }, [effectiveStudent, profileExams, profileExamById, studentGrades, studentOpportunities, studentLeavesForProfile, studentCallsForProfile, allStudentNotes, profileSystemLogs, courseName, opportunityTraceByLogId]);
-
-  const systemLogCount = useMemo(
-    () => fullStudentLog.filter((row) => row.id.startsWith("sys-")).length,
-    [fullStudentLog],
-  );
-  const timelineRows = useMemo(
-    () => (showSystemLog ? fullStudentLog : fullStudentLog.filter((row) => !row.id.startsWith("sys-"))),
-    [fullStudentLog, showSystemLog],
-  );
+  const storyEvents = useMemo(() => {
+    if (!story) return [] as Array<{ group: string; day: string; event: StoryEvent }>;
+    return story.groups.flatMap((group) =>
+      group.days.flatMap((day) =>
+        day.events
+          .filter((event) => storyFilter === "all" || event.cats.includes(storyFilter))
+          .map((event) => ({ group: group.title, day: day.title, event })),
+      ),
+    );
+  }, [story, storyFilter]);
   const visibleStudentLog = useMemo(
-    () => timelineRows.slice(0, timelineVisibleCount),
-    [timelineRows, timelineVisibleCount],
+    () => storyEvents.slice(0, storyVisibleCount),
+    [storyEvents, storyVisibleCount],
   );
 
   useEffect(() => {
@@ -649,22 +354,23 @@ export function StudentProfileDialog({
   }, [open, student?.id]);
 
   useEffect(() => {
-    setTab("timeline");
     setShowSystemLog(false);
-    setGradeViewFilter("all");
-    setProfileAnchor(null);
-    setProfileNavigationVersion(0);
+    setStoryFilter("all");
+    setShareStatus("");
     setDatabaseStats(null);
     setDatabaseStatsLoading(false);
     setDatabaseStatsError(null);
     setDatabaseStudent(null);
     setDatabaseGrades([]);
     setDatabaseExams([]);
+    setDatabaseCourseExams([]);
     setDatabaseOpportunityLogs([]);
     setDatabaseStudentLeaves([]);
     setDatabaseStudentCalls([]);
     setDatabaseStudentNotes([]);
     setDatabaseLogs([]);
+    setDatabaseStory(null);
+    setDatabaseCanReadLogs(false);
     setDatabaseEnrollmentArchives([]);
     setDatabaseGradesLoading(false);
     setDatabaseGradesError(null);
@@ -672,8 +378,12 @@ export function StudentProfileDialog({
     setDatabaseProfileStudentId("");
     setDatabaseStatsSnapshotVersion("");
     setDatabaseProfileSnapshotVersion("");
-    setTimelineVisibleCount(100);
+    setStoryVisibleCount(STORY_PAGE);
   }, [open, student?.id]);
+
+  useEffect(() => {
+    setStoryVisibleCount(STORY_PAGE);
+  }, [storyFilter]);
 
   useEffect(() => {
     if (!open || !student?.id) return;
@@ -726,11 +436,14 @@ export function StudentProfileDialog({
         }
         setDatabaseGrades((result.grades || []) as unknown as Grade[]);
         setDatabaseExams((result.exams || []) as unknown as Exam[]);
+        setDatabaseCourseExams((result.allCourseExams || []) as unknown as Exam[]);
         setDatabaseOpportunityLogs((result.opportunityLogs || []) as unknown as OpportunityLog[]);
         setDatabaseStudentLeaves((result.studentLeaves || []) as unknown as StudentLeave[]);
         setDatabaseStudentCalls((result.studentCalls || []) as unknown as StudentCall[]);
         setDatabaseStudentNotes((result.studentNotes || []) as unknown as StudentNote[]);
         setDatabaseLogs((result.logs || []) as unknown as LogEntry[]);
+        setDatabaseStory(result.story || null);
+        setDatabaseCanReadLogs(Boolean(result.sections?.logs));
         setDatabaseEnrollmentArchives(result.enrollmentArchives || []);
         const remoteStudent = (result as typeof result & { student?: Student | null }).student;
         setDatabaseStudent(remoteStudent?.id === student.id ? remoteStudent : null);
@@ -778,6 +491,7 @@ export function StudentProfileDialog({
       "input:not([disabled])",
       "select:not([disabled])",
       "textarea:not([disabled])",
+      "summary",
       "[tabindex]:not([tabindex='-1'])",
     ].join(",");
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -820,21 +534,9 @@ export function StudentProfileDialog({
     };
   }, [open, isMounted, student?.id]);
 
-  useEffect(() => {
-    if (!open || profileNavigationVersion === 0) return;
-    const frame = window.requestAnimationFrame(() => {
-      const target = tab === "followup" && profileAnchor
-        ? sectionRefs.current[profileAnchor]
-        : profilePanelRef.current;
-      target?.scrollIntoView({ block: "start", behavior: "auto" });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [open, tab, gradeViewFilter, profileAnchor, profileNavigationVersion]);
-
   if (!open || !student || !isMounted) return null;
 
   const profileStudent = effectiveStudent || student;
-  const currentGraceText = formatStudentCurrentGrace(profileStudent);
   const statsForStudent = databaseStats?.studentId === profileStudent.id ? databaseStats : null;
   const statsPending = databaseStatsLoading || (!statsForStudent && !databaseStatsError);
   const profileLogPending = databaseGradesLoading || (!hasAuthoritativeProfile && !databaseGradesError);
@@ -844,193 +546,29 @@ export function StudentProfileDialog({
       databaseStatsSnapshotVersion !== databaseProfileSnapshotVersion,
   );
   const profileError = [
-    databaseStatsError,
     databaseGradesError,
     snapshotConflict
       ? "تغيّرت بيانات الطالب أثناء تحميل الملف؛ أعد المحاولة للحصول على لقطة موحّدة."
       : null,
   ].filter(Boolean).join(" ") || null;
-  const activeChapter = resolveStudentProfileActiveChapter(
-    statsForStudent,
-    profileStudent.activeChapter,
-    activeChapterForCourse(profileStudent.courseId),
-  );
-  // مصدر الفصل النشط الوحيد من الآن فصاعداً هو بيانات النظام (statsForStudent).
-  // عند عدم تحميل الإحصائيات بعد نعرض "جاري التحقق…"، وعند الفشل نعرض خطأ صريح.
-  // لا نعد نستخدم الكاش المحلي (student.activeChapter أو activeChapterForCourse) كقيمة عرض.
-  const activeChapterText = statsPending
-    ? "جاري التحقق…"
-    : statsForStudent?.opportunityHealth === "active-chapter-conflict"
-      ? `تعارض: ${statsForStudent.activeChapterConflictCount} فصول نشطة`
-      : statsForStudent?.opportunityHealth === "missing-active-chapter"
-        ? "لا يوجد فصل نشط"
-        : statsForStudent?.opportunityHealth === "zero-limit"
-          ? `${activeChapter?.name || "الفصل النشط"} — سقف الفرص 0`
-          : activeChapter?.name
-            || (databaseStatsError
-              ? "تعذر التحقق من الفصل النشط"
-              : "لا يوجد فصل نشط");
-  const profileStatValue = (value: number | undefined) => {
-    if (statsPending) return "…";
-    return value ?? "—";
-  };
-  // رصيد الفرص مصدره الوحيد هو بيانات النظام (statsForStudent). عند عدم التحميل
-  // نعرض "…"، وعند الفشل نعرض "—" بدلاً من قراءة الكاش المحلي للطالب.
-  const opportunityText = statsPending
-    ? "…"
-    : statsForStudent
-      ? formatOpportunityBalance(statsForStudent)
-      : "—";
-  const successCount = profileStatValue(statsForStudent?.success);
-  const failedCount = profileStatValue(statsForStudent?.failed);
-  const absentCount = profileStatValue(statsForStudent?.absent);
-  const graceGradeCount = profileStatValue(statsForStudent?.graceGrades);
-  const noDiscountGradeCount = profileStatValue(statsForStudent?.noDiscountGrades);
-  const examCount = profileStatValue(statsForStudent?.exams);
-  const callsCount = profileStatValue(statsForStudent?.calls);
-  const leavesCount = profileStatValue(statsForStudent?.leaves);
-  const notesCount = profileStatValue(statsForStudent?.notes);
-  const dismissalsCount = profileStatValue(statsForStudent?.dismissals);
-  const reactivationsCount = profileStatValue(statsForStudent?.reactivations);
-  const timelineCount = profileStatValue(statsForStudent?.timeline);
-
-  const gradesEmptyMessage = databaseGradesLoading
-    ? "جاري تحميل درجات الطالب…"
-    : databaseGradesError
-      ? databaseGradesError
-      : databaseStats && databaseStats.grades > 0 && studentGrades.length === 0
-        ? "تعذر عرض درجات الطالب الآن. حدّث الصفحة أو أعد فتح الملف."
-        : "لا توجد درجات لهذا الطالب";
-  const filteredGradeRows = filterStudentProfileGrades(
-    studentGrades.map((grade) => {
-      const exam = profileExamById.get(grade.examId);
-      const impactKind = exam
-        ? classifyGradeAcademicImpact(grade, exam, {
-            student: profileStudent,
-            leaves: studentLeavesForProfile,
-            opportunityLogs: studentOpportunities,
-            chapterId: profileStudent.activeChapter?.id,
-          })
-        : "missing";
-      const withinGrace = impactKind === "grace-period";
-      return {
-        grade,
-        status: grade.status,
-        withinGrace,
-        withoutDiscount: Boolean(
-          exam?.noDiscount &&
-            ["no-discount-protected", "passed", "full-mark"].includes(impactKind),
-        ),
-        impactKind,
-        deductionLog: exam ? deductionLogByExamId.get(exam.id) : undefined,
-        historicalDeduction: exam && deductionLogByExamId.has(exam.id)
-          ? !isCurrentChapterOpportunityLog(deductionLogByExamId.get(exam.id)!, profileStudent, exam)
-          : false,
-      };
-    }),
-    gradeViewFilter,
-  );
-
-  const allCards: { key: StudentProfileCardKey; label: string; value: string | number }[] = [
-    { key: "grades", label: "الدرجات", value: profileStatValue(statsForStudent?.grades) },
-    { key: "exams", label: "الامتحانات", value: examCount },
-    { key: "absences", label: "الغيابات", value: absentCount },
-    { key: "grace-grades", label: "فترة السماح", value: graceGradeCount },
-    { key: "no-discount-grades", label: "بدون خصم", value: noDiscountGradeCount },
-    { key: "opportunities", label: "الخصومات/الفرص", value: opportunityText },
-    { key: "status-actions", label: "فصل/إعادة تفعيل", value: `${dismissalsCount}/${reactivationsCount}` },
-    { key: "calls", label: "المكالمات", value: callsCount },
-    { key: "leaves", label: "الإجازات", value: leavesCount },
-    { key: "notes", label: "الملاحظات", value: notesCount },
-    { key: "archives", label: "الملفات السابقة", value: profileLogPending ? "…" : databaseEnrollmentArchives.length },
-    { key: "timeline", label: "السجل الزمني", value: timelineCount },
-  ];
-  const sectionAccess = statsForStudent?.sections;
-  const gradeCardKeys = new Set<StudentProfileCardKey>([
-    "grades", "absences", "exams", "grace-grades", "no-discount-grades",
-  ]);
-  const followUpCardKeys = new Set<StudentProfileCardKey>([
-    "calls", "leaves", "notes",
-  ]);
-  const cards = !sectionAccess
-    ? allCards
-    : allCards.filter(({ key }) => {
-        if (gradeCardKeys.has(key)) return sectionAccess.grades;
-        if (key === "opportunities") return sectionAccess.opportunities;
-        if (followUpCardKeys.has(key)) return sectionAccess.followUp;
-        if (key === "status-actions") return sectionAccess.opportunities || sectionAccess.followUp;
-        if (key === "archives") return sectionAccess.archives;
-        if (key === "timeline") {
-          return sectionAccess.grades || sectionAccess.opportunities || sectionAccess.followUp || sectionAccess.logs;
-        }
-        return true;
-      });
-
-  const followUpTotal = [callsCount, leavesCount, notesCount].every((value) => typeof value === "number")
-    ? Number(callsCount) + Number(leavesCount) + Number(notesCount)
-    : "…";
-  const statValue = (key: StudentProfileCardKey) => allCards.find((card) => card.key === key)?.value ?? "—";
-  const visibleCardKeys = new Set(cards.map((card) => card.key));
-  // A few tabs, each with its count; the finer filters live inside the tab.
-  type ProfileTabItem = { tab: StudentFileTab; label: string; value?: string | number; card?: StudentProfileCardKey };
-  // Four tabs: what happened, the grades, the follow-up, the data.
-  const allProfileTabs: ProfileTabItem[] = [
-    { tab: "timeline", label: "السجل", card: "timeline" },
-    { tab: "grades", label: "الدرجات", card: "grades" },
-    { tab: "followup", label: "المتابعة", value: followUpTotal, card: "calls" },
-    { tab: "details", label: "البيانات" },
-  ];
-  const profileTabs = allProfileTabs.filter((item) => !item.card || visibleCardKeys.has(item.card));
-  // «الوضع هسه»: since when the student is dismissed and what this chapter took.
   const isDismissedNow = hasAuthoritativeProfile && profileStudent.status === "مفصول";
-  const latestDismissalDate = allStudentNotes
-    .filter((note) => note.dismissalKey || note.dismissalDate)
-    .map((note) => note.dismissalDate || note.date)
-    .filter(Boolean)
-    .sort()
-    .pop();
-  const currentChapterDeducted = studentOpportunities
-    .filter((log) => {
-      const action = String(log.action || "");
-      return (action === "خصم" || action === "خصم تلقائي" || action === "خصم يدوي") &&
-        isCurrentChapterOpportunityLog(log, profileStudent, log.examId ? profileExamById.get(log.examId) : undefined);
-    })
-    .reduce((sum, log) => sum + Math.abs(Number(log.amount) || 0), 0);
-  const currentChapterBonuses = studentOpportunities
-    .filter((log) => String(log.action || "") === BONUS_OPPORTUNITY_ACTION &&
-      isCurrentChapterOpportunityLog(log, profileStudent, log.examId ? profileExamById.get(log.examId) : undefined))
-    .reduce((sum, log) => sum + Math.abs(Number(log.amount) || 0), 0);
   const canReturnStudent = isDismissedNow && canAccessSection("dismissed-management");
   const openReturnStudent = () => {
     requestDismissedStudentFocus(profileStudent.code || profileStudent.name);
     onOpenChange(false);
     setSection("dismissed-management");
   };
-  // Chips inside a tab: the finer views the old statistic cards used to open.
-  const openCardTarget = (key: StudentProfileCardKey) => {
-    const target = getStudentProfileCardTarget(key);
-    setTab(target.tab);
-    setGradeViewFilter(target.gradeFilter);
-    setProfileAnchor(target.followupFilter === "all" ? null : target.followupFilter);
-    setProfileNavigationVersion((value) => value + 1);
+
+  const parentLink = withWhatsAppText(whatsappLink(profileStudent.parentPhone || ""), story?.parentMessage || "");
+  const studentLink = withWhatsAppText(whatsappLink(profileStudent.phone || ""), story?.studentMessage || "");
+  // Opens the chat with the message ready, and keeps a copy on the clipboard
+  // in case WhatsApp drops a long prefilled text.
+  const sendWhatsApp = (link: string, text: string, who: string) => {
+    void navigator.clipboard?.writeText(text).catch(() => undefined);
+    window.open(link, "_blank", "noopener,noreferrer");
+    setShareStatus(`انفتح واتساب ${who}، والرسالة منسوخة هم.`);
   };
-  const gradeChips: Array<{ key: StudentProfileCardKey; label: string; filter: string }> = [
-    { key: "grades", label: "الكل", filter: "all" },
-    { key: "absences", label: "الغيابات المؤثرة", filter: "absent" },
-    { key: "grace-grades", label: "فترة السماح", filter: "grace" },
-    { key: "no-discount-grades", label: "بدون خصم", filter: "no-discount" },
-  ];
-  const followUpChips: Array<{ key: StudentProfileCardKey; label: string; anchor: StudentProfileAnchor }> = [
-    { key: "calls", label: "المكالمات", anchor: "calls" },
-    { key: "leaves", label: "الإجازات", anchor: "leaves" },
-    { key: "notes", label: "الملاحظات", anchor: "notes" },
-  ];
-  const openProfileTab = (next: StudentFileTab) => {
-    setTab(next);
-    setGradeViewFilter("all");
-    setProfileAnchor(null);
-    setProfileNavigationVersion((value) => value + 1);
-  };
+
   const profileContacts = [
     profileStudent.phone ? { key: "phone", label: "رقم الطالب", value: profileStudent.phone, href: whatsappLink(profileStudent.phone) } : null,
     profileStudent.parentPhone ? { key: "parent", label: "ولي الأمر", value: profileStudent.parentPhone, href: whatsappLink(profileStudent.parentPhone) } : null,
@@ -1046,20 +584,145 @@ export function StudentProfileDialog({
     formatStudentLocation(profileStudent) === "—" ? "الموقع" : "",
   ].filter(Boolean);
   const profileFacts = [
+    { label: "الدورة", value: courseName(profileStudent.courseId) },
+    { label: "المدرسة", value: profileStudent.school },
     { label: "الجنس", value: profileStudent.gender },
     { label: "نظام الاشتراك", value: profileStudent.courseProgram },
     { label: "الكورس المطلوب", value: profileStudent.courseTerm },
     { label: "نظام الدراسة", value: profileStudent.studyType },
     { label: "الموقع", value: formatStudentLocation(profileStudent) === "—" ? "" : formatStudentLocation(profileStudent) },
-    { label: "الفصل النشط", value: activeChapterText },
-    { label: "تاريخ الإضافة", value: formatAppDate(profileStudent.createdAt, "") },
+    { label: "انسجل", value: profileDay(profileStudent.createdAt) },
   ].filter((fact) => fact.value && fact.value !== "—");
 
-  const showOverview = () => {
-    setTab("details");
-    setGradeViewFilter("all");
-    setProfileAnchor(null);
-    setProfileNavigationVersion((value) => value + 1);
+  const auditLabels = {
+    students: { [profileStudent.id]: profileStudent.name },
+    exams: Object.fromEntries(profileExams.map((exam) => [exam.id, exam.name])),
+  };
+  const systemLogRows = databaseLogs.map((log) => ({
+    id: log.id,
+    stamp: storyStamp(log.time),
+    source: humanizeProfileText(log.module || "النظام"),
+    title: humanizeProfileText(log.action || "سجل نظام"),
+    details: humanizeProfileText(formatAuditLogDisplay(log, auditLabels).summary || ""),
+  }));
+
+  const renderArchive = (archive: StudentEnrollmentArchiveRecord) => {
+    const counts = archiveSnapshotCounts(archive);
+    const oldGrades = archiveSnapshotList(archive, "grades");
+    const oldOpportunities = archiveSnapshotList(archive, "opportunityLogs");
+    const oldLeaves = archiveSnapshotList(archive, "studentLeaves");
+    const oldCalls = archiveSnapshotList(archive, "studentCalls");
+    const oldNotes = archiveSnapshotList(archive, "studentNotes").filter(
+      (note) => !isRetiredFollowupNote(note),
+    );
+    const oldLeaveGradeBackups = archiveSnapshotList(archive, "studentLeaveGradeBackups");
+    const oldAuditLogs = archiveSnapshotList(archive, "auditLogs");
+    const oldStudent = archiveSnapshotObject(archive, "student");
+    const oldFollowups: Array<Record<string, any> & { _kind: string }> = [
+      ...oldLeaves.map((item) => ({ ...item, _kind: "إجازة" })),
+      ...oldCalls.map((item) => ({ ...item, _kind: "مكالمة" })),
+    ];
+    return (
+      <details key={archive.id} className="tp-story__old">
+        <summary>
+          قبل النقل: {archive.fromCourseName || archive.fromCourseId || "دورة سابقة"}
+          <span className="tp-story__meta"> · انقفل يوم {profileDay(archive.createdAt)}{archive.createdByName ? ` · ${archive.createdByName}` : ""}</span>
+        </summary>
+        <div className="mt-3 space-y-3">
+          <div className="rounded-2xl border border-info-line border-s-4 border-s-info-vivid bg-info-soft p-3 text-sm">
+            <p className="font-black text-info">الملفات السابقة — للقراءة فقط</p>
+            <p className="mt-1 leading-6 text-muted-foreground">
+              هذه الملفات جُمّدت قبل نقل الطالب إلى دورة جديدة أو قبل اختياره كطالب جديد. لا تدخل درجاتها أو فرصها أو إجراءاتها في ملفه الحالي.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {archive.resetKind === "course-transfer" ? "نقل إلى دورة جديدة" : "بدء جديد داخل الدورة"}
+              {archive.toCourseName ? ` ← ${archive.toCourseName}` : ""}
+              {archive.reason ? ` — ${archive.reason}` : ""}
+            </p>
+          </div>
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2">
+            <InfoBox label="كود الملف السابق" value={oldStudent.code || "—"} />
+            <InfoBox label="الحالة السابقة" value={oldStudent.status || "—"} />
+            <InfoBox label="الفرص السابقة" value={`${Number(oldStudent.opportunities || 0)} من ${Number(oldStudent.baseOpportunities || 0)}`} />
+            <InfoBox label="بداية الملف" value={profileDay(oldStudent.createdAt)} />
+            <InfoBox label="الدرجات" value={counts.grades || 0} />
+            <InfoBox label="حركات الفرص" value={counts.opportunityLogs || 0} />
+            <InfoBox label="الإجازات" value={counts.studentLeaves || 0} />
+            <InfoBox label="المكالمات" value={counts.studentCalls || 0} />
+          </div>
+          <div className="grid gap-3 xl:grid-cols-2">
+            <details className="rounded-2xl border bg-muted/30 p-3">
+              <summary className="cursor-pointer font-black">الدرجات القديمة ({oldGrades.length})</summary>
+              <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                {oldGrades.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد درجات</p> : oldGrades.map((grade) => (
+                  <div key={String(grade.id)} className="rounded-xl bg-background p-3 text-xs">
+                    <p><b>{grade.exam?.name || "امتحان"}</b> — {profileGradeStatus(grade.status) || "—"} {grade.score !== null && grade.score !== undefined ? <b>({grade.score})</b> : null}</p>
+                    <p className="mt-1 text-muted-foreground"><b>{profileDay(grade.exam?.date || grade.updatedAt || grade.createdAt)}</b></p>
+                  </div>
+                ))}
+              </div>
+            </details>
+            <details className="rounded-2xl border bg-muted/30 p-3">
+              <summary className="cursor-pointer font-black">الفرص والإجراءات القديمة ({oldOpportunities.length})</summary>
+              <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                {oldOpportunities.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد حركات</p> : oldOpportunities.map((log) => (
+                  <div key={String(log.id)} className="rounded-xl bg-background p-3 text-xs">
+                    <p className="font-bold">{displayOpportunityAction(log.action) || "حركة"} {log.amount ? `— ${log.amount}` : ""}</p>
+                    <p className="mt-1 break-words text-muted-foreground">{humanizeProfileText(displayReasonText(log.reason)) || "—"} — <b>{profileDay(log.date)}</b></p>
+                  </div>
+                ))}
+              </div>
+            </details>
+            <details className="rounded-2xl border bg-muted/30 p-3">
+              <summary className="cursor-pointer font-black">الإجازات والمكالمات ({oldLeaves.length + oldCalls.length})</summary>
+              <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                {oldFollowups.map((item) => (
+                  <div key={`${item._kind}-${String(item.id)}`} className="rounded-xl bg-background p-3 text-xs">
+                    <p className="font-bold">{item._kind} — {item.exam?.name || item.status || "بدون امتحان"}</p>
+                    <p className="mt-1 break-words text-muted-foreground">{item.reason || item.notes || item.status || "—"}</p>
+                  </div>
+                ))}
+              </div>
+            </details>
+            <details className="rounded-2xl border bg-muted/30 p-3">
+              <summary className="cursor-pointer font-black">الملاحظات القديمة ({oldNotes.length})</summary>
+              <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                {oldNotes.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد ملاحظات</p> : oldNotes.map((note) => (
+                  <div key={String(note.id)} className="rounded-xl bg-background p-3 text-xs">
+                    <p className="font-bold">{note.kind || "ملاحظة"} — <b>{profileDay(note.date)}</b></p>
+                    <p className="mt-1 break-words text-muted-foreground">{note.text || "—"}</p>
+                  </div>
+                ))}
+              </div>
+            </details>
+            <details className="rounded-2xl border bg-muted/30 p-3">
+              <summary className="cursor-pointer font-black">نسخ درجات الإجازات القديمة ({oldLeaveGradeBackups.length})</summary>
+              <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                {oldLeaveGradeBackups.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد نسخ درجات</p> : oldLeaveGradeBackups.map((backup) => (
+                  <div key={String(backup.id)} className="rounded-xl bg-background p-3 text-xs">
+                    <p className="font-bold">{backup.exam?.name || "امتحان"} — {backup.status || "—"} {backup.score !== null && backup.score !== undefined ? `(${backup.score})` : ""}</p>
+                    <p className="mt-1 break-words text-muted-foreground">{backup.notes ? shortGradeNoteText(backup.notes) : "بدون ملاحظات"} — {profileDay(backup.gradeUpdatedAt || backup.gradeCreatedAt || backup.createdAt)}</p>
+                  </div>
+                ))}
+              </div>
+            </details>
+            {oldAuditLogs.length ? (
+              <details className="rounded-2xl border bg-muted/30 p-3">
+                <summary className="cursor-pointer font-black">سجلات النظام القديمة ({oldAuditLogs.length})</summary>
+                <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                  {oldAuditLogs.map((log) => (
+                    <div key={String(log.id)} className="rounded-xl bg-background p-3 text-xs">
+                      <p className="font-bold">{humanizeProfileText(log.module || "النظام")} — {humanizeProfileText(log.action || "إجراء")}</p>
+                      <p className="mt-1 break-words text-muted-foreground">{humanizeProfileText(formatAuditLogDisplay(log).summary)} — {profileDay(log.time)}</p>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ) : null}
+          </div>
+        </div>
+      </details>
+    );
   };
 
   const profileContent = (
@@ -1084,8 +747,11 @@ export function StudentProfileDialog({
                   <Badge variant={profileStudent.status === "نشط" ? "success" : profileStudent.status === "مفصول" ? "destructive" : "secondary"}>{profileStudent.status}</Badge>
                 ) : null}
                 <Badge variant="outline" className="max-w-full whitespace-normal [overflow-wrap:anywhere]">{profileStudent.code}</Badge>
+                {statsForStudent && profileStudent.status !== "مفصول" ? (
+                  <Badge variant="outline" className="tabular-nums">الفرص {formatOpportunityBalance(statsForStudent, { separator: " من " })}</Badge>
+                ) : null}
               </div>
-              <p id="student-profile-description" className="sr-only">ملف الطالب: المعلومات والإحصائيات والمتابعة</p>
+              <p id="student-profile-description" className="sr-only">ملف الطالب: الخلاصة وكل شي صار وياه</p>
             </div>
             <div className="tp-student-profile__header-actions">
               <button
@@ -1111,497 +777,181 @@ export function StudentProfileDialog({
         </header>
 
         <div ref={contentScrollRef} className="tp-student-profile__content min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 lg:p-6 [scrollbar-gutter:stable]">
-          <div className="tp-student-profile__body space-y-4 sm:space-y-5">
-            <div className="tp-student-profile__metadata" aria-label="معلومات الطالب المختصرة">
-              <span>{courseName(profileStudent.courseId)}</span>
-              {profileStudent.school ? <span>{profileStudent.school}</span> : null}
-              <span>مسجّل {formatAppDate(profileStudent.createdAt, profileStudent.createdAt || "-")}</span>
-            </div>
-
-            {/* Status now: the one thing to know first. The dismissal comes only
-                from the database profile, never from a stale local copy. */}
-            <div
-              className="tp-student-profile__now rounded-2xl border p-4 text-sm sm:rounded-3xl"
-              data-tone={hasAuthoritativeProfile && profileStudent.status === "مفصول" ? "danger" : profileStudent.status === "نشط" ? "success" : "muted"}
-              data-dismissed={hasAuthoritativeProfile && profileStudent.status === "مفصول" ? "true" : undefined}
-            >
-              <p className="text-xs font-black text-muted-foreground">الوضع هسه</p>
-              {hasAuthoritativeProfile && profileStudent.status === "مفصول" ? (
-                <>
-                  <p className="mt-1 break-words text-base font-black text-danger">
-                    مفصول{latestDismissalDate ? ` منذ ${formatAppDate(baghdadDateKey(latestDismissalDate))}` : ""} —{" "}
-                    {displayReasonText(profileStudent.dismissalReason) || "سبب الفصل غير مدخل"}
-                  </p>
-                  {profileStudent.dismissalNotes && <p className="mt-1 break-words text-muted-foreground">ملاحظة: {profileStudent.dismissalNotes}</p>}
-                </>
-              ) : hasAuthoritativeProfile ? (
-                <p className="mt-1 text-base font-black">
-                  {profileStudent.status === "نشط"
-                    ? `نشط${activeChapterText && activeChapterText !== "لا يوجد فصل نشط" ? ` · ${activeChapterText}` : ""}`
-                    : profileStudent.status}
-                </p>
-              ) : (
-                <p className="mt-1 text-sm text-muted-foreground">جاري قراءة ملف الطالب من النظام…</p>
-              )}
-              {currentChapterDeducted > 0 ? (
-                <p className="mt-1 font-bold">
-                  انخصمت {currentChapterDeducted} {currentChapterDeducted === 1 ? "فرصة" : "فرص"} بهذا الفصل
-                  {currentChapterBonuses > 0 ? `، ورجعت ${currentChapterBonuses === 1 ? "فرصة مكافأة" : `${currentChapterBonuses} فرص مكافأة`}` : ""}
-                </p>
-              ) : null}
-              {currentGraceText && <p className="mt-1 text-xs leading-6 text-muted-foreground">{currentGraceText}</p>}
-              {isDismissedNow && (canReturnStudent || profileTabs.some((item) => item.tab === "timeline")) ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {canReturnStudent ? (
-                    <Button type="button" size="sm" onClick={openReturnStudent}>
-                      إرجاع الطالب…
-                    </Button>
-                  ) : null}
-                  {profileTabs.some((item) => item.tab === "timeline") ? (
-                    <Button type="button" variant="outline" size="sm" onClick={() => openProfileTab("timeline")}>
-                      شنو صار بالتسلسل
-                    </Button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-
-            {/* Four figures from the database profile; «…» until it answers. */}
-            <dl className="tp-student-profile__figures" aria-label="أرقام الطالب">
-              <div>
-                <dt>الفرص</dt>
-                <dd dir="ltr">{hasAuthoritativeProfile ? opportunityText : "…"}</dd>
-              </div>
-              <div>
-                <dt>الامتحانات</dt>
-                <dd>{statValue("exams")}</dd>
-              </div>
-              <div>
-                <dt>الغيابات</dt>
-                <dd>{statValue("absences")}</dd>
-              </div>
-              <div>
-                <dt>المكالمات</dt>
-                <dd>{callsCount}</dd>
-              </div>
-            </dl>
-
-            <nav className="tp-student-profile__nav tp-student-profile__nav--tabs" role="tablist" aria-label="أقسام ملف الطالب">
-              {profileTabs.map((item) => (
-                <button
-                  key={item.tab}
-                  type="button"
-                  role="tab"
-                  onClick={() => (item.tab === "details" ? showOverview() : openProfileTab(item.tab))}
-                  aria-selected={tab === item.tab}
-                  aria-pressed={tab === item.tab}
-                  aria-controls="student-profile-panel"
-                  className="tp-student-profile__stat"
-                >
-                  <span className="tp-student-profile__stat-label">{item.label}</span>
-                </button>
-              ))}
-            </nav>
-
+          <div className="tp-student-profile__body tp-story space-y-4 sm:space-y-5">
             <ProfileLoadNotice
-              loading={(statsPending || profileLogPending) && !profileError}
+              loading={profileLogPending && !profileError}
               error={profileError}
-              hasFallback={!hasAuthoritativeProfile || Boolean(statsForStudent)}
               onRetry={retryProfile}
             />
 
-            <div ref={profilePanelRef} id="student-profile-panel" className="tp-student-profile__panel" role="region" aria-live="polite">
-            {tab === "details" && (
-              <div className="space-y-4">
-                <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                  <h4 className="mb-3 text-base font-black">التواصل</h4>
-                  {profileContacts.length ? (
-                    <div className="flex flex-wrap gap-2">
-                      {profileContacts.map((contact) => (
-                        <span key={contact.key} className="inline-flex min-h-10 max-w-full items-center gap-2 rounded-xl border bg-muted/40 px-3 py-1.5 text-sm">
-                          <span className="text-xs font-bold text-muted-foreground">{contact.label}</span>
-                          <ContactLink href={contact.href}>{contact.value}</ContactLink>
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  {missingProfileFacts.length ? (
-                    <p className="mt-3 rounded-xl border border-warning-line bg-warning-soft px-3 py-2 text-xs font-bold text-warning">
-                      ناقص: {missingProfileFacts.join("، ")}
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
-                  <div className="min-w-0 rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                    <h4 className="mb-3 text-base font-black">البيانات</h4>
-                    <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
-                      {profileFacts.map((fact) => (
-                        <div key={fact.label} className="flex min-w-0 flex-wrap gap-x-2">
-                          <dt className="text-muted-foreground">{fact.label}:</dt>
-                          <dd className="min-w-0 break-words font-bold">{fact.value}</dd>
-                        </div>
-                      ))}
-                    </dl>
+            {story ? (
+              <>
+                <section className="tp-story__summary" data-tone={profileStudent.status === "مفصول" ? "danger" : profileStudent.status === "نشط" ? "success" : "muted"} aria-label="الخلاصة">
+                  <h3 className="tp-story__label">الخلاصة</h3>
+                  {story.summary.map((parts, index) => (
+                    <p key={index} className={index === 0 ? "tp-story__lead" : "tp-story__line"}><StoryText parts={parts} /></p>
+                  ))}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="tp-student-profile__control border-success-line bg-card font-black text-success hover:bg-success-soft disabled:opacity-50"
+                      disabled={!parentLink}
+                      title={parentLink ? "يفتح واتساب ولي الأمر والخلاصة جاهزة" : "رقم ولي الأمر ما مسجّل"}
+                      onClick={() => sendWhatsApp(parentLink, story.parentMessage, "ولي الأمر")}
+                    >
+                      رسالة لولي الأمر
+                    </button>
+                    <button
+                      type="button"
+                      className="tp-student-profile__control border-border bg-card font-black hover:bg-muted disabled:opacity-50"
+                      disabled={!studentLink}
+                      title={studentLink ? "يفتح واتساب الطالب والتقرير الكامل جاهز" : "رقم الطالب ما مسجّل"}
+                      onClick={() => sendWhatsApp(studentLink, story.studentMessage, "الطالب")}
+                    >
+                      تقرير كامل للطالب
+                    </button>
+                    {canReturnStudent ? (
+                      <Button type="button" size="sm" onClick={openReturnStudent}>إرجاع الطالب…</Button>
+                    ) : null}
                   </div>
+                  {shareStatus ? <p role="status" className="tp-story__meta">{shareStatus}</p> : null}
+                </section>
 
-                  <div className="min-w-0 rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                    <h4 className="mb-3 text-base font-black">الأداء</h4>
-                    <div className="flex flex-wrap gap-2 text-sm">
-                      <span className="rounded-full bg-success-soft px-3 py-1 font-bold text-success">ناجح {successCount}</span>
-                      <span className="rounded-full bg-danger-soft px-3 py-1 font-bold text-danger">راسب غير مخصوم {failedCount}</span>
-                      <span className="rounded-full bg-warning-soft px-3 py-1 font-bold text-warning">غياب {absentCount}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <h4 className="text-base font-black">حركات الفرص</h4>
-                    <span className="text-xs text-muted-foreground">الفرص الآن: <b dir="ltr">{opportunityText}</b></span>
-                  </div>
-                  <div className="space-y-2">
-                    {opportunityTraceRows.length === 0 ? (
-                      <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="ما صارت حركة على فرصه" />
-                    ) : (
-                      [...opportunityTraceRows].reverse().map((row) => (
-                        <div key={row.log.id} className="grid min-w-0 gap-1.5 rounded-xl bg-muted/45 px-3 py-2 text-sm sm:grid-cols-[6.5rem_auto_minmax(0,1fr)] sm:items-center">
-                          <span className="text-xs text-muted-foreground">{profileDay(row.log.date)}</span>
-                          <Badge className="w-fit" variant={row.log.action === "خصم" || row.log.action === "خصم تلقائي" || row.log.action === "خصم يدوي" ? "destructive" : "default"}>
-                            {displayOpportunityAction(row.log.action)} {row.log.amount}
-                          </Badge>
-                          <span className="min-w-0 break-words text-muted-foreground">{row.details}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {visibleCardKeys.has("archives") && databaseEnrollmentArchives.length > 0 ? (
-                  <Button type="button" variant="outline" onClick={() => openProfileTab("archives")}>
-                    الملفات السابقة ({databaseEnrollmentArchives.length})
-                  </Button>
+                {story.openItems.length ? (
+                  <section className="tp-story__open" aria-label="يحتاج متابعة">
+                    <h3 className="tp-story__label">يحتاج متابعة</h3>
+                    <ul>
+                      {story.openItems.map((parts, index) => <li key={index}><StoryText parts={parts} /></li>)}
+                    </ul>
+                  </section>
                 ) : null}
-              </div>
-            )}
 
-            {tab === "grades" && (
-              <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="عرض الدرجات">
-                  {gradeChips.map((chip) => (
+                {story.strip.length ? (
+                  <section className="tp-story__strip" aria-label="شريط الامتحانات">
+                    <h3 className="tp-story__label">امتحانات {story.stripChapterName}</h3>
+                    <ol>
+                      {story.strip.map((item) => (
+                        <li key={item.id} title={`${item.name} (${storyDay(item.dayKey)}): ${item.result}`}>
+                          <i data-kind={item.kind} aria-hidden="true" />
+                          <span>{item.index}</span>
+                          <span className="sr-only">{item.name}: {item.result}</span>
+                        </li>
+                      ))}
+                    </ol>
+                    <p className="tp-story__legend">
+                      {STRIP_LEGEND.filter(([kind]) => story.strip.some((item) => item.kind === kind)).map(([kind, label]) => (
+                        <span key={kind}><i data-kind={kind} aria-hidden="true" />{label}</span>
+                      ))}
+                    </p>
+                  </section>
+                ) : null}
+
+                <div className="tp-story__filters" role="group" aria-label="فلترة القصة">
+                  {STORY_FILTERS.map(([key, label]) => (
                     <button
-                      key={chip.key}
+                      key={key}
                       type="button"
-                      aria-pressed={gradeViewFilter === chip.filter}
-                      onClick={() => openCardTarget(chip.key)}
-                      className="tp-student-profile__control rounded-full border-border bg-card font-bold aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-primary"
+                      aria-pressed={storyFilter === key}
+                      onClick={() => setStoryFilter(key)}
+                      className="tp-student-profile__control rounded-full border-border bg-card font-bold aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground"
                     >
-                      {chip.label}
-                      <span dir="ltr" className="rounded-full bg-muted px-2 text-xs tabular-nums">{statValue(chip.key)}</span>
+                      {label}
                     </button>
                   ))}
                 </div>
-                <h4 className="mb-4 text-base font-black sm:text-lg">{gradeViewFilter === "absent" ? "غيابات الطالب المؤثرة" : gradeViewFilter === "grace" ? "درجات ضمن فترة السماح" : gradeViewFilter === "no-discount" ? "درجات بدون خصم" : "درجات الطالب"}</h4>
-                <div className="space-y-2">
-                  {filteredGradeRows.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText={gradeViewFilter === "all" ? gradesEmptyMessage : "لا توجد درجات مطابقة لهذا التصنيف"} /> : filteredGradeRows.map(({ grade, withinGrace, withoutDiscount, deductionLog, historicalDeduction }) => {
-                    const exam = profileExamById.get(grade.examId);
-                    return (
-                      <div key={grade.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
-                        <div className="min-w-0">
-                          <b className="break-words">{exam?.name || "امتحان محذوف"}</b>
-                          <p className="text-xs text-muted-foreground">{formatAppDate(exam?.date)}</p>
-                          {grade.notes ? <div className="mt-2"><GradeNoteBanner notes={grade.notes} /></div> : null}
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {withinGrace && <Badge className="w-fit" variant="warning">{GRACE_PERIOD_EXCUSE_LABEL}</Badge>}
-                          {!withinGrace && withoutDiscount && <Badge className="w-fit" variant="info">بدون خصم</Badge>}
-                          {deductionLog && (
-                            <Badge className="w-fit" variant={historicalDeduction ? "outline" : "destructive"} title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>
-                              {historicalDeduction ? `خصم سابق: ${deductionLog.amount} — لا يؤثر على الفصل الحالي` : `خصم ${deductionLog.amount} فرصة`}
-                            </Badge>
-                          )}
-                          <Badge className="w-fit" variant={withinGrace || withoutDiscount ? "outline" : grade.status === "درجة" ? "default" : grade.status === "غائب" ? "destructive" : grade.status === "مجاز" ? "warning" : "secondary"}>{profileGradeStatus(grade.status)}</Badge>
-                        </div>
-                        <span className="font-black">{formatScore(grade, exam)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
-            {tab === "followup" && (
-              <div className="grid gap-4 xl:grid-cols-2">
-                <div className="flex flex-wrap gap-2 xl:col-span-2" role="group" aria-label="أقسام المتابعة">
-                  {followUpChips.map((chip) => (
+                {visibleStudentLog.length === 0 ? (
+                  <EmptyState compact title={storyFilter === "all" ? "ما صار شي لهذا الطالب بعد" : "ماكو شي بهالتصنيف"} />
+                ) : (
+                  <div className="tp-story__list">
+                    {visibleStudentLog.map(({ group, day, event }, index) => {
+                      const previous = index > 0 ? visibleStudentLog[index - 1] : null;
+                      const newGroup = !previous || previous.group !== group;
+                      const newDay = newGroup || previous?.day !== day;
+                      return (
+                        <React.Fragment key={event.id}>
+                          {newGroup ? <h3 className="tp-story__chapter">{group}</h3> : null}
+                          {newDay ? <h4 className="tp-story__day">{day}</h4> : null}
+                          <ul className="tp-story__events"><StoryRow event={event} /></ul>
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                )}
+                {visibleStudentLog.length < storyEvents.length ? (
+                  <div className="flex justify-center">
                     <button
-                      key={chip.key}
                       type="button"
-                      aria-pressed={profileAnchor === chip.anchor}
-                      onClick={() => openCardTarget(chip.key)}
-                      className="tp-student-profile__control rounded-full border-border bg-card font-bold aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-primary"
+                      onClick={() => setStoryVisibleCount((value) => value + STORY_PAGE)}
+                      className="min-h-11 max-w-full touch-manipulation rounded-xl border px-4 py-2 text-sm font-black text-primary [overflow-wrap:anywhere] hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-primary/30"
                     >
-                      {chip.label}
-                      <span dir="ltr" className="rounded-full bg-muted px-2 text-xs tabular-nums">{statValue(chip.key)}</span>
+                      عرض الأقدم ({storyEvents.length - visibleStudentLog.length})
                     </button>
-                  ))}
-                </div>
-                <div ref={(node) => { sectionRefs.current.calls = node; }} className="scroll-mt-4 rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                  <h4 className="mb-4 text-base font-black sm:text-lg">مكالمات الطالب</h4>
-                  <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
-                    {studentCallsForProfile.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="لا توجد مكالمات لهذا الطالب" /> : studentCallsForProfile.map((call) => {
-                      const exam = profileExamById.get(call.examId);
-                      return (
-                        <div key={call.id} className="rounded-2xl bg-muted/55 p-3 text-sm">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <Badge variant={call.completed ? "default" : "secondary"}>{call.status || (call.completed ? "تم الاتصال" : "لم يرد")}</Badge>
-                            <span className="text-xs text-muted-foreground">{formatAppDate(call.completedAt || call.createdAt)}</span>
-                          </div>
-                          <p className="mt-2 break-words font-bold">{exam?.name || "بدون امتحان مرتبط"}</p>
-                          <p className="mt-1 break-words text-xs text-muted-foreground">{callLogDetails(call, exam)}</p>
-                        </div>
-                      );
-                    })}
                   </div>
-                </div>
+                ) : null}
 
-                <div ref={(node) => { sectionRefs.current.leaves = node; }} className="scroll-mt-4 rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                  <h4 className="mb-4 text-base font-black sm:text-lg">إجازات الطالب</h4>
-                  <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
-                    {studentLeavesForProfile.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="لا توجد إجازات لهذا الطالب" /> : studentLeavesForProfile.map((leave) => {
-                      const exam = profileExamById.get(leave.examId);
-                      return (
-                        <div key={leave.id} className="rounded-2xl bg-muted/55 p-3 text-sm">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <Badge variant="outline">{(leave.leaveType || "exam") === "period" ? "إجازة فترة" : "إجازة امتحان"}</Badge>
-                            <span className="text-xs text-muted-foreground">{formatAppDate(leave.date || leave.dateFrom)}</span>
-                          </div>
-                          <p className="mt-2 break-words font-bold">{exam?.name || "بدون امتحان مرتبط"}</p>
-                          <p className="mt-1 break-words text-xs text-muted-foreground">{leaveLogDetails(leave, exam)}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                {databaseEnrollmentArchives.length ? databaseEnrollmentArchives.map(renderArchive) : null}
+              </>
+            ) : profileLogPending ? (
+              <LoadingState title="جاري تحميل ملف الطالب…" />
+            ) : databaseGradesError ? (
+              <div role="alert"><EmptyState compact icon={AlertCircle} title="تعذر تحميل ملف الطالب." /></div>
+            ) : null}
 
-                <div ref={(node) => { sectionRefs.current.notes = node; }} className="scroll-mt-4 rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                  <h4 className="mb-4 text-base font-black sm:text-lg">ملاحظات الطالب</h4>
-                  <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
-                    {studentGeneralNotes.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="لا توجد ملاحظات عامة لهذا الطالب" /> : studentGeneralNotes.map((note) => (
-                      <div key={note.id} className="rounded-2xl bg-muted/55 p-3 text-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <Badge variant={note.kind === "إجراء" ? "secondary" : "outline"}>{note.kind || "ملاحظة"}</Badge>
-                          <span className="text-xs text-muted-foreground">{formatAppDate(note.date)}</span>
-                        </div>
-                        <p className="mt-2 break-words">{note.text}</p>
-                      </div>
+            <details className="tp-story__data">
+              <summary>بيانات التواصل والتسجيل</summary>
+              <div className="mt-3 space-y-3">
+                {profileContacts.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {profileContacts.map((contact) => (
+                      <span key={contact.key} className="inline-flex min-h-10 max-w-full items-center gap-2 rounded-xl border bg-muted/40 px-3 py-1.5 text-sm">
+                        <span className="text-xs font-bold text-muted-foreground">{contact.label}</span>
+                        <ContactLink href={contact.href}>{contact.value}</ContactLink>
+                      </span>
                     ))}
                   </div>
-                </div>
-              </div>
-            )}
-
-            {tab === "archives" && (
-              <div className="space-y-4">
-                <Button type="button" variant="ghost" size="sm" onClick={showOverview}>رجوع للبيانات</Button>
-                <div className="rounded-2xl border border-info-line border-s-4 border-s-info-vivid bg-info-soft p-4 text-sm shadow-sm sm:rounded-3xl sm:p-5">
-                  <h4 className="font-black text-info">الملفات السابقة — للقراءة فقط</h4>
-                  <p className="mt-1 leading-6 text-muted-foreground">
-                    هذه الملفات جُمّدت قبل نقل الطالب إلى دورة جديدة أو قبل اختياره كطالب جديد. لا تدخل درجاتها أو فرصها أو إجراءاتها في ملفه الحالي.
+                ) : null}
+                {missingProfileFacts.length ? (
+                  <p className="rounded-xl border border-warning-line bg-warning-soft px-3 py-2 text-xs font-bold text-warning">
+                    ناقص: {missingProfileFacts.join("، ")}
                   </p>
-                </div>
-                {databaseEnrollmentArchives.length === 0 ? (
-                  <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="لا توجد ملفات سابقة مؤرشفة لهذا الطالب" />
-                ) : (
-                  databaseEnrollmentArchives.map((archive) => {
-                    const counts = archiveSnapshotCounts(archive);
-                    const oldGrades = archiveSnapshotList(archive, "grades");
-                    const oldOpportunities = archiveSnapshotList(archive, "opportunityLogs");
-                    const oldLeaves = archiveSnapshotList(archive, "studentLeaves");
-                    const oldCalls = archiveSnapshotList(archive, "studentCalls");
-                    const oldNotes = archiveSnapshotList(archive, "studentNotes").filter(
-                      (note) => !isRetiredFollowupNote(note),
-                    );
-                    const oldLeaveGradeBackups = archiveSnapshotList(archive, "studentLeaveGradeBackups");
-                    const oldAuditLogs = archiveSnapshotList(archive, "auditLogs");
-                    const oldStudent = archiveSnapshotObject(archive, "student");
-                    const oldFollowups: Array<Record<string, any> & { _kind: string }> = [
-                      ...oldLeaves.map((item) => ({ ...item, _kind: "إجازة" })),
-                      ...oldCalls.map((item) => ({ ...item, _kind: "مكالمة" })),
-                    ];
-                    return (
-                      <article key={archive.id} className="rounded-2xl border bg-card/90 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="outline">قراءة فقط</Badge>
-                              <Badge variant="secondary">
-                                {archive.resetKind === "course-transfer" ? "نقل إلى دورة جديدة" : "بدء جديد داخل الدورة"}
-                              </Badge>
-                            </div>
-                            <h5 className="mt-3 text-base font-black sm:text-lg">
-                              {archive.fromCourseName || archive.fromCourseId || "دورة سابقة"}
-                              {archive.toCourseName ? ` ← ${archive.toCourseName}` : ""}
-                            </h5>
-                            <p className="mt-1 text-xs leading-6 text-muted-foreground">{archive.reason || "أرشفة ملف الطالب السابق"}</p>
-                          </div>
-                          <div className="text-left text-xs text-muted-foreground">
-                            <p>{formatAppDate(archive.createdAt)}</p>
-                            {archive.createdByName && <p className="mt-1">بواسطة: {archive.createdByName}</p>}
-                          </div>
-                        </div>
-
-                        <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2">
-                          <InfoBox label="كود الملف السابق" value={oldStudent.code || "—"} />
-                          <InfoBox label="الحالة السابقة" value={oldStudent.status || "—"} />
-                          <InfoBox label="نظام الاشتراك / الكورس المطلوب" value={[oldStudent.courseProgram, oldStudent.courseTerm].filter(Boolean).join(" — ") || "—"} />
-                          <InfoBox label="نظام الدراسة" value={oldStudent.studyType || "—"} />
-                          <InfoBox label="الموقع السابق" value={[oldStudent.locationScope || oldStudent.mainSite, oldStudent.subSite].filter(Boolean).join(" — ") || "—"} />
-                          <InfoBox label="الرصيد السابق" value={`${Number(oldStudent.opportunities || 0)}/${Number(oldStudent.baseOpportunities || 0)}`} />
-                          <InfoBox label="تاريخ بداية الملف" value={formatAppDate(oldStudent.createdAt)} />
-                          <InfoBox label="هاتف الطالب" value={oldStudent.phone || "—"} />
-                          <InfoBox label="هاتف ولي الأمر" value={oldStudent.parentPhone || "—"} />
-                          <InfoBox label="معرف تيليجرام" value={oldStudent.telegram || "—"} />
-                          <InfoBox label="المدرسة" value={oldStudent.school || "—"} />
-                        </div>
-
-                        <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2">
-                          <InfoBox label="الدرجات" value={counts.grades || 0} />
-                          <InfoBox label="حركات الفرص" value={counts.opportunityLogs || 0} />
-                          <InfoBox label="الإجازات" value={counts.studentLeaves || 0} />
-                          <InfoBox label="المكالمات" value={counts.studentCalls || 0} />
-                          <InfoBox label="الملاحظات" value={oldNotes.length} />
-                          <InfoBox label="نسخ درجات الإجازات" value={counts.studentLeaveGradeBackups || 0} />
-                          <InfoBox label="سجلات النظام" value={counts.auditLogs || 0} />
-                        </div>
-
-                        <div className="mt-4 grid gap-3 xl:grid-cols-2">
-                          <details className="rounded-2xl border bg-muted/30 p-3">
-                            <summary className="cursor-pointer font-black">الدرجات القديمة ({oldGrades.length})</summary>
-                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-                              {oldGrades.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد درجات</p> : oldGrades.map((grade) => (
-                                <div key={String(grade.id)} className="rounded-xl bg-background p-3 text-xs">
-                                  <p className="font-bold">{grade.exam?.name || "امتحان"} — {profileGradeStatus(grade.status) || "—"} {grade.score !== null && grade.score !== undefined ? `(${grade.score})` : ""}</p>
-                                  <p className="mt-1 text-muted-foreground">{formatAppDate(grade.exam?.date || grade.updatedAt || grade.createdAt)}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </details>
-                          <details className="rounded-2xl border bg-muted/30 p-3">
-                            <summary className="cursor-pointer font-black">الفرص والإجراءات القديمة ({oldOpportunities.length})</summary>
-                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-                              {oldOpportunities.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد حركات</p> : oldOpportunities.map((log) => (
-                                <div key={String(log.id)} className="rounded-xl bg-background p-3 text-xs">
-                                  <p className="font-bold">{displayOpportunityAction(log.action) || "حركة"} {log.amount ? `— ${log.amount}` : ""}</p>
-                                  <p className="mt-1 break-words text-muted-foreground">{humanizeProfileText(displayOpportunityReason(log.reason)) || "—"} — {formatAppDate(log.date)}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </details>
-                          <details className="rounded-2xl border bg-muted/30 p-3">
-                            <summary className="cursor-pointer font-black">الإجازات والمكالمات ({oldLeaves.length + oldCalls.length})</summary>
-                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-                              {oldFollowups.map((item) => (
-                                <div key={`${item._kind}-${String(item.id)}`} className="rounded-xl bg-background p-3 text-xs">
-                                  <p className="font-bold">{item._kind} — {item.exam?.name || item.status || "بدون امتحان"}</p>
-                                  <p className="mt-1 break-words text-muted-foreground">{item.reason || item.notes || item.status || "—"}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </details>
-                          <details className="rounded-2xl border bg-muted/30 p-3">
-                            <summary className="cursor-pointer font-black">الملاحظات القديمة ({oldNotes.length})</summary>
-                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-                              {oldNotes.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد ملاحظات</p> : oldNotes.map((note) => (
-                                <div key={String(note.id)} className="rounded-xl bg-background p-3 text-xs">
-                                  <p className="font-bold">{note.kind || "ملاحظة"} — {formatAppDate(note.date)}</p>
-                                  <p className="mt-1 break-words text-muted-foreground">{note.text || "—"}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </details>
-                          <details className="rounded-2xl border bg-muted/30 p-3">
-                            <summary className="cursor-pointer font-black">نسخ درجات الإجازات القديمة ({oldLeaveGradeBackups.length})</summary>
-                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-                              {oldLeaveGradeBackups.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد نسخ درجات</p> : oldLeaveGradeBackups.map((backup) => (
-                                <div key={String(backup.id)} className="rounded-xl bg-background p-3 text-xs">
-                                  <p className="font-bold">{backup.exam?.name || "امتحان"} — {backup.status || "—"} {backup.score !== null && backup.score !== undefined ? `(${backup.score})` : ""}</p>
-                                  <p className="mt-1 break-words text-muted-foreground">{backup.notes ? shortGradeNoteText(backup.notes) : "بدون ملاحظات"} — {formatAppDate(backup.gradeUpdatedAt || backup.gradeCreatedAt || backup.createdAt)}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </details>
-                          <details className="rounded-2xl border bg-muted/30 p-3">
-                            <summary className="cursor-pointer font-black">سجلات النظام القديمة ({oldAuditLogs.length})</summary>
-                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-                              {oldAuditLogs.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد سجلات نظام</p> : oldAuditLogs.map((log) => (
-                                <div key={String(log.id)} className="rounded-xl bg-background p-3 text-xs">
-                                  <p className="font-bold">{humanizeProfileText(log.module || "النظام")} — {humanizeProfileText(log.action || "إجراء")}</p>
-                                  <p className="mt-1 break-words text-muted-foreground">{humanizeProfileText(formatAuditLogDisplay(log).summary)} — {formatAppDate(log.time)}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </details>
-                        </div>
-                      </article>
-                    );
-                  })
-                )}
+                ) : null}
+                <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+                  {profileFacts.map((fact) => (
+                    <div key={fact.label} className="flex min-w-0 flex-wrap gap-x-2">
+                      <dt className="text-muted-foreground">{fact.label}:</dt>
+                      <dd className="min-w-0 break-words font-bold">{fact.value}</dd>
+                    </div>
+                  ))}
+                </dl>
               </div>
-            )}
+            </details>
 
-            {tab === "timeline" && (
-            <div className="tp-profile-timeline">
-              {timelineRows.length === 0 ? (
-                <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="ما صار شي لهذا الطالب بعد" />
-              ) : (
-                <ol className="tp-profile-timeline__list">
-                  {visibleStudentLog.map((row, index) => {
-                    const day = profileDay(row.date);
-                    const previous = index > 0 ? visibleStudentLog[index - 1] : null;
-                    const newDay = !previous || profileDay(previous.date) !== day;
-                    return (
-                      <li key={row.id} className="tp-profile-timeline__row" data-tone={row.tone}>
-                        {newDay ? <p className="tp-profile-timeline__day">{day}</p> : null}
-                        <div className="tp-profile-timeline__event">
-                          <span className="tp-profile-timeline__dot" aria-hidden="true" />
-                          <div className="min-w-0">
-                            <p className="tp-profile-timeline__title">
-                              <span className="tp-profile-timeline__source">{row.source}</span>
-                              {row.title}
-                            </p>
-                            {row.details ? <p className="tp-profile-timeline__details">{row.details}</p> : null}
-                          </div>
+            {databaseCanReadLogs && systemLogRows.length ? (
+              <div className="tp-story__system">
+                <button
+                  type="button"
+                  aria-pressed={showSystemLog}
+                  onClick={() => setShowSystemLog((value) => !value)}
+                  className="min-h-11 max-w-full touch-manipulation rounded-xl px-3 py-2 text-xs font-bold text-muted-foreground hover:bg-muted"
+                >
+                  {showSystemLog ? "إخفاء سجل النظام التقني" : `سجل النظام التقني (${systemLogRows.length})`}
+                </button>
+                {showSystemLog ? (
+                  <ul className="tp-story__events mt-2">
+                    {systemLogRows.map((row) => (
+                      <li key={row.id} className="tp-story__event" data-tone="admin">
+                        <span className="tp-story__dot" aria-hidden="true" />
+                        <div className="min-w-0">
+                          <p className="tp-story__text"><span className="tp-story__source">{row.source}</span>{row.title}</p>
+                          <p className="tp-story__meta">{[storyDay(row.stamp.dayKey), storyTime(row.stamp.time)].filter(Boolean).join(" · ")}{row.details ? ` — ${row.details}` : ""}</p>
                         </div>
                       </li>
-                    );
-                  })}
-                </ol>
-              )}
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                {visibleStudentLog.length < timelineRows.length && (
-                  <button
-                    type="button"
-                    onClick={() => setTimelineVisibleCount((value) => value + 100)}
-                    className="min-h-11 max-w-full touch-manipulation rounded-xl border px-4 py-2 text-sm font-black text-primary [overflow-wrap:anywhere] hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  >
-                    عرض الأقدم ({timelineRows.length - visibleStudentLog.length})
-                  </button>
-                )}
-                {systemLogCount > 0 && (
-                  <button
-                    type="button"
-                    aria-pressed={showSystemLog}
-                    onClick={() => setShowSystemLog((value) => !value)}
-                    className="min-h-11 max-w-full touch-manipulation rounded-xl px-3 py-2 text-xs font-bold text-muted-foreground hover:bg-muted"
-                  >
-                    {showSystemLog ? "إخفاء سجل النظام التقني" : `إظهار سجل النظام التقني (${systemLogCount})`}
-                  </button>
-                )}
+                    ))}
+                  </ul>
+                ) : null}
               </div>
-            </div>
-            )}
-            </div>
+            ) : null}
           </div>
         </div>
       </div>

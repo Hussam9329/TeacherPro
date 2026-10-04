@@ -3138,3 +3138,117 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
   color: var(--muted-foreground);
 }
 .tp-profile-timeline__details { margin: 0.1rem 0 0; font-size: 0.8rem; line-height: 1.7; color: var(--muted-foreground); overflow-wrap: anywhere; }
+
+/* «ملف الطالب» as one story: summary, open items, exam strip, then events. */
+.tp-story b { font-weight: 900; }
+.tp-story s { opacity: 0.7; }
+.tp-story__label { margin: 0 0 0.35rem; font-size: 0.75rem; font-weight: 800; color: var(--muted-foreground); }
+.tp-story__summary {
+  display: grid;
+  gap: 0.3rem;
+  padding: 1rem;
+  border-radius: 1.25rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+.tp-story__summary[data-tone="success"] { border-color: var(--status-success-border); background: color-mix(in srgb, var(--status-success-bg) 55%, var(--card)); }
+.tp-story__summary[data-tone="danger"] { border-color: var(--status-danger-border); background: var(--status-danger-bg); }
+.tp-story__lead { margin: 0; font-size: 1.02rem; font-weight: 700; line-height: 1.8; overflow-wrap: anywhere; }
+.tp-story__line { margin: 0; font-size: 0.88rem; line-height: 1.8; overflow-wrap: anywhere; }
+.tp-story__open {
+  padding: 0.85rem 1rem;
+  border-radius: 1.25rem;
+  border: 1px solid var(--status-warning-border);
+  background: var(--status-warning-bg);
+  font-size: 0.88rem;
+}
+.tp-story__open ul { margin: 0; padding-inline-start: 1.1rem; display: grid; gap: 0.25rem; }
+.tp-story__strip ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(1.9rem, 1fr));
+  gap: 0.3rem;
+}
+.tp-story__strip li { display: grid; justify-items: center; gap: 0.15rem; font-size: 0.68rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.tp-story__strip i, .tp-story__legend i {
+  display: block;
+  inline-size: 100%;
+  max-inline-size: 1.5rem;
+  aspect-ratio: 1;
+  border-radius: 0.4rem;
+  border: 1.5px solid var(--muted-foreground);
+  background: transparent;
+}
+.tp-story__legend { margin: 0.4rem 0 0; display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; font-size: 0.72rem; color: var(--muted-foreground); }
+.tp-story__legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.tp-story__legend i { inline-size: 0.65rem; border-radius: 0.2rem; }
+.tp-story i[data-kind="pass"] { background: var(--status-success-vivid); border-color: var(--status-success-vivid); }
+.tp-story i[data-kind="fail"] { background: var(--status-warning-bg); border-color: var(--status-warning-vivid); }
+.tp-story i[data-kind="loss"] { background: var(--status-danger-vivid); border-color: var(--status-danger-vivid); }
+.tp-story i[data-kind="neutral"] { background: var(--status-info-bg); border-color: var(--status-info-border); }
+.tp-story i[data-kind="pending"] { background: var(--status-grace-bg); border-color: var(--status-grace-vivid); }
+.tp-story i[data-kind="missing"] { border-style: dashed; }
+.tp-story__filters { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.tp-story__list { display: grid; gap: 0.35rem; }
+.tp-story__chapter { margin: 0.6rem 0 0; font-size: 1rem; font-weight: 900; }
+.tp-story__day { margin: 0.55rem 0 0.1rem; font-size: 0.8rem; font-weight: 800; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.tp-story__events { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.35rem; }
+.tp-story__event {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: start;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.85rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+.tp-story__event[data-tone="good"] { border-color: var(--status-success-border); background: color-mix(in srgb, var(--status-success-bg) 60%, var(--card)); }
+.tp-story__event[data-tone="danger"] { border-color: var(--status-danger-border); background: var(--status-danger-bg); }
+.tp-story__dot { inline-size: 0.55rem; block-size: 0.55rem; margin-top: 0.55rem; border-radius: 999px; background: var(--muted-foreground); }
+.tp-story__event[data-tone="pass"] .tp-story__dot,
+.tp-story__event[data-tone="good"] .tp-story__dot { background: var(--status-success-vivid); }
+.tp-story__event[data-tone="fail"] .tp-story__dot { background: var(--status-warning-vivid); }
+.tp-story__event[data-tone="loss"] .tp-story__dot,
+.tp-story__event[data-tone="danger"] .tp-story__dot { background: var(--status-danger-vivid); }
+.tp-story__event[data-tone="wait"] .tp-story__dot { background: var(--status-grace-vivid); }
+.tp-story__event[data-tone="admin"] .tp-story__dot { background: var(--primary); }
+.tp-story__text { margin: 0; font-size: 0.9rem; line-height: 1.8; overflow-wrap: anywhere; }
+.tp-story__meta { margin: 0; font-size: 0.75rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.tp-story__source { display: inline-block; margin-inline-end: 0.4rem; font-size: 0.7rem; font-weight: 700; color: var(--muted-foreground); }
+.tp-story__subs {
+  margin: 0.35rem 0 0;
+  padding: 0 0.7rem 0 0;
+  list-style: none;
+  display: grid;
+  gap: 0.2rem;
+  border-inline-start: 2px solid var(--border);
+  font-size: 0.84rem;
+  line-height: 1.7;
+}
+.tp-story__balance {
+  white-space: nowrap;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  padding: 0 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1.6rem;
+  font-variant-numeric: tabular-nums;
+}
+.tp-story__balance[data-zero="true"] { color: var(--status-danger-vivid); border-color: var(--status-danger-border); }
+.tp-story__old, .tp-story__data {
+  border-radius: 1rem;
+  border: 1px dashed var(--border);
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+}
+.tp-story__data { border-style: solid; background: var(--card); }
+.tp-story__old > summary, .tp-story__data > summary { cursor: pointer; font-weight: 900; }
+@media (max-width: 640px) {
+  .tp-story__event { grid-template-columns: auto minmax(0, 1fr); }
+  .tp-story__balance { grid-column: 2; justify-self: start; }
+}
