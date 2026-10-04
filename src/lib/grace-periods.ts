@@ -1,4 +1,5 @@
 import { baghdadDateKey } from "./baghdad-time";
+import { APP_MONTHS } from "./format";
 
 /**
  * فترة السماح في TeacherPro هي فترة زمنية محددة للطالب (من يوم إلى يوم،
@@ -221,7 +222,7 @@ export function studentGraceLight(periods: unknown, todayKey: string): GraceLigh
 
 export function formatGraceDate(key: string): string {
   const match = key.match(DATE_KEY_PATTERN);
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : "—";
+  return match ? `${Number(match[3])} ${APP_MONTHS[Number(match[2]) - 1]} ${match[1]}` : "—";
 }
 
 export function formatGracePeriod(period: Pick<GracePeriodRange, "startDate" | "endDate">): string {

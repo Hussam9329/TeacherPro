@@ -34,6 +34,12 @@ export function getPhoneValidationError(value: string, label: string, required =
   return null;
 }
 
+/** Gregorian month names as people say them here: «8 أكتوبر 2026». */
+export const APP_MONTHS = [
+  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+] as const;
+
 function padDatePart(value: number): string {
   return String(value).padStart(2, '0');
 }
@@ -54,6 +60,12 @@ function getDateParts(value: string | Date | null | undefined): { year: number; 
     return { year: Number(isoMatch[1]), month: Number(isoMatch[2]), day: Number(isoMatch[3]) };
   }
 
+  const namedMatch = raw.match(/^(\d{1,2})\s+(\S+)\s+(\d{4})$/);
+  if (namedMatch) {
+    const month = APP_MONTHS.indexOf(namedMatch[2] as (typeof APP_MONTHS)[number]) + 1;
+    if (month > 0) return { year: Number(namedMatch[3]), month, day: Number(namedMatch[1]) };
+  }
+
   const browserDateMatch = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
   if (browserDateMatch) {
     return { year: Number(browserDateMatch[3]), month: Number(browserDateMatch[1]), day: Number(browserDateMatch[2]) };
@@ -71,8 +83,15 @@ function isValidDateParts(year: number, month: number, day: number): boolean {
   return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
 }
 
-/** Display dates as year/month/day using Latin digits, e.g. 2026/6/11. */
+/** Display dates as «8 أكتوبر 2026», with Latin digits. */
 export function formatAppDate(value: string | Date | null | undefined, fallback = '—'): string {
+  const parts = getDateParts(value);
+  if (!parts || !isValidDateParts(parts.year, parts.month, parts.day)) return fallback;
+  return `${parts.day} ${APP_MONTHS[parts.month - 1]} ${parts.year}`;
+}
+
+/** The numeric form, 2026/6/11, for text that is sorted or read back. */
+export function formatNumericAppDate(value: string | Date | null | undefined, fallback = '—'): string {
   const parts = getDateParts(value);
   if (!parts || !isValidDateParts(parts.year, parts.month, parts.day)) return fallback;
   return `${parts.year}/${parts.month}/${parts.day}`;

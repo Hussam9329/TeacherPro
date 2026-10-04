@@ -314,7 +314,7 @@ function selectCourse(view, value) {
     'tg://resolve?domain=legacy_student',
   ], 'prefer the saved username over numeric Telegram ID, with a legacy username fallback');
   assert(view.nodes('a').every((node) => !node.props.target), 'native links open the Telegram app directly, never through a web page');
-  assert.equal(view.nodes('time')[0].props.children, '2026/9/26', 'dismissal dates use the Baghdad calendar day');
+  assert.equal(view.nodes('time')[0].props.children, '26 سبتمبر 2026', 'dismissal dates use the Baghdad calendar day');
   assert(view.text().includes('غير مسجل'), 'missing dates are explicit rather than invented');
   assert(!view.text().includes(first.dismissalReason), 'dismissal reasons start hidden');
   const reasonButton = () => view.nodes('Button').find((node) => node.props['aria-label']?.endsWith(`سبب فصل ${first.name}`));

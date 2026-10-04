@@ -1885,12 +1885,6 @@ export function StudentRegistryView() {
         }
         actions={
           <>
-            {canAddStudents && (
-              <Button onClick={() => setSection("student-register")}>
-                <UserPlus className="size-4" aria-hidden="true" />
-                إضافة طالب
-              </Button>
-            )}
             <ExportDialog
               title="تصدير سجل الطلاب"
               fileName="students"

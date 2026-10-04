@@ -16,7 +16,7 @@ import { courseApi, courseChapterApi, gradeApi, opportunityLogApi, studentLeaveA
 import { type CourseLocationConfig, type StudyTypesByProgram, getAvailablePrograms, getAvailableStudyTypes, getStudyTypesByProgram, parseJsonArray, parseJsonRecord } from "./course-config";
 import { getExamEntryAvailability, isExamOnOrAfterStudentRegistration, isGradeEntered } from "./exam-utils";
 import { baghdadDateKey, baghdadTodayKey, toBaghdadDateTimeLocal } from "./baghdad-time";
-import { formatAppDate } from "./format";
+import { formatNumericAppDate } from "./format";
 import {
   GRACE_PERIOD_EXCUSE_LABEL,
   isExamInStudentGracePeriod,
@@ -519,7 +519,7 @@ function normalizeDateTimeValue(value: unknown): string {
 
 function nowText(): string {
   const d = new Date();
-  const date = formatAppDate(d);
+  const date = formatNumericAppDate(d);
   const time = d.toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",

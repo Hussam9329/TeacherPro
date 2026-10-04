@@ -43,8 +43,8 @@ import {
   Menu,
   X,
   LogOut,
-  ChevronDown,
   ChevronLeft,
+  Plus,
   KeyRound,
   Lock,
   Search,
@@ -83,7 +83,7 @@ const menuItems: {
   },
   {
     id: "student-registry",
-    title: "سجل الطلاب",
+    title: "الطلاب",
     icon: ClipboardList,
   },
   {
@@ -92,31 +92,67 @@ const menuItems: {
     icon: UsersRound,
   },
   { id: "dismissed-management", title: "إدارة المفصولين", icon: ShieldAlert },
-  { id: "exam-new", title: "إضافة الامتحان", icon: FileText },
+  { id: "exam-new", title: "إضافة امتحان", icon: FileText },
   { id: "grade-entry", title: "تسجيل الدرجات", icon: PenTool },
-  { id: "exam-records", title: "سجل الامتحانات", icon: FileCheck },
+  { id: "exam-records", title: "الامتحانات", icon: FileCheck },
   { id: "grade-records", title: "سجل الدرجات", icon: BarChart3 },
-  { id: "opportunities", title: "إدارة الفرص", icon: Target },
+  { id: "opportunities", title: "الفرص والمفصولين", icon: Target },
   { id: "follow-up-calls", title: "المكالمات", icon: PhoneCall },
   { id: "accounts", title: "إدارة الحسابات", icon: Shield },
   { id: "logs", title: "السجلات", icon: ScrollText },
 ];
 
-const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
-  { title: "الدورات", itemIds: ["courses"] },
-  { title: "الفرص", itemIds: ["chapters", "opportunities", "dismissed-management"] },
-  { title: "الطلاب", itemIds: ["student-register", "student-bulk-import", "student-registry"] },
+// One flat sidebar. Pages that belong together show as one entry; a bar at
+// the top of the page switches between them, and their old links still work.
+type SectionGroupItem = { id: SectionId; label: string; kind: "tab" | "action" };
+const sectionGroups: Array<{ parent: SectionId; items: SectionGroupItem[] }> = [
   {
-    title: "الامتحانات والدرجات",
-    itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
+    parent: "student-registry",
+    items: [
+      { id: "student-registry", label: "الطلاب", kind: "tab" },
+      { id: "student-register", label: "إضافة طالب", kind: "action" },
+      { id: "student-bulk-import", label: "إضافة جماعية", kind: "action" },
+    ],
   },
-  { title: "المتابعة", itemIds: ["follow-up-calls"] },
-  { title: "الإدارة", itemIds: ["accounts", "logs"] },
+  {
+    parent: "exam-records",
+    items: [
+      { id: "exam-records", label: "الامتحانات", kind: "tab" },
+      { id: "exam-new", label: "إضافة امتحان", kind: "action" },
+    ],
+  },
+  {
+    parent: "opportunities",
+    items: [
+      { id: "opportunities", label: "الفرص", kind: "tab" },
+      { id: "dismissed-management", label: "المفصولين", kind: "tab" },
+    ],
+  },
 ];
-
-const familyItemIds = new Set<SectionId>(
-  menuFamilies.flatMap((family) => family.itemIds),
+const sectionParent = new Map<SectionId, SectionId>(
+  sectionGroups.flatMap((group) =>
+    group.items
+      .filter((item) => item.id !== group.parent)
+      .map((item) => [item.id, group.parent] as [SectionId, SectionId]),
+  ),
 );
+const sidebarOrder: SectionId[] = [
+  "dashboard",
+  "courses",
+  "chapters",
+  "student-registry",
+  "student-register",
+  "student-bulk-import",
+  "exam-records",
+  "exam-new",
+  "grade-entry",
+  "grade-records",
+  "opportunities",
+  "dismissed-management",
+  "follow-up-calls",
+  "accounts",
+  "logs",
+];
 
 const sectionsWithPageSearch = new Set<SectionId>([
   "courses",
@@ -542,35 +578,6 @@ export function TeacherProLayout() {
       if (actionStatusTimerRef.current) window.clearTimeout(actionStatusTimerRef.current);
     };
   }, []);
-
-  const [openFamilies, setOpenFamilies] = useState<Record<string, boolean>>(() => {
-    const activeFamily = menuFamilies.find((family) =>
-      family.itemIds.includes(currentSection),
-    );
-    return Object.fromEntries(
-      menuFamilies.map((family) => [
-        family.title,
-        family.title === activeFamily?.title,
-      ]),
-    );
-  });
-
-  useEffect(() => {
-    const activeFamily = menuFamilies.find((family) =>
-      family.itemIds.includes(currentSection),
-    );
-    if (!activeFamily) return;
-    setOpenFamilies((previous) => {
-      if (previous[activeFamily.title]) return previous;
-      return { ...previous, [activeFamily.title]: true };
-    });
-  }, [currentSection]);
-
-  const toggleFamily = (title: string) => {
-    React.startTransition(() => {
-      setOpenFamilies((prev) => ({ ...prev, [title]: !prev[title] }));
-    });
-  };
 
   const handleSectionLinkClick = (
     event: React.MouseEvent<HTMLAnchorElement>,
@@ -1103,26 +1110,17 @@ export function TeacherProLayout() {
     }
   }, [currentSection, setSection]);
   const firstVisibleSectionId = visibleMenuItems[0]?.id ?? null;
-  const dashboardMenuItem = visibleMenuItems.find(
-    (item) => item.id === "dashboard",
-  );
-  const groupedMenuFamilies = useMemo(
-    () =>
-      menuFamilies
-        .map((family) => ({
-          ...family,
-          items: family.itemIds
-            .map((id) => visibleMenuItems.find((item) => item.id === id))
-            .filter((item): item is (typeof visibleMenuItems)[number] =>
-              Boolean(item),
-            ),
-        }))
-        .filter((family) => family.items.length > 0),
-    [visibleMenuItems],
-  );
-  const standaloneMenuItems = visibleMenuItems.filter(
-    (item) => item.id !== "dashboard" && !familyItemIds.has(item.id),
-  );
+  // A page whose group entry is visible lives inside it, not in the sidebar.
+  const sidebarItems = useMemo(() => {
+    const visibleIds = new Set(visibleMenuItems.map((item) => item.id));
+    return sidebarOrder
+      .map((id) => visibleMenuItems.find((item) => item.id === id))
+      .filter((item): item is (typeof visibleMenuItems)[number] => Boolean(item))
+      .filter((item) => {
+        const parent = sectionParent.get(item.id);
+        return !parent || !visibleIds.has(parent);
+      });
+  }, [visibleMenuItems]);
 
   useEffect(() => {
     if (
@@ -1145,9 +1143,12 @@ export function TeacherProLayout() {
       ? sectionComponents[currentSection] || DashboardView
       : DashboardView;
   const currentMenu = menuItems.find((m) => m.id === currentSection);
-  const currentMenuFamily = menuFamilies.find((family) =>
-    family.itemIds.includes(currentSection),
-  );
+  const currentParentMenu = sectionParent.has(currentSection)
+    ? menuItems.find((m) => m.id === sectionParent.get(currentSection))
+    : undefined;
+  const currentGroupItems = (
+    sectionGroups.find((group) => group.items.some((item) => item.id === currentSection))?.items || []
+  ).filter((item) => isAdmin || canAccess(item.id));
   const CurrentMenuIcon = currentMenu?.icon || LayoutDashboard;
   // Numbers beside a page only when something there waits for someone.
   // Grade entry deliberately has none.
@@ -1220,17 +1221,17 @@ export function TeacherProLayout() {
       <aside
         aria-label="التنقل الرئيسي"
         className={cn(
-          "tp-app-sidebar fixed inset-y-0 right-0 z-50 flex h-dvh w-[min(19rem,calc(100dvw-0.75rem))] max-w-full flex-col overflow-hidden border-l border-sidebar-border bg-sidebar text-sidebar-foreground shadow-2xl transition-transform duration-300 lg:static lg:h-auto lg:w-[18rem] lg:shadow-none",
+          "tp-app-sidebar fixed inset-y-0 right-0 z-50 flex h-dvh w-[min(11rem,calc(100dvw-0.75rem))] max-w-full flex-col overflow-hidden border-l border-sidebar-border bg-sidebar text-sidebar-foreground shadow-2xl transition-transform duration-300 lg:static lg:h-auto lg:w-[9.5rem] lg:shadow-none",
           sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
         )}
       >
         <div className="absolute inset-0 pointer-events-none sidebar-aura" />
 
-        <div className="relative border-b border-sidebar-border p-3.5">
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
+        <div className="relative border-b border-sidebar-border p-2.5">
+          <div className="flex items-center gap-1">
+            <div className="min-w-0 flex-1">
               <h1
-                className="text-xl font-extrabold tracking-tight md:text-2xl"
+                className="truncate text-base font-extrabold tracking-tight lg:text-lg"
                 style={{
                   background:
                     "linear-gradient(135deg, #CD938F, #FBF9EB, #E6E3D9)",
@@ -1253,7 +1254,7 @@ export function TeacherProLayout() {
               <X className="w-5 h-5" />
             </Button>
           </div>
-          <div className="mt-3 flex min-w-0 items-center gap-2 rounded-xl border border-sidebar-border bg-sidebar-foreground/[0.04] px-2.5 py-2">
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 rounded-xl border border-sidebar-border bg-sidebar-foreground/[0.04] px-2 py-1.5">
             <div
               className={cn(
                 "tp-connection-dot",
@@ -1263,19 +1264,13 @@ export function TeacherProLayout() {
               aria-label={connectionVisualLabel}
               title={connectionVisualDescription}
             />
-            <p className="min-w-0 flex-1 truncate text-sm font-semibold text-sidebar-foreground">
+            <p className="min-w-0 flex-1 truncate text-xs font-semibold text-sidebar-foreground" title={user?.role || ""}>
               {user?.name || "غير مسجل"}
             </p>
-            <Badge
-              variant="secondary"
-              className="min-h-5 max-w-24 shrink border-sidebar-border bg-sidebar-foreground/10 px-1.5 text-[10px] leading-4 text-sidebar-foreground"
-            >
-              {user?.role || "-"}
-            </Badge>
             <Button
               variant="ghost"
               size="icon"
-              className="size-9 shrink-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              className="size-8 shrink-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
               title="تسجيل الخروج"
               aria-label="تسجيل الخروج"
               onClick={() => {
@@ -1297,143 +1292,12 @@ export function TeacherProLayout() {
           className="app-scrollbar relative flex-1 overflow-y-auto overscroll-contain py-2.5"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
-          <nav className="space-y-2 px-2.5" aria-label="صفحات النظام">
-            {dashboardMenuItem &&
-              (() => {
-                const item = dashboardMenuItem;
-                const Icon = item.icon;
-                const isActive = currentSection === item.id;
-                return (
-                  <a
-                    key={item.id}
-                    href={sectionHref(item.id)}
-                    onClick={(event) => handleSectionLinkClick(event, item.id)}
-                    aria-current={isActive ? "page" : undefined}
-                    className={cn(
-                      "relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-right text-sm transition-all duration-200 group",
-                      isActive
-                        ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20"
-                        : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-[-2px]",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
-                        isActive
-                          ? "bg-sidebar-primary-foreground/10"
-                          : "bg-sidebar-foreground/[0.04] group-hover:bg-sidebar-foreground/[0.08]",
-                      )}
-                    >
-                      <Icon
-                        className={cn(
-                          "size-4 shrink-0",
-                          isActive
-                            ? "text-sidebar-primary-foreground"
-                            : "text-sidebar-foreground/60 group-hover:text-sidebar-accent-foreground",
-                        )}
-                      />
-                    </span>
-                    <div className="min-w-0 flex-1 text-right">
-                      <div className="truncate font-semibold leading-5">
-                        {item.title}
-                      </div>
-                    </div>
-                  </a>
-                );
-              })()}
-
-            {groupedMenuFamilies.map((family) => {
-              const isFamilyOpen = Boolean(openFamilies[family.title]);
-              const hasActiveItem = family.items.some(
-                (item) => item.id === currentSection,
-              );
-
-              return (
-                <div
-                  key={family.title}
-                  className="rounded-2xl border border-sidebar-border/60 bg-sidebar-foreground/[0.02] p-1.5"
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggleFamily(family.title)}
-                    aria-expanded={isFamilyOpen}
-                    className={cn(
-                      "group flex min-h-11 w-full touch-manipulation items-center gap-2 rounded-xl px-2.5 py-2 text-right text-sm transition-all duration-200",
-                      hasActiveItem
-                        ? "bg-sidebar-primary/15 text-sidebar-foreground"
-                        : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                    )}
-                  >
-                    <span className="flex-1 text-right font-bold">
-                      {family.title}
-                    </span>
-                    <SidebarAlertBadge
-                      count={family.items.reduce((sum, item) => sum + (sectionAlerts[item.id]?.count || 0), 0)}
-                      label={family.items.map((item) => sectionAlerts[item.id]?.label).filter(Boolean).join("، ")}
-                    />
-                    <ChevronDown
-                      className={cn(
-                        "size-4 shrink-0 transition-transform duration-200 text-sidebar-foreground/60",
-                        isFamilyOpen && "rotate-180",
-                      )}
-                    />
-                  </button>
-
-                  {isFamilyOpen && (
-                    <div className="mr-2 mt-1.5 space-y-1 border-r border-sidebar-border/50 pr-2">
-                      {family.items.map((item) => {
-                        const Icon = item.icon;
-                        const isActive = currentSection === item.id;
-                        return (
-                          <a
-                            key={item.id}
-                            href={sectionHref(item.id)}
-                            onClick={(event) =>
-                              handleSectionLinkClick(event, item.id)
-                            }
-                            aria-current={isActive ? "page" : undefined}
-                            className={cn(
-                              "relative flex w-full items-center gap-2.5 rounded-xl border border-transparent px-2.5 py-2 text-right text-sm transition-all duration-200 group",
-                              isActive
-                                ? "border-sidebar-primary/30 bg-sidebar-primary text-sidebar-primary-foreground shadow-md shadow-primary/15"
-                                : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-[-2px]",
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
-                                isActive
-                                  ? "bg-sidebar-primary-foreground/10"
-                                  : "bg-sidebar-foreground/[0.04] group-hover:bg-sidebar-foreground/[0.08]",
-                              )}
-                            >
-                              <Icon
-                                className={cn(
-                                  "size-4 shrink-0",
-                                  isActive
-                                    ? "text-sidebar-primary-foreground"
-                                    : "text-sidebar-foreground/60 group-hover:text-sidebar-accent-foreground",
-                                )}
-                              />
-                            </span>
-                            <div className="min-w-0 flex-1 text-right">
-                              <div className="truncate font-semibold leading-5">
-                                {item.title}
-                              </div>
-                            </div>
-                            <SidebarAlertBadge count={sectionAlerts[item.id]?.count || 0} label={sectionAlerts[item.id]?.label} />
-                          </a>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            {standaloneMenuItems.map((item) => {
+          <nav className="space-y-1 px-1.5" aria-label="صفحات النظام">
+            {sidebarItems.map((item) => {
               const Icon = item.icon;
-              const isActive = currentSection === item.id;
+              const isActive = currentSection === item.id || sectionParent.get(currentSection) === item.id;
+              const alertCount = [item.id, ...Array.from(sectionParent.entries()).filter(([, parent]) => parent === item.id).map(([child]) => child)]
+                .reduce((sum, id) => sum + (sectionAlerts[id]?.count || 0), 0);
               return (
                 <a
                   key={item.id}
@@ -1441,53 +1305,43 @@ export function TeacherProLayout() {
                   onClick={(event) => handleSectionLinkClick(event, item.id)}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-right text-sm transition-all duration-200 group",
+                    "group flex min-h-11 w-full touch-manipulation items-center gap-2 rounded-xl px-2 py-1.5 text-right text-[13px] transition-colors duration-200",
                     isActive
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20"
-                      : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-[-2px]",
+                      ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md shadow-primary/20"
+                      : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                   )}
                 >
-                  <span
+                  <Icon
                     className={cn(
-                      "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+                      "size-4 shrink-0",
                       isActive
-                        ? "bg-sidebar-primary-foreground/10"
-                        : "bg-sidebar-foreground/[0.04] group-hover:bg-sidebar-foreground/[0.08]",
+                        ? "text-sidebar-primary-foreground"
+                        : "text-sidebar-foreground/60 group-hover:text-sidebar-accent-foreground",
                     )}
-                  >
-                    <Icon
-                      className={cn(
-                        "size-4 shrink-0",
-                        isActive
-                          ? "text-sidebar-primary-foreground"
-                          : "text-sidebar-foreground/60 group-hover:text-sidebar-accent-foreground",
-                      )}
-                    />
+                  />
+                  <span className="min-w-0 flex-1 font-semibold leading-5 [overflow-wrap:anywhere]">
+                    {item.title}
                   </span>
-                  <div className="min-w-0 flex-1 text-right">
-                    <div className="truncate font-semibold leading-5">
-                      {item.title}
-                    </div>
-                  </div>
+                  <SidebarAlertBadge count={alertCount} label={sectionAlerts[item.id]?.label} />
                 </a>
               );
             })}
           </nav>
         </div>
 
-        <div className="relative shrink-0 border-t border-sidebar-border bg-sidebar-foreground/[0.03] p-2.5">
+        <div className="relative shrink-0 border-t border-sidebar-border bg-sidebar-foreground/[0.03] p-1.5">
           <Button
             variant="ghost"
             size="sm"
-            className="h-9 w-full justify-start rounded-xl text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="h-9 w-full justify-start rounded-xl px-2 text-xs text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             onClick={toggleTheme}
           >
             {theme === "dark" ? (
-              <Sun className="w-4 h-4 ml-2" />
+              <Sun className="w-4 h-4 ml-1.5" />
             ) : (
-              <Moon className="w-4 h-4 ml-2" />
+              <Moon className="w-4 h-4 ml-1.5" />
             )}
-            {theme === "dark" ? "الوضع الصباحي" : "الوضع الليلي"}
+            {theme === "dark" ? "صباحي" : "ليلي"}
           </Button>
         </div>
       </aside>
@@ -1518,9 +1372,9 @@ export function TeacherProLayout() {
                 <div className="mb-0.5 hidden items-center gap-1.5 text-[11px] font-semibold text-muted-foreground md:flex">
                   <span>TeacherPro</span>
                   <ChevronLeft className="size-3.5 opacity-45" />
-                  {currentMenuFamily ? (
+                  {currentParentMenu ? (
                     <>
-                      <span>{currentMenuFamily.title}</span>
+                      <span>{currentParentMenu.title}</span>
                       <ChevronLeft className="size-3.5 opacity-45" />
                     </>
                   ) : null}
@@ -1642,6 +1496,23 @@ export function TeacherProLayout() {
         >
           <div className="content-container tp-page-surface min-w-0 space-y-4 md:space-y-6" data-teacherpro-active-content="true" data-teacherpro-section={currentSection}>
             {dbLoading && <LoadingState />}
+            {currentGroupItems.length > 1 ? (
+              <nav className="tp-section-group" aria-label={currentParentMenu?.title || currentMenu?.title || "الصفحة"}>
+                {currentGroupItems.map((item) => (
+                  <a
+                    key={item.id}
+                    href={sectionHref(item.id)}
+                    onClick={(event) => handleSectionLinkClick(event, item.id)}
+                    aria-current={currentSection === item.id ? "page" : undefined}
+                    data-kind={item.kind}
+                    className="tp-section-group__item"
+                  >
+                    {item.kind === "action" ? <Plus className="size-4 shrink-0" aria-hidden="true" /> : null}
+                    {item.label}
+                  </a>
+                ))}
+              </nav>
+            ) : null}
             {isAdmin || canAccess(currentSection) ? (
               CurrentComponent === DashboardView ? (
                 <DashboardView onSectionLinkClick={handleSectionLinkClick} />

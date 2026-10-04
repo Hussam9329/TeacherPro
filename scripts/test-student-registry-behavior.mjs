@@ -774,11 +774,11 @@ test("registry shows grace only while today is inside a managed period", () => {
 
   assert.equal(
     registryViewHelpers.formatStudentCurrentGrace(student, "2026-08-01"),
-    "ضمن فترة السماح حتى 12/08/2026",
+    "ضمن فترة السماح حتى 12 أغسطس 2026",
   );
   assert.equal(
     registryViewHelpers.formatStudentCurrentGrace(student, "2026-08-12"),
-    "ضمن فترة السماح حتى 12/08/2026",
+    "ضمن فترة السماح حتى 12 أغسطس 2026",
   );
   assert.equal(registryViewHelpers.formatStudentCurrentGrace(student, "2026-08-13"), "");
   assert.equal(registryViewHelpers.currentStudentGracePeriod(student, "2026-08-13"), null);

@@ -114,7 +114,7 @@ test("from/to and from+days describe the same period", () => {
   assert.equal(grace.gracePeriodDays(PERIOD), 4);
   assert.equal(grace.gracePeriodEndFromDays("2026-03-25", 4), "2026-03-28");
   assert.equal(grace.gracePeriodEndFromDays("2026-09-30", 3), "2026-10-02");
-  assert.equal(grace.formatGracePeriod(PERIOD), "25/03/2026 → 28/03/2026");
+  assert.equal(grace.formatGracePeriod(PERIOD), "25 مارس 2026 → 28 مارس 2026");
 });
 
 test("validation: no upcoming start, no reversed range, no overlap, max 30 days", () => {

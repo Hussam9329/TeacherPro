@@ -1,10 +1,8 @@
 import { toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
+import { APP_MONTHS } from "@/lib/format";
 
 /** Gregorian month names as people say them here: «8 أكتوبر 2026». */
-export const STORY_MONTHS = [
-  "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
-  "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
-] as const;
+export const STORY_MONTHS = APP_MONTHS;
 
 /** A piece of story text: bold for grades, exam names and dates; struck for
  * something that happened and was later cancelled. */

@@ -3252,3 +3252,39 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
   .tp-story__event { grid-template-columns: auto minmax(0, 1fr); }
   .tp-story__balance { grid-column: 2; justify-self: start; }
 }
+
+/* Pages that share one sidebar entry: tabs to switch, buttons to add. */
+.tp-section-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.tp-section-group__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  max-width: 100%;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: var(--foreground);
+  text-decoration: none;
+  touch-action: manipulation;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.tp-section-group__item:hover { border-color: var(--primary); }
+.tp-section-group__item[aria-current="page"] {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.tp-section-group__item[data-kind="action"]:not([aria-current="page"]) {
+  border-style: dashed;
+  color: var(--primary);
+}
+.tp-section-group__item:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
