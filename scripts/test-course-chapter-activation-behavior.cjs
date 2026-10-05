@@ -161,6 +161,10 @@ function harness(initial, options = {}) {
 
 (async () => {
   const original = fixture();
+  // A student counting toward «فرصة مكافأة», and one holding a bonus for a
+  // missing grade: without a chapter there is nothing left to count toward.
+  Object.assign(original.students.find(row => row.id === "low-score"), { bonusProgress: 1, bonusWaitingExamName: null });
+  Object.assign(original.students.find(row => row.id === "absent"), { bonusProgress: 2, bonusWaitingExamName: "old exam" });
   const close = harness(original);
   const response = await close.apply("deactivate");
   assert.equal(response.status, 200, `deactivation must not fail: ${close.errors.map(error => error.message).join("; ")}`);
@@ -168,7 +172,8 @@ function harness(initial, options = {}) {
   for (const id of ["absent", "low-score", "dismissed"]) {
     const before = original.students.find(row => row.id === id);
     const after = closed.students.find(row => row.id === id);
-    assert.deepEqual(after, { ...before, opportunities: 0, baseOpportunities: 0 }, "closing a chapter changes balances, never dismissal state");
+    assert.deepEqual(after, { ...before, opportunities: 0, baseOpportunities: 0, bonusProgress: 0, bonusWaitingExamName: null },
+      "closing a chapter changes balances and clears «فرصة مكافأة» progress, never dismissal state");
   }
   for (const id of ["archived", "unrelated"]) {
     assert.deepEqual(closed.students.find(row => row.id === id), original.students.find(row => row.id === id));

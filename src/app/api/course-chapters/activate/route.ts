@@ -448,7 +448,9 @@ export async function POST(req: NextRequest) {
       });
       const resetUpdate = await tx.student.updateMany({
         where: { courseId: target.courseId, status: { not: "مؤرشف" } },
-        data: { opportunities: 0, baseOpportunities: 0 },
+        // No chapter, no «فرصة مكافأة» to count toward: its progress goes
+        // with the balance.
+        data: { opportunities: 0, baseOpportunities: 0, bonusProgress: 0, bonusWaitingExamName: null },
       });
       // Closing a chapter is an administrative archive, not an exam event.
       // Preserve statuses and historical logs: there is no active chapter

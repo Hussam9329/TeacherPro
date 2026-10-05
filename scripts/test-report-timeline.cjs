@@ -10,6 +10,7 @@ require.extensions[".ts"] = (module, file) => module._compile(
 const {
   buildReportTimelineEvents: timeline,
   reportGradeTimelineDate: gradeDate,
+  reportGradeTimelineDates: gradeDates,
   buildReportOpportunityContext: context,
   reportGradePresentation: presentation,
 } = require("../src/lib/student-report-presentation.ts");
@@ -195,4 +196,34 @@ const unsortedBalances = timeline([
 assert.equal(gradeDate(grade, exam, unsortedBalances.reverse()), at(10, "20:00:00.000"), "latest qualifying balance on the exam's Baghdad day wins regardless of input order");
 assert.equal(gradeDate(grade, { ...exam, date: at(10, "21:30:00.000") }, timeline([log("إضافة", 11, { date: at(11, "07:00:00.000"), amount: 1 })])), at(11, "07:00:00.000"), "different UTC dates can share the same Baghdad exam day");
 assert.equal(gradeDate(grade, { ...exam, date: at(10, "20:59:59.000") }, timeline([log("إضافة", 10, { date: at(10, "21:00:00.000"), amount: 1 })])), at(10, "20:59:59.000"), "crossing Baghdad midnight excludes a later-day credit even on the same UTC date");
+// The engine's own order: a pass (or a fail above the discount mark) keeps its
+// exam's place however late it was typed, but never comes before an earlier
+// exam of its day that a credit moved later.
+const dayExam = (id, type = "يومي") => ({ id, date: at(10, "00:00:00.000"), type, passMark: 60, discountMark: 19, dismissalGrade: type === "فاينل" ? 10 : null });
+const typed = (examId, status, score, time) => ({ examId, status, score, createdAt: at(10, time) });
+const sameDayCreditOnly = timeline([log("إضافة", 10, { amount: 1 })], "chapter");
+assert.equal(gradeDate(typed("p", "درجة", 80, "15:00:00.000"), dayExam("p"), sameDayCreditOnly), at(10, "00:00:00.000"),
+  "a pass typed after a same-day credit keeps its exam's place");
+assert.equal(gradeDate(typed("f", "درجة", 45, "15:00:00.000"), dayExam("f"), sameDayCreditOnly), at(10, "00:00:00.000"),
+  "so does a fail above the discount mark");
+assert.equal(gradeDate(typed("d", "درجة", 10, "15:00:00.000"), dayExam("d"), sameDayCreditOnly), at(10, "12:00:00.000"),
+  "a discount score still follows the credit it was typed after");
+assert.equal(gradeDate(typed("z", "درجة", 5, "15:00:00.000"), dayExam("z", "فاينل"), sameDayCreditOnly), at(10, "12:00:00.000"),
+  "a final at its dismissal grade can dismiss, so it follows the credit too");
+const dayExams = { a: dayExam("a"), b: dayExam("b") };
+assert.deepEqual(gradeDates([typed("a", "غائب", null, "15:00:00.000"), typed("b", "درجة", 80, "16:00:00.000")], g => dayExams[g.examId], sameDayCreditOnly),
+  [at(10, "12:00:00.000"), at(10, "12:00:00.000")], "a pass never comes before an earlier exam of its day");
+assert.deepEqual(gradeDates([typed("b", "درجة", 80, "16:00:00.000"), typed("a", "غائب", null, "15:00:00.000")], g => dayExams[g.examId], sameDayCreditOnly),
+  [at(10, "12:00:00.000"), at(10, "12:00:00.000")], "whatever order the grades are given in");
+assert.deepEqual(gradeDates([typed("a", "درجة", 80, "16:00:00.000"), typed("b", "غائب", null, "15:00:00.000")], g => dayExams[g.examId], sameDayCreditOnly),
+  [at(10, "00:00:00.000"), at(10, "12:00:00.000")], "a pass before a later exam of its day keeps its place");
+// A result with no effect keeps its place and never drags a pass behind a credit.
+assert.equal(gradeDate(typed("l", "مجاز", null, "15:00:00.000"), dayExam("l"), sameDayCreditOnly), at(10, "00:00:00.000"), "a leave keeps its exam's place");
+assert.equal(gradeDate(typed("n", "درجة", 5, "15:00:00.000"), { ...dayExam("n"), noDiscount: true }, sameDayCreditOnly), at(10, "00:00:00.000"), "so does a «بدون خصم» score");
+assert.equal(gradeDate(typed("c", "غش", null, "15:00:00.000"), { ...dayExam("c"), noDiscount: true }, sameDayCreditOnly), at(10, "12:00:00.000"), "cheating counts even on a «بدون خصم» exam");
+assert.deepEqual(gradeDates([typed("a", "مجاز", null, "15:00:00.000"), typed("b", "درجة", 80, "09:00:00.000")], g => dayExams[g.examId], sameDayCreditOnly),
+  [at(10, "00:00:00.000"), at(10, "00:00:00.000")], "a leave typed late leaves the day's pass in place");
+assert.equal(gradeDate(typed("i", "غائب", null, "15:00:00.000"), { ...dayExam("i"), active: false }, sameDayCreditOnly), at(10, "00:00:00.000"), "a result on a closed exam keeps its place");
+assert.equal(gradeDate(typed("r", "درجة", 150, "15:00:00.000"), { ...dayExam("r"), fullMark: 100 }, sameDayCreditOnly), at(10, "00:00:00.000"), "so does a score outside the exam's range");
+assert.equal(gradeDate(typed("o", "غائب", null, "15:00:00.000"), { ...dayExam("o"), active: true, fullMark: 100 }, sameDayCreditOnly), at(10, "12:00:00.000"), "an absence on an open exam still follows the credit");
 console.log("PASS: report timeline preserves dated grants and actual history, merges paired recoveries, uses real amounts, handles delayed results and excludes private data");

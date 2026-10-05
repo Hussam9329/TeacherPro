@@ -84,6 +84,8 @@ const NON_WRITABLE_STUDENT_UPDATE_KEYS = new Set([
   // Academic balances are owned by the opportunities/academic engine only.
   "opportunities",
   "baseOpportunities",
+  "bonusProgress",
+  "bonusWaitingExamName",
   // Status and dismissal transitions are owned by status-action. Keeping them
   // out of generic profile edits prevents accidental unarchive/reactivation.
   "status",
@@ -1105,6 +1107,9 @@ export async function PUT(req: NextRequest) {
         transactionData.status = "نشط";
         transactionData.dismissalReason = "";
         transactionData.dismissalNotes = "";
+        // ملف جديد بلا درجات: ما يبقى تقدّم «فرصة مكافأة» من الملف القديم.
+        transactionData.bonusProgress = 0;
+        transactionData.bonusWaitingExamName = null;
         // الطالب الجديد يبدأ من لحظة النقل/إعادة البداية؛ هذا يمنع امتحانات
         // الملف القديم من العودة إلى التأثير مستقبلاً. فترات السماح لا تتغير
         // بالنقل؛ تُدار من شاشة إدارة فترة السماح فقط.

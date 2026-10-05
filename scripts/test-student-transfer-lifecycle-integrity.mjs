@@ -21,6 +21,12 @@ const checks = [];
 const check = (label, condition) => checks.push({ label, ok: Boolean(condition) });
 
 check(
+  "الملف الجديد ما يرث تقدّم «فرصة مكافأة» من الملف القديم، والتقدّم ما ينكتب من تعديل الطالب العادي",
+  /transactionData\.dismissalNotes = "";[\s\S]{0,200}transactionData\.bonusProgress = 0;\s*transactionData\.bonusWaitingExamName = null;/.test(studentsRoute) &&
+    /NON_WRITABLE_STUDENT_UPDATE_KEYS = new Set\(\[[\s\S]*"bonusProgress",\s*"bonusWaitingExamName",[\s\S]*\]\)/.test(studentsRoute),
+);
+
+check(
   "قاعدة البيانات تحتوي أرشيف تسجيلات الطالب مع علاقة وفهارس وترحيل قابل للنشر",
   schema.includes("model StudentEnrollmentArchive") &&
     schema.includes("enrollmentArchives StudentEnrollmentArchive[]") &&

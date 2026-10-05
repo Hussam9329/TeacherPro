@@ -1,5 +1,5 @@
 import { historicalGradeExclusion } from "./grade-settlement";
-import { examResultTimelineDate } from "./academic-event-order";
+import { examResultLedgerDates } from "./academic-event-order";
 import { examChapterExclusion } from "./exam-chapter-scope";
 import {
   isExamAvailableForEntry,
@@ -843,7 +843,38 @@ export function recalculateAcademicState(
       opportunities = Math.max(0, Math.min(Number(activeChapter?.opportunities ?? student.baseOpportunities ?? 0), Number(lastReset.balanceAfter ?? lastReset.amount)));
       // A chapter settlement opens a fresh balance; an administrator's reset
       // to a lower balance is a deliberate deduction that passes cannot undo.
-      bonusHold = isSettlementReason(lastReset.reason) ? 0 : Math.max(0, bonusCap - opportunities);
+      // Held: what the reset itself removed, on top of what the student
+      // carried into it. Walking the chapter's manual commands up to it:
+      // a deduction adds to the hold, its recorded undo and a return take it
+      // back, and each reset first gives back what it raised the balance by.
+      // A gap from a limit raised later, or one lost in exams, stays
+      // recoverable.
+      const resetHold = (log: AcademicOpportunityLog, carried: number): number => {
+        if (isSettlementReason(log.reason)) return 0;
+        const from = Number(log.balanceBefore);
+        const to = Math.max(0, Math.min(bonusCap, Number(log.balanceAfter ?? log.amount ?? 0)));
+        if (log.balanceBefore == null || !Number.isSafeInteger(from) || from < 0) return Math.max(0, bonusCap - to);
+        const kept = Math.max(0, Math.min(carried, Math.max(0, bonusCap - from)) - Math.max(0, to - from));
+        return Math.min(kept + Math.max(0, from - to), Math.max(0, bonusCap - to));
+      };
+      let carried = 0;
+      for (const log of allStudentManualLogs) {
+        if (log === lastReset) break;
+        if (log.chapterId !== activeChapter?.id) continue;
+        const amount = Math.abs(Number(log.appliedAmount ?? log.amount ?? 0));
+        if (isReactivationBalanceOpportunityLog(log)) carried = 0;
+        else if (log.action === "إعادة تعيين") carried = resetHold(log, carried);
+        else if (log.action === "خصم" && !isUndoOfAddition(log.reason)) carried += amount;
+        else if (log.action === "إضافة" && isUndoOfDeduction(log.reason)) carried = Math.max(0, carried - amount);
+        // As in the replay (clampBonusHold): nothing held beyond the gap the
+        // command left, so a credit that refilled the balance clears it.
+        const recordedAfter = Number(log.balanceAfter);
+        if (log.action !== "إعادة تعيين" && log.balanceAfter != null && Number.isSafeInteger(recordedAfter) && recordedAfter >= 0) {
+          carried = Math.min(carried, Math.max(0, bonusCap - recordedAfter));
+        }
+      }
+      bonusHold = resetHold(lastReset, carried);
+      clampBonusHold();
     }
     // Balance without any bonus. A bonus that keeps the student above zero
     // where this balance would have dismissed is recorded below.
@@ -907,10 +938,42 @@ export function recalculateAcademicState(
       log.action === "إضافة" && Number(log.appliedAmount ?? log.amount) > 0 &&
       Number.isFinite(Date.parse(log.date)));
     const creditDates = recordedCredits.map(log => log.date);
-    const gradesInLedgerOrder = studentGrades.map((grade) => {
-      const examDate = String(examsById.get(grade.examId)?.date || grade.createdAt || "");
-      return { grade, ledgerDate: examResultTimelineDate(examDate, grade.createdAt, creditDates) };
-    }).sort((a, b) => {
+    // A result that cannot deduct keeps its exam's place: a pass, a fail
+    // above the discount mark, or one this replay gives no effect at all
+    // (leave, «بدون خصم», settled, excluded…). So how late it was entered
+    // never changes a «فرصة مكافأة». A result that can deduct follows the
+    // credits it was entered after (examResultLedgerDates).
+    const resultHasNoEffectHere = (grade: AcademicGrade, exam: AcademicExam): boolean => {
+      if (examChapterExclusion(exam, student.courseId, activeChapter?.id)) return true;
+      if (settledGradeIds.has(grade.id) || grade.status === "مجاز") return true;
+      if (historicalGradeExclusion(grade, exam, historicalSettlementDate)) return true;
+      const eventDay = dayKey(exam.date || grade.updatedAt || grade.createdAt || "");
+      if (reactivationStartDate && eventDay < reactivationStartDate) return true;
+      if (manualDismissal && manualDismissalDate && eventDay && eventDay < manualDismissalDate) return true;
+      if (!isExamOnOrAfterStudentRegistration(student, exam)) return true;
+      if (normalizedLeaves.some((leave) => studentLeaveAppliesToExam(leave, student.id, exam))) return true;
+      if (isExamInStudentGracePeriod(student, exam)) return true;
+      return isProtectedLinkedSourceGrade(grade);
+    };
+    const keepsPlace = studentGrades.map((grade) => {
+      const exam = examsById.get(grade.examId);
+      return !exam || !gradeHasAcademicEffect(grade, exam) || resultHasNoEffectHere(grade, exam);
+    });
+    const ledgerDates = examResultLedgerDates(studentGrades.map((grade, index) => {
+      const exam = examsById.get(grade.examId);
+      const examDate = String(exam?.date || grade.createdAt || "");
+      return {
+        examDate,
+        enteredDate: String(grade.createdAt || ""),
+        orderKey: `${examDate}|${exam?.id || grade.examId}`,
+        cannotDeduct: keepsPlace[index],
+      };
+    }), creditDates);
+    const gradesInLedgerOrder = studentGrades.map((grade, index) => ({
+      grade,
+      ledgerDate: ledgerDates[index],
+      keepsPlace: keepsPlace[index],
+    })).sort((a, b) => {
       const timeA = Date.parse(a.ledgerDate);
       const timeB = Date.parse(b.ledgerDate);
       return Number.isFinite(timeA) && Number.isFinite(timeB)
@@ -918,38 +981,40 @@ export function recalculateAcademicState(
         : a.ledgerDate.localeCompare(b.ledgerDate);
     });
 
-    // «فرصة مكافأة» streak. Bonuses earned in this chapter that this replay
-    // does not regenerate (their grade was settled by a reset or a return, or
-    // falls before the balance's opening) still count toward the limit.
-    const replayedBonusExamIds = new Set(studentGrades
-      .filter((grade) => {
-        const exam = examsById.get(grade.examId);
-        if (!exam || settledGradeIds.has(grade.id)) return false;
-        if (examChapterExclusion(exam, student.courseId, activeChapter?.id)) return false;
-        const examDay = dayKey(exam.date || "");
-        if (reactivationStartDate && examDay < reactivationStartDate) return false;
-        return !historicalGradeExclusion(grade, exam, historicalSettlementDate);
-      })
-      .map((grade) => grade.examId));
+    // «فرصة مكافأة» streak. Toward the chapter's limit of two count the
+    // bonuses this replay earns, plus the stored ones whose grade the current
+    // balance opening settled (a reset or a return). Those are exactly the
+    // stored bonuses a recalculation keeps, so replaying the same record again
+    // never frees or uses a place: a bonus whose grade was deleted or is
+    // replayed again does not count twice.
+    const settledExamIds = new Set(settledGradeIds.size
+      ? state.grades
+        .filter((grade) => grade.studentId === student.id && settledGradeIds.has(grade.id))
+        .map((grade) => grade.examId)
+      : []);
+    const settlementTime = settlement ? Date.parse(String(settlement.date)) : NaN;
     let bonusCount = state.opportunityLogs.filter((log) =>
       log.studentId === student.id && isBonusOpportunityLog(log) &&
-      log.chapterId === activeChapter?.id && !replayedBonusExamIds.has(log.examId)).length;
+      log.chapterId === activeChapter?.id && settledExamIds.has(String(log.examId || "")) &&
+      Date.parse(String(log.date)) <= settlementTime).length;
     let bonusStreak = 0;
     let bonusFirstPass: { exam: AcademicExam; score: number } | null = null;
     let bonusWaitingExam: AcademicExam | null = null;
     const examOrderKey = (exam: AcademicExam) => `${String(exam.date || "")}|${exam.id}`;
-    const bonusOpeningDays = [
+    // Passes count from the balance's opening. A historical settlement covers
+    // its whole day; a return or a reset covers only the grades it settled,
+    // so an exam later the same day counts, as a pass exactly as a loss.
+    // The streak follows exam dates. A pass keeps its exam's place, so it is
+    // replayed after a newer result of its day only when an earlier result of
+    // that day followed a credit; that newer result's break then waits for it
+    // (breakAfterVisit below), so it still counts in exam order. A pass at or
+    // before the balance's opening never counts and never moves the streak
+    // backwards.
+    let bonusLastKey = [
+      historicalSettlementDate ? `${historicalSettlementDate}\uffff` : "",
       reactivationStartDate,
-      historicalSettlementDate,
       settlement ? dayKey(settlement.date) : "",
-    ].filter(Boolean).sort();
-    // Missing grades before the student's current balance window cannot
-    // change a streak that starts after it.
-    let bonusWindowKey = bonusOpeningDays.length ? `${bonusOpeningDays[bonusOpeningDays.length - 1]}\uffff` : "";
-    // The streak follows exam dates. The replay can visit a late-entered older
-    // result after newer ones; such a pass never counts and never moves the
-    // streak backwards, while a late loss or fail still breaks it.
-    let bonusLastKey = bonusWindowKey;
+    ].reduce((latest, key) => (key > latest ? key : latest), "");
     const enteredExamIds = new Set(studentGrades
       .filter((grade) => {
         const exam = examsById.get(grade.examId);
@@ -975,7 +1040,6 @@ export function recalculateAcademicState(
       bonusFirstPass = null;
       bonusWaitingExam = null;
       const key = examOrderKey(exam);
-      if (key > bonusWindowKey) bonusWindowKey = key;
       if (key > bonusLastKey) bonusLastKey = key;
     };
     const countBonusPass = (exam: AcademicExam, grade: AcademicGrade, score: number) => {
@@ -993,15 +1057,21 @@ export function recalculateAcademicState(
         bonusLastKey = examOrderKey(exam);
         return;
       }
+      // The pair is the previous counted pass and this one. Only a missing
+      // grade between the two can break them; one before the first cannot,
+      // whatever it turns out to be. While a bonus waits for a missing
+      // grade, a later pair with nothing missing between them earns it.
+      const first = bonusFirstPass as { exam: AcademicExam; score: number } | null;
+      const firstKey = first ? examOrderKey(first.exam) : bonusLastKey;
       const missing = bonusMissingExams.find((item) =>
-        examOrderKey(item) > bonusWindowKey && examOrderKey(item) < examOrderKey(exam));
+        examOrderKey(item) > firstKey && examOrderKey(item) < examOrderKey(exam));
       if (missing) {
         bonusStreak = BONUS_PASSES_REQUIRED;
-        bonusWaitingExam = missing;
+        if (!bonusWaitingExam) bonusWaitingExam = missing;
+        bonusFirstPass = { exam, score };
         bonusLastKey = examOrderKey(exam);
         return;
       }
-      const first = bonusFirstPass;
       opportunities = Math.min(bonusCap, opportunities + 1);
       if (beforeLateResults) beforeLateResults.balance = Math.min(bonusCap, beforeLateResults.balance + 1);
       bonusCount += 1;
@@ -1025,10 +1095,52 @@ export function recalculateAcademicState(
       if (shadowEffect.dismissalTrigger && !historicalZero && !effect.dismissalTrigger) {
         bonusSavedAt.add(exam.id);
       }
-      resetBonusStreak(exam);
+      breakBonusStreak(exam);
+    };
+    // A day's exams count toward the streak in exam order. A loss (a result
+    // that can deduct) replayed before a pass of an earlier exam of its day
+    // (that pass follows a credit an earlier result was entered after) breaks
+    // the streak only once that pass has been counted; its balance effect
+    // stays where it is.
+    const breakAfterVisit = new Map<number, number>();
+    const visitsByDay = new Map<string, number[]>();
+    gradesInLedgerOrder.forEach(({ grade }, index) => {
+      const exam = examsById.get(grade.examId);
+      if (!exam) return;
+      const day = dayKey(exam.date);
+      visitsByDay.set(day, [...(visitsByDay.get(day) || []), index]);
+    });
+    for (const visits of visitsByDay.values()) {
+      for (const index of visits) {
+        const exam = examsById.get(gradesInLedgerOrder[index].grade.examId) as AcademicExam;
+        const lastEarlierPass = visits.filter((other) => {
+          const entry = gradesInLedgerOrder[other];
+          const otherExam = examsById.get(entry.grade.examId) as AcademicExam;
+          return other > index && entry.keepsPlace && entry.grade.status === "درجة" && entry.grade.score !== null &&
+            Number(entry.grade.score) >= Number(otherExam.passMark) && examOrderKey(otherExam) < examOrderKey(exam);
+        }).at(-1);
+        if (lastEarlierPass !== undefined) breakAfterVisit.set(index, lastEarlierPass);
+      }
+    }
+    const deferredBreaks: Array<{ after: number; exam: AcademicExam }> = [];
+    let visitIndex = -1;
+    function breakBonusStreak(exam: AcademicExam) {
+      const after = breakAfterVisit.get(visitIndex);
+      if (after === undefined) resetBonusStreak(exam);
+      else deferredBreaks.push({ after, exam });
+    }
+    const applyDeferredBreaks = (through: number) => {
+      const due = deferredBreaks.filter((item) => item.after <= through)
+        .sort((a, b) => examOrderKey(a.exam).localeCompare(examOrderKey(b.exam)));
+      for (const item of due) {
+        deferredBreaks.splice(deferredBreaks.indexOf(item), 1);
+        resetBonusStreak(item.exam);
+      }
     };
 
-    for (const { grade, ledgerDate } of gradesInLedgerOrder) {
+    for (const [index, { grade, ledgerDate }] of gradesInLedgerOrder.entries()) {
+      applyDeferredBreaks(index - 1);
+      visitIndex = index;
       const eventExam = examsById.get(grade.examId);
       // Retain historical grades above to resolve recorded pledge grants.
       // Their exam effects cannot cross the chapter boundary, even when an
@@ -1189,7 +1301,7 @@ export function recalculateAcademicState(
           } else if (score >= Number(exam.passMark)) {
             countBonusPass(exam, grade, score);
           } else {
-            resetBonusStreak(exam);
+            breakBonusStreak(exam);
           }
           continue;
         }
@@ -1197,7 +1309,7 @@ export function recalculateAcademicState(
           countBonusPass(exam, grade, score);
         } else if (score > exam.discountMark) {
           // راسب غير مخصوم: no deduction, but the streak starts over.
-          resetBonusStreak(exam);
+          breakBonusStreak(exam);
         }
         if (score <= exam.discountMark) {
           const penalty = examPenaltyValue(exam);
@@ -1228,6 +1340,7 @@ export function recalculateAcademicState(
       }
     }
 
+    applyDeferredBreaks(Infinity);
     applyCommandsThrough("\uffff");
 
     const opportunityCap = Number(

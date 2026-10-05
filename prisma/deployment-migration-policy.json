@@ -286,5 +286,9 @@
   "20261005090000_settle_held_grades_of_active_students": {
     "kind": "audited-data-reconciliation",
     "checksum": "92c6538c85a16add10ef74f595ef0ef7bbf99e14f182921539976cc516916479"
+  },
+  "20261005100000_clear_bonus_progress_without_active_chapter": {
+    "kind": "audited-data-reconciliation",
+    "checksum": "b9c29483380f59e96a5faa1abea4a1d86ba68b0af73a2191b7de2a6862695350"
   }
 }

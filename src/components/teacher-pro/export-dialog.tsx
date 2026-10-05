@@ -18,7 +18,7 @@ import { toast } from "@/lib/user-toast";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 import { buildProfessionalXlsx } from "@/lib/xlsx-export";
 import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
-import { buildReportOpportunityContext, buildReportTimelineEvents, reportGradeTimelineDate, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, studentReportText, DISMISSED_NO_GRADE_TEXT, DURING_DISMISSAL_GRADE_MARK, examHeldDuringDismissal, isDuringDismissalGrade, reportDismissalPeriods, type ReportBalanceNote, type ReportTimelineEvent, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
+import { buildReportOpportunityContext, buildReportTimelineEvents, reportGradeTimelineDates, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, studentReportText, DISMISSED_NO_GRADE_TEXT, DURING_DISMISSAL_GRADE_MARK, examHeldDuringDismissal, isDuringDismissalGrade, reportDismissalPeriods, type ReportBalanceNote, type ReportTimelineEvent, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
 import { GRACE_PERIOD_EXCUSE_LABEL, isStudentInGracePeriod, normalizeGracePeriodRanges } from "@/lib/grace-periods";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS, type AcademicOpportunityCommandEffect } from "@/lib/academic-types";
 import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
@@ -491,15 +491,25 @@ export function buildStudentDetailsFromProfileLog(
   // Include filtered records so a hidden pre-registration marker cannot be
   // reintroduced as a missing grade from the course exam list.
   const gradeExamIds = new Set(rawGrades.map(grade => String(grade.examId || "")));
-  const grades: StudentGradeDetail[] = rawGrades
-    // درجات امتحانات الفصل النشط الحالي فقط: عند توفر سياق الفصل النشط
-    // (currentChapter) نخفي درجات الامتحانات المنشأة قبل بداية الفصل النشط
-    // حتى يعرض التقرير فصل الطالب الحالي وحده — غياب السياق = بلا فلترة.
-    .filter((rawGrade) => {
-      const examId = String(rawGrade.examId || "");
-      return (!chapterExamIds || chapterExamIds.has(examId)) && includeExam(rawGrade.status, examMap.get(examId));
-    })
-    .map((rawGrade) => {
+  // درجات امتحانات الفصل النشط الحالي فقط: عند توفر سياق الفصل النشط
+  // (currentChapter) نخفي درجات الامتحانات المنشأة قبل بداية الفصل النشط
+  // حتى يعرض التقرير فصل الطالب الحالي وحده — غياب السياق = بلا فلترة.
+  // In the engine's exam order (date, then exam), so results that share a
+  // place in the timeline are shown as the engine replays them.
+  const shownGrades = rawGrades.filter((rawGrade) => {
+    const examId = String(rawGrade.examId || "");
+    return (!chapterExamIds || chapterExamIds.has(examId)) && includeExam(rawGrade.status, examMap.get(examId));
+  }).sort((a, b) =>
+    String(examMap.get(String(a.examId || ""))?.date || a.createdAt || "")
+      .localeCompare(String(examMap.get(String(b.examId || ""))?.date || b.createdAt || "")) ||
+    String(a.examId || "").localeCompare(String(b.examId || "")));
+  // With the report's own status, so a leave or grace day keeps its place.
+  const gradeTimelineDates = reportGradeTimelineDates(
+    shownGrades.map((rawGrade) => ({ ...rawGrade, status: reportStatus(rawGrade.status, examMap.get(String(rawGrade.examId || ""))) })),
+    (rawGrade) => examMap.get(String(rawGrade.examId || "")), timelineEvents,
+  );
+  const grades: StudentGradeDetail[] = shownGrades
+    .map((rawGrade, index) => {
       const examId = String(rawGrade.examId || "");
       const exam = examMap.get(examId);
       const grade: Record<string, unknown> & { status: string } = { ...rawGrade, status: reportStatus(rawGrade.status, exam) };
@@ -511,7 +521,7 @@ export function buildStudentDetailsFromProfileLog(
         examName: String(exam?.name || "امتحان غير محدد"),
         examType: String(exam?.type || ""),
         examDate: String(exam?.date || ""),
-        timelineDate: reportGradeTimelineDate(rawGrade, exam, timelineEvents),
+        timelineDate: gradeTimelineDates[index],
         score: score === null || score === undefined ? null : Number(score),
         fullMark:
           fullMark === null || fullMark === undefined ? null : Number(fullMark),

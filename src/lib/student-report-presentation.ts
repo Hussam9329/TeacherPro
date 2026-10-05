@@ -1,6 +1,6 @@
 import { findStudentGracePeriod, GRACE_PERIOD_EXCUSE_LABEL, type GracePeriodRange } from "./grace-periods";
 import { isExamOnOrAfterStudentRegistration } from "./exam-utils";
-import { examResultTimelineDate } from "./academic-event-order";
+import { examResultCannotDeduct, examResultLedgerDates } from "./academic-event-order";
 import type { AcademicOpportunityCommandEffect } from "./academic-types";
 import { baghdadDateKey } from "./baghdad-time";
 import { BONUS_OPPORTUNITY_ACTION, isBonusOpportunityLog } from "./bonus-opportunity";
@@ -290,19 +290,47 @@ export function buildReportTimelineEvents(
 }
 
 /** Keep the exam's real day and use same-day balance movements only to
- * resolve a date-only exam's position within that day. */
+ * resolve a date-only exam's position within that day, by the engine's own
+ * rule (examResultLedgerDates): a result that can deduct follows a movement
+ * it was entered after; a pass keeps its exam's place. */
 export function reportGradeTimelineDate(
   grade: Record<string, unknown>,
   exam: Record<string, unknown> | undefined,
   events: readonly ReportTimelineEvent[],
 ): string {
-  const examDate = reportLogDate({ date: exam?.date });
-  const enteredDate = reportLogDate({ date: grade.createdAt });
-  if (!examDate) return enteredDate || "";
-  if (!enteredDate) return examDate;
-  return examResultTimelineDate(examDate, enteredDate, events
+  return reportGradeTimelineDates([grade], () => exam, events)[0];
+}
+
+/** Every grade's place in the timeline, in input order. Grades of the same
+ * day are placed together, so a pass never comes before an earlier exam of
+ * its day. */
+export function reportGradeTimelineDates(
+  grades: readonly Record<string, unknown>[],
+  examFor: (grade: Record<string, unknown>) => Record<string, unknown> | undefined,
+  events: readonly ReportTimelineEvent[],
+): string[] {
+  const balanceDates = events
     .filter(event => event.kind !== "deduct" && (event.kind !== "return" || event.balanceAfter !== null))
-    .map(event => event.date));
+    .map(event => event.date);
+  const placed: number[] = [];
+  const results: Array<{ examDate: string; enteredDate: string; orderKey: string; cannotDeduct: boolean }> = [];
+  const dates = grades.map((grade, index) => {
+    const exam = examFor(grade);
+    const examDate = reportLogDate({ date: exam?.date });
+    const enteredDate = reportLogDate({ date: grade.createdAt });
+    if (!examDate) return enteredDate || "";
+    if (!enteredDate) return examDate;
+    placed.push(index);
+    results.push({
+      examDate,
+      enteredDate,
+      orderKey: `${examDate}|${String(exam?.id ?? grade.examId ?? "")}`,
+      cannotDeduct: examResultCannotDeduct(grade, exam),
+    });
+    return examDate;
+  });
+  examResultLedgerDates(results, balanceDates).forEach((date, index) => { dates[placed[index]] = date; });
+  return dates;
 }
 
 function reportLogDate(log: Record<string, unknown>): string | null {

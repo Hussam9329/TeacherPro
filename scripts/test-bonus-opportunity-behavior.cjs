@@ -276,13 +276,29 @@ scenario("32 only exams from the start day count as passes", () => {
   const r = run([["s", 12, { day: -3 }], ["s", 77, { day: -1 }], ["s", 69, { day: 1 }], ["s", 70, { day: 2 }]]);
   assert.equal(balance(r), 3); assert.deepEqual(r.bonuses.map((b) => b.examId), ["e4"]);
 });
+// Exams before the return whose grades the return settled, each with the
+// bonus it earned then.
+const settledBefore = (n) => ({
+  exams: Array.from({ length: n }, (_, i) => ({
+    id: `old${i + 1}`, name: `سابق ${i + 1}`, type: "يومي", date: day(i + 1), fullMark: 100, passMark: 60, discountMark: 19,
+    opportunitiesPenalty: 1, dismissalGrade: null, noDiscount: false, active: true, courseIds: ["course"],
+    examCourses: [{ courseId: "course", chapterId: "chapter" }],
+  })),
+  grades: Array.from({ length: n }, (_, i) => ({
+    id: `gold${i + 1}`, studentId: "student", examId: `old${i + 1}`, status: "درجة", score: 80,
+    createdAt: day(i + 1).replace("T00:00", "T10:00"), updatedAt: day(i + 1).replace("T00:00", "T10:00"),
+  })),
+  bonuses: Array.from({ length: n }, (_, i) => ({
+    id: `auto_bonus_old${i + 1}`, studentId: "student", examId: `old${i + 1}`, action: BONUS_OPPORTUNITY_ACTION, amount: 1,
+    reason: "تلقائي: فرصة مكافأة: سابقة", date: day(i + 1), chapterId: "chapter",
+  })),
+  ids: Array.from({ length: n }, (_, i) => `gold${i + 1}`),
+});
 scenario("33 the chapter limit counts bonuses earned before a return", () => {
-  const earlier = {
-    id: "auto_bonus_old", studentId: "student", examId: "old", action: BONUS_OPPORTUNITY_ACTION, amount: 1,
-    reason: "تلقائي: فرصة مكافأة: سابقة", date: day(1), chapterId: "chapter",
-  };
+  const before = settledBefore(2);
   const r = run([["s", 10, { day: 6 }], ["s", 70, { day: 7 }], ["s", 80, { day: 8 }], ["s", 75, { day: 9 }], ["s", 90, { day: 10 }]], {
-    logs: [{ ...earlier }, { ...earlier, id: "auto_bonus_old2", date: day(2) }, grant(2, 5)],
+    exams: before.exams, grades: before.grades,
+    logs: [...before.bonuses, { ...grant(2, 5), settledGradeIds: JSON.stringify(before.ids) }],
   });
   assert.equal(r.bonuses.length, 0); assert.equal(balance(r), 1);
 });
@@ -323,5 +339,170 @@ scenario("38 without an active chapter there is no progress to show", () => {
   state.students[0].bonusProgress = 1;
   const result = recalculateAcademicState(state, new Set(["student"]));
   assert.equal(result.students[0].bonusProgress, 0);
+});
+// The six findings of the trial check (all fixed).
+const replay = (state, logs, students) => recalculateAcademicState({ ...state, students: students || state.students, opportunityLogs: logs }, new Set(["student"]));
+const bonusIds = (result) => result.opportunityLogs.filter((log) => log.action === BONUS_OPPORTUNITY_ACTION).map((log) => log.examId);
+scenario("39 deleting a grade that earned a bonus: one recalculation gives the final answer", () => {
+  const before = run([["s", 12], ["s", 70], ["s", 80], ["s", 10], ["s", 70], ["s", 80], ["s", 10], ["s", 70], ["s", 80]]);
+  assert.deepEqual(before.bonuses.map((b) => b.examId), ["e3", "e6"]);
+  const state = { ...before.state, grades: before.state.grades.filter((grade) => grade.id !== "g3") };
+  const first = replay(state, before.logs);
+  const second = replay(state, first.opportunityLogs, first.students);
+  const third = replay(state, second.opportunityLogs, second.students);
+  assert.deepEqual(bonusIds(first), ["e6", "e9"]);
+  assert.deepEqual([first, second, third].map((r) => [r.students[0].opportunities, bonusIds(r)]),
+    [[2, ["e6", "e9"]], [2, ["e6", "e9"]], [2, ["e6", "e9"]]]);
+});
+scenario("40 a pass counts on its exam's day, however late it is entered", () => {
+  const add = command("add", "إضافة", 1, 3, "تعويض");
+  const later = [["s", 10, { day: 5 }], ["s", 70, { day: 6 }], ["s", 80, { day: 7 }], ["s", 10, { day: 8 }], ["s", 70, { day: 9 }], ["s", 80, { day: 10 }]];
+  const at = (entered) => run([["s", 12, { day: 1 }], ["s", 70, { day: 2 }], ["s", 80, { day: 3, entered }], ...later], { logs: [add] });
+  const quick = at(day(3).replace("T00:00", "T10:00"));
+  const late = at(day(4));
+  assert.deepEqual([balance(late), late.bonuses.map((b) => b.examId)], [balance(quick), quick.bonuses.map((b) => b.examId)]);
+  assert.deepEqual(quick.bonuses.map((b) => b.examId), ["e3", "e6"]);
+  // A late loss still spends only the balance it knew about.
+  const lateLoss = run([["a", null, { day: 1 }], ["a", null, { day: 2 }], ["a", null, { day: 3, entered: day(4) }]], { logs: [add] });
+  assert.equal(balance(lateLoss), 1);
+  // A fail above the discount mark keeps its exam's place too: typed after
+  // the credit it neither pushes the day's passes behind it (bonus at e4)
+  // nor lets a later pass of its day pair across it (no bonus).
+  const at3 = (h) => day(3).replace("T00:00", `T${h}:00`);
+  const failFirst = (h) => run([["s", 12, { day: 1 }], ["s", 45, { day: 3, entered: at3(h) }], ["s", 70, { day: 3, entered: at3("09") }], ["s", 80, { day: 3, entered: at3("09") }]], { logs: [add] });
+  for (const h of ["09", "15"]) assert.deepEqual(failFirst(h).bonuses.map((b) => b.examId), ["e4"]);
+  const failBetween = (h) => run([["s", 12, { day: 1 }], ["s", 70, { day: 2 }], ["s", 45, { day: 3, entered: at3(h) }], ["s", 80, { day: 3, entered: at3("09") }]], { logs: [add] });
+  for (const h of ["09", "15"]) assert.equal(failBetween(h).bonuses.length, 0);
+});
+scenario("40b a pass never jumps ahead of an earlier exam of its day", () => {
+  const at = (h) => day(3).replace("T00:00", `T${h}:00`);
+  const credit = command("add", "إضافة", 1, 3, "تعويض");
+  // Two absences then a pass on one day, all typed after the noon credit:
+  // the pass comes after them, so it never pairs with yesterday's pass and
+  // the second absence at zero dismisses.
+  const a = run([["a", null, { day: 1 }], ["a", null, { day: 1 }], ["a", null, { day: 1 }], ["s", 70, { day: 2 }],
+    ["a", null, { day: 3, entered: at(13) }], ["a", null, { day: 3, entered: at(13).replace(":00:", ":30:") }], ["s", 80, { day: 3, entered: at(14) }]], { logs: [credit] });
+  assert.equal(balance(a), "مفصول"); assert.equal(a.bonuses.length, 0);
+  // Cheating first that day, then a pass: no bonus is written for the dismissed student.
+  const c = run([["s", 12, { day: 1 }], ["s", 70, { day: 2 }], ["cheat", null, { day: 3, entered: at(13) }], ["s", 80, { day: 3, entered: at(14) }]], { logs: [credit] });
+  assert.equal(balance(c), "مفصول"); assert.equal(c.bonuses.length, 0);
+  // A same-day loss before the pass, then a pass the next day: the pair is
+  // the two passes after the loss, whenever the loss was typed.
+  const early = command("add", "إضافة", 1, 2, "تعويض", { date: day(2).replace("T00:00", "T08:00") });
+  const lossAt = (entered) => run([["a", null, { day: 1 }], ["s", 10, { day: 2, entered }], ["s", 70, { day: 2, entered: day(2).replace("T00:00", "T14:00") }],
+    ["s", 80, { day: 3 }], ["a", null, { day: 4 }], ["a", null, { day: 5 }], ["a", null, { day: 6 }]], { logs: [early] });
+  for (const entered of [day(2).replace("T00:00", "T07:00"), day(2).replace("T00:00", "T13:00")]) {
+    const r = lossAt(entered);
+    assert.equal(r.student.status, "نشط"); assert.equal(balance(r), 0); assert.deepEqual(r.bonuses.map((b) => b.examId), ["e4"]);
+  }
+  // Losses before and after two passes of one day, one typed after the noon
+  // credit and one before it: the passes still pair (bonus at the second),
+  // and the later loss breaks the streak only after them.
+  const around = (first, last, after = []) => run([["a", null, { day: 1 }], ["a", null, { day: 1 }],
+    ["a", null, { day: 3, entered: at(first) }], ["s", 70, { day: 3, entered: at("09") }], ["s", 80, { day: 3, entered: at("09") }],
+    ["a", null, { day: 3, entered: at(last) }], ...after], { logs: [credit] });
+  for (const [first, last] of [["09", "09"], ["13", "13"], ["09", "13"], ["13", "09"]]) {
+    const r = around(first, last);
+    assert.equal(balance(r), 1, `${first}/${last}`); assert.deepEqual(r.bonuses.map((b) => b.examId), ["e5"], `${first}/${last}`);
+    assert.equal(r.student.bonusProgress, 0);
+    const next = around(first, last, [["a", null, { day: 4 }]]);
+    assert.equal(next.student.status, "نشط", `${first}/${last}`); assert.equal(balance(next), 0);
+  }
+});
+scenario("40c a result with no effect never moves a pass, however late it is typed", () => {
+  const at = (h) => day(3).replace("T00:00", `T${h}:00`);
+  const credit = command("add", "إضافة", 1, 3, "تعويض");
+  for (const neutral of [["leave", null], ["nd", 5], ["off", 5]]) {
+    const outcome = (h) => {
+      const r = run([["s", 12, { day: 1 }], ["s", 70, { day: 2 }], [neutral[0], neutral[1], { day: 3, entered: at(h) }],
+        ["s", 80, { day: 3, entered: at("09") }], ["a", null, { day: 4 }], ["a", null, { day: 5 }],
+        ["s", 70, { day: 6 }], ["s", 75, { day: 7 }], ["s", 80, { day: 8 }], ["s", 90, { day: 9 }]], { logs: [credit] });
+      return [balance(r), r.bonuses.map((b) => b.examId)];
+    };
+    assert.deepEqual(outcome("13"), outcome("09"), neutral[0]);
+    assert.deepEqual(outcome("09")[1][0], "e4", neutral[0]);
+  }
+});
+const returnedAt = (n, settled) => ({ ...grant(2, n), settledGradeIds: JSON.stringify(settled) });
+scenario("41 an exam on the return day graded after the return counts, as a pass exactly as a loss", () => {
+  const losses = [["a", null, { day: 1 }], ["a", null, { day: 2 }], ["a", null, { day: 3 }], ["a", null, { day: 4 }]];
+  const settled = ["g1", "g2", "g3", "g4"];
+  const afterReturn = { entered: day(5).replace("T00:00", "T15:00") };
+  const pass = run([...losses, ["s", 70, { day: 5, ...afterReturn }], ["s", 80, { day: 6 }]], { logs: [returnedAt(5, settled)] });
+  assert.equal(balance(pass), 3); assert.deepEqual(pass.bonuses.map((b) => b.examId), ["e6"]);
+  const loss = run([...losses, ["a", null, { day: 5, ...afterReturn }]], { logs: [returnedAt(5, settled)] });
+  assert.equal(balance(loss), 1);
+  // A same-day grade the return settled stays out, for passes as for losses.
+  const known = run([...losses, ["s", 70, { day: 5 }], ["s", 80, { day: 6 }]], { logs: [returnedAt(5, [...settled, "g5"])] });
+  assert.equal(balance(known), 2); assert.equal(known.bonuses.length, 0); assert.equal(known.student.bonusProgress, 1);
+});
+scenario("42 a missing grade before the two passes does not hold the bonus", () => {
+  const r = run([["s", 12], ["missing"], ["s", 70], ["s", 80]]);
+  assert.equal(balance(r), 3); assert.deepEqual(r.bonuses.map((b) => b.examId), ["e4"]);
+  assert.equal(r.student.bonusProgress, 0); assert.equal(r.student.bonusWaitingExamName, null);
+  // Whatever the missing grade turns out to be, the bonus stays.
+  assert.equal(balance(run([["s", 12], ["s", 75], ["s", 70], ["s", 80]])), 3);
+  assert.equal(balance(run([["s", 12], ["s", 45], ["s", 70], ["s", 80]])), 3);
+  assert.equal(balance(run([["s", 12], ["a"], ["s", 70], ["s", 80]])), 2);
+  // Between the two passes it still holds.
+  const between = run([["s", 12], ["s", 70], ["missing"], ["s", 80]]);
+  assert.equal(balance(between), 2); assert.equal(between.student.bonusProgress, 2);
+  assert.equal(between.student.bonusWaitingExamName, "امتحان 3");
+  // A later pair with nothing missing between its passes earns it.
+  const later = run([["s", 12], ["s", 70], ["missing"], ["s", 80], ["s", 90]]);
+  assert.equal(balance(later), 3); assert.deepEqual(later.bonuses.map((b) => b.examId), ["e5"]);
+  assert.match(later.bonuses[0].reason, /«امتحان 4» \(80\) و«امتحان 5» \(90\)/);
+  const stillHeld = run([["s", 12], ["s", 70], ["missing"], ["s", 80], ["missing"], ["s", 90]]);
+  assert.equal(balance(stillHeld), 2); assert.equal(stillHeld.student.bonusWaitingExamName, "امتحان 3");
+});
+const adminReset = (from, to, n) => command("reset", "إعادة تعيين", to, n,
+  `إعادة تعيين الفرص من إدارة الفرص [قبل: ${from} → بعد: ${to}، فرق: ${to - from}]`,
+  { balanceBefore: from, balanceAfter: to, settledGradeIds: "[]" });
+scenario("43 a reset holds only what it removed", () => {
+  // Reset to the full 3, then the limit raised to 4: the 4th is earned by passing.
+  const raised = run([["s", 70, { day: 2 }], ["s", 80, { day: 3 }]], { cap: 4, logs: [adminReset(1, 3, 1)] });
+  assert.equal(balance(raised), 4); assert.equal(raised.bonuses.length, 1);
+  // A reset that lowered the balance is still a deduction passes cannot undo.
+  const lowered = run([["s", 70, { day: 2 }], ["s", 80, { day: 3 }]], { logs: [adminReset(3, 1, 1)] });
+  assert.equal(balance(lowered), 1); assert.equal(lowered.bonuses.length, 0);
+  // A reset that raised the balance short of the limit removed nothing.
+  const partial = run([["s", 70, { day: 2 }], ["s", 80, { day: 3 }]], { logs: [adminReset(1, 2, 1)] });
+  assert.equal(balance(partial), 3); assert.equal(partial.bonuses.length, 1);
+  // A manual deduction before a reset stays held: confirming the balance
+  // (before = after) frees nothing, and a lowering reset adds to it.
+  const deduct = command("m", "خصم", 1, 1, "سلوك", { date: day(1).replace("T00:00", "T09:00") });
+  const confirm = command("reset", "إعادة تعيين", 2, 1, "حماية P2: تثبيت الرصيد الموجود دون تغيير",
+    { balanceBefore: 2, balanceAfter: 2, appliedAmount: 0, settledGradeIds: "[]" });
+  const confirmed = run([["s", 70, { day: 3 }], ["s", 80, { day: 4 }]], { logs: [deduct, confirm] });
+  assert.equal(balance(confirmed), 2); assert.equal(confirmed.bonuses.length, 0);
+  const deeper = run([["s", 70, { day: 3 }], ["s", 80, { day: 4 }], ["s", 75, { day: 5 }], ["s", 90, { day: 6 }]],
+    { logs: [deduct, adminReset(2, 1, 1)] });
+  assert.equal(balance(deeper), 1); assert.equal(deeper.bonuses.length, 0);
+  // An undone deduction is not carried.
+  const undo = command("u", "إضافة", 1, 1, "تراجع موثق عن خصم: سلوك [undo-ref:m]", { date: day(1).replace("T00:00", "T10:00") });
+  const undone = run([["s", 70, { day: 3 }], ["s", 80, { day: 4 }]], { logs: [deduct, undo, adminReset(3, 2, 1)] });
+  assert.equal(balance(undone), 2); assert.equal(undone.bonuses.length, 0);
+  // A reset to the full limit gives back an earlier deduction: raising the
+  // limit later leaves only a gap passes can earn back.
+  const restored = run([["s", 70, { day: 3 }], ["s", 80, { day: 4 }]], { cap: 4, logs: [deduct, adminReset(2, 3, 1)] });
+  assert.equal(balance(restored), 4); assert.equal(restored.bonuses.length, 1);
+  // A second reset that changes nothing keeps what an earlier one held.
+  const twice = run([["s", 70, { day: 3 }], ["s", 75, { day: 4 }], ["s", 80, { day: 5 }], ["s", 90, { day: 6 }]],
+    { logs: [{ ...adminReset(3, 1, 1), id: "reset-a", date: day(1).replace("T00:00", "T11:00") }, adminReset(1, 1, 2)] });
+  assert.equal(balance(twice), 1); assert.equal(twice.bonuses.length, 0);
+  const confirmedTwice = run([["s", 70, { day: 3 }], ["s", 80, { day: 4 }]],
+    { logs: [deduct, { ...confirm, id: "confirm-a" }, { ...confirm, id: "confirm-b", date: day(2).replace("T00:00", "T12:00") }] });
+  assert.equal(balance(confirmedTwice), 2); assert.equal(confirmedTwice.bonuses.length, 0);
+  // A deduction a later plain credit refilled is not carried into a reset:
+  // the exam loss after it stays recoverable.
+  const refill = command("credit", "إضافة", 1, 1, "تعويض", { date: day(1).replace("T00:00", "T12:00"), balanceBefore: 2, balanceAfter: 3 });
+  const p2 = command("p2", "إعادة تعيين", 2, 2, "حماية P2: تثبيت الرصيد الموجود دون تغيير",
+    { date: day(2).replace("T00:00", "T12:00"), balanceBefore: 2, balanceAfter: 2, appliedAmount: 0, settledGradeIds: '["g1"]' });
+  const refilled = run([["a", null, { day: 2 }], ["s", 80, { day: 4 }], ["s", 90, { day: 5 }]],
+    { logs: [{ ...deduct, balanceBefore: 3, balanceAfter: 2 }, refill, p2] });
+  assert.equal(balance(refilled), 3); assert.deepEqual(refilled.bonuses.map((b) => b.examId), ["e3"]);
+  // Lowered from 3 to 2 under a raised limit of 4: only the one it removed is held.
+  const both = run([["s", 70, { day: 2 }], ["s", 80, { day: 3 }], ["s", 75, { day: 4 }], ["s", 90, { day: 5 }]], { cap: 4, logs: [adminReset(3, 2, 1)] });
+  assert.equal(balance(both), 3); assert.equal(both.bonuses.length, 1);
 });
 console.log(`bonus opportunity behavior: ${count} scenarios passed`);
