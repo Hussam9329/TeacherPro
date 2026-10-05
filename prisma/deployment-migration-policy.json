@@ -282,5 +282,9 @@
   "20261004120000_bot_problems": {
     "kind": "expand",
     "checksum": "5c247f56762371aca1860ebf8273e141e85293ca803975adac93b38f734c29b4"
+  },
+  "20261005090000_settle_held_grades_of_active_students": {
+    "kind": "audited-data-reconciliation",
+    "checksum": "92c6538c85a16add10ef74f595ef0ef7bbf99e14f182921539976cc516916479"
   }
 }

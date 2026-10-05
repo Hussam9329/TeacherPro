@@ -1,3 +1,4 @@
+import { settleHeldGradesOfActiveStudents } from "@/lib/grade-smart-note-reactivation-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { examChapterExclusion } from "@/lib/exam-chapter-scope";
 import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
@@ -1068,7 +1069,7 @@ export async function recalculateStudentsAcademicState(
   result.opportunityLogs.push(...settledHistory);
   // A «فرصة مكافأة» that removed a stored automatic dismissal returns the
   // student here, like an exam edit that removes its dismissal: a dated
-  // note, no grant, and grades held while dismissed stay pending smart notes.
+  // note and no grant; grades held while dismissed are settled below.
   const storedDismissed = new Set(state.students.filter(student => student.status === "مفصول").map(student => student.id));
   const bonusReturned = result.students.filter(student =>
     student.bonusAutoReturned && student.status === "نشط" && storedDismissed.has(student.id) &&
@@ -1083,14 +1084,18 @@ export async function recalculateStudentsAcademicState(
     })) });
   }
   // Explicit leave/exam edits may remove only a proved obsolete exam dismissal.
-  // Neither creates a grant nor promotes dismissed pending grades.
-  return persistAcademicRecalculation(
+  // Neither creates a grant.
+  const persisted = await persistAcademicRecalculation(
     client,
     recalculableStudentIds,
     result,
     preservedHistory,
     state.opportunityLogs,
   );
+  // A student who is no longer dismissed keeps no held grade: each becomes a
+  // grade with no effect, or is deleted when its exam has an official grade.
+  await settleHeldGradesOfActiveStudents(client, recalculableStudentIds);
+  return persisted;
 }
 
 /** A score entered for a dismissed student is held as a smart note, except

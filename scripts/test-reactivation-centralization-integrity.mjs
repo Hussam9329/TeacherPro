@@ -117,10 +117,10 @@ check(
 );
 
 check(
-  !recalculation.includes("migrateDismissedPendingGradesAfterActivation") &&
   !recalculation.includes("reactivatedStudentIds") &&
+  recalculation.includes("await settleHeldGradesOfActiveStudents(client, recalculableStudentIds)") &&
   statusAction.includes("await migrateDismissedPendingGradesAfterActivation("),
-  "ترحيل درجات المفصول محصور بمسار الاسترجاع الصريح ولا يوجد فرع ميت داخل إعادة الاحتساب",
+  "إعادة الاحتساب ما ترجّع أحد، بس الطالب النشط ما يبقى عنده درجات معلّقة (تنتقل بلا تأثير أو تنحذف إذا أكو درجة رسمية)",
 );
 
 check(

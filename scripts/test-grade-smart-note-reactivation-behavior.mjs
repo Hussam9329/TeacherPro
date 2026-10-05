@@ -128,8 +128,13 @@ function createFakeTransaction(initialNotes, initialGrades = []) {
   const grades = structuredClone(initialGrades);
   let nextGradeId = 1;
 
+  // Equality, plus the { not } and { in } filters the code uses.
   const matches = (row, where) =>
-    Object.entries(where).every(([key, value]) => row[key] === value);
+    Object.entries(where).every(([key, value]) => {
+      if (value && typeof value === "object" && "not" in value) return row[key] !== value.not;
+      if (value && typeof value === "object" && "in" in value) return value.in.includes(row[key]);
+      return row[key] === value;
+    });
 
   return {
     state: { notes, grades },
@@ -159,6 +164,13 @@ function createFakeTransaction(initialNotes, initialGrades = []) {
           count += 1;
         }
         return { count };
+      },
+      async deleteMany({ where }) {
+        const before = notes.length;
+        for (let index = notes.length - 1; index >= 0; index -= 1) {
+          if (matches(notes[index], where)) notes.splice(index, 1);
+        }
+        return { count: before - notes.length };
       },
     },
     grade: {
@@ -308,9 +320,9 @@ test("reactivation migrates only DISMISSED_PENDING once and records provenance",
   );
 
   assert.equal(first.processed, 1);
-  assert.equal(first.conflicts, 0);
+  assert.equal(first.deleted, 0);
   assert.equal(second.processed, 0);
-  assert.equal(second.conflicts, 0);
+  assert.equal(second.deleted, 0);
   assert.equal(tx.state.grades.length, 1);
   assert.equal(tx.state.grades[0].academicEffectExcluded, true);
   assert.equal(
@@ -337,7 +349,7 @@ test("reactivation migrates only DISMISSED_PENDING once and records provenance",
 });
 
 
-test("a dismissed pending score above the current full mark is rejected", async () => {
+test("a held score above the current full mark is deleted, no grade is made", async () => {
   const tx = createFakeTransaction([
     smartNote({ score: 91, examFullMark: 80 }),
   ]);
@@ -349,26 +361,23 @@ test("a dismissed pending score above the current full mark is rejected", async 
   );
 
   assert.equal(result.processed, 0);
-  assert.equal(result.conflicts, 1);
+  assert.equal(result.deleted, 1);
   assert.equal(tx.state.grades.length, 0);
-  assert.equal(tx.state.notes[0].status, "REJECTED");
-  assert.match(tx.state.notes[0].resolution, /0 - 80/);
+  assert.equal(tx.state.notes.length, 0);
 });
 
-test("an official grade wins and the dismissed attempt becomes CONFLICT", async () => {
+test("two grades for one exam: the official one stays and the held one is deleted", async () => {
   const tx = createFakeTransaction(
-    [smartNote({ score: 12 })],
+    [smartNote({ score: 8 })],
     [
       {
         id: "official-grade",
         studentId: "student-1",
         examId: "exam-1",
-        status: "درجة",
-        score: 91,
+        status: "غائب",
+        score: null,
         academicEffectExcluded: false,
-        // Even a stale/reopened note that already points at a Grade must not
-        // turn that existing official row back into a migration retry.
-        smartNoteId: "note-dismissed",
+        smartNoteId: null,
       },
     ],
   );
@@ -380,10 +389,35 @@ test("an official grade wins and the dismissed attempt becomes CONFLICT", async 
   );
 
   assert.equal(result.processed, 0);
-  assert.equal(result.conflicts, 1);
+  assert.equal(result.deleted, 1);
   assert.equal(tx.state.grades.length, 1);
-  assert.equal(tx.state.grades[0].score, 91);
-  assert.equal(tx.state.grades[0].academicEffectExcluded, false);
-  assert.equal(tx.state.notes[0].status, "CONFLICT");
-  assert.match(tx.state.notes[0].resolution, /لم تُستبدل الدرجة الرسمية/);
+  assert.equal(tx.state.grades[0].status, "غائب");
+  assert.equal(tx.state.notes.length, 0);
+});
+
+test("a held attempt an older version marked «تعارض» is deleted on the next return", async () => {
+  const tx = createFakeTransaction(
+    [smartNote({ score: 8, status: "CONFLICT" })],
+    [{ id: "official-grade", studentId: "student-1", examId: "exam-1", status: "درجة", score: 5, smartNoteId: null }],
+  );
+
+  const result = await migrateDismissedPendingGradesAfterActivation(tx, "student-1", { name: "النظام" });
+
+  assert.equal(result.deleted, 1);
+  assert.equal(tx.state.notes.length, 0);
+  assert.equal(tx.state.grades[0].score, 5);
+});
+
+test("a held attempt whose grade already exists is only marked processed", async () => {
+  const tx = createFakeTransaction(
+    [smartNote({ score: 12 })],
+    [{ id: "its-grade", studentId: "student-1", examId: "exam-1", status: "درجة", score: 12, smartNoteId: "note-dismissed" }],
+  );
+
+  const result = await migrateDismissedPendingGradesAfterActivation(tx, "student-1", { name: "النظام" });
+
+  assert.equal(result.processed, 1);
+  assert.equal(result.deleted, 0);
+  assert.equal(tx.state.notes[0].status, "PROCESSED");
+  assert.equal(tx.state.grades.length, 1);
 });

@@ -29,7 +29,10 @@ require.extensions['.ts'] = (m,f) => m._compile(ts.transpileModule(fs.readFileSy
 
   function predicate(where, values=[]) {
     const flat = where.studentId_examId || where;
-    return { values, clause: Object.entries(flat).map(([key,value]) => { values.push(value);return `"${key}"=$${values.length}`; }).join(' AND ') || 'true' };
+    return { values, clause: Object.entries(flat).map(([key,value]) => {
+      if (value && typeof value === 'object' && 'not' in value) { values.push(value.not);return `"${key}"<>$${values.length}`; }
+      values.push(value);return `"${key}"=$${values.length}`;
+    }).join(' AND ') || 'true' };
   }
   const rows = async (table, where={}) => { const p=predicate(where);return (await db.query(`SELECT * FROM "${table}" WHERE ${p.clause} ORDER BY id`,p.values)).rows; };
   const insert = async (table, data) => {
@@ -50,6 +53,7 @@ require.extensions['.ts'] = (m,f) => m._compile(ts.transpileModule(fs.readFileSy
       update: async ({where,data}) => (await update(table,where,data))[0],
       updateMany: async ({where,data}) => ({count:(await update(table,where,data)).length}),
       createMany: async ({data}) => { for (const row of data) await insert(table,row);return {count:data.length}; },
+      deleteMany: async ({where}) => { const p=predicate(where);return {count:(await db.query(`DELETE FROM "${table}" WHERE ${p.clause} RETURNING id`,p.values)).rows.length}; },
     };
   }
   tx.courseChapter = {findMany:async ({where}) => Promise.all((await rows('CourseChapter',where)).map(async link=>({...link,chapter:(await rows('Chapter',{id:link.chapterId}))[0]})))};
@@ -112,7 +116,8 @@ require.extensions['.ts'] = (m,f) => m._compile(ts.transpileModule(fs.readFileSy
   assert.deepEqual(await rows('Grade',{id:'old-g'}),before.Grade,'official absence must remain exactly unchanged');
   const migrated=(await rows('Grade',{studentId:'s1',examId:'pending'}))[0];
   assert.equal(migrated.score,12);assert.equal(migrated.academicEffectExcluded,true);
-  assert.equal((await rows('GradeSmartNote',{id:'p2'}))[0].status,'CONFLICT','existing official grade wins over pending score');
+  assert.equal((await rows('GradeSmartNote',{id:'p2'})).length,0,'existing official grade wins: the held score is deleted, not left pending');
+  assert.equal((await rows('GradeSmartNote',{studentId:'s1',status:{not:'PROCESSED'}})).length,0,'a returned student keeps no held grade');
   const logs1=await rows('OpportunityLog',{studentId:'s1'});
   assert.deepEqual(logs1.find(l=>l.id==='history'),before.OpportunityLog[0]);
   assert.equal(hasTwoOpportunityPledge(logs1),false,'manual restoration must not be presented as a pledge');
@@ -169,5 +174,5 @@ require.extensions['.ts'] = (m,f) => m._compile(ts.transpileModule(fs.readFileSy
   legacy.opportunityLogs.push({id:'legacy',studentId:'s3',action:'رصيد إعادة التفعيل',amount:1,reason:'تعهد قديم',ledgerVersion:null,date:new Date().toISOString(),chapterId:'ch'});
   assert.equal(replay(legacy).find(s=>s.id==='s3').opportunities,2,'legacy pledge interpretation remains unchanged');
   await db.close();
-  console.log('PASS: both real recovery APIs, strict validation, atomic rollback, no duplicate grants, preserved grade history, pending-grade conflicts, 1/2/3-chance replay, future dismissal law, and unchanged pledges');
+  console.log('PASS: both real recovery APIs, strict validation, atomic rollback, no duplicate grants, preserved grade history, held grades settled (official grade wins), 1/2/3-chance replay, future dismissal law, and unchanged pledges');
 })().catch(error=>{console.error(error);process.exitCode=1;});
