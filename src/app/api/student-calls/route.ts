@@ -20,6 +20,9 @@ import {
   assertStudentsNotArchived,
   isArchivedStudentError,
 } from "@/lib/archived-student-guard";
+import { parseCallWindowId } from "@/lib/call-batch";
+import { dropCallHold, holdCallCase } from "@/lib/call-reservations-server";
+import { writeAuditLog } from "@/lib/audit-log-server";
 
 function dateOrNull(value: unknown): Date | null {
   if (!value) return null;
@@ -104,6 +107,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const data = normalizeCallPayload(body);
+    const windowId = parseCallWindowId(body?.windowId);
     const studentError = requireText(data.studentId, "الطالب");
     if (studentError) return validationError(studentError);
     const categoryError = requireText(data.category, "نوع المكالمة");
@@ -155,12 +159,21 @@ export async function POST(req: NextRequest) {
             return { studentCall: null, deleted: false };
           }
 
-          const { createdAt: _createdAt, ...updateData } = data;
+          // Who made this contact action, and when (shown in the card, the
+          // logs and the student's story).
+          const actor = {
+            actedAt: new Date(),
+            actedById: principal.id,
+            actedByName: principal.name || principal.username || "مستخدم",
+          };
+          const { createdAt: _createdAt, ...callData } = data;
+          const updateData = { ...callData, ...(examCall ? actor : {}) };
           // Preserve a legacy category when reusing an old row. The category is
           // metadata now; studentId + examId is the authoritative call identity.
           updateData.category = existing?.category || data.category;
           const createData = {
             ...data,
+            ...(examCall ? actor : {}),
             category: String(updateData.category || data.category),
           };
           let studentCall;
@@ -196,6 +209,23 @@ export async function POST(req: NextRequest) {
               id: { not: studentCall.id },
             },
           });
+
+          if (examCall && data.examId) {
+            // «دفعات»: any action ends the hold on this student. Taking the
+            // action back returns them to the window that asked, if nobody
+            // else holds them meanwhile.
+            if (data.status) await dropCallHold(tx, data.studentId, data.examId);
+            else if (windowId) await holdCallCase(tx, { id: windowId, ownerId: principal.id }, data.studentId, data.examId);
+            const previous = String(existing?.status || "");
+            if (previous !== data.status) {
+              await writeAuditLog(principal, "المكالمات", data.status ? "تحديث حالة مكالمة" : "مسح حالة مكالمة", {
+                studentId: data.studentId,
+                examId: data.examId,
+                status: data.status || "بدون إجراء",
+                previousStatus: previous || "بدون إجراء",
+              }, { tx });
+            }
+          }
 
           return { studentCall, deleted: false };
         }),

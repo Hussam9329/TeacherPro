@@ -13,8 +13,11 @@ import {
   callCandidatesApi,
   callCourseExamsApi,
   callStatsApi,
+  callWindowApi,
   studentCallApi,
+  type CallBatchInfo,
   type CallStatsResponse,
+  type LiveCallWindowRow,
 } from "@/lib/api";
 import {
   AlertCircle,
@@ -69,7 +72,7 @@ import { formatOpportunityBalance, getOpportunityLimit } from "@/lib/opportunity
 import { baghdadTodayKey } from "@/lib/baghdad-time";
 import { CALL_STUDENT_NOTE_CATEGORY } from "@/lib/call-notes-filter";
 import { contactStatusMatchesFilter } from "@/lib/call-contact-status";
-import { callWorkShareOptions, parseCallWorkShare } from "@/lib/call-work-share";
+import { CALL_BATCH_SIZE, CALL_WINDOW_HEARTBEAT_MS } from "@/lib/call-batch";
 import {
   isStudentExamCall,
   studentExamCallIdentityKey,
@@ -95,6 +98,7 @@ type CallStatusFilter = "all" | "discounted" | "full";
 type CallGradeDisplayMode = "latest" | "latest-two" | "all";
 type CallContactStatusFilter =
   | "all"
+  | "batch"
   | "no-action"
   | "contacted"
   | "unanswered"
@@ -122,6 +126,8 @@ type CallStudentRow = {
   student: Student;
   items: CallGradeItem[];
   focusItem: CallGradeItem | null;
+  /** «دفعات»: the calls window holding this student, if any. */
+  heldBy?: { userName: string; mine: boolean } | null;
 };
 
 type CallExportRow = {
@@ -137,12 +143,14 @@ const callStatusFilterLabels: Record<CallStatusFilter, string> = {
   full: "الدرجات الكاملة",
 };
 
-/** Each laptop remembers its own «تقسيم العمل» slice. */
-const CALL_WORK_SHARE_STORAGE_KEY = "teacherpro-calls-work-share";
-const callWorkShareChoices = callWorkShareOptions();
-function callWorkShareLabel(value: string): string {
-  const share = parseCallWorkShare(value);
-  return share ? `القسم ${share.part} من ${share.parts}` : "كل الطلاب";
+/** Each open calls window is its own holder of a batch («دفعتي»). */
+function newCallWindowId(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  } catch {
+    // Older browsers fall through.
+  }
+  return `w-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 const callStatusFilterOptions = Object.keys(
@@ -150,17 +158,24 @@ const callStatusFilterOptions = Object.keys(
 ) as CallStatusFilter[];
 
 /** The contact filter buttons, with the stats key that counts each one. */
-const callContactFilterChips: Array<{
+type CallContactChip = {
   value: CallContactStatusFilter;
   label: string;
   tone?: CallContactTone;
-  countKey: keyof NonNullable<CallStatsResponse["contactCounts"]>;
-}> = [
+  countKey?: keyof NonNullable<CallStatsResponse["contactCounts"]>;
+};
+const callContactFilterChips: CallContactChip[] = [
   { value: "all", label: "الكل", countKey: "all" },
   { value: "no-action", label: "بدون إجراء", tone: "muted", countKey: "noAction" },
   { value: "contacted", label: "تم الاتصال", tone: "success", countKey: "contacted" },
   { value: "unanswered", label: "لم يرد", tone: "warning", countKey: "unanswered" },
   { value: "wrong", label: "الرقم خاطئ", tone: "danger", countKey: "wrong" },
+];
+/** Whoever makes calls works from «دفعتي»: nobody else gets those students.
+ * «الكل» and «بدون إجراء» would show students other windows hold. */
+const callBatchFilterChips: CallContactChip[] = [
+  { value: "batch", label: "دفعتي" },
+  ...callContactFilterChips.filter((chip) => chip.value !== "all" && chip.value !== "no-action"),
 ];
 
 type CallContactTone = "success" | "warning" | "danger" | "muted";
@@ -360,6 +375,9 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   } = useTeacherStore();
 
   const callActor = currentUser();
+  const callActorIsAdmin = Boolean(callActor && (
+    callActor.username?.trim().toLowerCase() === "admin" || callActor.roleId === "role_admin"
+  ));
   const canManageCalls = Boolean(callActor && (
     callActor.username?.trim().toLowerCase() === "admin" ||
     callActor.roleId === "role_admin" ||
@@ -371,15 +389,27 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   const [callExamId, setCallExamId] = useState("");
   const [callStatusFilter, setCallStatusFilter] =
     useState<CallStatusFilter>("all");
+  const callDefaultContactFilter: CallContactStatusFilter = canManageCalls ? "batch" : "all";
+  // Read by the reset effects: choosing a course or exam starts from it.
+  const callDefaultContactFilterRef = useRef(callDefaultContactFilter);
+  useEffect(() => {
+    callDefaultContactFilterRef.current = callDefaultContactFilter;
+  }, [callDefaultContactFilter]);
   const [callContactStatusFilter, setCallContactStatusFilter] =
-    useState<CallContactStatusFilter>("all");
+    useState<CallContactStatusFilter>(callDefaultContactFilter);
   const [callNotesFilter, setCallNotesFilter] =
     useState<CallNotesFilter>("all");
   const [callGradeFrom, setCallGradeFrom] = useState("");
   const [callGradeTo, setCallGradeTo] = useState("");
   const [callGeneralSearch, setCallGeneralSearch] = useState("");
-  // «تقسيم العمل»: "" for the whole list, or "k/n" for this laptop's fixed slice.
-  const [callWorkShare, setCallWorkShare] = useState("");
+  // «دفعات»: this window's id, whether the next load takes a new batch, the
+  // filters its batch was taken with, and what is left for everyone.
+  const [callWindowId] = useState(newCallWindowId);
+  const callClaimRequestedRef = useRef(false);
+  const callBatchFiltersRef = useRef<string | null>(null);
+  const [callBatchInfo, setCallBatchInfo] = useState<CallBatchInfo | null>(null);
+  const [liveWindowsOpen, setLiveWindowsOpen] = useState(false);
+  const [liveWindows, setLiveWindows] = useState<LiveCallWindowRow[] | null>(null);
   const [callGradePage, setCallGradePage] = useState(1);
   const [callLoading, setCallLoading] = useState(false);
   const [callCourseExamsLoading, setCallCourseExamsLoading] = useState(false);
@@ -425,7 +455,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   useEffect(() => {
     setCallExamId("");
     setCallStatusFilter("all");
-    setCallContactStatusFilter("all");
+    setCallContactStatusFilter(callDefaultContactFilterRef.current);
     setCallNotesFilter("all");
     setCallGradeFrom("");
     setCallGradeTo("");
@@ -436,13 +466,15 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
 
   useEffect(() => {
     setCallStatusFilter("all");
-    setCallContactStatusFilter("all");
+    setCallContactStatusFilter(callDefaultContactFilterRef.current);
     setCallNotesFilter("all");
     setCallGradeFrom("");
     setCallGradeTo("");
     setCallGradePage(1);
     setCallGradeDisplayModes({});
     setDetailsRow(null);
+    callBatchFiltersRef.current = null;
+    setCallBatchInfo(null);
   }, [callExamId]);
 
   useEffect(() => {
@@ -499,6 +531,14 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     // الـSkeleton يظهر فقط في أول تحميل عندما لا توجد صفوف معروضة أصلاً.
     const shouldBlockTable = callRowsRef.current.length === 0;
     setCallLoading(shouldBlockTable);
+    // «دفعتي»: take a new batch only when asked, and let go of the batch when
+    // its filters changed (the button then offers one with the new filters).
+    const batchView = canManageCalls && callContactStatusFilter === "batch" && !debouncedCallGeneralSearch.trim();
+    const batchFilters = JSON.stringify([callStatusFilter, callNotesFilter, debouncedCallGradeFrom, debouncedCallGradeTo]);
+    const claim = batchView && callClaimRequestedRef.current;
+    callClaimRequestedRef.current = false;
+    const release = batchView && callBatchFiltersRef.current !== null && callBatchFiltersRef.current !== batchFilters;
+    if (batchView) callBatchFiltersRef.current = batchFilters;
 
     callCandidatesApi
       .get(
@@ -511,7 +551,9 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           gradeFrom: debouncedCallGradeFrom,
           gradeTo: debouncedCallGradeTo,
           q: debouncedCallGeneralSearch,
-          share: callWorkShare || undefined,
+          window: canManageCalls ? callWindowId : undefined,
+          claim,
+          release,
           page: callGradePage,
           pageSize: CALL_PAGE_SIZE,
         },
@@ -546,6 +588,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             totalPages: Math.max(1, Number(result.totalPages || 1)),
             hasMore: Boolean(result.hasMore),
           });
+          setCallBatchInfo(result.batch || null);
           setCallLoading(false);
         });
       })
@@ -581,9 +624,10 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     debouncedCallGradeFrom,
     debouncedCallGradeTo,
     debouncedCallGeneralSearch,
-    callWorkShare,
     callGradePage,
     callFilterRefreshKey,
+    canManageCalls,
+    callWindowId,
   ]);
 
   useEffect(() => {
@@ -608,7 +652,6 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             gradeFrom: debouncedCallGradeFrom,
             gradeTo: debouncedCallGradeTo,
             q: debouncedCallGeneralSearch,
-            share: callWorkShare || undefined,
             },
           { signal: controller.signal, quietAbort: true },
         )
@@ -637,7 +680,6 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     debouncedCallGradeFrom,
     debouncedCallGradeTo,
     debouncedCallGeneralSearch,
-    callWorkShare,
     callFilterRefreshKey,
     callStatsRefreshKey,
   ]);
@@ -646,25 +688,60 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     latestSyncKeyRef.current = syncKey;
   }, [syncKey]);
 
+  // «دفعات»: while this window is open on an exam it beats, so the batch it
+  // holds stays its own; when it closes (or the page goes away) the batch
+  // goes back to everyone at once instead of after the timeout.
+  const callWindowOpenRef = useRef(false);
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(CALL_WORK_SHARE_STORAGE_KEY) || "";
-      if (parseCallWorkShare(stored)) setCallWorkShare(stored);
-    } catch {
-      // Private windows may refuse storage; the whole list is then shown.
+    if (!canManageCalls || !callCourseId || !callExamId) {
+      if (callWindowOpenRef.current) {
+        callWindowOpenRef.current = false;
+        callWindowApi.close(callWindowId);
+      }
+      return;
     }
-  }, []);
+    callWindowOpenRef.current = true;
+    const beat = () => void callWindowApi.beat({ windowId: callWindowId, courseId: callCourseId, examId: callExamId });
+    const timer = window.setInterval(beat, CALL_WINDOW_HEARTBEAT_MS);
+    const onVisible = () => { if (document.visibilityState === "visible") beat(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", beat);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", beat);
+    };
+  }, [canManageCalls, callCourseId, callExamId, callWindowId]);
+  useEffect(() => {
+    const close = () => {
+      if (!callWindowOpenRef.current) return;
+      callWindowOpenRef.current = false;
+      callWindowApi.close(callWindowId);
+    };
+    window.addEventListener("pagehide", close);
+    return () => {
+      window.removeEventListener("pagehide", close);
+      close();
+    };
+  }, [callWindowId]);
 
-  const chooseCallWorkShare = (value: string) => {
-    const next = parseCallWorkShare(value) ? value : "";
-    setCallWorkShare(next);
-    setCallGradePage(1);
-    try {
-      if (next) window.localStorage.setItem(CALL_WORK_SHARE_STORAGE_KEY, next);
-      else window.localStorage.removeItem(CALL_WORK_SHARE_STORAGE_KEY);
-    } catch {
-      // The choice still applies for this visit.
-    }
+  // The admin's «منو شغال هسه»: refreshed every few seconds while open.
+  useEffect(() => {
+    if (!liveWindowsOpen) return;
+    let cancelled = false;
+    const load = () => {
+      void callWindowApi.live({ quietAbort: true }).then((result) => {
+        if (!cancelled) setLiveWindows(result?.windows || []);
+      }).catch(() => { if (!cancelled) setLiveWindows([]); });
+    };
+    load();
+    const timer = window.setInterval(load, 10_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [liveWindowsOpen]);
+
+  const takeCallBatch = () => {
+    callClaimRequestedRef.current = true;
+    setCallFilterRefreshKey((current) => current + 1);
   };
   const callUpdatesPending = syncKey !== callLoadedSyncKey;
 
@@ -751,8 +828,9 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   const visibleCallRows = callRows;
   // Students on this page whose new action took them out of the contact
   // filter. They stay visible until the page is reloaded.
+  const callBatchView = canManageCalls && callContactStatusFilter === "batch" && !debouncedCallGeneralSearch.trim();
   const callDepartedCount =
-    callContactStatusFilter === "all"
+    callContactStatusFilter === "all" || callContactStatusFilter === "batch"
       ? 0
       : visibleCallRows.filter(
           (row) => !contactStatusMatchesFilter(callContactStatusFilter, callStatusForLog(callLogForRow(row))),
@@ -776,12 +854,13 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       courseId: callCourseId,
       examId: callExamId,
       statusFilter: callStatusFilter,
-      contactStatusFilter: callContactStatusFilter,
       notesFilter: callNotesFilter,
       gradeFrom: debouncedCallGradeFrom,
       gradeTo: debouncedCallGradeTo,
       q: debouncedCallGeneralSearch,
-      share: callWorkShare || undefined,
+      // The export lists everyone the filters match, whoever holds them.
+      contactStatusFilter: callContactStatusFilter === "batch" ? "all" : callContactStatusFilter,
+      exportAll: true,
       pageSize: 200,
     });
     if (!result) throw new Error("call candidates export failed");
@@ -862,6 +941,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       // A contact-status row carries no automatic note; the teacher's notes
       // live in their own «call-student-note» rows.
       notes: existing?.notes || "",
+      // «دفعتي»: taking an action back returns the student to this window.
+      windowId: canManageCalls ? callWindowId : undefined,
     };
     const savingKey = `status:${studentExamCallIdentityKey(payload.studentId, payload.examId)}`;
     const previousCall = existing || null;
@@ -869,6 +950,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       id: existing?.id || `optimistic-call-${Date.now()}`,
       createdAt: existing?.createdAt || todayISO(),
       ...payload,
+      actedByName: callActor?.name || existing?.actedByName || null,
     };
 
     // يتغير الصف فوراً من دون انتظار الشبكة، ثم يُستبدل برد بيانات النظام.
@@ -1437,6 +1519,11 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             <span className="tp-call-card__pill" data-tone={opportunityTone(row.student)}>
               <ChartColumn aria-hidden="true" />الفرص: {studentOpportunityText(row.student)}
             </span>
+            {row.heldBy && !row.heldBy.mine && (
+              <span className="tp-call-card__pill" data-tone="warning" title="هذا الطالب بدفعة موظف ثاني هسه">
+                <Users aria-hidden="true" />عند {row.heldBy.userName}
+              </span>
+            )}
           </div>
           <Button type="button" variant="outline" className="tp-call-card__details" onClick={() => setDetailsRow(row)}>
             <FileText aria-hidden="true" />التفاصيل
@@ -1487,9 +1574,12 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             <div className="tp-call-card__row">
               <span className="tp-call-card__row-label">
                 <SlidersHorizontal aria-hidden="true" />الإجراء
-                {(statusSaving || call?.completedAt) && (
+                {(statusSaving || call?.completedAt || (contactStatus && call?.actedByName)) && (
                   <small className="tp-call-card__last">
-                    {statusSaving ? "جاري الحفظ…" : `آخر تواصل: ${formatAppDate(call?.completedAt)}`}
+                    {statusSaving
+                      ? "جاري الحفظ…"
+                      : [call?.completedAt ? `آخر تواصل: ${formatAppDate(call.completedAt)}` : "", contactStatus ? call?.actedByName || "" : ""]
+                          .filter(Boolean).join(" · ")}
                   </small>
                 )}
               </span>
@@ -1605,8 +1695,11 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                 {/* The exam card already names a recorded action; add what it lacks. */}
                 {!focusCall ? (
                   <p className="tp-modal__muted">إجراء التواصل: بدون إجراء</p>
-                ) : focusCall.completedAt ? (
-                  <p className="tp-modal__muted">آخر تواصل: {formatAppDate(focusCall.completedAt)}</p>
+                ) : focusCall.completedAt || focusCall.actedByName ? (
+                  <p className="tp-modal__muted">
+                    {[focusCall.completedAt ? `آخر تواصل: ${formatAppDate(focusCall.completedAt)}` : "",
+                      focusCall.actedByName ? `بواسطة ${focusCall.actedByName}` : ""].filter(Boolean).join(" · ")}
+                  </p>
                 ) : null}
               </section>
 
@@ -1729,6 +1822,11 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           </div>
         </div>
         <div className="tp-calls__export">
+          {callActorIsAdmin && (
+            <Button type="button" variant="outline" onClick={() => setLiveWindowsOpen(true)}>
+              <Users aria-hidden="true" />منو شغال هسه
+            </Button>
+          )}
           {callExamSelected ? (
             <ExportDialog
               title="تصدير المكالمات"
@@ -1776,11 +1874,13 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
               </div>
             }
             chipsLabel="حالة التواصل"
-            chips={callContactFilterChips.map((chip) => ({
+            chips={(canManageCalls ? callBatchFilterChips : callContactFilterChips).map((chip) => ({
               key: chip.value,
               label: chip.label,
               tone: chip.tone,
-              count: contactCounts?.[chip.countKey] ?? null,
+              count: chip.value === "batch"
+                ? callBatchInfo?.mine ?? null
+                : chip.countKey ? contactCounts?.[chip.countKey] ?? null : null,
             }))}
             activeChip={callContactStatusFilter}
             onChipChange={(key) => {
@@ -1805,25 +1905,6 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                       {callStatusFilterOptions.map((option) => (
                         <SelectItem key={option} value={option}>
                           {callStatusFilterLabels[option]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="tp-calls__field">
-                  <Label htmlFor={`calls-share-${variant}`}>تقسيم العمل</Label>
-                  <Select value={callWorkShare || "all"} onValueChange={chooseCallWorkShare}>
-                    <SelectTrigger
-                      id={`calls-share-${variant}`}
-                      title="لكل جهاز قسم ثابت من الطلاب لا يتداخل مع الأجهزة الأخرى"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">كل الطلاب</SelectItem>
-                      {callWorkShareChoices.map((option) => (
-                        <SelectItem key={option} value={option}>
-                          {callWorkShareLabel(option)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1886,7 +1967,6 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             }
             activeFilterCount={
               (callStatusFilter !== "all" ? 1 : 0) +
-              (callWorkShare ? 1 : 0) +
               (callNotesFilter !== "all" ? 1 : 0) +
               (callGradeFrom || callGradeTo ? 1 : 0)
             }
@@ -1894,9 +1974,6 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             activeFilters={[
               ...(callStatusFilter !== "all"
                 ? [{ key: "status", label: callStatusFilterLabels[callStatusFilter], onClear: () => { setCallStatusFilter("all"); setCallGradePage(1); } }]
-                : []),
-              ...(callWorkShare
-                ? [{ key: "share", label: callWorkShareLabel(callWorkShare), onClear: () => chooseCallWorkShare("all") }]
                 : []),
               ...(callNotesFilter !== "all"
                 ? [{ key: "notes", label: "لديهم ملاحظات", onClear: () => { setCallNotesFilter("all"); setCallGradePage(1); } }]
@@ -1910,7 +1987,15 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                 : []),
             ]}
             summary={<span data-count-scope="filtered">
-            المعروض <b>{visibleCallRows.length}</b> من <b>{callStatValue(callDatabaseStats?.total)}</b>
+            {callBatchView ? (
+              <>
+                دفعتك <b>{visibleCallRows.length}</b> من {CALL_BATCH_SIZE}
+                {" · "}باقي بدون حجز <b>{callBatchInfo?.available ?? "…"}</b>
+                {callBatchInfo?.othersWorking ? <>{" · "}يشتغل ويّاك <b>{callBatchInfo.othersWorking}</b></> : null}
+              </>
+            ) : (
+              <>المعروض <b>{visibleCallRows.length}</b> من <b>{callStatValue(callDatabaseStats?.total)}</b></>
+            )}
             {callLoading && visibleCallRows.length > 0 ? " · جاري التحديث…" : ""}
             {callUpdatesPending && (
               <>
@@ -1936,6 +2021,19 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           <div className="tp-calls__list">
             {callLoading && visibleCallRows.length === 0 ? (
               renderCallLoadingSkeleton()
+            ) : visibleCallRows.length === 0 && callBatchView ? (
+              <div className="tp-calls__batch" role="status">
+                {(callBatchInfo?.available ?? 0) > 0 ? (
+                  <>
+                    <p>خذ دفعة من {CALL_BATCH_SIZE} أسماء. محد غيرك يشوفهم لحد ما تسوي إجراء ويّاهم أو تسكّر النافذة.</p>
+                    <Button type="button" onClick={takeCallBatch} disabled={callLoading}>
+                      <PhoneCall aria-hidden="true" />خذ دفعة
+                    </Button>
+                  </>
+                ) : (
+                  <p>ماكو أسماء باقية بدون حجز لهذا الامتحان والفلاتر الحالية.</p>
+                )}
+              </div>
             ) : visibleCallRows.length === 0 ? (
               <EmptyState title="لا يوجد طلاب مطابقون للدورة والامتحان والفلاتر الحالية." />
             ) : (
@@ -1943,7 +2041,17 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             )}
           </div>
 
-          {visibleCallRows.length > 0 && (
+          {callBatchView && visibleCallRows.length > 0 &&
+            visibleCallRows.every((row) => callStatusForLog(callLogForRow(row))) && (
+            <div className="tp-calls__batch" role="status">
+              <p>خلصت دفعتك.</p>
+              <Button type="button" onClick={takeCallBatch} disabled={callLoading}>
+                <PhoneCall aria-hidden="true" />الدفعة الجاية
+              </Button>
+            </div>
+          )}
+
+          {visibleCallRows.length > 0 && !callBatchView && (
             <nav className="tp-calls__pager" aria-label="صفحات الطلاب">
               <Button
                 variant="outline"
@@ -1976,6 +2084,38 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       )}
 
       {renderDetailsWindow()}
+
+      {callActorIsAdmin && (
+        <Dialog open={liveWindowsOpen} onOpenChange={(open) => { setLiveWindowsOpen(open); if (!open) setLiveWindows(null); }}>
+          <DialogContent className="tp-modal" dir="rtl">
+            <div className="tp-modal__hero">
+              <span className="tp-modal__hero-icon" aria-hidden="true"><Users /></span>
+              <DialogHeader className="tp-modal__heading">
+                <DialogTitle>منو شغال هسه</DialogTitle>
+                <p className="tp-modal__subtitle">نوافذ المكالمات المفتوحة، وكم اسم باقي بدفعة كل وحدة. تتحدث كل ١٠ ثواني.</p>
+              </DialogHeader>
+            </div>
+            <div className="tp-modal__body">
+              {liveWindows === null ? (
+                <p className="tp-modal__muted">جاري التحميل…</p>
+              ) : liveWindows.length === 0 ? (
+                <EmptyState compact icon={Users} title="ماكو نافذة مكالمات مفتوحة هسه." />
+              ) : (
+                <ul className="tp-call-live">
+                  {liveWindows.map((window) => (
+                    <li key={window.key} className="tp-call-live__row">
+                      <b>{window.userName}{window.mine ? " (أنت)" : ""}</b>
+                      <span>{[window.courseName, window.examName].filter(Boolean).join(" · ") || "—"}</span>
+                      <span>باقي بدفعته: <b>{window.held}</b></span>
+                      <span>سوّى اليوم: <b>{window.actedToday}</b></span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {profileDialogOpen && selectedProfileStudent && (
         <StudentProfileDialog

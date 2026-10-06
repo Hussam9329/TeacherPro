@@ -92,6 +92,8 @@ const CALL_SELECT = {
   completedAt: true,
   notes: true,
   createdAt: true,
+  actedAt: true,
+  actedByName: true,
 } as const;
 
 const NOTE_SELECT = {

@@ -201,6 +201,9 @@ export interface StudentCall {
   completedAt: string;
   notes: string;
   createdAt: string;
+  /** The last contact action: when, and by which account. */
+  actedAt?: string | null;
+  actedByName?: string | null;
 }
 
 export interface StudentNote {

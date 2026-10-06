@@ -63,7 +63,7 @@ const contact = loadTypeScriptModule("src/lib/call-contact-status.ts");
 const notes = loadTypeScriptModule("src/lib/call-notes-filter.ts");
 const phoneQr = loadTypeScriptModule("src/lib/call-phone-qr.ts");
 const classification = loadTypeScriptModule("src/lib/grade-classification.ts");
-const workShare = loadTypeScriptModule("src/lib/call-work-share.ts");
+const batch = loadTypeScriptModule("src/lib/call-batch.ts");
 const candidatesSource = fs.readFileSync(
   path.join(root, "src/app/api/student-calls/candidates/route.ts"),
   "utf8",
@@ -522,30 +522,27 @@ test("«المخصومين» leaves out leave, grace, passes and fails above the
   assert.equal(isDeducted({ grade: { status: "مجاز", score: null } }), false, "excused");
 });
 
-test("«تقسيم العمل» puts every student in exactly one share and never moves them", () => {
-  const ids = Array.from({ length: 600 }, (_, i) => `c${(i * 7919).toString(36)}x${i}`);
-  for (let parts = 2; parts <= 5; parts += 1) {
-    const sizes = [];
-    for (const id of ids) {
-      const owners = [];
-      for (let part = 1; part <= parts; part += 1) {
-        if (workShare.studentInCallWorkShare(id, workShare.parseCallWorkShare(`${part}/${parts}`))) owners.push(part);
-      }
-      assert.equal(owners.length, 1, `${id} in ${parts} parts`);
-      sizes[owners[0]] = (sizes[owners[0]] || 0) + 1;
-    }
-    // Shares stay roughly even, so no laptop gets most of the list.
-    for (let part = 1; part <= parts; part += 1) {
-      assert.ok(sizes[part] > (ids.length / parts) * 0.7, `share ${part}/${parts} too small: ${sizes[part]}`);
-    }
-  }
-  const share = workShare.parseCallWorkShare("2/3");
-  assert.equal(
-    workShare.studentInCallWorkShare("same-student", share),
-    workShare.studentInCallWorkShare("same-student", workShare.parseCallWorkShare("2/3")),
-  );
-  assert.equal(workShare.parseCallWorkShare("4/3"), null);
-  assert.equal(workShare.parseCallWorkShare("1/1"), null);
-  assert.equal(workShare.parseCallWorkShare(""), null);
-  assert.equal(workShare.studentInCallWorkShare("anyone", null), true);
+test("«دفعات»: who still needs a call, and the next batch in list order", () => {
+  const now = new Date("2026-10-06T12:00:00.000Z");
+  const hoursAgo = (h) => new Date(now.getTime() - h * 3600_000).toISOString();
+  assert.equal(batch.callCaseOpenForBatch(undefined, now), true, "nobody called yet");
+  assert.equal(batch.callCaseOpenForBatch({ status: "" }, now), true, "an action taken back");
+  assert.equal(batch.callCaseOpenForBatch({ status: "تم الاتصال" }, now), false);
+  assert.equal(batch.callCaseOpenForBatch({ status: "الرقم خاطئ" }, now), false);
+  assert.equal(batch.callCaseOpenForBatch({ status: "", completed: true }, now), false, "legacy completed row");
+  assert.equal(batch.callCaseOpenForBatch({ status: "لم يرد", actedAt: hoursAgo(0.5) }, now), false, "«لم يرد» half an hour ago waits");
+  assert.equal(batch.callCaseOpenForBatch({ status: "لم يرد", actedAt: hoursAgo(1) }, now), true, "«لم يرد» an hour ago comes back");
+  assert.equal(batch.callCaseOpenForBatch({ status: "لم يرد", actedAt: null, createdAt: hoursAgo(30) }, now), true, "old rows use their creation time");
+  assert.equal(batch.CALL_BATCH_SIZE, 10);
+  assert.equal(batch.CALL_WINDOW_TTL_MS, 2 * 60 * 1000);
+  assert.equal(batch.CALL_NO_ANSWER_RETRY_MS, 60 * 60 * 1000);
+  const ids = Array.from({ length: 15 }, (_, i) => `s${i}`);
+  assert.deepEqual(batch.pickCallBatch(ids, new Set(["s0", "s2"]), 4), ["s1", "s3", "s4", "s5"]);
+  assert.equal(batch.pickCallBatch(ids, new Set()).length, 10);
+  assert.deepEqual(batch.pickCallBatch(ids, new Set(ids)), []);
+  assert.equal(batch.parseCallWindowId("3b1f2c4e-1111-4a2b-9c3d-0123456789ab"), "3b1f2c4e-1111-4a2b-9c3d-0123456789ab");
+  assert.equal(batch.parseCallWindowId("short"), null);
+  assert.equal(batch.parseCallWindowId("bad id with spaces"), null);
+  assert.equal(batch.callWindowAlive(hoursAgo(1 / 60), now), true, "a beat a minute ago");
+  assert.equal(batch.callWindowAlive(hoursAgo(3 / 60), now), false, "silent for three minutes");
 });

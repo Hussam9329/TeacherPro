@@ -37,7 +37,9 @@ must(/CREATE TABLE "BotProblem"/.test(migration) && !/^\s*(?:UPDATE|DELETE|DROP|
 must(policy[migrationName]?.kind === "expand" &&
   policy[migrationName]?.checksum === createHash("sha256").update(migration).digest("hex"),
   "الترحيل مسجل بسياسة النشر مع بصمته");
-must(read("src/lib/schema-readiness.ts").includes(`'${migrationName}'`), "النظام ينتظر هذا الترحيل قبل العمل");
+// The readiness gate names the newest schema migration, this one or a later one.
+const requiredMigration = /REQUIRED_DATABASE_MIGRATION =\s*'([^']+)'/.exec(read("src/lib/schema-readiness.ts"))?.[1] || "";
+must(requiredMigration >= migrationName, "النظام ينتظر هذا الترحيل قبل العمل");
 
 // Who sees it: the admin, or whoever is given «مشاكل البوت».
 must(catalog.includes('id: "bot-problems.manage"') && catalog.includes('label: "مشاكل البوت"') &&

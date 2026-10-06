@@ -301,7 +301,7 @@ assert(
   'فلتر حالة التواصل ينتقل من الواجهة إلى القائمة والإحصائيات والتصدير',
 );
 assert(
-  candidates.includes('contactStatusMatchesFilter(contactStatusFilter, contactStatus)') &&
+  candidates.includes('contactStatusMatchesFilter(contactFilter, normalizeContactStatus(bestCallByStudentId.get(item.student.id)))') &&
     stats.includes('contactStatusMatchesFilter(contactStatusFilter, contactStatus)') &&
     contactStatus.includes('call.completed ? "تم الاتصال" : ""'),
   'القائمة والإحصائيات تستخدمان منطقاً موحداً ومتوافقاً مع سجلات التواصل القديمة',
@@ -446,15 +446,55 @@ assert(
   'تعديل ملاحظة من المكالمات يعيدها لإدارة ملاحظات المكالمات حتى لو كانت منجزة، ويحدّث عددها فوراً',
 );
 
-assert(
-  [candidates, stats].every((source) =>
-    source.includes('const workShare = parseCallWorkShare(searchParams.get("share"));') &&
-    source.includes('if (!studentInCallWorkShare(student.id, workShare))')) &&
-    (followUp.match(/share: callWorkShare \|\| undefined,/g) || []).length === 3 &&
-    followUp.includes('<Label htmlFor={`calls-share-${variant}`}>تقسيم العمل</Label>') &&
-    api.includes('share: query.share,'),
-  '«تقسيم العمل» يطبق نفس القسم على القائمة والأعداد والتصدير، ويحفظه كل جهاز لنفسه',
-);
+{
+  // «دفعات»: each open calls window holds its own batch; the manual «تقسيم العمل» is gone.
+  const presence = read('src/app/api/student-calls/presence/route.ts');
+  const reservations = read('src/lib/call-reservations-server.ts');
+  const batch = read('src/lib/call-batch.ts');
+  const migration = read('prisma/migrations/20261006090000_call_batches/migration.sql');
+  assert(
+    !fs.existsSync('src/lib/call-work-share.ts') &&
+      ![followUp, candidates, stats, api].some((source) => /WorkShare|تقسيم العمل|share:/.test(source)),
+    '«تقسيم العمل» اليدوي انشال: القسمة صارت دفعات تلقائية لكل نافذة',
+  );
+  assert(
+    batch.includes('export const CALL_BATCH_SIZE = 10;') &&
+      batch.includes('export const CALL_WINDOW_TTL_MS = 2 * 60 * 1000;') &&
+      batch.includes('export const CALL_NO_ANSWER_RETRY_MS = 60 * 60 * 1000;') &&
+      migration.includes('CREATE UNIQUE INDEX "CallReservation_studentId_examId_key"') &&
+      reservations.includes('ON CONFLICT ("studentId", "examId") DO NOTHING'),
+    'الدفعة ١٠ أسماء، والطالب ينحجز لنافذة وحدة بس، والنافذة الساكتة دقيقتين تنفك، و«لم يرد» يرجع بعد ساعة',
+  );
+  assert(
+    candidates.includes('if (contactStatusFilter === "batch" && !searching) {') &&
+      candidates.includes('if (wantsClaim && mine.size === 0) {') &&
+      candidates.includes('(searching || exportAll || !heldByOther(item.student.id))') &&
+      candidates.includes('heldBy: holder ? { userName: holder.userName, mine: ownsWindow && holder.windowId === windowId } : null,') &&
+      candidates.includes('if (canHold && windowId && ownsWindow) {'),
+    '«دفعتي» تاخذ دفعة بس لما تنطلب، المحجوز عند غيرك يختفي، والبحث يطلّعه ويّا اسم اللي عنده',
+  );
+  assert(
+    callsRoute.includes('if (data.status) await dropCallHold(tx, data.studentId, data.examId);') &&
+      callsRoute.includes('actedById: principal.id,') &&
+      callsRoute.includes('writeAuditLog(principal, "المكالمات", data.status ? "تحديث حالة مكالمة" : "مسح حالة مكالمة"'),
+    'أي إجراء يطلّع الطالب من الدفعة، وينحفظ اسم الموظف ويّاه وبالسجلات',
+  );
+  assert(
+    presence.includes('requirePermissionPrincipal(req, "follow-up.calls.manage")') &&
+      presence.includes('if (!principal.isAdmin) {') &&
+      followUp.includes('callWindowApi.close(callWindowId);') &&
+      followUp.includes('window.setInterval(beat, CALL_WINDOW_HEARTBEAT_MS)') &&
+      followUp.includes('منو شغال هسه'),
+    'النافذة المفتوحة تنبض وتسلّم دفعتها لما تنسد، والأدمن يشوف منو شغال وكم باقي عند كل واحد',
+  );
+  assert(
+    followUp.includes('{ value: "batch", label: "دفعتي" }') &&
+      followUp.includes('<PhoneCall aria-hidden="true" />خذ دفعة') &&
+      followUp.includes('<PhoneCall aria-hidden="true" />الدفعة الجاية') &&
+      followUp.includes('عند {row.heldBy.userName}'),
+    'شاشة المكالمات: «دفعتي» و«خذ دفعة» و«الدفعة الجاية»، و«عند فلان» على الطالب المحجوز',
+  );
+}
 assert(
   read('src/components/teacher-pro/layout.tsx').includes('  "follow-up-calls",\n  "accounts",') &&
     !read('src/app/api/auth/logout/route.ts').includes('increment'),
@@ -469,9 +509,10 @@ assert(
   assert(
     catalog.includes('id: "role_caller",') &&
       catalog.includes('permissions: ["system.dashboard", "follow-up.calls.view", "follow-up.calls.manage", "students.registry.view"],') &&
-      [candidates, stats, courseExams, callsRoute].every((source) =>
+      [stats, courseExams, callsRoute].every((source) =>
         source.includes('await requireAnyPermission(req, CALLS_VIEW_PERMISSIONS);') &&
         !source.includes('requirePermission(req, "follow-up.view")')) &&
+      candidates.includes('await requireAnyPermissionPrincipal(req, CALLS_VIEW_PERMISSIONS);') &&
       bootstrap.includes('["courses.view", ...CALLS_VIEW_PERMISSIONS]') &&
       profileAccess.includes('const logs = hasPermission(principal, "logs.view");') &&
       profileAccess.includes("    grades: true,\n    opportunities: true,\n    followUp: true,"),

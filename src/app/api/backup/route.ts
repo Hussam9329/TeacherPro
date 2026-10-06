@@ -343,7 +343,11 @@ async function executeRestore(
       const currentCredentials = await tx.appUser.findMany({ select: { id: true, passwordHash: true, sessionVersion: true } });
       if (mode === 'replace') {
         // One closed table list, RESTRICT by default: never cascade into omitted tables.
-        const names = RESTORE_ORDER.map(key => `"${PRISMA_TABLE_NAMES[key]}"`).join(', ');
+        // Open calls windows and their batches are never backed up; a restore ends them.
+        const names = [
+          ...RESTORE_ORDER.map(key => `"${PRISMA_TABLE_NAMES[key]}"`),
+          ...CALL_WINDOW_TABLES.map(name => `"${name}"`),
+        ].join(', ');
         await tx.$executeRaw(Prisma.raw(`TRUNCATE TABLE ${names} RESTART IDENTITY`));
       }
 
@@ -637,6 +641,9 @@ async function restoreTable(
 
   return { inserted, updated, skipped };
 }
+
+/** «دفعات» in إدارة المكالمات: live state of open windows, not data to restore. */
+const CALL_WINDOW_TABLES = ['CallReservation', 'CallWindow'];
 
 // Map internal table keys to PostgreSQL table names (for TRUNCATE)
 const PRISMA_TABLE_NAMES: Record<string, string> = {

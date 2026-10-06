@@ -162,6 +162,38 @@
 .tp-calls__skeleton { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; }
 .tp-calls__skeleton > .tp-call-card { gap: 0.65rem; padding: 0.85rem 1rem; }
 
+/* «دفعتي»: the box that offers a batch, and «الدفعة الجاية» once it is done. */
+.tp-calls__batch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px dashed var(--border);
+  border-radius: 0.9rem;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  text-align: center;
+}
+.tp-calls__batch p { margin: 0; max-width: 46ch; }
+
+/* The admin's «منو شغال هسه»: one row per open calls window. */
+.tp-call-live { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.tp-call-live__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 1rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
+}
+.tp-call-live__row > b:first-child { color: var(--foreground); font-size: 0.95rem; }
+.tp-call-live__row span b { color: var(--foreground); font-variant-numeric: tabular-nums; }
+
 .tp-calls__pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.6rem 1rem; font-size: 0.85rem; color: var(--muted-foreground); }
 .tp-calls__pager b { color: var(--foreground); font-variant-numeric: tabular-nums; }
 

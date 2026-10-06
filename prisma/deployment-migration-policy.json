@@ -290,5 +290,9 @@
   "20261005100000_clear_bonus_progress_without_active_chapter": {
     "kind": "audited-data-reconciliation",
     "checksum": "b9c29483380f59e96a5faa1abea4a1d86ba68b0af73a2191b7de2a6862695350"
+  },
+  "20261006090000_call_batches": {
+    "kind": "expand",
+    "checksum": "e49eb0323972b03f12ed38b5f5306e0f5be829fd84ea79ed03dc38b6a870b7d4"
   }
 }

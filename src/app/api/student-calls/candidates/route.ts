@@ -7,7 +7,7 @@ import { annotateGradeRecordedImpacts } from "@/lib/grade-recorded-impact-server
 import { annotateGradeSettlementEffects } from "@/lib/grade-settlement-server";
 import type { ReportGradePresentation } from "@/lib/student-report-presentation";
 import type { GracePeriodRange } from "@/lib/grace-periods";
-import { requireAnyPermission } from "@/lib/server-auth";
+import { hasPermission, requireAnyPermissionPrincipal } from "@/lib/server-auth";
 import { CALLS_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
 import { db } from "@/lib/db";
 import { normalizeArabicText, routeErrorResponse } from "@/lib/route-helpers";
@@ -36,7 +36,21 @@ import {
   hasManualCallNote,
   normalizeCallNotesFilter,
 } from "@/lib/call-notes-filter";
-import { parseCallWorkShare, studentInCallWorkShare } from "@/lib/call-work-share";
+import {
+  CALL_BATCH_SIZE,
+  callCaseOpenForBatch,
+  parseCallWindowId,
+} from "@/lib/call-batch";
+import {
+  claimCallBatch,
+  countOtherLiveCallWindows,
+  dropCallHold,
+  liveCallHolders,
+  releaseCallBatch,
+  releaseStaleCallWindows,
+  touchCallWindow,
+  type CallHolder,
+} from "@/lib/call-reservations-server";
 import {
   buildImplicitCallAbsenceGrade,
   resolveCallAbsenceSource,
@@ -465,8 +479,8 @@ function buildGradeItem(args: {
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requireAnyPermission(req, CALLS_VIEW_PERMISSIONS);
-  if (authError) return authError;
+  const principal = await requireAnyPermissionPrincipal(req, CALLS_VIEW_PERMISSIONS);
+  if (principal instanceof NextResponse) return principal;
 
   try {
     const { searchParams } = new URL(req.url);
@@ -477,8 +491,14 @@ export async function GET(req: NextRequest) {
       searchParams.get("contactStatusFilter"),
     );
     const notesFilter = normalizeCallNotesFilter(searchParams.get("notesFilter"));
-    // «تقسيم العمل»: this person's fixed slice of the students, if chosen.
-    const workShare = parseCallWorkShare(searchParams.get("share"));
+    // «دفعتي»: the calls window asking, and whether it wants a new batch now
+    // or to let go of the one it holds (its filters changed).
+    const windowId = parseCallWindowId(searchParams.get("window"));
+    const canHold = Boolean(windowId) && hasPermission(principal, "follow-up.calls.manage");
+    const wantsClaim = searchParams.get("claim") === "1";
+    const wantsRelease = searchParams.get("release") === "1";
+    // The export lists everyone, whoever holds them.
+    const exportAll = searchParams.get("exportAll") === "1";
     const gradeRange = parseCallGradeRange(
       searchParams.get("gradeFrom"),
       searchParams.get("gradeTo"),
@@ -700,36 +720,38 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const now = new Date();
     const bestCallByStudentId = new Map<
       string,
-      { status: string; completed: boolean }
+      { status: string; completed: boolean; actedAt: Date | null; createdAt: Date }
     >();
-    if (contactStatusFilter !== "all") {
-      const selectedExamCalls = await db.studentCall.findMany({
-        where: {
-          examId,
-          studentId: { in: candidateStudentIds },
-        },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        select: {
-          studentId: true,
-          category: true,
-          status: true,
-          completed: true,
-        },
-      });
-      selectedExamCalls.forEach((call) => {
-        // Student + exam is the call identity. Category may point to an old
-        // Grade row and is intentionally ignored when selecting contact state.
-        if (!isStudentExamCall({ ...call, examId })) return;
-        if (!bestCallByStudentId.has(call.studentId)) {
-          bestCallByStudentId.set(call.studentId, call);
-        }
-      });
-    }
+    const selectedExamCalls = await db.studentCall.findMany({
+      where: {
+        examId,
+        studentId: { in: candidateStudentIds },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: {
+        studentId: true,
+        category: true,
+        status: true,
+        completed: true,
+        actedAt: true,
+        createdAt: true,
+      },
+    });
+    selectedExamCalls.forEach((call) => {
+      // Student + exam is the call identity. Category may point to an old
+      // Grade row and is intentionally ignored when selecting contact state.
+      if (!isStudentExamCall({ ...call, examId })) return;
+      if (!bestCallByStudentId.has(call.studentId)) {
+        bestCallByStudentId.set(call.studentId, call);
+      }
+    });
+    const caseOpen = (studentId: string) => callCaseOpenForBatch(bestCallByStudentId.get(studentId), now);
 
-    const matching = selectedStudents.flatMap((student) => {
-      if (!studentInCallWorkShare(student.id, workShare)) return [];
+    // Every student this exam has a call for, before any filter.
+    const allCases = selectedStudents.flatMap((student) => {
       const storedGrade = selectedGradeByStudentId.get(student.id);
       const leaves = leavesForExam(selectedLeavesByStudentId, student.id, exam);
       const absenceSource = resolveCallAbsenceSource({
@@ -751,30 +773,86 @@ export async function GET(req: NextRequest) {
       if (!grade) return [];
       const impactKind = classifyCallImpact(grade, exam, student, leaves);
       const kind = absenceSource ? "absent" : gradeKindForCalls(impactKind);
-      if (
-        !gradeMatchesStatusFilter(
-          statusFilter,
-          kind,
-          impactKind,
-          absenceSource,
-        )
-      )
-        return [];
-      if (!callGradeMatchesRange(grade, gradeRange)) return [];
-      const contactStatus = normalizeContactStatus(bestCallByStudentId.get(student.id));
-      if (!contactStatusMatchesFilter(contactStatusFilter, contactStatus)) return [];
-      if (notesFilter === "with-notes" && !studentIdsWithNotes.has(student.id)) return [];
+      return [{ student, grade, kind, impactKind, absenceSource }];
+    }).sort((a, b) => a.student.name.localeCompare(b.student.name, "ar"));
+    type CallCase = (typeof allCases)[number];
+    const searching = Boolean(generalSearch || filterSearch);
+    const passesFilters = ({ student, grade, kind, impactKind, absenceSource }: CallCase) => {
+      if (!gradeMatchesStatusFilter(statusFilter, kind, impactKind, absenceSource)) return false;
+      if (!callGradeMatchesRange(grade, gradeRange)) return false;
+      if (notesFilter === "with-notes" && !studentIdsWithNotes.has(student.id)) return false;
       const values = searchableValues({ student, grade, exam, kind });
-      if (generalSearch && !includesSearch(generalSearch, values)) return [];
-      if (filterSearch && !includesSearch(filterSearch, values)) return [];
-      return [{ student, grade, kind, absenceSource }];
-    });
+      if (generalSearch && !includesSearch(generalSearch, values)) return false;
+      if (filterSearch && !includesSearch(filterSearch, values)) return false;
+      return true;
+    };
 
-    const sortedMatching = matching.sort((a, b) => {
-      const aTime = new Date(exam.date).getTime() || 0;
-      const bTime = new Date(exam.date).getTime() || 0;
-      return bTime - aTime || a.student.name.localeCompare(b.student.name, "ar");
-    });
+    // Who holds which student of this exam right now. Asking from a window
+    // also counts as its beat.
+    const owner = { id: principal.id, name: principal.name || principal.username || "مستخدم" };
+    let ownsWindow = false;
+    let holders: CallHolder[] = await withDatabaseSchema(() => canHold && windowId
+      ? db.$transaction(async (tx) => {
+          await releaseStaleCallWindows(tx, now);
+          ownsWindow = await touchCallWindow(tx, { id: windowId, owner, courseId, examId }, now);
+          if (ownsWindow && contactStatusFilter === "batch" && wantsRelease) await releaseCallBatch(tx, windowId, examId);
+          return liveCallHolders(tx, examId, now);
+        })
+      : liveCallHolders(db, examId, now), "CallWindow");
+    let holderByStudentId = new Map(holders.map((holder) => [holder.studentId, holder]));
+    const heldByOther = (studentId: string) => {
+      const holder = holderByStudentId.get(studentId);
+      return Boolean(holder && (!ownsWindow || holder.windowId !== windowId));
+    };
+
+    let batch: { size: number; mine: number; available: number; othersWorking: number } | null = null;
+    let matching: CallCase[];
+    if (contactStatusFilter === "batch" && !searching) {
+      if (canHold && windowId && ownsWindow) {
+        const caseIds = new Set(allCases.map((item) => item.student.id));
+        let mine = new Set(holders.filter((holder) => holder.windowId === windowId).map((holder) => holder.studentId));
+        // A held student who no longer needs a call, or left the list, is let go.
+        const finished = [...mine].filter((studentId) => !caseIds.has(studentId) || !caseOpen(studentId));
+        if (finished.length) {
+          await withDatabaseSchema(() => db.$transaction(async (tx) => {
+            for (const studentId of finished) await dropCallHold(tx, studentId, examId);
+          }), "CallWindow");
+          finished.forEach((studentId) => mine.delete(studentId));
+        }
+        if (wantsClaim && mine.size === 0) {
+          const openStudentIds = allCases
+            .filter((item) => passesFilters(item) && caseOpen(item.student.id))
+            .map((item) => item.student.id);
+          mine = await withDatabaseSchema(() => db.$transaction((tx) => claimCallBatch(tx, {
+            windowId, ownerId: owner.id, examId, openStudentIds, size: CALL_BATCH_SIZE,
+          }, now)), "CallWindow");
+        }
+        holders = await withDatabaseSchema(() => liveCallHolders(db, examId, now), "CallWindow");
+        holderByStudentId = new Map(holders.map((holder) => [holder.studentId, holder]));
+        matching = allCases.filter((item) => mine.has(item.student.id));
+        batch = {
+          size: CALL_BATCH_SIZE,
+          mine: matching.length,
+          available: allCases.filter((item) =>
+            passesFilters(item) && caseOpen(item.student.id) && !holderByStudentId.has(item.student.id)).length,
+          othersWorking: await withDatabaseSchema(
+            () => countOtherLiveCallWindows(db, examId, windowId, now), "CallWindow"),
+        };
+      } else {
+        // Someone who cannot hold a batch sees who still needs a call.
+        matching = allCases.filter((item) =>
+          passesFilters(item) && caseOpen(item.student.id) && !heldByOther(item.student.id));
+      }
+    } else {
+      // A search inside «دفعتي» looks through everyone, and shows who holds them.
+      const contactFilter = contactStatusFilter === "batch" ? "all" : contactStatusFilter;
+      matching = allCases.filter((item) =>
+        passesFilters(item) &&
+        contactStatusMatchesFilter(contactFilter, normalizeContactStatus(bestCallByStudentId.get(item.student.id))) &&
+        (searching || exportAll || !heldByOther(item.student.id)));
+    }
+
+    const sortedMatching = matching;
 
     const totalCount = sortedMatching.length;
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -907,11 +985,13 @@ export async function GET(req: NextRequest) {
               a.exam.name.localeCompare(b.exam.name, "ar"),
           );
 
+      const holder = holderByStudentId.get(student.id);
       return {
         id: `student:${student.id}`,
         student: authoritativeStudent,
         items,
         focusItem,
+        heldBy: holder ? { userName: holder.userName, mine: ownsWindow && holder.windowId === windowId } : null,
       };
     });
 
@@ -957,6 +1037,7 @@ export async function GET(req: NextRequest) {
       pageSize,
       totalPages,
       hasMore: page < totalPages,
+      batch,
       source: "database",
     });
   } catch (error) {

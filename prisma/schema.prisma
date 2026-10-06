@@ -104,6 +104,7 @@ model Student {
   gradeSmartNotes GradeSmartNote[]
   gracePeriods    GracePeriod[]
   botProblems     BotProblem[]
+  callReservations CallReservation[]
 
   @@index([courseId])
   @@index([status])
@@ -139,6 +140,7 @@ model Exam {
   examCourses ExamCourse[]
   studentLeaveGradeBackups StudentLeaveGradeBackup[]
   gradeSmartNotes       GradeSmartNote[]
+  callReservations      CallReservation[]
 
   @@index([type])
   @@index([date])
@@ -280,6 +282,10 @@ model StudentCall {
   noteResolved Boolean  @default(false)
   noteRevision Int      @default(0)
   createdAt   DateTime  @default(now())
+  // The last contact action: when, and by which account.
+  actedAt     DateTime?
+  actedById   String?
+  actedByName String?
   student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   exam        Exam?     @relation(fields: [examId], references: [id], onDelete: Cascade)
 
@@ -288,6 +294,38 @@ model StudentCall {
   @@index([examId])
   @@index([createdAt])
   @@index([category, examId, noteResolved])
+}
+
+/// An open «إدارة المكالمات» window. It beats every few seconds while open;
+/// one that stops beating is dropped with the names it held.
+model CallWindow {
+  id         String   @id
+  userId     String
+  userName   String   @default("")
+  courseId   String   @default("")
+  examId     String   @default("")
+  openedAt   DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  reservations CallReservation[]
+
+  @@index([lastSeenAt])
+}
+
+/// A student held for one window's batch: nobody else gets them while the
+/// window is open. Any contact action ends it.
+model CallReservation {
+  id         String     @id
+  studentId  String
+  examId     String
+  windowId   String
+  reservedAt DateTime   @default(now())
+  window     CallWindow @relation(fields: [windowId], references: [id], onDelete: Cascade)
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam       Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, examId])
+  @@index([windowId])
+  @@index([examId])
 }
 
 model StudentCallHistoryMigrationRun {

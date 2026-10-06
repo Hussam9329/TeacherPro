@@ -927,8 +927,6 @@ export interface CallStatsQuery {
   gradeTo?: string;
   q?: string;
   filterQ?: string;
-  /** «تقسيم العمل», e.g. "2/3". */
-  share?: string;
 }
 
 export interface CallStatsResponse {
@@ -945,6 +943,22 @@ export interface CallStatsResponse {
 export interface CallCandidatesQuery extends CallStatsQuery {
   page?: number;
   pageSize?: number;
+  /** «دفعتي»: this calls window, made by the browser. */
+  window?: string;
+  /** Take a new batch now (only when this window holds none). */
+  claim?: boolean;
+  /** Let go of this window's batch first (its filters changed). */
+  release?: boolean;
+  /** The export: every matching student, whoever holds them. */
+  exportAll?: boolean;
+}
+
+/** «دفعتي»: this window's batch and what is left for everyone. */
+export interface CallBatchInfo {
+  size: number;
+  mine: number;
+  available: number;
+  othersWorking: number;
 }
 
 export interface CallCandidatesResponse {
@@ -958,6 +972,7 @@ export interface CallCandidatesResponse {
   pageSize: number;
   totalPages: number;
   hasMore: boolean;
+  batch?: CallBatchInfo | null;
   source: "database";
 }
 
@@ -1913,7 +1928,6 @@ export const callStatsApi = {
       gradeTo: query.gradeTo,
       q: query.q,
       filterQ: query.filterQ,
-      share: query.share,
     });
     return apiGet<CallStatsResponse>(
       `student-calls/stats${queryString ? `?${queryString}` : ""}`,
@@ -1934,7 +1948,10 @@ export const callCandidatesApi = {
       gradeTo: query.gradeTo,
       q: query.q,
       filterQ: query.filterQ,
-      share: query.share,
+      window: query.window,
+      claim: query.claim ? "1" : undefined,
+      release: query.release ? "1" : undefined,
+      exportAll: query.exportAll ? "1" : undefined,
       page: query.page ?? 1,
       pageSize: query.pageSize ?? 120,
     });
@@ -2021,6 +2038,54 @@ export const studentLeaveApi = {
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-leaves", { id, ...updates }),
   remove: (id: string) => apiDelete("student-leaves", id),
+};
+
+export type LiveCallWindowRow = {
+  key: string;
+  userName: string;
+  courseName: string;
+  examName: string;
+  held: number;
+  actedToday: number;
+  openedAt: string;
+  lastSeenAt: string;
+  mine: boolean;
+};
+
+/**
+ * «دفعات»: an open calls window beats so its batch stays its own, and says
+ * when it closes so the batch goes back at once. Plain requests: a missed
+ * beat must never be queued and replayed later.
+ */
+export const callWindowApi = {
+  beat: async (body: { windowId: string; courseId: string; examId: string }): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/student-calls/presence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(body),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+  close: (windowId: string) => {
+    try {
+      void fetch("/api/student-calls/presence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        keepalive: true,
+        body: JSON.stringify({ windowId, close: true }),
+      }).catch(() => undefined);
+    } catch {
+      // The window is dropped anyway once it stops beating.
+    }
+  },
+  live: (options: ApiGetOptions = {}) =>
+    apiGet<{ windows: LiveCallWindowRow[] }>("student-calls/presence", options),
 };
 
 export const studentCallApi = {

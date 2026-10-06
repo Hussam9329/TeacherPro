@@ -87,6 +87,8 @@ const CALL_SELECT = {
   notes: true,
   noteResolved: true,
   createdAt: true,
+  actedAt: true,
+  actedByName: true,
 } as const;
 
 const NOTE_SELECT = {

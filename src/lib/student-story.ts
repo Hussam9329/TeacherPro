@@ -227,6 +227,12 @@ function messageExamSentence(f: ExamFacts, voice: "parent" | "student"): string 
   }
 }
 
+/** Who made a call: the account saved with its last contact action, or
+ * the one the logs name for a note. */
+function callActor(call: Rec, audit: { callNoteActors: Record<string, string> } | null | undefined): string {
+  return s(call.actedByName) || audit?.callNoteActors[s(call.id)] || "";
+}
+
 function callSentence(call: Rec): string {
   const target = s(call.target);
   const who = target === "student" || target === "الطالب" ? "بالطالب" : target === "parent" || target === "ولي الأمر" ? "بولي الأمر" : "";
@@ -345,7 +351,7 @@ export function buildStudentStory(input: StudentStoryInput): StudentStory {
       .map((call) => {
         usedCallIds.add(s(call.id));
         const callStamp = storyStamp(call.completedAt || call.createdAt);
-        return { id: `call-${s(call.id)}`, ...callStamp, parts: storyParts(callSentence(call)), by: audit?.callNoteActors[s(call.id)] || "" };
+        return { id: `call-${s(call.id)}`, ...callStamp, parts: storyParts(callSentence(call)), by: callActor(call, audit) };
       })
       .sort((a, b) => a.at.localeCompare(b.at));
     const balanceAfter = facts.balanceAfter;
@@ -531,7 +537,7 @@ export function buildStudentStory(input: StudentStoryInput): StudentStory {
     const exam = examById.get(s(call.examId));
     events.push({ id: `call-${s(call.id)}`, ...storyStamp(call.completedAt || call.createdAt), chapterId: "", cats: ["follow"], tone: "neutral", balance: null,
       parts: storyParts(`${exam ? `${bold(examTypeName(exam))}: ` : ""}${callSentence(call)}`),
-      by: audit?.callNoteActors[s(call.id)] || "", subs: [] });
+      by: callActor(call, audit), subs: [] });
   }
 
   // ── Audit-only events ──

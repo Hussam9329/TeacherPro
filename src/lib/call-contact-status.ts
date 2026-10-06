@@ -4,6 +4,7 @@ export type ContactStatus = "" | "تم الاتصال" | "لم يرد" | "الر
 
 export type ContactStatusFilter =
   | "all"
+  | "batch"
   | "no-action"
   | "contacted"
   | "unanswered"
@@ -14,6 +15,7 @@ export function normalizeContactStatusFilter(
 ): ContactStatusFilter {
   const normalized = normalizeListFilter(value);
   if (
+    normalized === "batch" ||
     normalized === "no-action" ||
     normalized === "contacted" ||
     normalized === "unanswered" ||
@@ -40,7 +42,8 @@ export function contactStatusMatchesFilter(
   status: ContactStatus,
 ): boolean {
   if (filter === "all") return true;
-  if (filter === "no-action") return status === "";
+  // «دفعتي» is drawn from the students still waiting for a call.
+  if (filter === "no-action" || filter === "batch") return status === "";
   if (filter === "contacted") return status === "تم الاتصال";
   if (filter === "unanswered") return status === "لم يرد";
   return status === "الرقم خاطئ";
