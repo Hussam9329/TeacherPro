@@ -1,6 +1,63 @@
 /* «إدارة فترة السماح» — pieces that only this window has. The shell, filters,
    lights and buttons come from tp-modal.css and its palette. */
 
+/* The search stays on top while the list or a student scrolls under it, so
+   the next student is always one search away. */
+.tp-grace__search {
+  --tp-grace-body-pad: 1.25rem; /* the body's top padding (tp-modal.css) */
+  position: sticky;
+  top: calc(-1 * var(--tp-grace-body-pad));
+  z-index: 3;
+  margin-block: calc(-1 * var(--tp-grace-body-pad)) -0.35rem;
+  padding-block: var(--tp-grace-body-pad) 0.35rem;
+  background: var(--tp-surface);
+  box-shadow: 0 10px 12px -12px color-mix(in srgb, var(--tp-deep) 40%, transparent);
+}
+/* Whatever is scrolled to (the saved note, a focused field) lands below it. */
+.tp-grace .tp-modal__body { scroll-padding-block: 5.5rem 1rem; }
+
+/* After a save: what was saved, and one tap to the next student. */
+.tp-grace__saved {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem 0.85rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--status-success-border);
+  border-inline-start: 4px solid var(--status-success-vivid);
+  border-radius: 1rem;
+  background: var(--status-success-bg);
+  color: var(--status-success-fg);
+}
+.tp-grace__saved p { margin: 0; font-size: 0.9rem; font-weight: 650; line-height: 1.8; overflow-wrap: anywhere; }
+.tp-grace__saved b { font-weight: 850; font-variant-numeric: tabular-nums; }
+.tp-grace__saved-icon { inline-size: 1.5rem; block-size: 1.5rem; color: var(--status-success-vivid); }
+.tp-grace__next { min-block-size: 2.75rem; white-space: nowrap; }
+
+/* Ready lengths: one tap fills «من + عدد الأيام». */
+.tp-grace__quick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.4rem; max-inline-size: 30rem; }
+.tp-grace__quick-day {
+  display: grid;
+  place-items: center;
+  gap: 0;
+  min-block-size: 3.1rem;
+  padding: 0.3rem 0.2rem;
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 0.85rem;
+  background: var(--tp-surface);
+  color: var(--tp-text);
+  line-height: 1.25;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.tp-grace__quick-day b { font-size: 1.05rem; font-weight: 850; font-variant-numeric: tabular-nums; }
+.tp-grace__quick-day small { color: var(--tp-text-muted); font-size: 0.72rem; font-weight: 700; }
+.tp-grace__quick-day:hover:not(:disabled):not([aria-pressed="true"]) { border-color: var(--tp-primary); background: var(--tp-primary-tint); }
+.tp-grace__quick-day[aria-pressed="true"] { border-color: var(--tp-primary); background: var(--tp-primary); color: var(--tp-on-primary); }
+.tp-grace__quick-day[aria-pressed="true"] small { color: inherit; }
+.tp-grace__quick-day:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
+.tp-grace__quick-day:disabled { cursor: not-allowed; opacity: 0.6; }
+
 /* Student cards (search, list and the selected student), in the calls card's
    layout: a header line, the toned period panel and the student facts, and an
    open tile beside them (below them on phones). The whole card is the button. */
@@ -214,6 +271,8 @@ a.tp-grace-card__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--t
 
 @container (max-width: 30rem) {
   .tp-grace-card { padding: 0.85rem; }
+  .tp-grace__saved { grid-template-columns: auto minmax(0, 1fr); }
+  .tp-grace__next { grid-column: 1 / -1; width: 100%; }
   .tp-grace-period { grid-template-columns: auto minmax(0, 1fr); padding: 0.8rem 0.9rem; }
   .tp-grace-period__length { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 0.25rem 0.75rem; }
   .tp-grace-card__facts { display: grid; gap: 0.55rem; }
@@ -223,4 +282,6 @@ a.tp-grace-card__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--t
 
 @media (max-width: 640px) {
   .tp-grace .tp-grace__back { width: 100%; }
+  .tp-grace__search { --tp-grace-body-pad: 0.9rem; }
+  .tp-grace .tp-modal__body { scroll-padding-block-start: 5rem; }
 }

@@ -133,6 +133,9 @@ function scalarMatches(value, condition) {
   if (Object.hasOwn(condition, "startsWith")) {
     return actual.startsWith(text(condition.startsWith, insensitive));
   }
+  if (Object.hasOwn(condition, "endsWith")) {
+    return actual.endsWith(text(condition.endsWith, insensitive));
+  }
   if (Object.hasOwn(condition, "in")) {
     return condition.in.some(
       (candidate) => actual === text(candidate, insensitive),
@@ -398,6 +401,26 @@ test("latin names remain searchable while Telegram is normalized without @", () 
       registryFilters.buildStudentRegistrySearchWhere("٠٧٧٠١٢٣٤٥٦٧"),
     ),
     ["ali-name"],
+  );
+  // A code typed in Arabic digits finds the same student as in English digits.
+  assert.deepEqual(
+    matchingIds(
+      searchableStudents,
+      registryFilters.buildStudentRegistrySearchWhere("ST-٢٠"),
+    ),
+    ["ali-telegram"],
+  );
+  // The code's number alone, in either digits, finds it too.
+  for (const number of ["٣٠٠", "300"]) {
+    assert.deepEqual(
+      matchingIds(searchableStudents, registryFilters.buildStudentRegistrySearchWhere(number)),
+      ["archived-ali"],
+    );
+  }
+  assert.deepEqual(
+    matchingIds(searchableStudents, registryFilters.buildStudentRegistrySearchWhere("30")),
+    [],
+    "a part of the number is not a code",
   );
 });
 

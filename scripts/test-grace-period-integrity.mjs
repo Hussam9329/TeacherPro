@@ -178,7 +178,32 @@ check(
   "الطالب المؤرشف والمفصول يظهران معطلَين (بلونين مختلفين) في البحث والقائمة وأزرار الإضافة والتعديل",
 );
 
-// 9. Tests are wired.
+// 10. The next student in one tap (phones): the search stays on top, «خروج»
+// and «سجّل طالب ثاني» go back to it focused, and digits are read in either script.
+const dialogCss = read("src/components/teacher-pro/grace-periods-dialog.css");
+const searchAt = dialog.indexOf('className="tp-modal__section tp-grace__search"');
+check(
+  searchAt > 0 && searchAt < dialog.indexOf("{!data && (") &&
+    /\.tp-grace__search\s*\{[^}]*position:\s*sticky/.test(dialogCss) &&
+    /onClick=\{\(\) => leaveStudent\(false\)\}[\s\S]{0,200}خروج/.test(dialog) &&
+    /onClick=\{\(\) => leaveStudent\(true\)\}[\s\S]{0,120}سجّل طالب ثاني/.test(dialog) &&
+    /function leaveStudent[\s\S]{0,300}input\.focus\(\)/.test(dialog),
+  "البحث ثابت فوق، و«خروج» و«سجّل طالب ثاني» يرجعان له جاهزاً للكتابة",
+);
+check(
+  /function cleanDays[\s\S]{0,120}toLatinDigits\(value\)/.test(dialog) &&
+    /inputMode="numeric"/.test(dialog) &&
+    !/type="number"/.test(dialog) &&
+    /const trimmedQuery = toLatinDigits\(query\)\.trim\(\)/.test(dialog) &&
+    /const latin = toLatinDigits\(query\)/.test(read("src/lib/student-registry-filters-server.ts")),
+  "الأرقام تُقبل عربية أو إنكليزية: عدد الأيام والبحث بالكود",
+);
+check(
+  /const QUICK_GRACE_DAYS = \[[\d, ]+\]\.filter\(\(days\) => days <= MAX_GRACE_PERIOD_DAYS\)/.test(dialog),
+  "المدد الجاهزة لا تتجاوز الحد الأعلى لفترة السماح",
+);
+
+// 11. Tests are wired.
 const pkg = JSON.parse(read("package.json"));
 check(pkg.scripts["test:grace-period-integrity"]?.includes("test-grace-periods-behavior.mjs"), "اختبارات سلوك السماح الجديدة ضمن الحزمة");
 

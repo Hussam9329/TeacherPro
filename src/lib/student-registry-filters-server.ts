@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { sanitizePhoneInput } from "@/lib/format";
+import { sanitizePhoneInput, toLatinDigits } from "@/lib/format";
 import { normalizeArabicText } from "@/lib/route-helpers";
 import { sanitizeTelegramInput } from "@/lib/student-utils";
 import { getStudentFilterLocationAliases } from "@/lib/student-list-filters";
@@ -79,6 +79,8 @@ export function buildStudentRegistrySearchWhere(
 ): Prisma.StudentWhereInput | null {
   const query = rawQuery.trim();
   if (!query) return null;
+  // Codes and usernames are stored in English digits; «٤٥» finds «45».
+  const latin = toLatinDigits(query);
 
   const normalized = normalizeArabicText(query);
   const numeric = sanitizePhoneInput(query);
@@ -87,14 +89,19 @@ export function buildStudentRegistrySearchWhere(
     .toLowerCase();
   const or: Prisma.StudentWhereInput[] = [
     { name: { contains: query, mode: "insensitive" } },
-    { code: { startsWith: query, mode: "insensitive" } },
+    { code: { startsWith: latin, mode: "insensitive" } },
     { school: { contains: query, mode: "insensitive" } },
     // يوزر تيليجرام المستعاد قابل للبحث بنفس استعلام الساحة (substring).
-    { username: { contains: query, mode: "insensitive" } },
+    { username: { contains: latin, mode: "insensitive" } },
   ];
 
   if (normalized) {
     or.push({ nameKey: { contains: normalized, mode: "insensitive" } });
+  }
+
+  // The number alone finds the code: «٩٠٠١» or «9001» → BIO-9001, «7» → BIO-007.
+  if (/^\d{1,9}$/.test(latin)) {
+    or.push({ code: { endsWith: `-${latin.padStart(3, "0")}`, mode: "insensitive" } });
   }
 
   if (telegram) {

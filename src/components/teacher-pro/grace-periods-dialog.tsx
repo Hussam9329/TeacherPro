@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import {
   AlertCircle,
   ArrowLeft,
-  ArrowRight,
   CalendarCheck,
   CalendarClock,
   CalendarDays,
@@ -19,6 +19,8 @@ import {
   PencilLine,
   Search,
   Send,
+  UserPlus,
+  X,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -52,6 +54,7 @@ import {
   type GraceStudentSearchResult,
 } from "@/lib/grace-periods-client";
 import { baghdadDateKey, formatBaghdadDateTime } from "@/lib/baghdad-time";
+import { toLatinDigits } from "@/lib/format";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
 import { describeTelegramHandle } from "./student-registry-helpers";
@@ -85,6 +88,24 @@ function editorPeriod(editor: EditorState): { startDate: string; endDate: string
   }
   return { startDate: editor.startDate, endDate: editor.endDate };
 }
+
+/** One tap for the usual lengths. */
+const QUICK_GRACE_DAYS = [1, 3, 7, 14, 30].filter((days) => days <= MAX_GRACE_PERIOD_DAYS);
+
+/** The word under a ready length's number: 1 يوم، 3 أيام، 14 يوماً. */
+function quickDaysUnit(days: number): string {
+  if (days === 1) return "يوم";
+  if (days === 2) return "يومان";
+  return days <= 10 ? "أيام" : "يوماً";
+}
+
+/** Days typed in Arabic or English digits, kept as plain digits. */
+function cleanDays(value: string): string {
+  return toLatinDigits(value).replace(/\D/g, "").slice(0, 3);
+}
+
+/** The last save, shown with one tap to the next student. */
+type SavedNote = { name: string; startDate: string; endDate: string; days: number };
 
 function examDateLabel(value: string): string {
   return formatGraceDate(String(value || "").slice(0, 10));
@@ -243,7 +264,10 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
   const [list, setList] = useState<GracePeriodListResponse | null>(null);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState("");
+  const [lastSaved, setLastSaved] = useState<SavedNote | null>(null);
   const loadSequence = useRef(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const nextButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (open) return;
@@ -257,11 +281,13 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
     setListFilter("all");
     setList(null);
     setListError("");
+    setLastSaved(null);
   }, [open]);
 
   // The list follows the filter and the search text; it is re-read whenever
   // the operator comes back from a student, so saved changes show up at once.
-  const trimmedQuery = query.trim();
+  // Codes and phones may be typed in Arabic digits; the system reads them in English.
+  const trimmedQuery = toLatinDigits(query).trim();
   const listQuery = trimmedQuery.length >= 2 ? trimmedQuery : "";
   useEffect(() => {
     if (!open || data) return;
@@ -287,7 +313,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
   }, [open, data, listFilter, listQuery]);
 
   useEffect(() => {
-    const trimmed = query.trim();
+    const trimmed = toLatinDigits(query).trim();
     if (!open || data || trimmed.length < 2) {
       setResults([]);
       setSearching(false);
@@ -319,13 +345,31 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
     };
   }, [query, open, data]);
 
-  const loadStudent = useCallback(async (studentId: string) => {
+  // After a save the note and «سجّل طالب ثاني» come into view, ready for one tap.
+  useEffect(() => {
+    if (!lastSaved) return;
+    const button = nextButtonRef.current;
+    button?.closest(".tp-grace__saved")?.scrollIntoView({ block: "nearest" });
+    button?.focus({ preventScroll: true });
+  }, [lastSaved]);
+
+  const loadStudent = useCallback(async (studentId: string, options: { openEditor?: boolean } = {}) => {
     const sequence = ++loadSequence.current;
     setLoading(true);
     setLoadError("");
     try {
       const response = await gracePeriodsApi.load(studentId);
-      if (sequence === loadSequence.current) setData(response);
+      if (sequence !== loadSequence.current) return;
+      setData(response);
+      setLastSaved(null);
+      // A student with no grace running gets the add form straight away.
+      const hasCurrent = response.periods.some((period) =>
+        !period.cancelledAt && gracePeriodState(period, response.today) === "current");
+      if (options.openEditor && canManage && !hasCurrent && !studentLock(response.student.status)) {
+        setEditor({ action: "create", mode: "range", startDate: response.today, endDate: "", days: "", cancelReason: "" });
+        setPreview(null);
+        setActionError("");
+      }
     } catch (cause) {
       if (sequence === loadSequence.current) {
         setLoadError(cause instanceof Error ? cause.message : "تعذر تحميل فترات السماح.");
@@ -333,7 +377,40 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
     } finally {
       if (sequence === loadSequence.current) setLoading(false);
     }
-  }, []);
+  }, [canManage]);
+
+  /** Closes the open student; a load still on its way is dropped. */
+  function closeStudent() {
+    loadSequence.current += 1;
+    setLoading(false);
+    setLoadError("");
+    setData(null);
+    setEditor(null);
+    setPreview(null);
+    setActionError("");
+    setLastSaved(null);
+  }
+
+  /** Back to the search (the «خروج» and «سجّل طالب ثاني» buttons): focused at
+   * once so the phone's keyboard opens. «خروج» brings back the last search,
+   * selected, so typing replaces it. */
+  function leaveStudent(clearSearch: boolean) {
+    flushSync(() => {
+      closeStudent();
+      if (clearSearch) setQuery("");
+    });
+    const input = searchInputRef.current;
+    if (input) {
+      input.focus();
+      if (!clearSearch) input.select();
+    }
+  }
+
+  function openStudent(studentId: string) {
+    setEditor(null);
+    setPreview(null);
+    void loadStudent(studentId, { openEditor: true });
+  }
 
   const today = data?.today || "";
   const activePeriods = useMemo(
@@ -413,30 +490,55 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
     };
   }
 
+  /** «حفظ»: when the change touches no exam and no balance it is saved at
+   * once; otherwise its effect is shown first for «تأكيد الحفظ». A cancel is
+   * always shown first. */
   async function runPreview() {
     const input = changeInput();
     if (!input) return;
     setBusy(true);
     setActionError("");
+    let next: GraceChangePreview;
     try {
-      setPreview(await gracePeriodsApi.preview(input));
+      next = await gracePeriodsApi.preview(input);
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "تعذر معاينة التعديل.");
-    } finally {
       setBusy(false);
+      return;
     }
+    const unchanged = !next.projection || (
+      next.projection.current.opportunities === next.projection.projected.opportunities &&
+      next.projection.current.status === next.projection.projected.status
+    );
+    if (input.action !== "cancel" && next.affectedExams.length === 0 && unchanged) {
+      await applyChange(input, next);
+      return;
+    }
+    setPreview(next);
+    setBusy(false);
   }
 
   async function confirmSave() {
     const input = changeInput();
-    if (!input || !preview || !data) return;
+    if (!input || !preview) return;
+    await applyChange(input, preview);
+  }
+
+  async function applyChange(input: GraceChangeInput, approved: GraceChangePreview) {
+    if (!data) return;
     setBusy(true);
     setActionError("");
     try {
-      const result = await gracePeriodsApi.apply({ ...input, previewToken: preview.previewToken });
+      const result = await gracePeriodsApi.apply({ ...input, previewToken: approved.previewToken });
       setData({ ...data, periods: result.periods });
       setEditor(null);
       setPreview(null);
+      setLastSaved(input.action === "cancel" || !input.startDate || !input.endDate ? null : {
+        name: data.student.name,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        days: gracePeriodDays({ startDate: input.startDate, endDate: input.endDate }),
+      });
       toast.success(
         input.action === "cancel" ? "تم إلغاء فترة السماح." : "تم حفظ فترة السماح.",
       );
@@ -518,24 +620,45 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
         </div>
 
         <div className="tp-modal__body">
+          {/* Always here, so the next student is one search away. */}
+          <section className="tp-modal__section tp-grace__search" aria-label="البحث عن طالب">
+            <div className="tp-modal__input-wrap">
+              <Search aria-hidden="true" />
+              <Input
+                ref={searchInputRef}
+                // Empty while a student is open: typing starts the next search.
+                value={data ? "" : query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  // Typing another name leaves the open student for the results.
+                  if (data || loading) closeStudent();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" || data) return;
+                  const first = results.find((student) => !studentLock(student.status));
+                  if (first && !loading) {
+                    event.preventDefault();
+                    openStudent(first.id);
+                  }
+                }}
+                placeholder={data ? "ابحث عن طالب ثاني" : "ابحث بالاسم أو الكود أو اليوزر أو الهاتف"}
+                aria-label="البحث عن طالب"
+                className="tp-modal__search-input"
+                enterKeyHint="search"
+                autoComplete="off"
+                disabled={busy}
+                autoFocus
+              />
+              {(searching || loading) && <Loader2 className="tp-modal__spinner animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+            </div>
+          </section>
+
           {!data && (
             <>
-              <section className="tp-modal__section" aria-label="البحث عن طالب">
-                <div className="tp-modal__input-wrap">
-                  <Search aria-hidden="true" />
-                  <Input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="ابحث بالاسم أو الكود أو اليوزر أو الهاتف"
-                    aria-label="البحث عن طالب"
-                    className="tp-modal__search-input"
-                    autoFocus
-                  />
-                  {searching && <Loader2 className="tp-modal__spinner animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-                </div>
+              <section className="tp-modal__section" aria-label="نتائج البحث">
                 {searchError && <p role="alert" className="tp-modal__error"><AlertCircle aria-hidden="true" />{searchError}</p>}
                 {loadError && <p role="alert" className="tp-modal__error"><AlertCircle aria-hidden="true" />{loadError}</p>}
-                {query.trim().length >= 2 && !searching && results.length === 0 && !searchError && (
+                {trimmedQuery.length >= 2 && !searching && results.length === 0 && !searchError && (
                   <p className="tp-modal__muted">لا يوجد طالب يطابق البحث.</p>
                 )}
                 {results.length > 0 && (
@@ -550,7 +673,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                             <button
                               type="button"
                               className="tp-modal__card-open"
-                              onClick={() => void loadStudent(student.id)}
+                              onClick={() => openStudent(student.id)}
                               disabled={loading || Boolean(lock)}
                               aria-disabled={Boolean(lock)}
                               aria-label={lock ? `${student.name}: ${lock.hint}` : `فتح فترات السماح للطالب ${student.name}`}
@@ -627,7 +750,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                           <button
                             type="button"
                             className="tp-modal__card-open"
-                            onClick={() => void loadStudent(period.studentId)}
+                            onClick={() => openStudent(period.studentId)}
                             disabled={loading || Boolean(lock)}
                             aria-disabled={Boolean(lock)}
                             aria-label={lock ? `${period.studentName}: ${lock.hint}` : `فتح فترات السماح للطالب ${period.studentName}`}
@@ -671,10 +794,10 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                     variant="outline"
                     size="sm"
                     className="tp-grace__back"
-                    onClick={() => { setData(null); setEditor(null); setPreview(null); }}
+                    onClick={() => leaveStudent(false)}
                     disabled={busy}
                   >
-                    <ArrowRight className="size-4" aria-hidden="true" />رجوع للقائمة
+                    <X className="size-4" aria-hidden="true" />خروج
                   </Button>
                 </GraceCardHead>
                 <StudentFacts
@@ -684,6 +807,19 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                   createdAt={data.student.createdAt}
                 />
               </section>
+
+              {lastSaved && (
+                <div className="tp-grace__saved" role="status">
+                  <CheckCircle2 className="tp-grace__saved-icon" aria-hidden="true" />
+                  <p>
+                    انحفظت فترة السماح لـ<b>{lastSaved.name}</b>: من <b>{formatGraceDate(lastSaved.startDate)}</b> إلى{" "}
+                    <b>{formatGraceDate(lastSaved.endDate)}</b> · {formatGraceDays(lastSaved.days)}
+                  </p>
+                  <Button ref={nextButtonRef} type="button" className="tp-grace__next" onClick={() => leaveStudent(true)}>
+                    <UserPlus className="size-4" aria-hidden="true" />سجّل طالب ثاني
+                  </Button>
+                </div>
+              )}
 
               {lock && <p role="note" className="tp-modal__note" data-tone={lock.kind === "dismissed" ? "danger" : undefined}>{lock.hint}.</p>}
 
@@ -765,6 +901,22 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                           </button>
                         ))}
                       </div>
+                      <div role="group" aria-label="مدة جاهزة" className="tp-grace__quick">
+                        {QUICK_GRACE_DAYS.map((days) => (
+                          <button
+                            key={days}
+                            type="button"
+                            className="tp-grace__quick-day"
+                            aria-pressed={editor.mode === "days" && editor.days === String(days)}
+                            aria-label={formatGraceDays(days)}
+                            disabled={Boolean(preview) || busy}
+                            onClick={() => setEditor({ ...editor, mode: "days", days: String(days) })}
+                          >
+                            <b>{days}</b>
+                            <small>{quickDaysUnit(days)}</small>
+                          </button>
+                        ))}
+                      </div>
                       <div className="tp-modal__fields">
                         <label className="tp-modal__field">
                           <span>من</span>
@@ -790,13 +942,13 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                             <label className="tp-modal__field">
                               <span>عدد الأيام</span>
                               <Input
-                                type="number"
+                                type="text"
                                 inputMode="numeric"
-                                min={1}
-                                max={MAX_GRACE_PERIOD_DAYS}
-                                step={1}
+                                pattern="[0-9]*"
+                                autoComplete="off"
+                                placeholder={`1 – ${MAX_GRACE_PERIOD_DAYS}`}
                                 value={editor.days}
-                                onChange={(event) => setEditor({ ...editor, days: event.target.value })}
+                                onChange={(event) => setEditor({ ...editor, days: cleanDays(event.target.value) })}
                                 disabled={Boolean(preview) || busy}
                               />
                             </label>
@@ -865,7 +1017,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                         disabled={busy || (editor.action !== "cancel" && (Boolean(validation) || !proposed?.endDate))}
                       >
                         {busy ? <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}
-                        معاينة الأثر
+                        {editor.action === "cancel" ? "معاينة الأثر" : "حفظ"}
                       </Button>
                     ) : (
                       <Button type="button" onClick={() => void confirmSave()} disabled={busy} data-tone={editor.action === "cancel" ? "danger" : undefined}>
