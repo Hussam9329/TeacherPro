@@ -860,7 +860,8 @@ export async function GET(req: NextRequest) {
       matching = allCases.filter((item) =>
         passesFilters(item) &&
         contactStatusMatchesFilter(contactFilter, normalizeContactStatus(bestCallByStudentId.get(item.student.id))) &&
-        (searching || exportAll || !heldByOther(item.student.id)));
+        // The admin oversees: every student shows, with who holds them.
+        (searching || exportAll || principal.isAdmin || !heldByOther(item.student.id)));
     }
 
     const sortedMatching = matching;

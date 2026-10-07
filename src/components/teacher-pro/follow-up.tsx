@@ -392,7 +392,10 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   const [callExamId, setCallExamId] = useState("");
   const [callStatusFilter, setCallStatusFilter] =
     useState<CallStatusFilter>("all");
-  const callDefaultContactFilter: CallContactStatusFilter = canManageCalls ? "batch" : "all";
+  // Callers work in batches («دفعتي»); the admin oversees: sees every student
+  // and every chip, holds no batch, and is never asked to take one.
+  const callUsesBatches = canManageCalls && !callActorIsAdmin;
+  const callDefaultContactFilter: CallContactStatusFilter = callUsesBatches ? "batch" : "all";
   // Read by the reset effects: choosing a course or exam starts from it.
   const callDefaultContactFilterRef = useRef(callDefaultContactFilter);
   useEffect(() => {
@@ -536,7 +539,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     setCallLoading(shouldBlockTable);
     // «دفعتي»: take a new batch only when asked, and let go of the batch when
     // its filters changed (the button then offers one with the new filters).
-    const batchView = canManageCalls && callContactStatusFilter === "batch" && !debouncedCallGeneralSearch.trim();
+    const batchView = callUsesBatches && callContactStatusFilter === "batch" && !debouncedCallGeneralSearch.trim();
     const batchFilters = JSON.stringify([callStatusFilter, callNotesFilter, debouncedCallGradeFrom, debouncedCallGradeTo]);
     const claim = batchView && callClaimRequestedRef.current;
     callClaimRequestedRef.current = false;
@@ -554,7 +557,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           gradeFrom: debouncedCallGradeFrom,
           gradeTo: debouncedCallGradeTo,
           q: debouncedCallGeneralSearch,
-          window: canManageCalls ? callWindowId : undefined,
+          window: callUsesBatches ? callWindowId : undefined,
           claim,
           release,
           page: callGradePage,
@@ -630,6 +633,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     callGradePage,
     callFilterRefreshKey,
     canManageCalls,
+    callUsesBatches,
     callWindowId,
   ]);
 
@@ -703,7 +707,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   const [callPageOutdated, setCallPageOutdated] = useState(false);
   const [callTakingIds, setCallTakingIds] = useState<Record<string, boolean>>({});
   useEffect(() => {
-    if (!canManageCalls || !callCourseId || !callExamId) {
+    if (!callUsesBatches || !callCourseId || !callExamId) {
       if (callWindowOpenRef.current) {
         callWindowOpenRef.current = false;
         callWindowApi.close(callWindowId);
@@ -720,7 +724,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
         if (!result || away || sequence !== callCandidatesRequestSequenceRef.current) return;
         const holding = new Set(result.held);
         if (!callBatchShownRef.current.some((studentId) => !holding.has(studentId))) return;
-        toast.warning("بعض أسماء دفعتك راحت لموظف ثاني لأن الصفحة بقت مسكّرة مدة طويلة. تحدثت القائمة.");
+        toast.warning("بعض أسماء دفعتك ما بقت عندك (انسجّل عليها إجراء من غيرك، أو الصفحة بقت مسكّرة مدة طويلة). تحدثت القائمة.");
         setCallFilterRefreshKey((current) => current + 1);
       });
     };
@@ -732,7 +736,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       document.removeEventListener("visibilitychange", beat);
       window.removeEventListener("online", beat);
     };
-  }, [canManageCalls, callCourseId, callExamId, callWindowId]);
+  }, [callUsesBatches, callCourseId, callExamId, callWindowId]);
   useEffect(() => {
     const close = () => {
       if (!callWindowOpenRef.current) return;
@@ -852,7 +856,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   const visibleCallRows = callRows;
   // Students on this page whose new action took them out of the contact
   // filter. They stay visible until the page is reloaded.
-  const callBatchView = canManageCalls && callContactStatusFilter === "batch" && !debouncedCallGeneralSearch.trim();
+  const callBatchView = callUsesBatches && callContactStatusFilter === "batch" && !debouncedCallGeneralSearch.trim();
   const callDepartedCount =
     callContactStatusFilter === "all" || callContactStatusFilter === "batch"
       ? 0
@@ -863,7 +867,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   // The students shown as this window's own without an action yet: the ones
   // it must still hold (an action ends the hold on purpose).
   useEffect(() => {
-    callBatchShownRef.current = canManageCalls
+    callBatchShownRef.current = callUsesBatches
       ? visibleCallRows
           .filter((row) => (callBatchView || row.heldBy?.mine) && !callStatusForLog(callLogForRow(row)))
           .map((row) => row.student.id)
@@ -903,8 +907,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
 
   // A caller sees a student's numbers (QR, WhatsApp, the details window) and
   // acts on them only while holding them; someone else's student is theirs.
-  const callNumbersHidden = (row: CallStudentRow) => canManageCalls && !row.heldBy?.mine;
-  const callHeldByOther = (row: CallStudentRow) => Boolean(canManageCalls && row.heldBy && !row.heldBy.mine);
+  const callNumbersHidden = (row: CallStudentRow) => callUsesBatches && !row.heldBy?.mine;
+  const callHeldByOther = (row: CallStudentRow) => Boolean(callUsesBatches && row.heldBy && !row.heldBy.mine);
 
   const callStatValue = (value: number | undefined) => {
     if (callDatabaseStatsLoading && !callDatabaseStats) return "…";
@@ -1012,7 +1016,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       // live in their own «call-student-note» rows.
       notes: existing?.notes || "",
       // «دفعتي»: taking an action back returns the student to this window.
-      windowId: canManageCalls ? callWindowId : undefined,
+      windowId: callUsesBatches ? callWindowId : undefined,
       client: CALL_CLIENT_PROTOCOL,
     };
     const savingKey = `status:${studentExamCallIdentityKey(payload.studentId, payload.examId)}`;
@@ -1980,7 +1984,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
               </div>
             }
             chipsLabel="حالة التواصل"
-            chips={(canManageCalls ? callBatchFilterChips : callContactFilterChips).map((chip) => ({
+            chips={(callUsesBatches ? callBatchFilterChips : callContactFilterChips).map((chip) => ({
               key: chip.value,
               label: chip.label,
               tone: chip.tone,

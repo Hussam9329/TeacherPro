@@ -161,7 +161,8 @@ export async function POST(req: NextRequest) {
             // else's batch is theirs until they act or close their page.
             if (data.examId) {
               const holder = (await liveCallHolders(tx, data.examId)).find((item) => item.studentId === data.studentId);
-              if (holder && holder.windowId !== windowId) throw new CallHeldByOtherError(holder.userName);
+              // The admin oversees and may act on anyone.
+              if (holder && holder.windowId !== windowId && !principal.isAdmin) throw new CallHeldByOtherError(holder.userName);
             }
           }
 

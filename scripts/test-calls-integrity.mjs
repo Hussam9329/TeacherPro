@@ -468,7 +468,7 @@ assert(
   assert(
     candidates.includes('if (contactStatusFilter === "batch" && !searching) {') &&
       candidates.includes('if (wantsClaim && mine.size === 0) {') &&
-      candidates.includes('(searching || exportAll || !heldByOther(item.student.id))') &&
+      candidates.includes('(searching || exportAll || principal.isAdmin || !heldByOther(item.student.id))') &&
       candidates.includes('heldBy: holder ? { userName: holder.userName, mine: ownsWindow && holder.windowId === windowId } : null,') &&
       candidates.includes('if (canHold && windowId && ownsWindow) {'),
     '«دفعتي» تاخذ دفعة بس لما تنطلب، المحجوز عند غيرك يختفي، والبحث يطلّعه ويّا اسم اللي عنده',
@@ -494,10 +494,18 @@ assert(
       followUp.includes('عند {row.heldBy.userName}'),
     'شاشة المكالمات: «دفعتي» و«خذ دفعة» و«الدفعة الجاية»، و«عند فلان» على الطالب المحجوز',
   );
+  assert(
+    followUp.includes('const callUsesBatches = canManageCalls && !callActorIsAdmin;') &&
+      followUp.includes('const callDefaultContactFilter: CallContactStatusFilter = callUsesBatches ? "batch" : "all";') &&
+      followUp.includes('chips={(callUsesBatches ? callBatchFilterChips : callContactFilterChips)') &&
+      followUp.includes('const callNumbersHidden = (row: CallStudentRow) => callUsesBatches && !row.heldBy?.mine;') &&
+      followUp.includes('window: callUsesBatches ? callWindowId : undefined,'),
+    'الأدمن يشوف كل الطلاب وكل الأزرار ويتعامل ويّا أي طالب، بدون دفعات وبدون «خذ دفعة»',
+  );
   // Nobody dials a student they do not hold: outside «دفعتي» the QR codes
   // show after «خذه للاتصال», never while someone else holds the student.
   assert(
-    followUp.includes('const callNumbersHidden = (row: CallStudentRow) => canManageCalls && !row.heldBy?.mine;') &&
+    followUp.includes('const callNumbersHidden = (row: CallStudentRow) => callUsesBatches && !row.heldBy?.mine;') &&
       followUp.includes('{!callNumbersHidden(row) ? (') &&
       followUp.includes('{renderContactButtons(row.student, callNumbersHidden(row))}') &&
       followUp.includes('.filter(([label]) => !callNumbersHidden(row) || !label.startsWith("هاتف"))') &&
@@ -505,7 +513,7 @@ assert(
       followUp.includes('<PhoneCall aria-hidden="true" />خذه للاتصال') &&
       followUp.includes('seenStatus: callStatusForLog(callLogForRow(row)),') &&
       presence.includes('changed = current !== null && seenStatus !== null && seenStatus !== current;') &&
-      callsRoute.includes('if (holder && holder.windowId !== windowId) throw new CallHeldByOtherError(holder.userName);'),
+      callsRoute.includes('if (holder && holder.windowId !== windowId && !principal.isAdmin) throw new CallHeldByOtherError(holder.userName);'),
     'الرقم (QR، واتساب، التفاصيل) والإجراء بس للطالب اللي بإيدك؛ «خذه للاتصال» يرفض الطالب اللي تغيّرت حالته أو اللي عند غيرك',
   );
   assert(
