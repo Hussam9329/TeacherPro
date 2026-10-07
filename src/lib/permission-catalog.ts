@@ -511,6 +511,14 @@ export const DEFAULT_ROLE_DEFINITIONS: DefaultRoleDefinition[] = [
     permissions: ["system.dashboard", "grace-periods.view", "grace-periods.manage"],
   },
   {
+    // For office staff: «سجل الطلاب» and editing a student's details, and
+    // nothing else (adding, archiving and the other pages stay closed).
+    id: "role_office",
+    name: "موظفي الإدارة",
+    isDefault: true,
+    permissions: ["students.registry.view", "students.edit"],
+  },
+  {
     id: "role_viewer",
     name: "مشاهدة فقط",
     isDefault: true,

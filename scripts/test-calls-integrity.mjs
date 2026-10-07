@@ -378,7 +378,8 @@ assert(
 );
 assert(
   [candidates, stats].every((source) =>
-    source.includes('const words = normalizeArabicText(query).split(" ").filter(Boolean);') &&
+    source.includes('const words = normalizeArabicText(query.replace(/(^|\\s)@+/g, "$1")).split(" ").filter(Boolean);') &&
+    source.includes('student.username,') && !source.includes('student.telegram,') &&
     source.includes('const haystack = values.map((value) => normalizeArabicText(value));')) &&
   candidates.includes('words.every((word) => haystack.some((value) => value.includes(word)))') &&
     stats.includes('words.every((word) => haystack.some((value) => value.includes(word)))') &&

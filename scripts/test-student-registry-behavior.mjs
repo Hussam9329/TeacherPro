@@ -342,8 +342,10 @@ const searchableStudents = [
     nameKey: "zaid kareem",
     school: "Al-Amal",
     code: "ST-200",
-    telegram: "ali_teacher",
-    telegramKey: "ali_teacher",
+    // The numeric Telegram id is not searched; the recovered username is.
+    telegram: "5551234567",
+    telegramKey: "5551234567",
+    username: "ali_teacher",
     phone: "07709999999",
     phoneKey: "07709999999",
     parentPhone: "07809999999",
@@ -380,7 +382,7 @@ const searchableStudents = [
   },
 ];
 
-test("latin names remain searchable while Telegram is normalized without @", () => {
+test("latin names remain searchable and Telegram is found by the recovered username without @", () => {
   assert.deepEqual(
     matchingIds(
       searchableStudents,
@@ -394,6 +396,13 @@ test("latin names remain searchable while Telegram is normalized without @", () 
       registryFilters.buildStudentRegistrySearchWhere("@ali_teacher"),
     ),
     ["ali-telegram"],
+  );
+  assert.deepEqual(
+    matchingIds(
+      searchableStudents,
+      registryFilters.buildStudentRegistrySearchWhere("5551234567"),
+    ),
+    [],
   );
   assert.deepEqual(
     matchingIds(

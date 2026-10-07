@@ -79,7 +79,8 @@ check(
     registryFiltersHelper.includes('buildStudentRegistrySearchWhere') &&
     registryFiltersHelper.includes('buildStudentRegistryLocationWhere') &&
     registryFiltersHelper.includes('{ name: { contains: query') &&
-    registryFiltersHelper.includes('telegramKey: { startsWith: telegram'),
+    registryFiltersHelper.includes('{ username: { contains: username, mode: "insensitive" } }') &&
+    !registryFiltersHelper.includes('telegramKey: { startsWith'),
 );
 check(
   'عدادات الحالات العامة مستقلة عن الفلاتر مع إبقاء العدادات المفلترة',

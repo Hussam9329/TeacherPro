@@ -224,10 +224,10 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage }: Props) {
   }, [students]);
 
   const scopedStudents = useMemo(() => {
-    const query = normalizeForSearch(search);
+    const query = normalizeForSearch(search.replace(/^\s*@+/, "")); // «@ali» finds the username «ali»
     return students.filter((student) => {
       if (courseId && student.courseId !== courseId) return false;
-      return !query || normalizeForSearch(`${student.name} ${student.code}`).includes(query);
+      return !query || normalizeForSearch(`${student.name} ${student.code} ${student.username || ""}`).includes(query);
     });
   }, [students, courseId, search]);
   const checkedCount = scopedStudents.filter((student) => student.dismissedChecked).length;

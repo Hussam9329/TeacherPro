@@ -91,6 +91,12 @@ const reset = (permissions, admin = false) => {
   reset(['grades.add']);
   assert.deepEqual(Object.keys(await (await GET(request)).json()).sort(), ['chapters', 'courses', 'exams']);
 
+  // «موظفي الإدارة»: editing a student picks the course and its chapter.
+  reset(['students.registry.view', 'students.edit']);
+  assert.deepEqual(Object.keys(await (await GET(request)).json()).sort(), ['chapters', 'courses']);
+  reset(['students.dismiss']);
+  assert.deepEqual(await (await GET(request)).json(), {});
+
   reset(['accounts.users.view']);
   payload = await (await GET(request)).json();
   assert.deepEqual(Object.keys(payload).sort(), ['roles', 'users']);

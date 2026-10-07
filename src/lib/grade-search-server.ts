@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { normalizeArabicText } from "@/lib/route-helpers";
+import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 
 // Up to this many matching students the search is an id list; a broader
 // match (a single common letter) keeps the relation filter to stay within the
@@ -22,17 +23,18 @@ export async function buildGradeSearchWhere(
 
   const normalizedQuery = normalizeArabicText(query);
   const compactQuery = query.replace(/\s+/g, "");
-  const telegramQuery = query.startsWith("@") ? query : `@${query}`;
+  // Telegram is searched by the recovered username, not the numeric Telegram id.
+  const username = normalizeTelegramIdentifier(query);
 
   const studentSearch: Prisma.StudentWhereInput[] = [
     { name: { contains: query, mode: "insensitive" } },
     { code: { startsWith: query, mode: "insensitive" } },
     { phone: { startsWith: compactQuery, mode: "insensitive" } },
     { parentPhone: { startsWith: compactQuery, mode: "insensitive" } },
-    { telegram: { startsWith: telegramQuery, mode: "insensitive" } },
-    // يوزر تيليجرام المستعاد: بحث بنفس استعلام الدرجات (بدون مسافات).
-    { username: { contains: compactQuery, mode: "insensitive" } },
   ];
+  if (username) {
+    studentSearch.push({ username: { contains: username, mode: "insensitive" } });
+  }
 
   if (normalizedQuery) {
     studentSearch.push({

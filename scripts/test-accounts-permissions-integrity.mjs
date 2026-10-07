@@ -153,6 +153,38 @@ must(
   );
 }
 
+// «موظفي الإدارة»: سجل الطلاب وتعديله فقط.
+must(
+  store.includes('id: "role_office",') && store.includes('name: "موظفي الإدارة",') &&
+    store.includes('permissions: ["students.registry.view", "students.edit"],'),
+  "دور «موظفي الإدارة» بيه سجل الطلاب وتعديله فقط",
+);
+
+// Every student search finds Telegram by the recovered username, never by
+// the numeric Telegram id.
+{
+  const searches = {
+    "src/lib/student-registry-filters-server.ts": 'or.push({ username: { contains: username, mode: "insensitive" } });',
+    "src/lib/opportunity-filters-server.ts": 'or.push({ username: { contains: username, mode: "insensitive" } });',
+    "src/lib/grade-search-server.ts": 'studentSearch.push({ username: { contains: username, mode: "insensitive" } });',
+    "src/lib/dismissed-student-filters-server.ts": '{ username: { contains: username, mode: "insensitive" as const } }',
+    "src/lib/student-leave-query-server.ts": 'studentSearch.push({ username: { contains: username, mode: "insensitive" } });',
+  };
+  must(
+    Object.entries(searches).every(([file, line]) => {
+      const source = read(file);
+      return source.includes(line) && !/\btelegram(Key)?: \{ (contains|startsWith)/.test(source);
+    }) &&
+      ["src/components/teacher-pro/grade-entry.tsx", "src/app/api/student-calls/candidates/route.ts", "src/app/api/student-calls/stats/route.ts"]
+        .every((file) => !read(file).includes("student.telegram,")) &&
+      !read("src/components/teacher-pro/bot-problems-dialog.tsx").includes("${problem.student.telegram}") &&
+      !read("src/components/teacher-pro/call-notes-management-dialog.tsx").includes("${note.student.telegram") &&
+      read("src/components/teacher-pro/code-closures-dialog.tsx").includes('${student.username || ""}') &&
+      read("src/components/teacher-pro/student-registry-helpers.ts").includes("studentUsername.includes(username)"),
+    "البحث بكل الصفحات يلكه التيليجرام باليوزر المستعاد، مو بالمعرف الرقمي",
+  );
+}
+
 if (failed) {
   console.error("\nفشل اختبار إدارة الحسابات والصلاحيات.");
   process.exit(1);

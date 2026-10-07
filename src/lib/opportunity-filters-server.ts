@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { sanitizePhoneInput } from "@/lib/format";
 import { normalizeArabicText } from "@/lib/route-helpers";
-import { sanitizeTelegramInput } from "@/lib/student-utils";
+import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { BONUS_OPPORTUNITY_ACTION } from "@/lib/bonus-opportunity";
 
 /** Active students one pass (or one missing grade) away from «فرصة مكافأة». */
@@ -53,9 +53,8 @@ export function buildOpportunitySearchWhere(
   if (!query) return null;
   const normalized = normalizeArabicText(query);
   const numeric = sanitizePhoneInput(query);
-  const telegram = sanitizeTelegramInput(query)
-    .replace(/\s+/g, "")
-    .toLowerCase();
+  // Telegram is searched by the recovered username, not the numeric Telegram id.
+  const username = normalizeTelegramIdentifier(query);
   const or: Prisma.StudentWhereInput[] = [
     { name: { contains: query, mode: "insensitive" } },
     { code: { startsWith: query, mode: "insensitive" } },
@@ -68,16 +67,8 @@ export function buildOpportunitySearchWhere(
   if (normalized) {
     or.push({ nameKey: { contains: normalized, mode: "insensitive" } });
   }
-  if (telegram) {
-    or.push(
-      { telegramKey: { startsWith: telegram, mode: "insensitive" } },
-      {
-        telegram: {
-          startsWith: sanitizeTelegramInput(query),
-          mode: "insensitive",
-        },
-      },
-    );
+  if (username) {
+    or.push({ username: { contains: username, mode: "insensitive" } });
   }
   if (numeric) {
     or.push(

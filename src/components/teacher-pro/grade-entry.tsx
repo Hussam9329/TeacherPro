@@ -734,7 +734,8 @@ export function GradeEntryView() {
       setReactivationWarningsAccepted({});
     }
   }, [filteredActiveExams, selectedExamId]);
-  const normalizedSearch = useMemo(() => normalizeForSearch(search), [search]);
+  // «@ali» finds the recovered Telegram username «ali».
+  const normalizedSearch = useMemo(() => normalizeForSearch(search.replace(/^\s*@+/, "")), [search]);
   const studentById = useMemo(
     () => new Map(entryStudentsSource.map((student) => [student.id, student])),
     [entryStudentsSource],
@@ -807,7 +808,7 @@ export function GradeEntryView() {
           [
             student.name,
             student.code,
-            student.telegram,
+            // Telegram: the recovered username, not the numeric Telegram id.
             student.username,
             student.phone,
             student.parentPhone,

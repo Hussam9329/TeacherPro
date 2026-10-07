@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { baghdadTodayKey } from "./baghdad-time";
-import { normalizeStudentName } from "./student-utils";
+import { normalizeStudentName, normalizeTelegramIdentifier } from "./student-utils";
 import { db } from "@/lib/db";
 
 const SEARCH_ID_LIST_LIMIT = 5000;
@@ -23,8 +23,11 @@ export async function studentLeaveListWhere(params: URLSearchParams): Promise<Pr
       { name: { contains: q, mode: "insensitive" } },
       { nameKey: { contains: normalizeStudentName(q), mode: "insensitive" } },
       { code: { contains: q, mode: "insensitive" } },
-      { phone: { contains: q } }, { telegram: { contains: q, mode: "insensitive" } },
+      { phone: { contains: q } },
     ];
+    // Telegram is searched by the recovered username, not the numeric Telegram id.
+    const username = normalizeTelegramIdentifier(q);
+    if (username) studentSearch.push({ username: { contains: username, mode: "insensitive" } });
     const [students, exams] = await Promise.all([
       db.student.findMany({ where: { OR: studentSearch }, select: { id: true }, take: SEARCH_ID_LIST_LIMIT + 1 }),
       db.exam.findMany({ where: { name: { contains: q, mode: "insensitive" } }, select: { id: true } }),

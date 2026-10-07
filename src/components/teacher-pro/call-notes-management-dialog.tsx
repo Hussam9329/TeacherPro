@@ -214,13 +214,13 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
   const totalCount = notes.filter((note) => !pendingIds.has(note.id)).length;
   // Everything but the action: the action buttons count inside this set.
   const actionBase = useMemo(() => {
-    const query = normalizeForSearch(search);
+    const query = normalizeForSearch(search.replace(/^\s*@+/, "")); // «@ali» finds the username «ali»
     return courseNotes.filter((note) => {
       if (pendingIds.has(note.id)) return false;
       if (examId === GENERAL_NOTES && note.examId) return false;
       if (examId && examId !== GENERAL_NOTES && note.examId !== examId) return false;
       return !query || normalizeForSearch(
-        `${note.student.name} ${note.student.code} ${note.student.telegram || ""} ${note.student.username || ""} ${note.notes}`,
+        `${note.student.name} ${note.student.code} ${note.student.username || ""} ${note.notes}`,
       ).includes(query);
     });
   }, [courseNotes, examId, search, pendingIds]);

@@ -28,14 +28,17 @@ export async function GET(req: NextRequest) {
     // active chapter's effect, so whoever works on grades gets the course,
     // chapter and exam lists (read-only) without the courses/exams pages.
     const gradesWork = GRADES_WORK_PERMISSIONS.some((permission) => hasPermission(principal, permission));
+    // Adding or editing a student picks the course and its active chapter, so
+    // whoever does that (e.g. «موظفي الإدارة») gets both lists read-only.
+    const studentsWork = ["students.add", "students.edit"].some((permission) => principal.isAdmin || principal.permissions.includes(permission));
     // The calls page picks a course first, so calls staff get the course list too.
-    if (gradesWork || ["courses.view", ...CALLS_VIEW_PERMISSIONS].some((permission) => hasPermission(principal, permission))) {
+    if (gradesWork || studentsWork || ["courses.view", ...CALLS_VIEW_PERMISSIONS].some((permission) => hasPermission(principal, permission))) {
       loaders.push(
         db.course.findMany({ orderBy: { createdAt: "desc" } })
           .then((courses) => ({ courses })),
       );
     }
-    if (gradesWork || hasPermission(principal, "chapters.view")) {
+    if (gradesWork || studentsWork || hasPermission(principal, "chapters.view")) {
       loaders.push(
         db.chapter.findMany({
           orderBy: { name: "asc" },

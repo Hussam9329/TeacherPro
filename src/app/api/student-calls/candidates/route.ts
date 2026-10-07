@@ -389,7 +389,8 @@ function gradeMatchesStatusFilter(
 function includesSearch(query: string, values: Array<unknown>): boolean {
   // One search box: every word must appear in one of the student's fields.
   // Both sides are normalized like سجل الطلاب (ة/ه، أ/إ/آ/ا، ى/ي، التشكيل).
-  const words = normalizeArabicText(query).split(" ").filter(Boolean);
+  // «@ali» finds the recovered Telegram username «ali».
+  const words = normalizeArabicText(query.replace(/(^|\s)@+/g, "$1")).split(" ").filter(Boolean);
   if (!words.length) return true;
   const haystack = values.map((value) => normalizeArabicText(value));
   return words.every((word) => haystack.some((value) => value.includes(word)));
@@ -407,7 +408,7 @@ function searchableValues(args: {
     student.code,
     student.phone,
     student.parentPhone,
-    student.telegram,
+    // Telegram: the recovered username, not the numeric Telegram id.
     student.username,
     student.school,
     student.status,

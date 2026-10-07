@@ -277,8 +277,9 @@ export function studentMatchesRegistrySearch(
 ): boolean {
   const trimmed = toLatinDigits(query).trim();
   if (!trimmed) return true;
-  const telegramKey = normalizeTelegramIdentifier(trimmed);
-  const studentTelegramKey = normalizeTelegramIdentifier(student.telegram || "");
+  // Telegram is searched by the recovered username, not the numeric Telegram id.
+  const username = normalizeTelegramIdentifier(trimmed);
+  const studentUsername = normalizeTelegramIdentifier(student.username || "");
   const queryCode = trimmed.toLocaleLowerCase("ar-IQ");
   const studentCode = String(student.code || "")
     .trim()
@@ -291,11 +292,7 @@ export function studentMatchesRegistrySearch(
   return (
     searchAny(trimmed, [student.name, student.school]) ||
     Boolean(studentCode && studentCode.startsWith(queryCode)) ||
-    Boolean(
-      telegramKey &&
-        studentTelegramKey &&
-        studentTelegramKey.startsWith(telegramKey),
-    ) ||
+    Boolean(username && studentUsername && studentUsername.includes(username)) ||
     phoneValues.some(
       (value) =>
         Boolean(compact && value.startsWith(compact)) ||

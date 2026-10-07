@@ -89,6 +89,9 @@ export async function GET(req: NextRequest) {
     "courses.view",
     "grades.add",
     "grades.view",
+    // Adding or editing a student shows the course's active chapter.
+    "students.add",
+    "students.edit",
   ]);
   if (authError) return authError;
 

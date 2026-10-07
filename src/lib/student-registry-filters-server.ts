@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { sanitizePhoneInput, toLatinDigits } from "@/lib/format";
 import { normalizeArabicText } from "@/lib/route-helpers";
-import { sanitizeTelegramInput } from "@/lib/student-utils";
+import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { getStudentFilterLocationAliases } from "@/lib/student-list-filters";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
@@ -84,16 +84,15 @@ export function buildStudentRegistrySearchWhere(
 
   const normalized = normalizeArabicText(query);
   const numeric = sanitizePhoneInput(query);
-  const telegram = sanitizeTelegramInput(query)
-    .replace(/\s+/g, "")
-    .toLowerCase();
+  // Telegram is searched by the recovered username («@ali» finds «ali»),
+  // never by the numeric Telegram id.
+  const username = normalizeTelegramIdentifier(query);
   const or: Prisma.StudentWhereInput[] = [
     { name: { contains: query, mode: "insensitive" } },
     { code: { startsWith: latin, mode: "insensitive" } },
     { school: { contains: query, mode: "insensitive" } },
-    // يوزر تيليجرام المستعاد قابل للبحث بنفس استعلام الساحة (substring).
-    { username: { contains: latin, mode: "insensitive" } },
   ];
+  if (username) or.push({ username: { contains: username, mode: "insensitive" } });
 
   if (normalized) {
     or.push({ nameKey: { contains: normalized, mode: "insensitive" } });
@@ -102,13 +101,6 @@ export function buildStudentRegistrySearchWhere(
   // The number alone finds the code: «٩٠٠١» or «9001» → BIO-9001, «7» → BIO-007.
   if (/^\d{1,9}$/.test(latin)) {
     or.push({ code: { endsWith: `-${latin.padStart(3, "0")}`, mode: "insensitive" } });
-  }
-
-  if (telegram) {
-    or.push(
-      { telegramKey: { startsWith: telegram, mode: "insensitive" } },
-      { telegram: { startsWith: telegram, mode: "insensitive" } },
-    );
   }
 
   if (numeric) {

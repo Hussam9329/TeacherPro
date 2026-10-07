@@ -165,9 +165,9 @@ export function BotProblemsDialog({ open, onOpenChange }: Props) {
     }
   }
 
-  const query = normalizeForSearch(search);
+  const query = normalizeForSearch(search.replace(/^\s*@+/, "")); // «@ali» finds the username «ali»
   const matching = problems.filter((problem) => !query || normalizeForSearch(
-    `${problem.student.name} ${problem.student.code} ${problem.student.username} ${problem.student.telegram} ${problem.reason}`,
+    `${problem.student.name} ${problem.student.code} ${problem.student.username} ${problem.reason}`,
   ).includes(query));
   const counts = {
     current: matching.filter((problem) => !problem.resolvedAt).length,
