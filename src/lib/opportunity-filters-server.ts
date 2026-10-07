@@ -100,12 +100,14 @@ export function buildOpportunityFilters(
   input: OpportunityFilterInput,
 ): Prisma.StudentWhereInput[] {
   const and: Prisma.StudentWhereInput[] = [];
-  const courseId = normalizeListFilter(input.courseId || "");
+  // One course, or several together ("a,b"); none is every course.
+  const courseIds = [...new Set(String(input.courseId || "").split(",").map((value) => normalizeListFilter(value)).filter(Boolean))];
   const status = normalizeListFilter(input.status || "");
   const opportunityCount = normalizeListFilter(input.opportunityCount || "");
   const query = String(input.q || "").trim();
 
-  if (courseId) and.push({ courseId });
+  if (courseIds.length === 1) and.push({ courseId: courseIds[0] });
+  else if (courseIds.length > 1) and.push({ courseId: { in: courseIds } });
 
   if (status === "active") and.push({ status: "نشط" });
   else if (status === "dismissed") and.push({ status: "مفصول" });

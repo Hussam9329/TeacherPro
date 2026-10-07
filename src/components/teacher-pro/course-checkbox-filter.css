@@ -1,0 +1,25 @@
+/* The course filter: «كل الدورات», or one course or several together. */
+.tp-course-filter { display: grid; gap: 0.4rem; min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+.tp-course-filter__legend { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; inline-size: 100%; margin-block-end: 0.35rem; padding: 0; font-size: 0.75rem; font-weight: 700; }
+.tp-course-filter__count { color: var(--muted-foreground); font-size: 0.72rem; font-weight: 650; }
+.tp-course-filter__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.35rem; max-block-size: 14rem; overflow-y: auto; overscroll-behavior: contain; padding-inline-end: 0.15rem; }
+.tp-course-filter__option {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-block-size: 2.5rem;
+  min-inline-size: 0;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--card);
+  font-size: 0.85rem;
+  font-weight: 650;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.tp-course-filter__option span { min-inline-size: 0; overflow-wrap: anywhere; }
+.tp-course-filter__option:hover { border-color: var(--ring); }
+.tp-course-filter__option[data-checked] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
+.tp-course-filter__option[data-all] { font-weight: 800; }

@@ -57,7 +57,8 @@ async function handleFilterBasedBulkAdjust(
     true,
   );
   const previewInput = {
-    courseId: normalizeText(body.courseId, 120),
+    // Several courses arrive as "a,b,c".
+    courseId: normalizeText(body.courseId, 4000),
     status: normalizeText(body.status, 120),
     opportunityCount: normalizeText(body.opportunityCount, 40),
     q: normalizeText(body.q, 300),

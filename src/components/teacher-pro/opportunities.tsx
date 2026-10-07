@@ -18,13 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -41,6 +34,7 @@ import { ChevronLeft, CircleMinus, CirclePlus, RotateCcw, Target } from "lucide-
 import { FormDialogHero } from "./form-dialog";
 import { EmptyState, LoadingState } from "./ui-kit";
 import { ListToolbar } from "./list-toolbar";
+import { CourseCheckboxFilter, courseFilterLabel, courseFilterParam } from "./course-checkbox-filter";
 import { RowActionsMenu } from "./row-actions-menu";
 import {
   formatOpportunityBalance,
@@ -117,7 +111,9 @@ export function OpportunitiesView() {
     mergeStudentsCache,
   } = useTeacherStore();
 
-  const [filterCourseId, setFilterCourseId] = useState("");
+  // The chosen courses; empty is every course.
+  const [filterCourseIds, setFilterCourseIds] = useState<string[]>([]);
+  const filterCourseParam = courseFilterParam(filterCourseIds);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterOpportunityCount, setFilterOpportunityCount] = useState("");
   const [search, setSearch] = useState("");
@@ -203,7 +199,7 @@ export function OpportunitiesView() {
       .list({
         page,
         pageSize,
-        courseId: filterCourseId,
+        courseIds: filterCourseParam,
         opportunityStatus: filterStatus,
         opportunityCount: filterOpportunityCount,
         q: debouncedSearch,
@@ -233,7 +229,7 @@ export function OpportunitiesView() {
   }, [
     page,
     pageSize,
-    filterCourseId,
+    filterCourseParam,
     filterStatus,
     filterOpportunityCount,
     debouncedSearch,
@@ -250,7 +246,7 @@ export function OpportunitiesView() {
       if (!silent) setDatabaseStatsLoading(true);
       opportunityStatsApi
         .get({
-          courseId: filterCourseId,
+          courseId: filterCourseParam,
           status: filterStatus,
           opportunityCount: filterOpportunityCount,
           q: debouncedSearch,
@@ -271,7 +267,7 @@ export function OpportunitiesView() {
       window.clearTimeout(timer);
     };
   }, [
-    filterCourseId,
+    filterCourseParam,
     filterStatus,
     filterOpportunityCount,
     debouncedSearch,
@@ -287,7 +283,7 @@ export function OpportunitiesView() {
       if (!silent) setBulkTargetLoading(true);
       opportunityStatsApi
         .bulkTargets({
-          courseId: filterCourseId,
+          courseId: filterCourseParam,
           status: filterStatus,
           opportunityCount: filterOpportunityCount,
           q: debouncedSearch,
@@ -311,7 +307,7 @@ export function OpportunitiesView() {
       window.clearTimeout(timer);
     };
   }, [
-    filterCourseId,
+    filterCourseParam,
     filterStatus,
     filterOpportunityCount,
     debouncedSearch,
@@ -383,9 +379,7 @@ export function OpportunitiesView() {
     bulkTargetStats?.eligibleWithActiveChapter ?? 0;
   const bulkTotalMatchingCount = bulkTargetStats?.totalMatching ?? 0;
 
-  const activeCourseFilterName = filterCourseId
-    ? courseName(filterCourseId)
-    : "كل الدورات";
+  const activeCourseFilterName = courseFilterLabel(filterCourseIds, courseName);
   const activeStatusFilterName = filterStatus
     ? (
         {
@@ -668,7 +662,7 @@ export function OpportunitiesView() {
       .join(" - ");
 
     const result = await opportunityStatsApi.bulkAdjustByFilters({
-      courseId: filterCourseId,
+      courseId: filterCourseParam,
       status: filterStatus,
       opportunityCount: filterOpportunityCount,
       q: debouncedSearch,
@@ -723,7 +717,7 @@ export function OpportunitiesView() {
 
   const fetchOpportunityExportRows = async () => {
     const result = await studentApi.listAll({
-      courseId: filterCourseId,
+      courseIds: filterCourseParam,
       opportunityStatus: filterStatus,
       opportunityCount: filterOpportunityCount,
       q: debouncedSearch,
@@ -888,46 +882,31 @@ export function OpportunitiesView() {
           setFilterStatus(value);
           setPage(1);
         }}
-        activeFilterCount={Number(Boolean(filterCourseId)) + Number(Boolean(filterOpportunityCount))}
+        activeFilterCount={Number(filterCourseIds.length > 0) + Number(Boolean(filterOpportunityCount))}
         activeFilters={[
-          ...(filterCourseId
-            ? [{ key: "course", label: `الدورة: ${courses.find((course) => course.id === filterCourseId)?.name || "—"}`, onClear: () => { setFilterCourseId(""); setPage(1); } }]
+          ...(filterCourseIds.length
+            ? [{ key: "course", label: `${filterCourseIds.length > 1 ? "الدورات" : "الدورة"}: ${activeCourseFilterName}`, onClear: () => { setFilterCourseIds([]); setPage(1); } }]
             : []),
           ...(filterOpportunityCount
             ? [{ key: "count", label: `عدد الفرص: ${filterOpportunityCount}`, onClear: () => { setFilterOpportunityCount(""); setPage(1); } }]
             : []),
         ]}
         onClearFilters={() => {
-          setFilterCourseId("");
+          setFilterCourseIds([]);
           setFilterOpportunityCount("");
           setPage(1);
         }}
         filters={
           <>
-            <div className="space-y-1.5">
-              <Label htmlFor="opp-course" className="text-xs font-bold">
-                اسم الدورة
-              </Label>
-              <Select
-                name="courseId"
-                value={filterCourseId || "all"}
-                onValueChange={(v) => {
-                  setFilterCourseId(v === "all" ? "" : v);
+            <div className="sm:col-span-2">
+              <CourseCheckboxFilter
+                courses={courses}
+                value={filterCourseIds}
+                onChange={(courseIds) => {
+                  setFilterCourseIds(courseIds);
                   setPage(1);
                 }}
-              >
-                <SelectTrigger id="opp-course">
-                  <SelectValue placeholder="كل الدورات" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل الدورات</SelectItem>
-                  {courses.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="opp-count" className="text-xs font-bold">

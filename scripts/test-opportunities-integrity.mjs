@@ -214,3 +214,18 @@ if (failed.length > 0) {
 }
 
 console.log('\nكل اختبارات سلامة تبويبة إدارة الفرص نجحت.');
+
+{
+  // Courses are chosen with checkboxes: every course, one, or several together.
+  const page = fs.readFileSync("src/components/teacher-pro/opportunities.tsx", "utf8");
+  const filters = fs.readFileSync("src/lib/opportunity-filters-server.ts", "utf8");
+  const bulk = fs.readFileSync("src/app/api/opportunities/bulk-adjust/route.ts", "utf8");
+  const ok = page.includes("<CourseCheckboxFilter") &&
+    page.includes("courseIds: filterCourseParam,") &&
+    page.includes("courseId: filterCourseParam,") &&
+    !page.includes('SelectItem value="all">كل الدورات') &&
+    filters.includes("else if (courseIds.length > 1) and.push({ courseId: { in: courseIds } });") &&
+    bulk.includes("courseId: normalizeText(body.courseId, 4000),");
+  console.log(`${ok ? "✅" : "❌"} فلترة الفرص بالدورات: الكل، أو دورة، أو أكثر من دورة سوية (القائمة والإحصائيات والعملية الجماعية والتصدير)`);
+  if (!ok) process.exitCode = 1;
+}
