@@ -576,6 +576,11 @@ a.tp-modal__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-foc
 .tp-notes__done:hover { background: var(--status-success-solid); color: var(--status-success-on); }
 .tp-notes__text { margin: 0; color: var(--tp-text); font-size: 0.92rem; font-weight: 600; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tp-notes__last { margin: 0; color: var(--tp-text-muted); font-size: 0.76rem; font-weight: 650; }
+/* «الأرشيف»: completed notes stay, with «إرجاع» back to «المعلّقة». */
+.tp-notes__views { margin-bottom: 0.15rem; }
+.tp-notes__done[data-note-return] { border-color: var(--status-info-border); background: var(--status-info-bg); color: var(--status-info-fg); }
+.tp-notes__done[data-note-return]:hover { background: var(--status-info-solid); color: var(--status-info-on); }
+.tp-notes__resolved { display: flex; align-items: center; gap: 0.3rem; margin: 0; color: var(--status-success-fg); font-size: 0.76rem; font-weight: 700; }
 
 @container (max-width: 30rem) {
   .tp-notes__sep { display: none; }

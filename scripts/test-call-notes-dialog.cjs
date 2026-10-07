@@ -133,9 +133,9 @@ function harness() {
     },
   };
   const api = {
-    list(signal) {
+    list(signal, view = 'pending') {
       const request = deferred();
-      reads.push({ ...request, signal });
+      reads.push({ ...request, signal, view });
       return request.promise;
     },
     resolve(note) {
@@ -154,7 +154,7 @@ function harness() {
   const dependencies = {
     react,
     'react/jsx-runtime': { jsx, jsxs: jsx },
-    'lucide-react': named(['Check', 'CheckCheck', 'ClipboardList', 'Loader2', 'RefreshCw', 'Search', 'Send', 'SlidersHorizontal', 'X']),
+    'lucide-react': named(['Archive', 'Check', 'CheckCheck', 'ClipboardList', 'Loader2', 'RefreshCw', 'RotateCcw', 'Search', 'Send', 'SlidersHorizontal', 'X']),
     '@/components/ui/button': named(['Button']),
     '@/components/ui/dialog': named(['Dialog', 'DialogContent', 'DialogHeader', 'DialogTitle']),
     '@/components/ui/input': named(['Input']),
@@ -235,7 +235,10 @@ function harness() {
       const toggle = walk(tree).find((node) => node.type === 'Button' && node.props['aria-expanded'] !== undefined && JSON.stringify(node.props.children).includes('تصفية'));
       if (toggle && !toggle.props['aria-expanded']) { toggle.props.onClick(); render(); }
     },
-    pressedAction() { return walk(tree).find((node) => node.type === 'button' && node.props['aria-pressed'] === true)?.props['data-action-filter']; },
+    // «المعلّقة» / «الأرشيف».
+    switchView(key) { walk(tree).find((node) => node.type === 'button' && node.props['data-notes-view'] === key).props.onClick(); render(); },
+    returns() { return walk(tree).filter((node) => node.type === 'Button' && node.props['data-note-return'] === 'true'); },
+    pressedAction() { return walk(tree).find((node) => node.type === 'button' && node.props['data-action-filter'] && node.props['aria-pressed'] === true)?.props['data-action-filter']; },
     text() { return JSON.stringify(tree); },
   };
 }
@@ -546,6 +549,36 @@ const note = (id = 'n1') => ({
   assert.equal(view.reopens.length, 1);
   assert.equal(view.reopens[0].note.id, 'newer');
   console.log('PASS: a completed note can be reopened from the confirmation.');
+
+  // Completed notes never disappear: «الأرشيف» lists them, latest completed
+  // first, with who completed them and when, and «إرجاع» sends one back.
+  view = harness();
+  view.render();
+  view.reads[0].resolve({ notes: [note('waiting')] });
+  await view.flush();
+  view.switchView('archive');
+  const archiveRead = view.reads.at(-1);
+  assert.equal(archiveRead.view, 'archive', 'the archive asks the server for the completed notes');
+  const doneEarly = { ...note('early'), noteResolved: true, resolvedAt: '2026-10-01T09:00:00.000Z', resolvedBy: 'موظف أ' };
+  const doneLate = { ...note('late'), noteResolved: true, resolvedAt: '2026-10-05T12:30:00.000Z', resolvedBy: 'موظف ب' };
+  archiveRead.resolve({ notes: [doneEarly, doneLate] });
+  await view.flush();
+  assert.equal(view.done().length, 0, 'no «إنجاز» in the archive');
+  assert.equal(view.returns().length, 2, 'every archived note has «إرجاع»');
+  const archived = view.text();
+  assert(archived.indexOf('ملاحظة تجريبية late') < archived.indexOf('ملاحظة تجريبية early'), 'latest completed first');
+  assert(archived.includes('بواسطة موظف ب') && archived.includes('الأرشيف (المنجزة)'));
+  view.tick();
+  assert.equal(view.reads.at(-1), archiveRead, 'the archive is not polled every five seconds');
+  view.returns()[0].props.onClick();
+  view.render();
+  assert.equal(view.reopens.at(-1).note.id, 'late');
+  view.reopens.at(-1).resolve({});
+  await view.flush();
+  assert.match(view.toasts.at(-1).message, /رجعت ملاحظة .* إلى المعلّقة/);
+  view.switchView('pending');
+  assert.equal(view.reads.at(-1).view, 'pending');
+  console.log('PASS: completed notes stay in «الأرشيف» and «إرجاع» sends one back.');
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

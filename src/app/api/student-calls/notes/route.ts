@@ -13,11 +13,41 @@ import {
   CallNoteMutationError, readExpectedNoteRevision, setCallNoteResolved,
 } from "@/lib/call-note-management-server";
 
+// «الأرشيف»: the newest completed notes, and who completed each and when
+// (read from the «إنجاز ملاحظة مكالمات» entries of the action log).
+const ARCHIVE_LIMIT = 1000;
+const RESOLUTION_LOG_LIMIT = 3000;
+
+async function loadNoteResolutions(noteIds: string[]) {
+  const wanted = new Set(noteIds);
+  const found = new Map<string, { at: Date; by: string | null }>();
+  if (!wanted.size) return found;
+  const logs = await db.auditLog.findMany({
+    where: { module: "المكالمات", action: "إنجاز ملاحظة مكالمات" },
+    select: { time: true, userName: true, details: true },
+    orderBy: [{ time: "desc" }, { id: "desc" }],
+    take: RESOLUTION_LOG_LIMIT,
+  });
+  for (const log of logs) {
+    let id = "";
+    try {
+      const details = JSON.parse(log.details || "{}") as { after?: { id?: unknown } | null };
+      id = typeof details.after?.id === "string" ? details.after.id : "";
+    } catch {
+      continue;
+    }
+    // Newest first: a note completed, reopened and completed again keeps the last time.
+    if (wanted.has(id) && !found.has(id)) found.set(id, { at: log.time, by: log.userName });
+  }
+  return found;
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requireAnyPermission(req, ["follow-up.calls.view", "follow-up.view"]);
   if (authError) return authError;
   try {
     const params = new URL(req.url).searchParams;
+    const archive = params.get("view") === "archive";
     const courseId = (params.get("courseId") || "").trim();
     const examId = (params.get("examId") || "").trim();
     const result = await withDatabaseSchema(async () => {
@@ -34,7 +64,8 @@ export async function GET(req: NextRequest) {
       const notes = await db.studentCall.findMany({
         where: {
           category: CALL_STUDENT_NOTE_CATEGORY,
-          noteResolved: false,
+          // Completed notes stay in the database; they are «الأرشيف».
+          noteResolved: archive,
           notes: { not: "" },
           ...(examId ? { OR: [{ examId }, { examId: null }] } : {}),
           student: { is: courseId ? studentCourseScopeWhere(courseId, "followup") : studentScopeWhere("followup") },
@@ -45,9 +76,13 @@ export async function GET(req: NextRequest) {
           exam: { select: { id: true, name: true } },
           student: { select: { id: true, name: true, code: true, telegram: true, username: true, courseId: true, course: { select: { id: true, name: true } } } },
         },
-        orderBy: [{ student: { name: "asc" } }, { createdAt: "desc" }, { id: "desc" }],
+        orderBy: archive
+          ? [{ createdAt: "desc" }, { id: "desc" }]
+          : [{ student: { name: "asc" } }, { createdAt: "desc" }, { id: "desc" }],
+        ...(archive ? { take: ARCHIVE_LIMIT } : {}),
       });
       const visibleNotes = notes.filter(hasManualCallNote);
+      const resolutions = archive ? await loadNoteResolutions(visibleNotes.map((note) => note.id)) : null;
       const studentIds = [...new Set(visibleNotes.map((note) => note.studentId))];
       const calls = studentIds.length ? await db.studentCall.findMany({
         where: { studentId: { in: studentIds }, category: { not: CALL_STUDENT_NOTE_CATEGORY } },
@@ -72,14 +107,16 @@ export async function GET(req: NextRequest) {
           const contact = note.examId
             ? contactByExam.get(contactKey(note.studentId, note.examId))
             : latestContactByStudent.get(note.studentId);
+          const resolution = resolutions?.get(note.id);
           return {
             ...note,
             scope: note.examId ? "exam" : "general",
             contactStatus: normalizeContactStatus(contact),
             contactExam: contact?.exam || null,
+            ...(resolutions ? { resolvedAt: resolution?.at.toISOString() || null, resolvedBy: resolution?.by || null } : {}),
           };
         }),
-        exam, totalCount: visibleNotes.length,
+        exam, totalCount: visibleNotes.length, view: archive ? "archive" : "pending",
         source: "database",
       };
     }, "StudentCall");

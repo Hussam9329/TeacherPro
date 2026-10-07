@@ -3,11 +3,11 @@
 import { toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
 import { formatAppDate, formatAppTime } from "@/lib/format";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, CheckCheck, ClipboardList, RefreshCw, Search, Send, SlidersHorizontal, X } from "lucide-react";
+import { Archive, Check, CheckCheck, ClipboardList, RefreshCw, RotateCcw, Search, Send, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { callNotesManagementApi, type ManagedCallNote } from "@/lib/call-notes-management-client";
+import { callNotesManagementApi, type CallNotesView, type ManagedCallNote } from "@/lib/call-notes-management-client";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
 import { normalizeForSearch } from "@/lib/validation";
@@ -55,8 +55,21 @@ function noteTime(createdAt: string) {
   return Number.isFinite(time) ? time : 0;
 }
 
+/** «الأرشيف» lists the latest completed first; «المعلّقة» the newest note. */
+function sortTime(note: ManagedCallNote, view: CallNotesView) {
+  return noteTime(view === "archive" ? note.resolvedAt || note.createdAt : note.createdAt);
+}
+
+const VIEWS: Array<{ key: CallNotesView; label: string }> = [
+  { key: "pending", label: "المعلّقة" },
+  { key: "archive", label: "الأرشيف (المنجزة)" },
+];
+
 export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Props) {
   const [notes, setNotes] = useState<ManagedCallNote[]>([]);
+  // Completed notes never disappear: they move to «الأرشيف».
+  const [view, setView] = useState<CallNotesView>("pending");
+  const viewRef = useRef<CallNotesView>("pending");
   const [search, setSearch] = useState("");
   const [courseId, setCourseId] = useState("");
   const [examId, setExamId] = useState("");
@@ -83,11 +96,12 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
     activeRequestRef.current = controller;
     const sequence = ++requestSequenceRef.current;
     const mutationVersion = mutationVersionRef.current;
+    const requestView = viewRef.current;
     setLoading(true);
     try {
-      const result = await callNotesManagementApi.list(controller.signal);
+      const result = await callNotesManagementApi.list(controller.signal, requestView);
       if (controller.signal.aborted || sequence !== requestSequenceRef.current ||
-          mutationVersion !== mutationVersionRef.current) return;
+          mutationVersion !== mutationVersionRef.current || requestView !== viewRef.current) return;
       setNotes(result.notes);
       setLoaded(true);
       setError("");
@@ -112,12 +126,15 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
     setExamId("");
     setActionFilter("all");
     setFiltersOpen(false);
+    viewRef.current = "pending";
+    setView("pending");
     if (!open) return;
     void refresh();
     // The ordinary background sync intentionally waits while dialogs are open.
-    // Poll this small, read-only list directly so other users' checks reach it.
+    // Poll this small, read-only list directly so other users' checks reach it;
+    // the archive reloads when it is opened, on focus and with «تحديث».
     const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refresh();
+      if (document.visibilityState === "visible" && viewRef.current === "pending") void refresh();
     }, 5000);
     const onVisible = () => {
       if (document.visibilityState === "visible") void refresh();
@@ -146,7 +163,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
       if (generation === generationRef.current) {
         setNotes((current) => current.filter((item) => item.id !== note.id));
       }
-      toast.success(`أُنجزت ملاحظة «${note.student.name}»`, {
+      toast.success(`أُنجزت ملاحظة «${note.student.name}» وانتقلت إلى الأرشيف`, {
         action: { label: "تراجع", onClick: () => void reopenNote(note) },
       });
       emitTeacherProDataChanged({
@@ -164,6 +181,50 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
       // Reconcile both failed/uncertain requests and changes by another user.
       if (generation === generationRef.current) void refresh();
     }
+  }
+
+  // «إرجاع» in the archive: the note goes back to «المعلّقة».
+  async function returnNote(note: ManagedCallNote) {
+    if (!canManage || pendingRef.current.has(note.id)) return;
+    const generation = generationRef.current;
+    pendingRef.current.add(note.id);
+    setPendingIds(new Set(pendingRef.current));
+    mutationVersionRef.current += 1;
+    activeRequestRef.current?.abort();
+    try {
+      await callNotesManagementApi.reopen(note);
+      if (generation === generationRef.current) {
+        setNotes((current) => current.filter((item) => item.id !== note.id));
+      }
+      toast.success(`رجعت ملاحظة «${note.student.name}» إلى المعلّقة`);
+      emitTeacherProDataChanged({
+        source: "local-mutation",
+        reason: "إعادة فتح ملاحظة المكالمات",
+        scopes: ["follow-up", "students", "dashboard", "logs"],
+        dispatchLocal: false,
+      });
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "تعذر إرجاع الملاحظة. أعد المحاولة.");
+    } finally {
+      mutationVersionRef.current += 1;
+      pendingRef.current.delete(note.id);
+      setPendingIds(new Set(pendingRef.current));
+      if (generation === generationRef.current) void refresh();
+    }
+  }
+
+  function switchView(next: CallNotesView) {
+    if (next === viewRef.current || pendingRef.current.size > 0) return;
+    viewRef.current = next;
+    setView(next);
+    requestSequenceRef.current += 1;
+    activeRequestRef.current?.abort();
+    activeRequestRef.current = null;
+    setNotes([]);
+    setLoaded(false);
+    setError("");
+    setActionFilter("all");
+    void refresh();
   }
 
   async function reopenNote(note: ManagedCallNote) {
@@ -237,9 +298,9 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
       byStudent.set(note.studentId, group);
     }
     return [...byStudent.values()]
-      .map((group) => group.slice().sort((left, right) => noteTime(right.createdAt) - noteTime(left.createdAt)))
-      .sort((left, right) => noteTime(right[0].createdAt) - noteTime(left[0].createdAt));
-  }, [visibleNotes]);
+      .map((group) => group.slice().sort((left, right) => sortTime(right, view) - sortTime(left, view)))
+      .sort((left, right) => sortTime(right[0], view) - sortTime(left[0], view));
+  }, [visibleNotes, view]);
 
   function clearFilters() {
     setSearch("");
@@ -280,6 +341,23 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
         </div>
 
         <div className="tp-modal__body">
+          <div role="group" aria-label="المعلّقة أو الأرشيف" className="tp-modal__chips tp-notes__views">
+            {VIEWS.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                className="tp-modal__filter"
+                data-notes-view={option.key}
+                aria-pressed={view === option.key}
+                disabled={pendingIds.size > 0}
+                onClick={() => switchView(option.key)}
+              >
+                {option.key === "archive" ? <Archive className="size-4" aria-hidden="true" /> : <ClipboardList className="size-4" aria-hidden="true" />}
+                <span className="tp-modal__filter-label">{option.label}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="tp-modal__searchbar">
             <div className="tp-modal__input-wrap tp-modal__search">
               <Search aria-hidden="true" />
@@ -374,8 +452,8 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
 
           <div className="tp-modal__toolbar">
             <span className="tp-modal__count" aria-live="polite">
-              {loaded ? `المعروض ${visibleNotes.length} من ${totalCount} ملاحظة` : "الملاحظات"}
-              {loaded && " · الأحدث أولاً · الأوقات بتوقيت بغداد"}
+              {loaded ? `المعروض ${visibleNotes.length} من ${totalCount} ${view === "archive" ? "ملاحظة منجزة" : "ملاحظة"}` : "الملاحظات"}
+              {loaded && (view === "archive" ? " · آخر المنجزة أولاً · الأوقات بتوقيت بغداد" : " · الأحدث أولاً · الأوقات بتوقيت بغداد")}
             </span>
             {hasFilters && (
               <div className="tp-modal__tools">
@@ -395,7 +473,11 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
             ) : loaded && visibleNotes.length === 0 ? (
               <EmptyState
                 icon={CheckCheck}
-                title={pendingIds.size > 0 ? "جاري حفظ الإنجاز..." : hasFilters ? "لا توجد ملاحظات تطابق البحث والفلاتر" : "لا توجد ملاحظات معلّقة"}
+                title={pendingIds.size > 0
+                  ? "جاري الحفظ..."
+                  : hasFilters
+                    ? "لا توجد ملاحظات تطابق البحث والفلاتر"
+                    : view === "archive" ? "الأرشيف فارغ: ما أكو ملاحظات منجزة" : "لا توجد ملاحظات معلّقة"}
               />
             ) : (
               <ul className="tp-notes__cards">
@@ -447,7 +529,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                                   {" · "}
                                   <time dateTime={note.createdAt}>{formatNoteTime(note.createdAt)}</time>
                                 </span>
-                                {canManage && (
+                                {canManage && view === "pending" && (
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -462,8 +544,31 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                                     إنجاز
                                   </Button>
                                 )}
+                                {canManage && view === "archive" && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="tp-notes__done"
+                                    data-note-return="true"
+                                    disabled={pendingIds.has(note.id)}
+                                    onClick={() => void returnNote(note)}
+                                    aria-label={`إرجاع ملاحظة ${student.name} إلى المعلّقة: ${note.notes}`}
+                                  >
+                                    <RotateCcw className="size-4" aria-hidden="true" />
+                                    إرجاع
+                                  </Button>
+                                )}
                               </div>
                               <p className="tp-notes__text">{note.notes}</p>
+                              {view === "archive" && (
+                                <p className="tp-notes__resolved">
+                                  <CheckCheck className="size-3.5" aria-hidden="true" />
+                                  {note.resolvedAt
+                                    ? `أُنجزت ${formatNoteDate(note.resolvedAt)} · ${formatNoteTime(note.resolvedAt)}${note.resolvedBy ? ` · بواسطة ${note.resolvedBy}` : ""}`
+                                    : "منجزة"}
+                                </p>
+                              )}
                               {note.scope === "general" && note.contactExam && (
                                 <p className="tp-notes__last">آخر إجراء: {note.contactExam.name}</p>
                               )}

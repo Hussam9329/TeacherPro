@@ -23,7 +23,13 @@ export type ManagedCallNote = {
   scope: "exam" | "general";
   contactStatus: ContactStatus;
   contactExam: { id: string; name: string } | null;
+  /** «الأرشيف» only: when the note was completed and by whom, if logged. */
+  resolvedAt?: string | null;
+  resolvedBy?: string | null;
 };
+
+/** «المعلّقة» (waiting) or «الأرشيف» (completed). */
+export type CallNotesView = "pending" | "archive";
 
 export type ManagedCallNotesResponse = {
   notes: ManagedCallNote[];
@@ -44,9 +50,9 @@ async function responseBody(response: Response) {
 }
 
 export const callNotesManagementApi = {
-  list(signal?: AbortSignal): Promise<ManagedCallNotesResponse> {
+  list(signal?: AbortSignal, view: CallNotesView = "pending"): Promise<ManagedCallNotesResponse> {
     return withReadDeadline(async (readSignal) => {
-      const response = await fetch("/api/student-calls/notes", {
+      const response = await fetch(view === "archive" ? "/api/student-calls/notes?view=archive" : "/api/student-calls/notes", {
         credentials: "same-origin",
         cache: "no-store",
         signal: readSignal,
