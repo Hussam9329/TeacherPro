@@ -494,6 +494,26 @@ assert(
       followUp.includes('عند {row.heldBy.userName}'),
     'شاشة المكالمات: «دفعتي» و«خذ دفعة» و«الدفعة الجاية»، و«عند فلان» على الطالب المحجوز',
   );
+  // Nobody dials a student they do not hold: outside «دفعتي» the QR codes
+  // show after «خذه للاتصال», never while someone else holds the student.
+  assert(
+    followUp.includes('{!canManageCalls || row.heldBy?.mine ? (') &&
+      followUp.includes('<PhoneCall aria-hidden="true" />خذه للاتصال') &&
+      followUp.includes('callWindowApi.hold({') &&
+      presence.includes('holdOk = exists > 0 && await holdCallCase(tx, { id: windowId, ownerId: owner.id }, holdStudentId, examId, now);'),
+    'خارج «دفعتي» الرقم والـQR يطلعون بس بعد «خذه للاتصال»، والمحجوز عند غيرك ما ينحجز',
+  );
+  // A page from before batches cannot list students; a page left open across
+  // an update asks for a reload; a page in the background keeps its batch.
+  assert(
+    batch.includes('export const CALL_CLIENT_PROTOCOL = 2;') &&
+      candidates.includes('if (hasPermission(principal, "follow-up.calls.manage") && !(clientProtocol >= CALL_CLIENT_PROTOCOL)) {') &&
+      api.includes('client: String(CALL_CLIENT_PROTOCOL),') &&
+      followUp.includes('if (result?.build && CALL_PAGE_BUILD && result.build !== CALL_PAGE_BUILD) setCallPageOutdated(true);') &&
+      followUp.includes('const away = document.visibilityState === "hidden";') &&
+      batch.includes('export const CALL_WINDOW_AWAY_MS = 15 * 60 * 1000;'),
+    'صفحة مكالمات قديمة ما تشتغل لحد ما تتحدث، والصفحة اللي بالخلفية (على مكالمة) تحتفظ بدفعتها',
+  );
 }
 assert(
   read('src/components/teacher-pro/layout.tsx').includes('  "follow-up-calls",\n  "accounts",') &&

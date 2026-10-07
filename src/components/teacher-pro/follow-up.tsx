@@ -32,6 +32,7 @@ import {
   PencilLine,
   Phone,
   PhoneCall,
+  RefreshCw,
   Search,
   Send,
   ShieldAlert,
@@ -245,6 +246,8 @@ const callGradeDisplayModeLabels: Record<CallGradeDisplayMode, string> = {
 // hold React's scheduler for hundreds of milliseconds. Counts and exports are
 // server-driven, so a smaller UI page keeps the complete result set intact.
 const CALL_PAGE_SIZE = 30;
+/** The build this page was loaded from (empty outside Vercel). */
+const CALL_PAGE_BUILD = process.env.NEXT_PUBLIC_APP_BUILD || "";
 
 const callExportColumns: ExportColumn<CallExportRow>[] = [
   {
@@ -696,6 +699,9 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   // (the window was gone too long), the list reloads so nobody shares a name.
   const callWindowOpenRef = useRef(false);
   const callBatchShownRef = useRef<string[]>([]);
+  // The server runs a newer build than this page: ask for a reload.
+  const [callPageOutdated, setCallPageOutdated] = useState(false);
+  const [callTakingIds, setCallTakingIds] = useState<Record<string, boolean>>({});
   useEffect(() => {
     if (!canManageCalls || !callCourseId || !callExamId) {
       if (callWindowOpenRef.current) {
@@ -708,10 +714,11 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     const beat = () => {
       const away = document.visibilityState === "hidden";
       const sequence = callCandidatesRequestSequenceRef.current;
-      void callWindowApi.beat({ windowId: callWindowId, courseId: callCourseId, examId: callExamId, away }).then((held) => {
+      void callWindowApi.beat({ windowId: callWindowId, courseId: callCourseId, examId: callExamId, away }).then((result) => {
+        if (result?.build && CALL_PAGE_BUILD && result.build !== CALL_PAGE_BUILD) setCallPageOutdated(true);
         // A list loaded after this beat left already shows what is held.
-        if (!held || away || sequence !== callCandidatesRequestSequenceRef.current) return;
-        const holding = new Set(held);
+        if (!result || away || sequence !== callCandidatesRequestSequenceRef.current) return;
+        const holding = new Set(result.held);
         if (!callBatchShownRef.current.some((studentId) => !holding.has(studentId))) return;
         toast.warning("بعض أسماء دفعتك راحت لموظف ثاني لأن الصفحة بقت مسكّرة مدة طويلة. تحدثت القائمة.");
         setCallFilterRefreshKey((current) => current + 1);
@@ -853,13 +860,41 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           (row) => !contactStatusMatchesFilter(callContactStatusFilter, callStatusForLog(callLogForRow(row))),
         ).length;
 
-  // The batch students shown without an action yet: the ones this window must
-  // still hold (an action ends the hold on purpose).
+  // The students shown as this window's own without an action yet: the ones
+  // it must still hold (an action ends the hold on purpose).
   useEffect(() => {
-    callBatchShownRef.current = callBatchView
-      ? visibleCallRows.filter((row) => !callStatusForLog(callLogForRow(row))).map((row) => row.student.id)
+    callBatchShownRef.current = canManageCalls
+      ? visibleCallRows
+          .filter((row) => (callBatchView || row.heldBy?.mine) && !callStatusForLog(callLogForRow(row)))
+          .map((row) => row.student.id)
       : [];
   });
+
+  // «خذه للاتصال»: outside «دفعتي» a student is called only once this window
+  // holds them, so two callers never dial the same student.
+  const takeCallCase = async (row: CallStudentRow) => {
+    if (!callCourseId || !callExamId || callTakingIds[row.student.id]) return;
+    setCallTakingIds((current) => ({ ...current, [row.student.id]: true }));
+    const result = await callWindowApi.hold({
+      windowId: callWindowId,
+      courseId: callCourseId,
+      examId: callExamId,
+      studentId: row.student.id,
+    });
+    setCallTakingIds((current) => {
+      const next = { ...current };
+      delete next[row.student.id];
+      return next;
+    });
+    if (result?.holdOk) {
+      const me = callActor?.name || callActor?.username || "";
+      setCallRowsFromDb((rows) => rows.map((current) =>
+        current.student.id === row.student.id ? { ...current, heldBy: { userName: me, mine: true } } : current));
+      return;
+    }
+    toast.error(result ? "هذا الطالب صار عند موظف ثاني." : "تعذر حجز الطالب. تأكد من الاتصال وحاول مرة ثانية.");
+    if (result) setCallFilterRefreshKey((current) => current + 1);
+  };
 
   const callStatValue = (value: number | undefined) => {
     if (callDatabaseStatsLoading && !callDatabaseStats) return "…";
@@ -1641,11 +1676,31 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             <div className="tp-call-card__note-row">{renderNoteArea(row, "card")}</div>
           </div>
 
-          {/* Scan a code with another phone to dial the number directly. */}
-          <aside className="tp-call-card__qr" aria-label="نقل الرقم إلى هاتف آخر عبر QR">
-            {renderQrTile(row, "الطالب", row.student.phone, <User aria-hidden="true" />)}
-            {renderQrTile(row, "ولي الأمر", row.student.parentPhone, <Users aria-hidden="true" />)}
-          </aside>
+          {/* Scan a code with another phone to dial the number directly. A
+              caller sees the codes only for students they hold. */}
+          {!canManageCalls || row.heldBy?.mine ? (
+            <aside className="tp-call-card__qr" aria-label="نقل الرقم إلى هاتف آخر عبر QR">
+              {renderQrTile(row, "الطالب", row.student.phone, <User aria-hidden="true" />)}
+              {renderQrTile(row, "ولي الأمر", row.student.parentPhone, <Users aria-hidden="true" />)}
+            </aside>
+          ) : (
+            <aside className="tp-call-card__qr tp-call-card__take" aria-label="الاتصال بالطالب">
+              {row.heldBy ? (
+                <p><Users aria-hidden="true" />بدفعة <b>{row.heldBy.userName}</b> هسه، هو يتصل بيه.</p>
+              ) : (
+                <>
+                  <p>حتى محد غيرك يتصل بيه بنفس الوقت، خذه أول وبعدين يطلع رقمه.</p>
+                  <Button
+                    type="button"
+                    onClick={() => void takeCallCase(row)}
+                    disabled={Boolean(callTakingIds[row.student.id])}
+                  >
+                    <PhoneCall aria-hidden="true" />خذه للاتصال
+                  </Button>
+                </>
+              )}
+            </aside>
+          )}
         </div>
       </article>
     );
@@ -2042,6 +2097,15 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             )}
             </span>}
           />
+
+          {callPageOutdated && (
+            <div className="tp-calls__outdated" role="alert">
+              <p>نزل تحديث جديد للنظام. حدّث الصفحة حتى تبقى الدفعات مضبوطة بينك وبين الباقين.</p>
+              <Button type="button" size="sm" onClick={() => window.location.reload()}>
+                <RefreshCw aria-hidden="true" />حدّث الصفحة
+              </Button>
+            </div>
+          )}
 
           <div className="tp-calls__list">
             {callLoading && visibleCallRows.length === 0 ? (

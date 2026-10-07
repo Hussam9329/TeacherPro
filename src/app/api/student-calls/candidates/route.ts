@@ -38,6 +38,7 @@ import {
 } from "@/lib/call-notes-filter";
 import {
   CALL_BATCH_SIZE,
+  CALL_CLIENT_PROTOCOL,
   callCaseOpenForBatch,
   parseCallWindowId,
 } from "@/lib/call-batch";
@@ -48,6 +49,7 @@ import {
   liveCallHolders,
   releaseCallBatch,
   releaseStaleCallWindows,
+  retryCallTransaction,
   touchCallWindow,
   type CallHolder,
 } from "@/lib/call-reservations-server";
@@ -499,6 +501,15 @@ export async function GET(req: NextRequest) {
     const wantsRelease = searchParams.get("release") === "1";
     // The export lists everyone, whoever holds them.
     const exportAll = searchParams.get("exportAll") === "1";
+    // A calls page from before batches would list students other windows
+    // hold, and nothing on it keeps two callers apart: it must reload first.
+    const clientProtocol = Number(searchParams.get("client") || 0);
+    if (hasPermission(principal, "follow-up.calls.manage") && !(clientProtocol >= CALL_CLIENT_PROTOCOL)) {
+      return NextResponse.json(
+        { error: "صفحة المكالمات عندك نسخة قديمة. حدّث الصفحة (F5) حتى تشتغل الدفعات.", staleClient: true },
+        { status: 409 },
+      );
+    }
     const gradeRange = parseCallGradeRange(
       searchParams.get("gradeFrom"),
       searchParams.get("gradeTo"),
@@ -792,12 +803,12 @@ export async function GET(req: NextRequest) {
     const owner = { id: principal.id, name: principal.name || principal.username || "مستخدم" };
     let ownsWindow = false;
     let holders: CallHolder[] = await withDatabaseSchema(() => canHold && windowId
-      ? db.$transaction(async (tx) => {
+      ? retryCallTransaction(() => db.$transaction(async (tx) => {
           await releaseStaleCallWindows(tx, now);
           ownsWindow = await touchCallWindow(tx, { id: windowId, owner, courseId, examId }, now);
           if (ownsWindow && contactStatusFilter === "batch" && wantsRelease) await releaseCallBatch(tx, windowId, examId);
           return liveCallHolders(tx, examId, now);
-        })
+        }))
       : liveCallHolders(db, examId, now), "CallWindow");
     let holderByStudentId = new Map(holders.map((holder) => [holder.studentId, holder]));
     const heldByOther = (studentId: string) => {
@@ -814,18 +825,18 @@ export async function GET(req: NextRequest) {
         // A held student who no longer needs a call, or left the list, is let go.
         const finished = [...mine].filter((studentId) => !caseIds.has(studentId) || !caseOpen(studentId));
         if (finished.length) {
-          await withDatabaseSchema(() => db.$transaction(async (tx) => {
+          await withDatabaseSchema(() => retryCallTransaction(() => db.$transaction(async (tx) => {
             for (const studentId of finished) await dropCallHold(tx, studentId, examId);
-          }), "CallWindow");
+          })), "CallWindow");
           finished.forEach((studentId) => mine.delete(studentId));
         }
         if (wantsClaim && mine.size === 0) {
           const openStudentIds = allCases
             .filter((item) => passesFilters(item) && caseOpen(item.student.id))
             .map((item) => item.student.id);
-          mine = await withDatabaseSchema(() => db.$transaction((tx) => claimCallBatch(tx, {
+          mine = await withDatabaseSchema(() => retryCallTransaction(() => db.$transaction((tx) => claimCallBatch(tx, {
             windowId, ownerId: owner.id, examId, openStudentIds, size: CALL_BATCH_SIZE,
-          }, now)), "CallWindow");
+          }, now))), "CallWindow");
         }
         holders = await withDatabaseSchema(() => liveCallHolders(db, examId, now), "CallWindow");
         holderByStudentId = new Map(holders.map((holder) => [holder.studentId, holder]));

@@ -6,6 +6,7 @@ import {
   inferTeacherProScopesFromEndpoint,
 } from "./teacherpro-sync";
 import { mutationCanBeReplayed } from "./mutation-replay-policy";
+import { CALL_CLIENT_PROTOCOL } from "./call-batch";
 
 /**
  * TeacherPro — API Service Layer
@@ -1949,6 +1950,8 @@ export const callCandidatesApi = {
       q: query.q,
       filterQ: query.filterQ,
       window: query.window,
+      // Tells the server this page keeps callers apart (see CALL_CLIENT_PROTOCOL).
+      client: String(CALL_CLIENT_PROTOCOL),
       claim: query.claim ? "1" : undefined,
       release: query.release ? "1" : undefined,
       exportAll: query.exportAll ? "1" : undefined,
@@ -2040,6 +2043,16 @@ export const studentLeaveApi = {
   remove: (id: string) => apiDelete("student-leaves", id),
 };
 
+type CallWindowBeat = { windowId: string; courseId: string; examId: string; away?: boolean; hold?: string };
+export type CallWindowBeatResult = {
+  /** The students this window holds on the exam now. */
+  held: string[];
+  /** Whether a «خذه للاتصال» hold went through (false when someone else holds them). */
+  holdOk: boolean;
+  /** The build the server runs; a different one means the page is out of date. */
+  build: string;
+};
+
 export type LiveCallWindowRow = {
   key: string;
   userName: string;
@@ -2065,7 +2078,7 @@ export const callWindowApi = {
    * sent even as the page freezes). Answers with the students this window
    * still holds, or null when the beat failed.
    */
-  beat: async (body: { windowId: string; courseId: string; examId: string; away?: boolean }): Promise<string[] | null> => {
+  beat: async (body: CallWindowBeat): Promise<CallWindowBeatResult | null> => {
     try {
       const res = await fetch("/api/student-calls/presence", {
         method: "POST",
@@ -2075,11 +2088,21 @@ export const callWindowApi = {
         body: JSON.stringify(body),
       });
       if (!res.ok) return null;
-      const data = (await res.json().catch(() => null)) as { held?: unknown } | null;
-      return Array.isArray(data?.held) ? data.held.map(String) : null;
+      const data = (await res.json().catch(() => null)) as { held?: unknown; holdOk?: unknown; build?: unknown } | null;
+      if (!Array.isArray(data?.held)) return null;
+      return {
+        held: data.held.map(String),
+        holdOk: data.holdOk === true,
+        build: typeof data.build === "string" ? data.build : "",
+      };
     } catch {
       return null;
     }
+  },
+  /** «خذه للاتصال»: holds one student for this window unless someone else does. */
+  hold: (body: Omit<CallWindowBeat, "away"> & { studentId: string }) => {
+    const { studentId, ...beat } = body;
+    return callWindowApi.beat({ ...beat, hold: studentId });
   },
   close: (windowId: string) => {
     try {

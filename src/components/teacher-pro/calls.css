@@ -432,6 +432,16 @@ a.tp-qr-tile:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in s
 .tp-qr-tile [data-part="phone"] { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.8rem; font-weight: 650; }
 .tp-qr-tile[data-empty] { opacity: 0.6; }
 .tp-qr-tile[data-empty] [data-part="phone"] { font-family: inherit; color: var(--muted-foreground); }
+/* Outside «دفعتي»: the numbers show once the caller holds the student. */
+.tp-call-card__take { flex-direction: column; flex-wrap: nowrap; align-items: center; justify-content: center; gap: 0.6rem; min-inline-size: 12rem; text-align: center; }
+.tp-call-card__take p { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.35rem; max-inline-size: 16rem; margin: 0; color: var(--muted-foreground); font-size: 0.82rem; font-weight: 650; line-height: 1.7; }
+.tp-call-card__take p svg { inline-size: 1rem; block-size: 1rem; }
+.tp-call-card__take p b { color: var(--foreground); }
+
+/* The page runs an older build than the server. */
+.tp-calls__outdated { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; padding: 0.7rem 0.9rem; border: 1px solid var(--status-warning-border); border-inline-start: 4px solid var(--status-warning-vivid); border-radius: 0.85rem; background: var(--status-warning-bg); color: var(--status-warning-fg); font-weight: 700; }
+.tp-calls__outdated p { margin: 0; }
+
 .tp-qr-tile__placeholder { inline-size: 6.25rem; block-size: 6.25rem; border: 1px dashed var(--border); border-radius: 0.6rem; }
 
 /* Note editor (card and window) */

@@ -11,8 +11,10 @@ import { parseCallWindowId } from "@/lib/call-batch";
 import {
   closeCallWindow,
   heldByCallWindow,
+  holdCallCase,
   liveCallWindows,
   releaseStaleCallWindows,
+  retryCallTransaction,
   touchCallWindow,
 } from "@/lib/call-reservations-server";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
@@ -21,8 +23,12 @@ import { baghdadTodayKey } from "@/lib/baghdad-time";
  * «دفعات» in إدارة المكالمات. POST: an open window beats (or says it went to
  * the background, or closes) so the batch it holds stays its own; a beat
  * answers with the students the window still holds, so the page drops any
- * that went to someone else. GET: the admin's «منو شغال هسه».
+ * that went to someone else, and with the running build, so a page left open
+ * across an update asks to be reloaded. `hold`: «خذه للاتصال» holds one
+ * student for this window unless someone else does. GET: the admin's
+ * «منو شغال هسه».
  */
+const RUNNING_BUILD = process.env.VERCEL_GIT_COMMIT_SHA || process.env.NEXT_PUBLIC_APP_BUILD || "";
 export async function POST(req: NextRequest) {
   const principal = await requirePermissionPrincipal(req, "follow-up.calls.manage");
   if (principal instanceof NextResponse) return principal;
@@ -38,14 +44,24 @@ export async function POST(req: NextRequest) {
     const courseId = normalizeListFilter(body?.courseId);
     const examId = normalizeListFilter(body?.examId);
     if (!courseId || !examId) return validationError("اختر الدورة والامتحان أولاً.");
+    const holdStudentId = typeof body?.hold === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(body.hold) ? body.hold : "";
     const now = new Date();
-    const held = await withDatabaseSchema(() => db.$transaction(async (tx) => {
+    const result = await withDatabaseSchema(() => retryCallTransaction(() => db.$transaction(async (tx) => {
       await releaseStaleCallWindows(tx, now);
       const owned = await touchCallWindow(tx, { id: windowId, owner, courseId, examId }, now, { away: body?.away === true });
-      return owned ? heldByCallWindow(tx, windowId, examId, now) : null;
-    }), "CallWindow");
-    if (!held) return NextResponse.json({ error: "هذه النافذة لحساب آخر." }, { status: 409 });
-    return NextResponse.json({ ok: true, held });
+      if (!owned) return null;
+      let holdOk: boolean | undefined;
+      if (holdStudentId) {
+        const exists = await tx.student.count({ where: { id: holdStudentId } });
+        holdOk = exists > 0 && await holdCallCase(tx, { id: windowId, ownerId: owner.id }, holdStudentId, examId, now);
+      }
+      const held = await heldByCallWindow(tx, windowId, examId, now);
+      // Already this window's own: taking it again is fine.
+      if (holdStudentId && !holdOk) holdOk = held.includes(holdStudentId);
+      return { held, holdOk };
+    })), "CallWindow");
+    if (!result) return NextResponse.json({ error: "هذه النافذة لحساب آخر." }, { status: 409 });
+    return NextResponse.json({ ok: true, ...result, build: RUNNING_BUILD });
   } catch (error) {
     return routeErrorResponse(error, "تعذر تحديث نافذة المكالمات.");
   }

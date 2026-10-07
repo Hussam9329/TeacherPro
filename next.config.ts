@@ -24,6 +24,11 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // The build a page was loaded from; the calls page compares it with the
+  // server's to ask for a reload after an update.
+  env: {
+    NEXT_PUBLIC_APP_BUILD: process.env.VERCEL_GIT_COMMIT_SHA || "",
+  },
   /* config options here */
   reactStrictMode: true,
   async headers() {

@@ -170,6 +170,24 @@ const { CALL_BATCH_SIZE } = require("../src/lib/call-batch.ts");
   assert.equal((await db.query(`SELECT COUNT(*)::int AS n FROM "CallWindow" WHERE id = 'window-b2'`)).rows[0].n, 0);
   step("a silent page without «away» loses its batch after two minutes, and learns it on return");
 
+  // The race the ten-caller run found: a window picks students from a list
+  // read a moment before another caller saved an action on some of them.
+  // Those are let go after the hold and replaced by the next open students.
+  await db.exec(`DELETE FROM "CallReservation"; DELETE FROM "CallWindow";`);
+  await open("window-c2", "u3", "e1", t13);
+  ownerOf["window-c2"] = "u3";
+  await db.exec(`INSERT INTO "StudentCall" (id, "studentId", "examId", category, status, completed, "actedAt")
+    VALUES ('just-called-1', 's01', 'e1', 'absent', 'تم الاتصال', true, now()),
+           ('just-called-2', 's02', 'e1', 'absent', 'لم يرد', false, '${t13.toISOString()}'),
+           ('only-a-note', 's03', 'e1', 'call-student-note', '', false, now())`);
+  const fresh = await claim("window-c2", "e1", t13);
+  assert.equal(fresh.has("s01"), false, "a student called a moment ago is not handed out");
+  assert.equal(fresh.has("s02"), false, "nor one who did not answer a moment ago");
+  assert.equal(fresh.has("s03"), true, "a note alone is not a call");
+  assert.equal(fresh.size, 10, "the batch is filled from the next open students");
+  assert.equal((await db.query(`SELECT COUNT(*)::int AS n FROM "CallReservation" WHERE "studentId" IN ('s01', 's02')`)).rows[0].n, 0);
+  step("a student called while the batch was being picked is let go and replaced");
+
   // Who acted is stored on the call row.
   await db.exec(`INSERT INTO "StudentCall" (id, "studentId", "examId", category, status, "actedAt", "actedById", "actedByName")
     VALUES ('call-1', 's01', 'e1', 'grade:x', 'تم الاتصال', now(), 'u1', 'staff u1')`);

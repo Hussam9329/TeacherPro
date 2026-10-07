@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
-import { CALL_WINDOW_AWAY_MS, CALL_WINDOW_TTL_MS, pickCallBatch } from "@/lib/call-batch";
+import { CALL_WINDOW_AWAY_MS, CALL_WINDOW_TTL_MS, callCaseOpenForBatch, pickCallBatch } from "@/lib/call-batch";
+import { CALL_STUDENT_NOTE_CATEGORY } from "@/lib/call-notes-filter";
 
 /**
  * The database side of «دفعات» in إدارة المكالمات (rules: call-batch.ts).
@@ -147,28 +148,87 @@ export async function holdCallCase(
   return inserted > 0;
 }
 
+type CallStatusRow = {
+  studentId: string;
+  status: string;
+  completed: boolean;
+  actedAt: Date | null;
+  createdAt: Date;
+};
+
+/**
+ * Of these students, the ones whose call on this exam still needs making,
+ * read fresh. It first waits for any contact action being saved on them right
+ * now (saving locks the student row), so a student called a moment ago is
+ * never handed to someone else.
+ */
+export async function stillOpenCallCases(
+  client: RawClient,
+  studentIds: readonly string[],
+  examId: string,
+  now = new Date(),
+): Promise<Set<string>> {
+  const ids = [...new Set(studentIds)];
+  if (!ids.length) return new Set();
+  await client.$queryRaw`SELECT "id" FROM "Student" WHERE "id" = ANY(${ids}) ORDER BY "id" FOR SHARE`;
+  const rows = await client.$queryRaw<CallStatusRow[]>`
+    SELECT "studentId", "status", "completed", "actedAt", "createdAt"
+    FROM "StudentCall"
+    WHERE "examId" = ${examId} AND "studentId" = ANY(${ids}) AND "category" <> ${CALL_STUDENT_NOTE_CATEGORY}
+    ORDER BY "createdAt" DESC, "id" DESC`;
+  const latest = new Map<string, CallStatusRow>();
+  for (const row of rows) if (!latest.has(row.studentId)) latest.set(row.studentId, row);
+  return new Set(ids.filter((studentId) => callCaseOpenForBatch(latest.get(studentId), now)));
+}
+
 /**
  * Fills this window's batch from the open students, in list order, skipping
- * anyone held. Returns the students the window holds afterwards.
+ * anyone held. Batches for one exam are picked one at a time (two windows
+ * picking at once would wait on each other's holds), and each student is
+ * checked fresh before the hold: one whose call was saved while the list was
+ * being read is skipped and the next taken. Must run inside a transaction.
+ * Returns the students the window holds afterwards.
  */
 export async function claimCallBatch(
   client: RawClient,
   args: { windowId: string; ownerId: string; examId: string; openStudentIds: readonly string[]; size: number },
   now = new Date(),
 ): Promise<Set<string>> {
+  await client.$queryRaw`SELECT 1 AS "locked" FROM (SELECT pg_advisory_xact_lock(hashtext(${`call-batch:${args.examId}`}))) AS "batchLock"`;
   const mine = async () => new Set(await heldByCallWindow(client, args.windowId, args.examId, now));
   let held = await mine();
-  // A student someone else took a moment ago is skipped and the next tried.
-  for (let attempt = 0; attempt < 3 && held.size < args.size; attempt += 1) {
+  const called = new Set<string>();
+  // A student someone else took or called a moment ago is skipped and the next tried.
+  for (let attempt = 0; attempt < 4 && held.size < args.size; attempt += 1) {
     const taken = new Set((await liveCallHolders(client, args.examId, now)).map((holder) => holder.studentId));
-    const wanted = pickCallBatch(args.openStudentIds, taken, args.size - held.size);
+    const wanted = pickCallBatch(args.openStudentIds.filter((id) => !called.has(id)), taken, args.size - held.size);
     if (!wanted.length) break;
+    const open = await stillOpenCallCases(client, wanted, args.examId, now);
     for (const studentId of wanted) {
-      await holdCallCase(client, { id: args.windowId, ownerId: args.ownerId }, studentId, args.examId, now);
+      if (open.has(studentId)) await holdCallCase(client, { id: args.windowId, ownerId: args.ownerId }, studentId, args.examId, now);
+      else called.add(studentId);
     }
     held = await mine();
   }
   return held;
+}
+
+/**
+ * Runs a reservations transaction again when the database broke a lock cycle
+ * (deadlock) or a serialization conflict, instead of failing the caller's page.
+ */
+export async function retryCallTransaction<T>(run: () => Promise<T>, attempts = 3): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      const code = String((error as { meta?: { code?: unknown }; code?: unknown })?.meta?.code ?? "");
+      const message = String((error as { message?: unknown })?.message ?? "");
+      const retryable = code === "40P01" || code === "40001" || /deadlock detected|could not serialize/.test(message);
+      if (!retryable || attempt >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 20 * attempt + Math.floor(Math.random() * 30)));
+    }
+  }
 }
 
 /** Every open window with how many students it still holds (the admin's view). */

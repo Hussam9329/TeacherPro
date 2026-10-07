@@ -11,6 +11,9 @@
  *   CALL_WINDOW_AWAY_MS. Closing the page gives the batch back at once.
  * - A window only shows students it still holds: when a beat finds one gone,
  *   the list reloads.
+ * - A student is only called by whoever holds them: outside «دفعتي» (other
+ *   chips, search) the numbers show after «خذه للاتصال» holds the student,
+ *   and never while someone else holds them.
  * - «لم يرد» comes back to the shared list after CALL_NO_ANSWER_RETRY_MS.
  *
  * Pure rules only; the database side is call-reservations-server.ts.
@@ -19,6 +22,12 @@ export const CALL_BATCH_SIZE = 10;
 export const CALL_WINDOW_TTL_MS = 2 * 60 * 1000;
 export const CALL_WINDOW_HEARTBEAT_MS = 30 * 1000;
 export const CALL_WINDOW_AWAY_MS = 15 * 60 * 1000;
+/**
+ * The calls page's protocol. A page from before batches (or before a rule
+ * change) keeps running old code until reloaded; the server refuses its list
+ * so it cannot show students that are in someone else's batch.
+ */
+export const CALL_CLIENT_PROTOCOL = 2;
 export const CALL_NO_ANSWER_RETRY_MS = 60 * 60 * 1000;
 
 /** A window id is made by the browser; anything else is refused. */

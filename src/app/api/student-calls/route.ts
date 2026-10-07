@@ -21,7 +21,7 @@ import {
   isArchivedStudentError,
 } from "@/lib/archived-student-guard";
 import { parseCallWindowId } from "@/lib/call-batch";
-import { dropCallHold, holdCallCase } from "@/lib/call-reservations-server";
+import { dropCallHold, holdCallCase, retryCallTransaction } from "@/lib/call-reservations-server";
 import { writeAuditLog } from "@/lib/audit-log-server";
 
 function dateOrNull(value: unknown): Date | null {
@@ -126,9 +126,11 @@ export async function POST(req: NextRequest) {
 
     // Upsert by the logical call key, not by client-provided IDs.
     // This prevents duplicate call rows when the user changes status quickly or retries after a network failure.
+    // Saving is an upsert by student + exam, so running it again after the
+    // database broke a lock cycle is safe.
     const result = await withDatabaseSchema(
       () =>
-        db.$transaction(async (tx) => {
+        retryCallTransaction(() => db.$transaction(async (tx) => {
           await assertStudentsNotArchived(tx, [data.studentId]);
           const examCall = isStudentExamCall(data);
 
@@ -228,7 +230,7 @@ export async function POST(req: NextRequest) {
           }
 
           return { studentCall, deleted: false };
-        }),
+        })),
       "StudentCall",
     );
     return NextResponse.json(result);
