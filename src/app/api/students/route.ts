@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { studentEditChanges, studentEditChangesSuffix } from "@/lib/student-edit-changes";
 import { NextRequest, NextResponse } from "next/server";
 import {
+  oversees,
   requireAnyPermission,
   requirePermissionPrincipal,
 } from "@/lib/server-auth";
@@ -718,9 +719,9 @@ export async function PUT(req: NextRequest) {
     const currentTelegram = sanitizeTelegramInput(String(currentStudent.telegram ?? ""));
     // مسح حقل التيليجرام من نافذة التعديل يلغي ارتباط الحساب نهائياً؛
     // يُعاد حساب telegramKey تلقائياً إلى null أدناه فيمنع الحساب القديم من الدخول باسم الطالب.
-    if (data.telegram !== currentTelegram && !principal.isAdmin) {
+    if (data.telegram !== currentTelegram && !oversees(principal)) {
       return NextResponse.json(
-        { error: "تعديل ارتباط تيليجرام متاح لمدير النظام فقط." },
+        { error: "تعديل ارتباط تيليجرام متاح لمدير النظام والمشرفين فقط." },
         { status: 403 },
       );
     }

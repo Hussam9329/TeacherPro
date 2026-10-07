@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePermissionPrincipal } from "@/lib/server-auth";
+import { oversees, requirePermissionPrincipal } from "@/lib/server-auth";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { normalizeListFilter } from "@/lib/all-filter";
@@ -79,8 +79,8 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const principal = await requirePermissionPrincipal(req, "follow-up.calls.manage");
   if (principal instanceof NextResponse) return principal;
-  if (!principal.isAdmin) {
-    return NextResponse.json({ error: "هذه الشاشة للأدمن فقط." }, { status: 403 });
+  if (!oversees(principal)) {
+    return NextResponse.json({ error: "هذه الشاشة لمدير النظام والمشرفين فقط." }, { status: 403 });
   }
   try {
     const windows = await withDatabaseSchema(() => liveCallWindows(db), "CallWindow");

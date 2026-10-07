@@ -7,7 +7,7 @@ import { annotateGradeRecordedImpacts } from "@/lib/grade-recorded-impact-server
 import { annotateGradeSettlementEffects } from "@/lib/grade-settlement-server";
 import type { ReportGradePresentation } from "@/lib/student-report-presentation";
 import type { GracePeriodRange } from "@/lib/grace-periods";
-import { hasPermission, requireAnyPermissionPrincipal } from "@/lib/server-auth";
+import { hasPermission, oversees, requireAnyPermissionPrincipal } from "@/lib/server-auth";
 import { CALLS_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
 import { db } from "@/lib/db";
 import { normalizeArabicText, routeErrorResponse } from "@/lib/route-helpers";
@@ -860,8 +860,8 @@ export async function GET(req: NextRequest) {
       matching = allCases.filter((item) =>
         passesFilters(item) &&
         contactStatusMatchesFilter(contactFilter, normalizeContactStatus(bestCallByStudentId.get(item.student.id))) &&
-        // The admin oversees: every student shows, with who holds them.
-        (searching || exportAll || principal.isAdmin || !heldByOther(item.student.id)));
+        // The admin and the supervisors oversee: every student shows, with who holds them.
+        (searching || exportAll || oversees(principal) || !heldByOther(item.student.id)));
     }
 
     const sortedMatching = matching;

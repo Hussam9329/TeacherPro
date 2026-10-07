@@ -284,6 +284,14 @@ export function hasPermission(principal: AuthPrincipal, permission: string): boo
   );
 }
 
+/**
+ * Whoever the system treats like مدير النظام outside accounts and
+ * permissions: the admin, and «إشراف كامل» (the supervisors).
+ */
+export function oversees(principal: AuthPrincipal): boolean {
+  return hasPermission(principal, "system.oversight");
+}
+
 export async function requireAnyPermissionPrincipal(
   req: NextRequest,
   permissions: string[],

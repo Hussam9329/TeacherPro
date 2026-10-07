@@ -378,8 +378,11 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   } = useTeacherStore();
 
   const callActor = currentUser();
+  // The admin and the supervisors («إشراف كامل») oversee the calls: no
+  // batches, every student, and «منو شغال هسه».
   const callActorIsAdmin = Boolean(callActor && (
-    callActor.username?.trim().toLowerCase() === "admin" || callActor.roleId === "role_admin"
+    callActor.username?.trim().toLowerCase() === "admin" || callActor.roleId === "role_admin" ||
+    callActor.permissions?.includes("system.oversight")
   ));
   const canManageCalls = Boolean(callActor && (
     callActor.username?.trim().toLowerCase() === "admin" ||

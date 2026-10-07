@@ -2,7 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthPrincipal, requirePermission } from '@/lib/server-auth';
+import { getAuthPrincipal, oversees, requirePermission } from '@/lib/server-auth';
 import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { routeErrorResponse } from '@/lib/route-helpers';
@@ -309,9 +309,9 @@ export async function DELETE(req: NextRequest) {
   if (!principal) {
     return NextResponse.json({ error: 'يجب تسجيل الدخول أولاً.' }, { status: 401 });
   }
-  if (!principal.isAdmin || !principal.permissions.includes('logs.delete')) {
+  if (!oversees(principal) || !principal.permissions.includes('logs.delete')) {
     return NextResponse.json(
-      { error: 'حذف السجلات متاح لمدير النظام صاحب صلاحية حذف السجلات فقط.' },
+      { error: 'حذف السجلات متاح لمدير النظام والمشرفين أصحاب صلاحية حذف السجلات فقط.' },
       { status: 403 },
     );
   }

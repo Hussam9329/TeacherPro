@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
-import { requireAnyPermission, requirePermissionPrincipal } from "@/lib/server-auth";
+import { oversees, requireAnyPermission, requirePermissionPrincipal } from "@/lib/server-auth";
 import { CALLS_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
 import { db } from "@/lib/db";
 import {
@@ -161,8 +161,8 @@ export async function POST(req: NextRequest) {
             // else's batch is theirs until they act or close their page.
             if (data.examId) {
               const holder = (await liveCallHolders(tx, data.examId)).find((item) => item.studentId === data.studentId);
-              // The admin oversees and may act on anyone.
-              if (holder && holder.windowId !== windowId && !principal.isAdmin) throw new CallHeldByOtherError(holder.userName);
+              // The admin and the supervisors oversee and may act on anyone.
+              if (holder && holder.windowId !== windowId && !oversees(principal)) throw new CallHeldByOtherError(holder.userName);
             }
           }
 

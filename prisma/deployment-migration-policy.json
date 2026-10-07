@@ -298,5 +298,9 @@
   "20261007090000_call_window_away": {
     "kind": "expand",
     "checksum": "3efb577ea1ee981f3ba6780087060fc7d5646fdb5bb164da7c99627b34e260dc"
+  },
+  "20261007120000_supervisors_full_access": {
+    "kind": "audited-data-reconciliation",
+    "checksum": "fdfd92f6c357eb1347fa77158a971b4d01cdfc71fc1e0db5326ffdb2433ffcc6"
   }
 }

@@ -163,7 +163,7 @@ check(
   'مسح حقل التيليجرام من تعديل الطالب يفك الارتباط بأمان دون الحارس المحذوف أو ذكر زر غير موجود',
   !studentsRoute.includes('استخدم زر فك ارتباط تيليجرام') &&
     studentsRoute.includes('data.telegramKey = identityKeys.telegramKey') &&
-    studentsRoute.includes('تعديل ارتباط تيليجرام متاح لمدير النظام فقط') &&
+    studentsRoute.includes('تعديل ارتباط تيليجرام متاح لمدير النظام والمشرفين فقط') &&
     registry.includes('updateEditTelegram'),
 );
 check('الأرشفة لا تستبدل سبب الفصل السابق', !studentsRoute.includes('dismissalReason: "أرشفة إدارية"'));

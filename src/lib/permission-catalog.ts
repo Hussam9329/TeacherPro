@@ -46,6 +46,13 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
     description: "استعادة بيانات النظام من نسخة احتياطية (عملية حساسة تستبدل أو تدمج البيانات)",
   },
   {
+    id: "system.oversight",
+    label: "إشراف كامل",
+    category: "النظام",
+    level: "manage",
+    description: "يتعامل مثل مدير النظام حيث يميّزه النظام: المكالمات بدون دفعات ويشوف كل الطلاب و«منو شغال هسه»، والإجراء على أي طالب، وتعديل ربط التيليجرام، وحذف السجلات. الحسابات والصلاحيات تبقى لمدير النظام.",
+  },
+  {
     id: "system.maintenance",
     label: "صيانة النظام الشاملة",
     category: "النظام",
@@ -450,24 +457,9 @@ export const DEFAULT_ROLE_DEFINITIONS: DefaultRoleDefinition[] = [
     id: "role_supervisor",
     name: "مشرف",
     isDefault: true,
-    permissions: ALL_PERMISSION_IDS.filter(
-      (p) =>
-        p !== "accounts.manage" &&
-        p !== "accounts.users.add" &&
-        p !== "accounts.users.edit" &&
-        p !== "accounts.users.delete" &&
-        p !== "accounts.roles.add" &&
-        p !== "accounts.roles.edit" &&
-        p !== "accounts.roles.delete" &&
-        p !== "accounts.permissions.assign" &&
-        p !== "logs.delete" &&
-        p !== "logs.clear" &&
-        p !== "logs.restore" &&
-        p !== "backup.view" &&
-        p !== "backup.restore" &&
-        p !== "system.settings" &&
-        p !== "bot-problems.manage",
-    ),
+    // Everything except the accounts and permissions pages: that is the only
+    // difference from مدير النظام («إشراف كامل» covers the rest).
+    permissions: ALL_PERMISSION_IDS.filter((p) => !p.startsWith("accounts.")),
   },
   {
     id: "role_registrar",

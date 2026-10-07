@@ -31,11 +31,13 @@ export function getStudentRegistryCapabilities(user?: {
   roleId?: string | null;
   permissions?: string[] | null;
 } | null) {
+  const permissions = new Set(user?.permissions || []);
+  // The admin, or «إشراف كامل» (the supervisors): may also edit the Telegram link.
   const isAdmin = Boolean(
     user?.username?.trim().toLowerCase() === "admin" ||
-      user?.roleId === "role_admin",
+      user?.roleId === "role_admin" ||
+      permissions.has("system.oversight"),
   );
-  const permissions = new Set(user?.permissions || []);
   return {
     isAdmin,
     canAddStudents: isAdmin || permissions.has("students.add"),

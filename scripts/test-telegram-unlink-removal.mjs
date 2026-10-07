@@ -59,7 +59,7 @@ check('سياسة إعادة تشغيل الطفرات خالية من مسار 
 
 // 5) مسار تحديث الطالب: مسح التيليجرام مسموح للمدير ويعيد حساب telegramKey
 const studentsRoute = fs.readFileSync(path.join(root, 'src/app/api/students/route.ts'), 'utf8');
-check('مسار تحديث الطالب يبقي تعديل التيليجرام حصرياً لمدير النظام', studentsRoute.includes('تعديل ارتباط تيليجرام متاح لمدير النظام فقط'));
+check('مسار تحديث الطالب يبقي تعديل التيليجرام لمدير النظام والمشرفين فقط', studentsRoute.includes('data.telegram !== currentTelegram && !oversees(principal)') && studentsRoute.includes('تعديل ارتباط تيليجرام متاح لمدير النظام والمشرفين فقط'));
 check('مسار تحديث الطالب يعيد حساب telegramKey عند تغيير التيليجرام (يفك الارتباط عند المسح)', studentsRoute.includes('if (data.telegram !== undefined)') && studentsRoute.includes('data.telegramKey = identityKeys.telegramKey'));
 check('مسار تحديث الطالب لا يعود يحظر مسح التيليجرام أو يذكر زراً محذوفاً', !studentsRoute.includes('استخدم زر فك ارتباط تيليجرام'));
 

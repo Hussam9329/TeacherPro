@@ -468,7 +468,7 @@ assert(
   assert(
     candidates.includes('if (contactStatusFilter === "batch" && !searching) {') &&
       candidates.includes('if (wantsClaim && mine.size === 0) {') &&
-      candidates.includes('(searching || exportAll || principal.isAdmin || !heldByOther(item.student.id))') &&
+      candidates.includes('(searching || exportAll || oversees(principal) || !heldByOther(item.student.id))') &&
       candidates.includes('heldBy: holder ? { userName: holder.userName, mine: ownsWindow && holder.windowId === windowId } : null,') &&
       candidates.includes('if (canHold && windowId && ownsWindow) {'),
     '«دفعتي» تاخذ دفعة بس لما تنطلب، المحجوز عند غيرك يختفي، والبحث يطلّعه ويّا اسم اللي عنده',
@@ -481,7 +481,7 @@ assert(
   );
   assert(
     presence.includes('requirePermissionPrincipal(req, "follow-up.calls.manage")') &&
-      presence.includes('if (!principal.isAdmin) {') &&
+      presence.includes('if (!oversees(principal)) {') &&
       followUp.includes('callWindowApi.close(callWindowId);') &&
       followUp.includes('window.setInterval(beat, CALL_WINDOW_HEARTBEAT_MS)') &&
       followUp.includes('منو شغال هسه'),
@@ -513,7 +513,7 @@ assert(
       followUp.includes('<PhoneCall aria-hidden="true" />خذه للاتصال') &&
       followUp.includes('seenStatus: callStatusForLog(callLogForRow(row)),') &&
       presence.includes('changed = current !== null && seenStatus !== null && seenStatus !== current;') &&
-      callsRoute.includes('if (holder && holder.windowId !== windowId && !principal.isAdmin) throw new CallHeldByOtherError(holder.userName);'),
+      callsRoute.includes('if (holder && holder.windowId !== windowId && !oversees(principal)) throw new CallHeldByOtherError(holder.userName);'),
     'الرقم (QR، واتساب، التفاصيل) والإجراء بس للطالب اللي بإيدك؛ «خذه للاتصال» يرفض الطالب اللي تغيّرت حالته أو اللي عند غيرك',
   );
   assert(

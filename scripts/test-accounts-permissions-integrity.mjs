@@ -109,12 +109,10 @@ must(
 
 
 must(
-  store.includes('p !== "accounts.users.delete"') &&
-    store.includes('p !== "accounts.permissions.assign"') &&
-    store.includes('p !== "logs.clear"') &&
-    store.includes('p !== "logs.restore"'),
-  "الأدوار الافتراضية لا تمنح الصلاحيات الحساسة الجديدة تلقائياً للمشرف",
-  "يجب منع الصلاحيات الحساسة الجديدة من دور المشرف الافتراضي.",
+  // Accounts and permissions (every accounts.* id) never go to the supervisor.
+  store.includes('permissions: ALL_PERMISSION_IDS.filter((p) => !p.startsWith("accounts.")),'),
+  "دور المشرف الافتراضي ما ياخذ أي صلاحية من الحسابات والصلاحيات",
+  "يجب منع صلاحيات الحسابات والصلاحيات من دور المشرف الافتراضي.",
 );
 
 must(
@@ -123,6 +121,27 @@ must(
   "اختبار إدارة الحسابات والصلاحيات مربوط داخل test:side-effects",
   "يجب ربط اختبار الحسابات والصلاحيات في package.json و test:side-effects.",
 );
+
+// «مشرف»: everything except the accounts and permissions pages, which are
+// the only thing that sets مدير النظام apart; «إشراف كامل» covers the places
+// the system treated the admin alone (calls oversight, Telegram link, logs).
+{
+  const catalog = read("src/lib/permission-catalog.ts");
+  const auth = read("src/lib/server-auth.ts");
+  const migration = read("prisma/migrations/20261007120000_supervisors_full_access/migration.sql");
+  const supervisorList = JSON.parse(/SET "permissions" = '([^']+)'/.exec(migration)?.[1] || "[]");
+  must(
+    catalog.includes('permissions: ALL_PERMISSION_IDS.filter((p) => !p.startsWith("accounts.")),') &&
+      catalog.includes('id: "system.oversight",') &&
+      auth.includes('return hasPermission(principal, "system.oversight");') &&
+      supervisorList.includes("system.oversight") && supervisorList.includes("backup.restore") &&
+      supervisorList.includes("bot-problems.manage") && !supervisorList.some((id) => id.startsWith("accounts.")) &&
+      migration.includes(`WHERE "id" = 'role_supervisor'`) &&
+      ["src/app/api/student-calls/presence/route.ts", "src/app/api/student-calls/candidates/route.ts", "src/app/api/student-calls/route.ts", "src/app/api/students/route.ts", "src/app/api/logs/route.ts"]
+        .every((file) => read(file).includes("oversees(principal)")),
+    "دور المشرف ياخذ كل الصلاحيات عدا الحسابات والصلاحيات، ويتعامل مثل مدير النظام بباقي النظام",
+  );
+}
 
 if (failed) {
   console.error("\nفشل اختبار إدارة الحسابات والصلاحيات.");

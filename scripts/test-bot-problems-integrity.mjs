@@ -45,7 +45,10 @@ must(requiredMigration >= migrationName, "النظام ينتظر هذا الت�
 must(catalog.includes('id: "bot-problems.manage"') && catalog.includes('label: "مشاكل البوت"') &&
   /id: "bot-problems.manage",[\s\S]{0,120}level: "manage"/.test(catalog),
   "صلاحية «مشاكل البوت» موجودة بالصلاحيات (ما تنطى لدور المشاهدة تلقائياً)");
-must(catalog.includes('p !== "bot-problems.manage"'), "دور المشرف الافتراضي ما ياخذها تلقائياً؛ الأدمن بس");
+// The supervisors hold every permission except the accounts and permissions
+// pages (the only thing that sets مدير النظام apart), «مشاكل البوت» included.
+must(catalog.includes('permissions: ALL_PERMISSION_IDS.filter((p) => !p.startsWith("accounts.")),'),
+  "دور المشرف ياخذ كل الصلاحيات عدا الحسابات والصلاحيات، ومنها «مشاكل البوت»");
 must(serverAuth.includes('"bot-problems.manage": []'), "ما تنفتح من أي صلاحية ثانية");
 for (const [name, source] of [["القائمة والإضافة والحل", route], ["بحث الطالب", search]]) {
   const handlers = source.match(/export async function (?:GET|POST|PATCH)/g) || [];
