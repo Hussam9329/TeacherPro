@@ -12,7 +12,7 @@ import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
 import { normalizeForSearch } from "@/lib/validation";
 import { contactStatusMatchesFilter, normalizeContactStatusFilter, type ContactStatusFilter } from "@/lib/call-contact-status";
-import { GUARDIAN_NUMBER_NOT_WORKING_MESSAGE } from "@/lib/call-note-telegram";
+import { GUARDIAN_NUMBER_NOT_WORKING_MESSAGE, telegramChatWithMessage } from "@/lib/call-note-telegram";
 import { copyText } from "@/lib/code-closure-contact";
 import { describeTelegramHandle } from "./student-registry-helpers";
 import { EmptyState, LoadingState } from "./ui-kit";
@@ -259,12 +259,13 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
     )) setExamId("");
   }
 
-  // Copied in the click itself, before the Telegram app takes the focus the
-  // clipboard needs; the link then opens the chat.
+  // The link opens the chat with the message already typed in; it is also
+  // copied in the click itself (before the Telegram app takes the focus the
+  // clipboard needs) in case an old Telegram app leaves the box empty.
   function copyGuardianMessage(name: string, link: Element) {
     void copyText(GUARDIAN_NUMBER_NOT_WORKING_MESSAGE, link).then((copied) => {
-      if (copied) toast.success(`انفتحت محادثة ${name} والرسالة منسوخة — الصقها وأرسل.`);
-      else toast.error("تعذر نسخ الرسالة تلقائياً؛ انفتحت المحادثة فقط.");
+      if (copied) toast.success(`انفتحت محادثة ${name} والرسالة مكتوبة بيها — اضغط إرسال. إذا ما طلعت، هي منسوخة: الصقها.`);
+      else toast.success(`انفتحت محادثة ${name} والرسالة مكتوبة بيها — اضغط إرسال.`);
     });
   }
 
@@ -417,12 +418,12 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                         )}
                         {telegram.href ? (
                           <a
-                            href={telegram.href}
+                            href={telegramChatWithMessage(telegram.href)}
                             dir="ltr"
                             className="tp-modal__tg tp-notes__tg"
                             onClick={(event) => copyGuardianMessage(student.name, event.currentTarget)}
-                            aria-label={`فتح محادثة ${student.name} في تيليجرام ونسخ رسالة رقم ولي الأمر`}
-                            title="يفتح المحادثة وينسخ رسالة «رقم ولي الأمر ما يشتغل» — الصقها وأرسل"
+                            aria-label={`فتح محادثة ${student.name} في تيليجرام ورسالة رقم ولي الأمر مكتوبة بيها`}
+                            title="يفتح المحادثة ورسالة «رقم ولي الأمر ما يشتغل» مكتوبة بيها — اضغط إرسال"
                           >
                             <Send className="size-3.5" aria-hidden="true" />
                             @{telegram.value}

@@ -2,6 +2,17 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const assert = require('node:assert/strict');
+// «إدارة ملاحظات المكالمات»: the guardian-number message, word for word.
+const GUARDIAN_MESSAGE = [
+  'عزيزي الطالب، الكود مالتك متوقف لأن رقم ولي الأمر المسجّل عدنا ما يشتغل.',
+  '✅ حتى يرجع يتفعل:',
+  'دزلنا رقمين لولي الأمر:',
+  '1️⃣ رقم الأب',
+  '2️⃣ رقم الأم',
+  'ومعاهم اسمك الرباعي.',
+  '⚠️ لازم تكون الأرقام آسياسيل أو زين، وتكون شغّالة.',
+  'دزها بأسرع وقت حتى نكمّل إجراءات فتح الكود وما نتأخر عليك 🙏',
+].join('\n');
 const ts = require('typescript');
 
 const root = path.resolve(__dirname, '..');
@@ -438,30 +449,21 @@ const note = (id = 'n1') => ({
   view.reads[0].resolve({ notes: actionNotes });
   await view.flush();
   assert.equal(view.nodes('a').length, 2, 'Numeric IDs and missing Telegram values must not create broken links.');
-  assert(view.nodes('a').some((node) => node.props.href === 'tg://resolve?domain=legacy_student'));
-  assert(view.nodes('a').some((node) => node.props.href === 'tg://resolve?domain=current_student'));
+  // The chat opens with the guardian-number message already typed in.
+  const typed = '&text=' + encodeURIComponent(GUARDIAN_MESSAGE);
+  assert(view.nodes('a').some((node) => node.props.href === 'tg://resolve?domain=legacy_student' + typed));
+  assert(view.nodes('a').some((node) => node.props.href === 'tg://resolve?domain=current_student' + typed));
   assert(view.text().includes('123456789'));
   assert(!view.text().includes('تيليجرام غير متوفر'), 'a missing Telegram shows nothing');
-  // The Telegram button copies the guardian-number message, word for word, and lets the link open the chat.
-  const chatLink = view.nodes('a').find((node) => node.props.href === 'tg://resolve?domain=current_student');
+  // The Telegram button also copies the message, word for word, in case the app leaves the box empty.
+  const chatLink = view.nodes('a').find((node) => node.props.href === 'tg://resolve?domain=current_student' + typed);
   const clicked = { tagName: 'A' };
   chatLink.props.onClick({ currentTarget: clicked });
   await view.flush();
   assert.equal(view.copies.length, 1);
   assert.equal(view.copies[0].near, clicked, 'copied next to the clicked link, inside the dialog');
-  assert.equal(view.copies[0].text, [
-    'عزيزي الطالب، الكود مالتك متوقف لأن رقم ولي الأمر المسجّل عدنا ما يشتغل.',
-    '',
-    '✅ حتى يرجع يتفعل:',
-    'خلّي ولي أمرك يتصل اتصال عادي (على الرصيد) على رقم المتابعة:',
-    '📞 07750359796',
-    'ويذكر اسمك الرباعي.',
-    '',
-    '⚠️ لازم يكون رقمه آسياسيل أو زين.',
-    '',
-    'خلّي يتصل بأسرع وقت حتى نكمّل إجراءات فتح الكود وما نتأخر عليك 🙏',
-  ].join('\n'));
-  assert.match(view.toasts.at(-1).message, /والرسالة منسوخة/);
+  assert.equal(view.copies[0].text, GUARDIAN_MESSAGE);
+  assert.match(view.toasts.at(-1).message, /والرسالة مكتوبة بيها — اضغط إرسال/);
   view.toasts.length = 0;
   const selectAction = (value) => {
     view.nodes('button').find((node) => node.props['data-action-filter'] === value).props.onClick();
