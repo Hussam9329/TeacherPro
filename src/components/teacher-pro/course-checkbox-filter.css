@@ -1,28 +1,66 @@
-/* The course filter: «كل الدورات», or one course or several together. */
-.tp-course-filter { display: grid; gap: 0.4rem; min-inline-size: 0; margin: 0; padding: 0; border: 0; }
-.tp-course-filter__legend { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; inline-size: 100%; margin-block-end: 0.35rem; padding: 0; font-size: 0.75rem; font-weight: 700; }
-.tp-course-filter__count { color: var(--muted-foreground); font-size: 0.72rem; font-weight: 650; }
-.tp-course-filter__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.35rem; max-block-size: 14rem; overflow-y: auto; overscroll-behavior: contain; padding-inline-end: 0.15rem; }
+/* The course filter: a field the size of a select that opens a short list
+   of checkboxes («كل الدورات», or one course or several together). */
+.tp-course-filter { position: relative; display: grid; gap: 0.375rem; min-inline-size: 0; }
+
+.tp-course-filter__trigger {
+  display: flex;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  overflow: hidden;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  inline-size: 100%;
+  min-block-size: 2.75rem;
+  padding: 0.5rem 0.875rem;
+  border: 1px solid var(--input);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--background) 70%, transparent);
+  color: var(--foreground);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  text-align: start;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.tp-course-filter__trigger:focus-visible { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent); }
+.tp-course-filter__summary { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-course-filter__chevron { flex-shrink: 0; inline-size: 1rem; block-size: 1rem; opacity: 0.5; transition: transform 0.15s ease; }
+.tp-course-filter[data-open] .tp-course-filter__chevron { transform: rotate(180deg); }
+
+.tp-course-filter__panel {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: calc(100% + 0.35rem);
+  z-index: 60;
+  min-inline-size: min(18rem, 100%);
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  background: var(--popover, var(--card));
+  color: var(--popover-foreground, var(--foreground));
+  box-shadow: 0 18px 40px -18px color-mix(in srgb, var(--foreground) 45%, transparent);
+}
+.tp-course-filter__list { max-block-size: 15rem; overflow-y: auto; overscroll-behavior: contain; }
+
 .tp-course-filter__option {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
-  min-block-size: 2.5rem;
-  min-inline-size: 0;
-  padding: 0.4rem 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  background: var(--card);
-  font-size: 0.85rem;
-  font-weight: 650;
-  line-height: 1.5;
+  gap: 0.6rem;
+  min-block-size: 2.4rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.6rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
-.tp-course-filter__option span { min-inline-size: 0; overflow-wrap: anywhere; }
-.tp-course-filter__option:hover { border-color: var(--ring); }
-.tp-course-filter__option[data-checked] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
-.tp-course-filter__option[data-all] { font-weight: 800; }
+.tp-course-filter__option > span:not(.tp-course-filter__count) { flex: 1; min-inline-size: 0; overflow-wrap: anywhere; }
+.tp-course-filter__option:hover { background: var(--accent, var(--muted)); }
+.tp-course-filter__option[data-all] { margin-block-end: 0.25rem; border-block-end: 1px solid var(--border); border-end-start-radius: 0; border-end-end-radius: 0; font-weight: 800; }
+.tp-course-filter__count { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+
 /* «كل الدورات» while only some courses are ticked: a dash, not a tick. */
 .tp-course-filter [data-slot="checkbox"][data-state="indeterminate"] { border-color: var(--primary); }
 .tp-course-filter [data-slot="checkbox"][data-state="indeterminate"] [data-slot="checkbox-indicator"] svg { display: none; }
@@ -32,4 +70,9 @@
   block-size: 2px;
   border-radius: 1px;
   background: var(--primary);
+}
+
+/* Phones: the filter sits in a sheet, so the list opens in place. */
+@media (max-width: 640px) {
+  .tp-course-filter__panel { position: static; min-inline-size: 0; box-shadow: none; }
 }

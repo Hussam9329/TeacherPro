@@ -34,7 +34,7 @@ import { ChevronLeft, CircleMinus, CirclePlus, RotateCcw, Target } from "lucide-
 import { FormDialogHero } from "./form-dialog";
 import { EmptyState, LoadingState } from "./ui-kit";
 import { ListToolbar } from "./list-toolbar";
-import { CourseCheckboxFilter, courseFilterLabel, courseFilterParam } from "./course-checkbox-filter";
+import { CourseCheckboxFilter, courseFilterLabel, courseFilterParam, courseFilterSummary } from "./course-checkbox-filter";
 import { RowActionsMenu } from "./row-actions-menu";
 import {
   formatOpportunityBalance,
@@ -885,7 +885,7 @@ export function OpportunitiesView() {
         activeFilterCount={Number(filterCourseIds.length > 0) + Number(Boolean(filterOpportunityCount))}
         activeFilters={[
           ...(filterCourseIds.length
-            ? [{ key: "course", label: `${filterCourseIds.length > 1 ? "الدورات" : "الدورة"}: ${activeCourseFilterName}`, onClear: () => { setFilterCourseIds([]); setPage(1); } }]
+            ? [{ key: "course", label: `${filterCourseIds.length > 1 ? "الدورات" : "الدورة"}: ${courseFilterSummary(filterCourseIds, courses)}`, onClear: () => { setFilterCourseIds([]); setPage(1); } }]
             : []),
           ...(filterOpportunityCount
             ? [{ key: "count", label: `عدد الفرص: ${filterOpportunityCount}`, onClear: () => { setFilterOpportunityCount(""); setPage(1); } }]
@@ -898,7 +898,7 @@ export function OpportunitiesView() {
         }}
         filters={
           <>
-            <div className="sm:col-span-2">
+            <div className="min-w-0">
               <CourseCheckboxFilter
                 courses={courses}
                 value={filterCourseIds}
