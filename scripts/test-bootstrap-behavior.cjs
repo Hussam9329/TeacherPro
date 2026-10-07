@@ -83,6 +83,14 @@ const reset = (permissions, admin = false) => {
     assert.notEqual(buildExamMutationToken(scalarExam), buildExamMutationToken({ ...scalarExam, [field.name]: 'changed-' + field.name }), 'actual change invalidates token: ' + field.name);
   }
 
+  // A grade clerk («مدخل درجات»: grade permissions only) gets the course,
+  // chapter and exam lists that grade entry and grade records pick from.
+  reset(['system.dashboard', 'grades.view', 'grades.add', 'grades.edit', 'grades.delete']);
+  payload = await (await GET(request)).json();
+  assert.deepEqual(Object.keys(payload).sort(), ['chapters', 'courses', 'exams']);
+  reset(['grades.add']);
+  assert.deepEqual(Object.keys(await (await GET(request)).json()).sort(), ['chapters', 'courses', 'exams']);
+
   reset(['accounts.users.view']);
   payload = await (await GET(request)).json();
   assert.deepEqual(Object.keys(payload).sort(), ['roles', 'users']);

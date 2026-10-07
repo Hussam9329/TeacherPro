@@ -8,7 +8,7 @@ import {
   hasPermission,
   unauthorizedResponse,
 } from "@/lib/server-auth";
-import { CALLS_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
+import { CALLS_VIEW_PERMISSIONS, GRADES_WORK_PERMISSIONS } from "@/lib/permission-catalog";
 import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 import { buildExamMutationToken } from "@/lib/exam-mutation-token";
 import { routeErrorResponse } from "@/lib/route-helpers";
@@ -24,14 +24,18 @@ export async function GET(req: NextRequest) {
     if (!principal) return unauthorizedResponse();
 
     const loaders: Array<Promise<Record<string, unknown>>> = [];
+    // Grade entry and grade records pick a course and an exam and show the
+    // active chapter's effect, so whoever works on grades gets the course,
+    // chapter and exam lists (read-only) without the courses/exams pages.
+    const gradesWork = GRADES_WORK_PERMISSIONS.some((permission) => hasPermission(principal, permission));
     // The calls page picks a course first, so calls staff get the course list too.
-    if (["courses.view", ...CALLS_VIEW_PERMISSIONS].some((permission) => hasPermission(principal, permission))) {
+    if (gradesWork || ["courses.view", ...CALLS_VIEW_PERMISSIONS].some((permission) => hasPermission(principal, permission))) {
       loaders.push(
         db.course.findMany({ orderBy: { createdAt: "desc" } })
           .then((courses) => ({ courses })),
       );
     }
-    if (hasPermission(principal, "chapters.view")) {
+    if (gradesWork || hasPermission(principal, "chapters.view")) {
       loaders.push(
         db.chapter.findMany({
           orderBy: { name: "asc" },
@@ -43,7 +47,7 @@ export async function GET(req: NextRequest) {
         }).then((chapters) => ({ chapters })),
       );
     }
-    if (hasPermission(principal, "exams.view")) {
+    if (gradesWork || hasPermission(principal, "exams.view")) {
       loaders.push((async () => {
         await assertDatabaseSchemaReady();
         const exams = await db.exam.findMany({

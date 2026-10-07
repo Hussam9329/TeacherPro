@@ -420,6 +420,8 @@ export const ALL_VIEW_PERMISSION_IDS = PERMISSION_CATALOG.filter(
  * whole-follow-up permission. A calls-only account needs nothing else.
  */
 export const CALLS_VIEW_PERMISSIONS = ["follow-up.calls.view", "follow-up.view"];
+/** Working on grades (entry, records, smart notes): any grade permission. */
+export const GRADES_WORK_PERMISSIONS = ["grades.view", "grades.add", "grades.edit", "grades.delete"];
 /** Reading «إدارة فترة السماح»: its own permission, or the full students view. */
 export const GRACE_VIEW_PERMISSIONS = ["grace-periods.view", "students.view"];
 /** Adding, editing and cancelling a grace period: its own permission, or editing students. */
