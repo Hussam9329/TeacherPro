@@ -162,7 +162,28 @@ check(
     !/\.(?:create|update|delete|upsert)\w*\(/.test(listRoute),
   "القائمة للقراءة فقط: الملغاة مستبعدة، والمستمرة تشمل اليوم الأخير",
 );
-check(/requirePermission\(req, "students\.view"\)/.test(listRoute), "القائمة تتطلب صلاحية عرض الطلاب");
+check(listRoute.includes("requireAnyPermission(req, GRACE_VIEW_PERMISSIONS)"), "القائمة تتطلب صلاحية عرض فترات السماح أو عرض الطلاب");
+
+// «موظف فترات السماح»: the dashboard and everything about grace periods, nothing else.
+{
+  const catalog = read("src/lib/permission-catalog.ts");
+  const dashboard = read("src/components/teacher-pro/dashboard.tsx");
+  const graceRoute = read("src/app/api/grace-periods/route.ts");
+  const searchRoute = read("src/app/api/grace-periods/search/route.ts");
+  check(
+    catalog.includes('id: "grace-periods.view",') && catalog.includes('id: "grace-periods.manage",') &&
+      catalog.includes('id: "role_grace",') && catalog.includes('name: "موظف فترات السماح",') &&
+      catalog.includes('permissions: ["system.dashboard", "grace-periods.view", "grace-periods.manage"],') &&
+      catalog.includes('export const GRACE_VIEW_PERMISSIONS = ["grace-periods.view", "students.view"];') &&
+      catalog.includes('export const GRACE_MANAGE_PERMISSIONS = ["grace-periods.manage", "students.edit"];') &&
+      graceRoute.includes("requireAnyPermission(req, GRACE_VIEW_PERMISSIONS)") &&
+      graceRoute.includes("requireAnyPermissionPrincipal(req, GRACE_MANAGE_PERMISSIONS)") &&
+      searchRoute.includes("requireAnyPermission(req, GRACE_VIEW_PERMISSIONS)") &&
+      dashboard.includes('Boolean(actor?.permissions?.includes("grace-periods.view"))') &&
+      dashboard.includes('actor.permissions?.includes("grace-periods.manage")'),
+    "دور «موظف فترات السماح» يفتح لوحة النظام و«إدارة فترة السماح» كاملة بدون باقي النظام، ومن عنده عرض/تعديل الطلاب يبقى مثل قبل",
+  );
+}
 
 // 9. Archived and dismissed students can never receive or change a grace period.
 const planServer = read("src/lib/grace-period-plan-server.ts");

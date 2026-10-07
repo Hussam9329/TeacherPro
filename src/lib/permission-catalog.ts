@@ -146,6 +146,21 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
     level: "delete",
     description: "حذف طالب من النظام",
   },
+  // فترات السماح
+  {
+    id: "grace-periods.view",
+    label: "عرض فترات السماح",
+    category: "الطلاب / فترات السماح",
+    level: "read",
+    description: "فتح «إدارة فترة السماح» من لوحة النظام: البحث عن طالب وقراءة فترات السماح وقائمتها.",
+  },
+  {
+    id: "grace-periods.manage",
+    label: "إدارة فترات السماح",
+    category: "الطلاب / فترات السماح",
+    level: "manage",
+    description: "إضافة فترة سماح وتعديلها وإلغاؤها، مع معاينة أثرها على الامتحانات والفرص قبل الحفظ.",
+  },
   // الامتحانات
   {
     id: "exams.view",
@@ -405,6 +420,10 @@ export const ALL_VIEW_PERMISSION_IDS = PERMISSION_CATALOG.filter(
  * whole-follow-up permission. A calls-only account needs nothing else.
  */
 export const CALLS_VIEW_PERMISSIONS = ["follow-up.calls.view", "follow-up.view"];
+/** Reading «إدارة فترة السماح»: its own permission, or the full students view. */
+export const GRACE_VIEW_PERMISSIONS = ["grace-periods.view", "students.view"];
+/** Adding, editing and cancelling a grace period: its own permission, or editing students. */
+export const GRACE_MANAGE_PERMISSIONS = ["grace-periods.manage", "students.edit"];
 /** Reading «إدارة الإجازات» (the leaves list, the student search, a leave's exams). */
 export const LEAVES_VIEW_PERMISSIONS = ["follow-up.leaves.view", "follow-up.view"];
 
@@ -487,6 +506,15 @@ export const DEFAULT_ROLE_DEFINITIONS: DefaultRoleDefinition[] = [
     name: "موظف إجازات",
     isDefault: true,
     permissions: ["system.dashboard", "follow-up.leaves.view", "follow-up.leaves.manage"],
+  },
+  {
+    // For staff who only handle grace periods: «إدارة فترة السماح» from the
+    // dashboard (search a student, add, edit and cancel a period with its
+    // effect on exams and opportunities) and nothing else.
+    id: "role_grace",
+    name: "موظف فترات السماح",
+    isDefault: true,
+    permissions: ["system.dashboard", "grace-periods.view", "grace-periods.manage"],
   },
   {
     id: "role_viewer",

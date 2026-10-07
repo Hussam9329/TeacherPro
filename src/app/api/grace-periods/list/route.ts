@@ -4,7 +4,8 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/server-auth";
+import { requireAnyPermission } from "@/lib/server-auth";
+import { GRACE_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { buildStudentRegistrySearchWhere } from "@/lib/student-registry-filters-server";
@@ -46,7 +47,7 @@ const newestFirst: Prisma.GracePeriodOrderByWithRelationInput[] = [
  * in every tab.
  */
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, "students.view");
+  const authError = await requireAnyPermission(req, GRACE_VIEW_PERMISSIONS);
   if (authError) return authError;
   try {
     const params = new URL(req.url).searchParams;

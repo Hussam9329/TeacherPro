@@ -105,11 +105,15 @@ export function DashboardView({
   ));
   const [codeClosuresOpen, setCodeClosuresOpen] = useState(false);
   // «إدارة فترة السماح» is the only place that creates, edits or cancels grace.
-  const canViewGracePeriods = canAccess("student-registry") && hasFullStudentsView;
+  // «إدارة فترة السماح»: its own permissions («موظف فترات السماح»), or the
+  // full students view / editing students as before.
+  const canViewGracePeriods = (canAccess("student-registry") && hasFullStudentsView) ||
+    Boolean(actor?.permissions?.includes("grace-periods.view"));
   const canManageGracePeriods = Boolean(actor && (
     actor.username?.trim().toLowerCase() === "admin" ||
     actor.roleId === "role_admin" ||
-    actor.permissions?.includes("students.edit")
+    actor.permissions?.includes("students.edit") ||
+    actor.permissions?.includes("grace-periods.manage")
   ));
   const [gracePeriodsOpen, setGracePeriodsOpen] = useState(false);
   // «إدارة الإجازات» replaced the old leaves tab; its old links open this window.

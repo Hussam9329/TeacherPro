@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePermission, requirePermissionPrincipal } from "@/lib/server-auth";
+import { requireAnyPermission, requireAnyPermissionPrincipal } from "@/lib/server-auth";
+import { GRACE_MANAGE_PERMISSIONS, GRACE_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
@@ -36,7 +37,7 @@ function readRequest(body: Record<string, unknown>): GraceChangeRequest | string
 
 /** GET /api/grace-periods?studentId= — the student's card, current and past periods. */
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, "students.view");
+  const authError = await requireAnyPermission(req, GRACE_VIEW_PERMISSIONS);
   if (authError) return authError;
   try {
     const studentId = String(new URL(req.url).searchParams.get("studentId") || "").trim();
@@ -89,7 +90,7 @@ export async function GET(req: NextRequest) {
  * The only endpoint in TeacherPro that creates, edits or cancels a grace period.
  */
 export async function POST(req: NextRequest) {
-  const principalOrError = await requirePermissionPrincipal(req, "students.edit");
+  const principalOrError = await requireAnyPermissionPrincipal(req, GRACE_MANAGE_PERMISSIONS);
   if (principalOrError instanceof NextResponse) return principalOrError;
   const principal = principalOrError;
   try {

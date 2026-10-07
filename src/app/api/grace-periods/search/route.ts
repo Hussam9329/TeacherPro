@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/server-auth";
+import { requireAnyPermission } from "@/lib/server-auth";
+import { GRACE_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { buildStudentRegistrySearchWhere } from "@/lib/student-registry-filters-server";
@@ -20,7 +21,7 @@ function graceSummary(periods: GracePeriodRange[] | undefined, today: string) {
 
 /** Student search for the grace-management screen, using TeacherPro's shared search definition. */
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, "students.view");
+  const authError = await requireAnyPermission(req, GRACE_VIEW_PERMISSIONS);
   if (authError) return authError;
   try {
     const query = String(new URL(req.url).searchParams.get("q") || "").trim();
