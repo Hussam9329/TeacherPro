@@ -188,6 +188,13 @@ const { CALL_BATCH_SIZE } = require("../src/lib/call-batch.ts");
   assert.equal((await db.query(`SELECT COUNT(*)::int AS n FROM "CallReservation" WHERE "studentId" IN ('s01', 's02')`)).rows[0].n, 0);
   step("a student called while the batch was being picked is let go and replaced");
 
+  // «خذه للاتصال» compares what the page shows with the student's status now.
+  assert.equal(await server.currentCallStatus(client, "s01", "e1"), "تم الاتصال");
+  assert.equal(await server.currentCallStatus(client, "s02", "e1"), "لم يرد");
+  assert.equal(await server.currentCallStatus(client, "s03", "e1"), "", "a note alone is no status");
+  assert.equal(await server.currentCallStatus(client, "nobody", "e1"), null);
+  step("the take-to-call check reads the student's status as the page shows it");
+
   // Who acted is stored on the call row.
   await db.exec(`INSERT INTO "StudentCall" (id, "studentId", "examId", category, status, "actedAt", "actedById", "actedByName")
     VALUES ('call-1', 's01', 'e1', 'grade:x', 'تم الاتصال', now(), 'u1', 'staff u1')`);

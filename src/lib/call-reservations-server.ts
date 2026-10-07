@@ -156,11 +156,34 @@ type CallStatusRow = {
   createdAt: Date;
 };
 
+async function latestCallRows(client: RawClient, studentIds: readonly string[], examId: string) {
+  const rows = await client.$queryRaw<CallStatusRow[]>`
+    SELECT "studentId", "status", "completed", "actedAt", "createdAt"
+    FROM "StudentCall"
+    WHERE "examId" = ${examId} AND "studentId" = ANY(${[...studentIds]}) AND "category" <> ${CALL_STUDENT_NOTE_CATEGORY}
+    ORDER BY "createdAt" DESC, "id" DESC`;
+  const latest = new Map<string, CallStatusRow>();
+  for (const row of rows) if (!latest.has(row.studentId)) latest.set(row.studentId, row);
+  return latest;
+}
+
+/**
+ * The lock a contact action holds while it is saved: one per student and
+ * exam (key space "call-case"). It never touches the student row, so grade
+ * saves and recalculations on the same students neither wait for it nor
+ * hold it up.
+ */
+export async function lockCallCaseForSave(client: RawClient, studentId: string, examId: string): Promise<void> {
+  await client.$queryRaw`
+    SELECT 1 AS "locked" FROM (SELECT pg_advisory_xact_lock(hashtext('call-case'), hashtext(${studentId} || ':' || ${examId}))) AS "caseLock"`;
+}
+
 /**
  * Of these students, the ones whose call on this exam still needs making,
- * read fresh. It first waits for any contact action being saved on them right
- * now (saving locks the student row), so a student called a moment ago is
- * never handed to someone else.
+ * read fresh, without ever waiting. A student whose contact action is being
+ * saved right now is skipped, not waited for, so a student called a moment
+ * ago is never handed to someone else; a save that starts now waits for this
+ * batch instead.
  */
 export async function stillOpenCallCases(
   client: RawClient,
@@ -168,17 +191,33 @@ export async function stillOpenCallCases(
   examId: string,
   now = new Date(),
 ): Promise<Set<string>> {
-  const ids = [...new Set(studentIds)];
+  const ids = [...new Set(studentIds)].sort();
   if (!ids.length) return new Set();
-  await client.$queryRaw`SELECT "id" FROM "Student" WHERE "id" = ANY(${ids}) ORDER BY "id" FOR SHARE`;
-  const rows = await client.$queryRaw<CallStatusRow[]>`
-    SELECT "studentId", "status", "completed", "actedAt", "createdAt"
-    FROM "StudentCall"
-    WHERE "examId" = ${examId} AND "studentId" = ANY(${ids}) AND "category" <> ${CALL_STUDENT_NOTE_CATEGORY}
-    ORDER BY "createdAt" DESC, "id" DESC`;
-  const latest = new Map<string, CallStatusRow>();
-  for (const row of rows) if (!latest.has(row.studentId)) latest.set(row.studentId, row);
-  return new Set(ids.filter((studentId) => callCaseOpenForBatch(latest.get(studentId), now)));
+  const free = new Set<string>();
+  for (const studentId of ids) {
+    const [row] = await client.$queryRaw<Array<{ free: boolean }>>`
+      SELECT pg_try_advisory_xact_lock_shared(hashtext('call-case'), hashtext(${studentId} || ':' || ${examId})) AS "free"`;
+    if (row?.free) free.add(studentId);
+  }
+  const latest = await latestCallRows(client, ids, examId);
+  return new Set(ids.filter((studentId) => free.has(studentId) && callCaseOpenForBatch(latest.get(studentId), now)));
+}
+
+/**
+ * The student's contact status on this exam as the calls page shows it
+ * ("" for none), read after any action being saved on them finishes.
+ * null when the student does not exist.
+ */
+export async function currentCallStatus(client: RawClient, studentId: string, examId: string): Promise<string | null> {
+  const exists = await client.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Student" WHERE "id" = ${studentId}`;
+  if (!exists.length) return null;
+  await client.$queryRaw`
+    SELECT 1 AS "locked" FROM (SELECT pg_advisory_xact_lock_shared(hashtext('call-case'), hashtext(${studentId} || ':' || ${examId}))) AS "caseLock"`;
+  const row = (await latestCallRows(client, [studentId], examId)).get(studentId);
+  if (!row) return "";
+  const status = String(row.status || "").trim();
+  if (status === "تم الاتصال" || status === "لم يرد" || status === "الرقم خاطئ") return status;
+  return row.completed ? "تم الاتصال" : "";
 }
 
 /**

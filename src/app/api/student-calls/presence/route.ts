@@ -10,6 +10,7 @@ import { normalizeListFilter } from "@/lib/all-filter";
 import { parseCallWindowId } from "@/lib/call-batch";
 import {
   closeCallWindow,
+  currentCallStatus,
   heldByCallWindow,
   holdCallCase,
   liveCallWindows,
@@ -45,20 +46,28 @@ export async function POST(req: NextRequest) {
     const examId = normalizeListFilter(body?.examId);
     if (!courseId || !examId) return validationError("اختر الدورة والامتحان أولاً.");
     const holdStudentId = typeof body?.hold === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(body.hold) ? body.hold : "";
+    const seenStatus = typeof body?.seenStatus === "string" ? body.seenStatus.trim() : null;
     const now = new Date();
     const result = await withDatabaseSchema(() => retryCallTransaction(() => db.$transaction(async (tx) => {
       await releaseStaleCallWindows(tx, now);
       const owned = await touchCallWindow(tx, { id: windowId, owner, courseId, examId }, now, { away: body?.away === true });
       if (!owned) return null;
       let holdOk: boolean | undefined;
+      let changed = false;
+      let status = "";
       if (holdStudentId) {
-        const exists = await tx.student.count({ where: { id: holdStudentId } });
-        holdOk = exists > 0 && await holdCallCase(tx, { id: windowId, ownerId: owner.id }, holdStudentId, examId, now);
+        // A student called after the page loaded is not taken over a stale
+        // card: the page gets the new status and reloads instead.
+        const current = await currentCallStatus(tx, holdStudentId, examId);
+        status = current || "";
+        changed = current !== null && seenStatus !== null && seenStatus !== current;
+        holdOk = current !== null && !changed &&
+          await holdCallCase(tx, { id: windowId, ownerId: owner.id }, holdStudentId, examId, now);
       }
       const held = await heldByCallWindow(tx, windowId, examId, now);
       // Already this window's own: taking it again is fine.
-      if (holdStudentId && !holdOk) holdOk = held.includes(holdStudentId);
-      return { held, holdOk };
+      if (holdStudentId && !holdOk && !changed) holdOk = held.includes(holdStudentId);
+      return { held, holdOk, changed, status };
     })), "CallWindow");
     if (!result) return NextResponse.json({ error: "هذه النافذة لحساب آخر." }, { status: 409 });
     return NextResponse.json({ ok: true, ...result, build: RUNNING_BUILD });

@@ -20,8 +20,15 @@ import {
   assertStudentsNotArchived,
   isArchivedStudentError,
 } from "@/lib/archived-student-guard";
-import { parseCallWindowId } from "@/lib/call-batch";
-import { dropCallHold, holdCallCase, retryCallTransaction } from "@/lib/call-reservations-server";
+import { CALL_CLIENT_PROTOCOL, parseCallWindowId } from "@/lib/call-batch";
+
+/** A contact action on a student another caller holds right now. */
+class CallHeldByOtherError extends Error {
+  constructor(readonly holderName: string) {
+    super("held by another caller");
+  }
+}
+import { dropCallHold, holdCallCase, liveCallHolders, lockCallCaseForSave, retryCallTransaction } from "@/lib/call-reservations-server";
 import { writeAuditLog } from "@/lib/audit-log-server";
 
 function dateOrNull(value: unknown): Date | null {
@@ -113,6 +120,15 @@ export async function POST(req: NextRequest) {
     const categoryError = requireText(data.category, "نوع المكالمة");
     if (categoryError) return validationError(categoryError);
 
+    // A calls page from before batches would save over students other
+    // callers hold: it must reload first (it is told why, not left silent).
+    if (data.category !== CALL_STUDENT_NOTE_CATEGORY && !(Number(body?.client) >= CALL_CLIENT_PROTOCOL)) {
+      return NextResponse.json(
+        { error: "صفحة المكالمات عندك نسخة قديمة. حدّث الصفحة (F5) وبعدها سجّل الإجراء.", staleClient: true },
+        { status: 409 },
+      );
+    }
+
     if (data.category === CALL_STUDENT_NOTE_CATEGORY) {
       const expectedRevision = readExpectedNoteRevision(body.expectedRevision);
       const result = await withDatabaseSchema(
@@ -135,10 +151,18 @@ export async function POST(req: NextRequest) {
           const examCall = isStudentExamCall(data);
 
           // The DB unique key still includes category for backward compatibility.
-          // Serialize exam-call writes on the stable parent row so two tabs cannot
-          // create different category rows for the same student + exam concurrently.
+          // Serialize exam-call writes per student + exam so two tabs cannot
+          // create different category rows concurrently. The lock is not the
+          // student row: a grade save on the same students must not make a
+          // caller's action wait (and time out).
           if (examCall) {
-            await tx.$queryRaw`SELECT "id" FROM "Student" WHERE "id" = ${data.studentId} FOR UPDATE`;
+            await lockCallCaseForSave(tx, data.studentId, String(data.examId));
+            // Only whoever holds a student acts on them: a student in someone
+            // else's batch is theirs until they act or close their page.
+            if (data.examId) {
+              const holder = (await liveCallHolders(tx, data.examId)).find((item) => item.studentId === data.studentId);
+              if (holder && holder.windowId !== windowId) throw new CallHeldByOtherError(holder.userName);
+            }
           }
 
           const logicalWhere: Prisma.StudentCallWhereInput = examCall
@@ -236,6 +260,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     if (isArchivedStudentError(error)) return archivedStudentLockedResponse();
+    if (error instanceof CallHeldByOtherError) {
+      return NextResponse.json({ error: `هذا الطالب بدفعة ${error.holderName} هسه، هو يتصل بيه.`, heldBy: error.holderName }, { status: 409 });
+    }
     if (error instanceof CallNoteMutationError) return NextResponse.json({ error: error.message, studentCall: error.studentCall }, { status: error.status });
     return routeErrorResponse(error, "تعذر حفظ المكالمة حالياً.");
   }

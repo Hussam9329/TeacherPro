@@ -73,7 +73,7 @@ import { formatOpportunityBalance, getOpportunityLimit } from "@/lib/opportunity
 import { baghdadTodayKey } from "@/lib/baghdad-time";
 import { CALL_STUDENT_NOTE_CATEGORY } from "@/lib/call-notes-filter";
 import { contactStatusMatchesFilter } from "@/lib/call-contact-status";
-import { CALL_BATCH_SIZE, CALL_WINDOW_HEARTBEAT_MS } from "@/lib/call-batch";
+import { CALL_BATCH_SIZE, CALL_CLIENT_PROTOCOL, CALL_WINDOW_HEARTBEAT_MS } from "@/lib/call-batch";
 import {
   isStudentExamCall,
   studentExamCallIdentityKey,
@@ -880,6 +880,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       courseId: callCourseId,
       examId: callExamId,
       studentId: row.student.id,
+      seenStatus: callStatusForLog(callLogForRow(row)),
     });
     setCallTakingIds((current) => {
       const next = { ...current };
@@ -892,9 +893,18 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
         current.student.id === row.student.id ? { ...current, heldBy: { userName: me, mine: true } } : current));
       return;
     }
-    toast.error(result ? "هذا الطالب صار عند موظف ثاني." : "تعذر حجز الطالب. تأكد من الاتصال وحاول مرة ثانية.");
+    if (result?.changed) {
+      toast.warning(`حالة هذا الطالب تغيّرت (${result.status || "بدون إجراء"}). تحدثت القائمة، شوفها قبل لا تتصل.`);
+    } else {
+      toast.error(result ? "هذا الطالب صار عند موظف ثاني." : "تعذر حجز الطالب. تأكد من الاتصال وحاول مرة ثانية.");
+    }
     if (result) setCallFilterRefreshKey((current) => current + 1);
   };
+
+  // A caller sees a student's numbers (QR, WhatsApp, the details window) and
+  // acts on them only while holding them; someone else's student is theirs.
+  const callNumbersHidden = (row: CallStudentRow) => canManageCalls && !row.heldBy?.mine;
+  const callHeldByOther = (row: CallStudentRow) => Boolean(canManageCalls && row.heldBy && !row.heldBy.mine);
 
   const callStatValue = (value: number | undefined) => {
     if (callDatabaseStatsLoading && !callDatabaseStats) return "…";
@@ -1003,6 +1013,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       notes: existing?.notes || "",
       // «دفعتي»: taking an action back returns the student to this window.
       windowId: canManageCalls ? callWindowId : undefined,
+      client: CALL_CLIENT_PROTOCOL,
     };
     const savingKey = `status:${studentExamCallIdentityKey(payload.studentId, payload.examId)}`;
     const previousCall = existing || null;
@@ -1254,12 +1265,16 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   };
 
   // Card: three direct buttons. A missing number is a faded button, never text.
-  const renderContactButtons = (student: Student) => {
+  const renderContactButtons = (student: Student, numbersHidden = false) => {
     const telegramHandle = String(student.username || "").trim().replace(/^@+/, "") ||
       normalizeTelegramIdentifier(student.telegram || "");
     const telegramOpens = Boolean(telegramHandle) && !/^\d+$/.test(telegramHandle);
     const phoneButton = (label: string, phone?: string) =>
-      phoneForWhatsApp(phone) ? (
+      numbersHidden ? (
+        <span className="tp-call-card__contact-btn" data-kind="whatsapp" aria-disabled="true" title="خذه للاتصال حتى يبين الرقم">
+          <WhatsAppIcon />{label}
+        </span>
+      ) : phoneForWhatsApp(phone) ? (
         <a
           className="tp-call-card__contact-btn"
           data-kind="whatsapp"
@@ -1628,7 +1643,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
 
             <div className="tp-call-card__row">
               <span className="tp-call-card__row-label"><Phone aria-hidden="true" />التواصل</span>
-              <div className="tp-call-card__row-content">{renderContactButtons(row.student)}</div>
+              <div className="tp-call-card__row-content">{renderContactButtons(row.student, callNumbersHidden(row))}</div>
             </div>
 
             <div className="tp-call-card__row">
@@ -1653,7 +1668,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                       className="tp-call-card__action"
                       data-tone={action.tone}
                       aria-pressed={contactStatus === action.value}
-                      disabled={!row.focusItem || statusSaving}
+                      disabled={!row.focusItem || statusSaving || callHeldByOther(row)}
+                      title={callHeldByOther(row) ? `بدفعة ${row.heldBy?.userName} هسه` : undefined}
                       onClick={() => void saveCallStatus(row, contactStatus === action.value ? "" : action.value)}
                     >
                       <ActionIcon aria-hidden="true" />{action.value}
@@ -1665,7 +1681,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                   className="tp-call-card__action"
                   data-tone="muted"
                   aria-pressed={!contactStatus}
-                  disabled={!row.focusItem || statusSaving}
+                  disabled={!row.focusItem || statusSaving || callHeldByOther(row)}
                   onClick={() => void saveCallStatus(row, "")}
                 >
                   <Ban aria-hidden="true" />بدون إجراء
@@ -1678,7 +1694,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
 
           {/* Scan a code with another phone to dial the number directly. A
               caller sees the codes only for students they hold. */}
-          {!canManageCalls || row.heldBy?.mine ? (
+          {!callNumbersHidden(row) ? (
             <aside className="tp-call-card__qr" aria-label="نقل الرقم إلى هاتف آخر عبر QR">
               {renderQrTile(row, "الطالب", row.student.phone, <User aria-hidden="true" />)}
               {renderQrTile(row, "ولي الأمر", row.student.parentPhone, <Users aria-hidden="true" />)}
@@ -1754,7 +1770,9 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                 <h3 id="tp-call-student" className="tp-modal__title">معلومات الطالب</h3>
                 {/* Everything a call may need, without leaving the calls page. */}
                 <dl className="tp-call-info">
-                  {callStudentFacts(row.student).map(([label, value]) => (
+                  {callStudentFacts(row.student)
+                    .filter(([label]) => !callNumbersHidden(row) || !label.startsWith("هاتف"))
+                    .map(([label, value]) => (
                     <div key={label} className="tp-call-info__item">
                       <dt>{label}</dt>
                       <dd dir="auto">{value}</dd>
@@ -1820,8 +1838,16 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
               <section className="tp-modal__section" aria-labelledby="tp-call-contact">
                 <h3 id="tp-call-contact" className="tp-modal__title">التواصل</h3>
                 <div className="flex flex-wrap gap-2">
-                  {renderPhoneLink("الطالب", row.student.phone)}
-                  {renderPhoneLink("ولي الأمر", row.student.parentPhone)}
+                  {callNumbersHidden(row) ? (
+                    <span className="rounded-xl border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                      {row.heldBy ? `بدفعة ${row.heldBy.userName} هسه، هو يتصل بيه.` : "الأرقام تبين بعد «خذه للاتصال» من البطاقة."}
+                    </span>
+                  ) : (
+                    <>
+                      {renderPhoneLink("الطالب", row.student.phone)}
+                      {renderPhoneLink("ولي الأمر", row.student.parentPhone)}
+                    </>
+                  )}
                   {renderTelegramLink(row.student.telegram, row.student.username)}
                 </div>
               </section>

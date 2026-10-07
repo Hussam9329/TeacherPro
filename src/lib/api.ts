@@ -2043,12 +2043,16 @@ export const studentLeaveApi = {
   remove: (id: string) => apiDelete("student-leaves", id),
 };
 
-type CallWindowBeat = { windowId: string; courseId: string; examId: string; away?: boolean; hold?: string };
+type CallWindowBeat = { windowId: string; courseId: string; examId: string; away?: boolean; hold?: string; seenStatus?: string };
 export type CallWindowBeatResult = {
   /** The students this window holds on the exam now. */
   held: string[];
   /** Whether a «خذه للاتصال» hold went through (false when someone else holds them). */
   holdOk: boolean;
+  /** The student's status changed since the page loaded (the hold was not made). */
+  changed: boolean;
+  /** The student's current status when a hold was asked for. */
+  status: string;
   /** The build the server runs; a different one means the page is out of date. */
   build: string;
 };
@@ -2088,11 +2092,15 @@ export const callWindowApi = {
         body: JSON.stringify(body),
       });
       if (!res.ok) return null;
-      const data = (await res.json().catch(() => null)) as { held?: unknown; holdOk?: unknown; build?: unknown } | null;
+      const data = (await res.json().catch(() => null)) as
+        | { held?: unknown; holdOk?: unknown; changed?: unknown; status?: unknown; build?: unknown }
+        | null;
       if (!Array.isArray(data?.held)) return null;
       return {
         held: data.held.map(String),
         holdOk: data.holdOk === true,
+        changed: data.changed === true,
+        status: typeof data.status === "string" ? data.status : "",
         build: typeof data.build === "string" ? data.build : "",
       };
     } catch {
@@ -2100,7 +2108,7 @@ export const callWindowApi = {
     }
   },
   /** «خذه للاتصال»: holds one student for this window unless someone else does. */
-  hold: (body: Omit<CallWindowBeat, "away"> & { studentId: string }) => {
+  hold: (body: Omit<CallWindowBeat, "away" | "hold"> & { studentId: string; seenStatus: string }) => {
     const { studentId, ...beat } = body;
     return callWindowApi.beat({ ...beat, hold: studentId });
   },

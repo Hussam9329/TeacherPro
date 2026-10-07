@@ -91,7 +91,7 @@ assert(
   'هوية مكالمة الامتحان معرفة مركزياً بالطالب + الامتحان بدون Grade ID',
 );
 assert(
-  callsRoute.includes('FOR UPDATE') &&
+  callsRoute.includes('await lockCallCaseForSave(tx, data.studentId, String(data.examId));') &&
     callsRoute.includes('category: { not: CALL_STUDENT_NOTE_CATEGORY }') &&
     callsRoute.includes('existing?.category || data.category'),
   'الحفظ يقفل الطالب أثناء المعاملة ويعيد استخدام أي category تاريخية لنفس الطالب/الامتحان بدون إنشاء Duplicate متزامن',
@@ -497,11 +497,25 @@ assert(
   // Nobody dials a student they do not hold: outside «دفعتي» the QR codes
   // show after «خذه للاتصال», never while someone else holds the student.
   assert(
-    followUp.includes('{!canManageCalls || row.heldBy?.mine ? (') &&
+    followUp.includes('const callNumbersHidden = (row: CallStudentRow) => canManageCalls && !row.heldBy?.mine;') &&
+      followUp.includes('{!callNumbersHidden(row) ? (') &&
+      followUp.includes('{renderContactButtons(row.student, callNumbersHidden(row))}') &&
+      followUp.includes('.filter(([label]) => !callNumbersHidden(row) || !label.startsWith("هاتف"))') &&
+      followUp.includes('disabled={!row.focusItem || statusSaving || callHeldByOther(row)}') &&
       followUp.includes('<PhoneCall aria-hidden="true" />خذه للاتصال') &&
-      followUp.includes('callWindowApi.hold({') &&
-      presence.includes('holdOk = exists > 0 && await holdCallCase(tx, { id: windowId, ownerId: owner.id }, holdStudentId, examId, now);'),
-    'خارج «دفعتي» الرقم والـQR يطلعون بس بعد «خذه للاتصال»، والمحجوز عند غيرك ما ينحجز',
+      followUp.includes('seenStatus: callStatusForLog(callLogForRow(row)),') &&
+      presence.includes('changed = current !== null && seenStatus !== null && seenStatus !== current;') &&
+      callsRoute.includes('if (holder && holder.windowId !== windowId) throw new CallHeldByOtherError(holder.userName);'),
+    'الرقم (QR، واتساب، التفاصيل) والإجراء بس للطالب اللي بإيدك؛ «خذه للاتصال» يرفض الطالب اللي تغيّرت حالته أو اللي عند غيرك',
+  );
+  assert(
+    reservations.includes("SELECT pg_try_advisory_xact_lock_shared(hashtext('call-case')") &&
+      callsRoute.includes('await lockCallCaseForSave(tx, data.studentId, String(data.examId));') &&
+      !/FOR (UPDATE|SHARE|KEY SHARE)/.test(reservations) &&
+      !callsRoute.includes('FOR UPDATE') &&
+      reservations.includes("pg_advisory_xact_lock(hashtext(${`call-batch:${args.examId}`}))") &&
+      reservations.includes('export async function retryCallTransaction'),
+    'الدفعة ما تنتظر حفظ الدرجات أو إعادة الحساب، وتتخطى الطالب اللي ينحفظ عليه إجراء هسه، والدفعات تنطي وحدة ورا وحدة',
   );
   // A page from before batches cannot list students; a page left open across
   // an update asks for a reload; a page in the background keeps its batch.
@@ -509,6 +523,8 @@ assert(
     batch.includes('export const CALL_CLIENT_PROTOCOL = 2;') &&
       candidates.includes('if (hasPermission(principal, "follow-up.calls.manage") && !(clientProtocol >= CALL_CLIENT_PROTOCOL)) {') &&
       api.includes('client: String(CALL_CLIENT_PROTOCOL),') &&
+      callsRoute.includes('if (data.category !== CALL_STUDENT_NOTE_CATEGORY && !(Number(body?.client) >= CALL_CLIENT_PROTOCOL)) {') &&
+      followUp.includes('client: CALL_CLIENT_PROTOCOL,') &&
       followUp.includes('if (result?.build && CALL_PAGE_BUILD && result.build !== CALL_PAGE_BUILD) setCallPageOutdated(true);') &&
       followUp.includes('const away = document.visibilityState === "hidden";') &&
       batch.includes('export const CALL_WINDOW_AWAY_MS = 15 * 60 * 1000;'),
