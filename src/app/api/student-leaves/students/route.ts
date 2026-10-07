@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/server-auth";
+import { requireAnyPermission } from "@/lib/server-auth";
+import { LEAVES_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { buildStudentRegistrySearchWhere } from "@/lib/student-registry-filters-server";
@@ -29,7 +30,7 @@ const EMPTY_SUMMARY: StudentLeaveSummary = { total: 0, active: 0, upcoming: 0, e
  * first leave can be added, and matches a leave's exam, reason or note.
  */
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, "follow-up.view");
+  const authError = await requireAnyPermission(req, LEAVES_VIEW_PERMISSIONS);
   if (authError) return authError;
   try {
     const params = new URL(req.url).searchParams;

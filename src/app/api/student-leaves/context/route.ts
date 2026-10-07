@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePermission } from "@/lib/server-auth";
+import { requireAnyPermission } from "@/lib/server-auth";
+import { LEAVES_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
 import { parseCourseIds } from "@/lib/exam-course-links";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
@@ -11,7 +12,7 @@ import { withDatabaseSchema } from "@/lib/schema-readiness";
 /** Fresh, read-only form context. Leave staff need not also have exams.view,
  * and the startup exam cache may predate a change to an exam or enrollment. */
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, "follow-up.view");
+  const authError = await requireAnyPermission(req, LEAVES_VIEW_PERMISSIONS);
   if (authError) return authError;
 
   const studentId = new URL(req.url).searchParams.get("studentId")?.trim();

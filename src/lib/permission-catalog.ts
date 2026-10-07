@@ -405,6 +405,8 @@ export const ALL_VIEW_PERMISSION_IDS = PERMISSION_CATALOG.filter(
  * whole-follow-up permission. A calls-only account needs nothing else.
  */
 export const CALLS_VIEW_PERMISSIONS = ["follow-up.calls.view", "follow-up.view"];
+/** Reading «إدارة الإجازات» (the leaves list, the student search, a leave's exams). */
+export const LEAVES_VIEW_PERMISSIONS = ["follow-up.leaves.view", "follow-up.view"];
 
 export const ADMIN_ROLE_ID = "role_admin";
 export const ADMIN_ROLE_NAME = "مدير عام";
@@ -476,6 +478,15 @@ export const DEFAULT_ROLE_DEFINITIONS: DefaultRoleDefinition[] = [
     isDefault: true,
     // The dashboard holds the «إدارة المكالمات» and «ملاحظات المكالمات» buttons.
     permissions: ["system.dashboard", "follow-up.calls.view", "follow-up.calls.manage", "students.registry.view"],
+  },
+  {
+    // For staff who only handle leaves: «إدارة الإجازات» (search a student,
+    // add, edit and delete a leave and see its effect on exams) from the
+    // dashboard, and the dashboard's count of current leaves.
+    id: "role_leaves",
+    name: "موظف إجازات",
+    isDefault: true,
+    permissions: ["system.dashboard", "follow-up.leaves.view", "follow-up.leaves.manage"],
   },
   {
     id: "role_viewer",

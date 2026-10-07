@@ -4,7 +4,8 @@ export const dynamic = "force-dynamic";
 import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermission } from "@/lib/server-auth";
+import { requireAnyPermission, requirePermission } from "@/lib/server-auth";
+import { LEAVES_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
 import { db } from "@/lib/db";
 import {
   requireText,
@@ -511,7 +512,7 @@ async function removeDuplicateExamLeavesBeforeSave(
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, "follow-up.view");
+  const authError = await requireAnyPermission(req, LEAVES_VIEW_PERMISSIONS);
   if (authError) return authError;
 
   try {

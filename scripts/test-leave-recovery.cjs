@@ -87,7 +87,7 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  client.$queryRaw=async(parts,...values)=>{const q=raw(parts,values);return (await query(q.text,q.values)).rows;};
  client.$executeRaw=async(parts,...values)=>{const q=raw(parts,values);return (await query(q.text,q.values)).affectedRows;};
  mocks.set('@/lib/db',{db:client});
- mocks.set('@/lib/server-auth',{requirePermission:async()=>deny?new Response('{}',{status:403}):null});
+ mocks.set('@/lib/server-auth',{requirePermission:async()=>deny?new Response('{}',{status:403}):null,requireAnyPermission:async()=>deny?new Response('{}',{status:403}):null});
  mocks.set('@/lib/schema-readiness',{withDatabaseSchema:async fn=>fn()});
  mocks.set('@/lib/audit-log-server',{writeRequestAuditLog:async(...args)=>audits.push(args)});
  mocks.set('@/lib/serializable-transaction',{withSerializableTransaction:async fn=>{await pg.exec('BEGIN');try{const result=await fn(client);await pg.exec('COMMIT');return result;}catch(e){await pg.exec('ROLLBACK');throw e;}}});

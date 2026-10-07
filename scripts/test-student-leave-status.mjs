@@ -115,11 +115,12 @@ function routeHarness(options = {}) {
     ["next/server", { NextResponse: { json } }],
     ["@/lib/db", { db }],
     ["@/lib/server-auth", {
-      async requirePermission(_req, permission) {
-        calls.push({ method: "permission", permission });
+      async requireAnyPermission(_req, permissions) {
+        calls.push({ method: "permission", permissions });
         return options.denied ? json({ error: "Forbidden" }, { status: 403 }) : null;
       },
     }],
+    ["@/lib/permission-catalog", { LEAVES_VIEW_PERMISSIONS: ["follow-up.leaves.view", "follow-up.view"] }],
     ["@/lib/route-helpers", { routeErrorResponse: (_error, fallback) => json({ error: fallback }, { status: 500 }) }],
     ["@/lib/schema-readiness", { async withDatabaseSchema(operation) { return operation(); } }],
     ["@/lib/student-registry-filters-server", { buildStudentRegistrySearchWhere: (q) => ({ name: { contains: q } }) }],
@@ -153,7 +154,8 @@ const leaveRow = (studentId, overrides) => ({ studentId, leaveType: "exam", date
 test("the list uses the leaves view permission and denies before any database access", async () => {
   const { calls, get } = routeHarness({ denied: true });
   assert.equal((await get()).status, 403);
-  assert.deepEqual(calls, [{ method: "permission", permission: "follow-up.view" }]);
+  // «موظف إجازات» (the leaves permission) and the older «عرض المتابعة» both open it.
+  assert.deepEqual(calls, [{ method: "permission", permissions: ["follow-up.leaves.view", "follow-up.view"] }]);
 });
 
 test("without a search it lists only students with leaves, newest first, with counts per filter", async () => {

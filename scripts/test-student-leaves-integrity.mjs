@@ -86,7 +86,7 @@ must(
 );
 
 must(
-  listRoute.includes('requirePermission(req, "follow-up.view")') &&
+  listRoute.includes("requireAnyPermission(req, LEAVES_VIEW_PERMISSIONS)") &&
     listRoute.includes("buildStudentRegistrySearchWhere(query)") &&
     listRoute.includes("studentLeaveListWhere(") &&
     listRoute.includes("attachStudentOpportunitySnapshots") &&
@@ -232,7 +232,7 @@ must(
   leaves.includes("/api/student-leaves/context?studentId=") &&
     leaves.includes("payload.student?.id !== studentId") &&
     leaves.includes("!leavePreviewReady ||") &&
-    contextRoute.includes('requirePermission(req, "follow-up.view")') &&
+    contextRoute.includes("requireAnyPermission(req, LEAVES_VIEW_PERMISSIONS)") &&
     contextRoute.includes('"Cache-Control": "private, no-store"'),
   "معاينة الإجازة تحمل امتحانات الطالب كاملة وتنتظرها قبل الحفظ بصلاحية الإجازات",
 );
@@ -318,6 +318,22 @@ must(
   "ملاحظة «تم إنشاء هذا السجل تلقائياً من تسوية تاريخية…» تُمسح وحدها؛ الإجازة وسببها وأي ملاحظة كتبها شخص تبقى",
   "ترحيل مسح الملاحظات التلقائية يجب أن يمسح النصين التلقائيين فقط دون حذف أو تغيير أي شيء آخر.",
 );
+
+{
+  // «موظف إجازات»: the dashboard and everything about leaves, nothing else;
+  // reading leaves accepts the leaves permission, not only «عرض المتابعة».
+  const catalog = fs.readFileSync("src/lib/permission-catalog.ts", "utf8");
+  const routes = ["src/app/api/student-leaves/route.ts", "src/app/api/student-leaves/students/route.ts", "src/app/api/student-leaves/context/route.ts"]
+    .map((file) => fs.readFileSync(file, "utf8"));
+  must(
+    catalog.includes('id: "role_leaves",') &&
+      catalog.includes('name: "موظف إجازات",') &&
+      catalog.includes('permissions: ["system.dashboard", "follow-up.leaves.view", "follow-up.leaves.manage"],') &&
+      catalog.includes('export const LEAVES_VIEW_PERMISSIONS = ["follow-up.leaves.view", "follow-up.view"];') &&
+      routes.every((source) => source.includes("requireAnyPermission(req, LEAVES_VIEW_PERMISSIONS)") && !source.includes('requirePermission(req, "follow-up.view")')),
+    "دور «موظف إجازات» يفتح لوحة النظام و«إدارة الإجازات» كاملة (عرض، إضافة، تعديل، حذف) بدون باقي النظام",
+  );
+}
 
 if (failed) {
   console.error("\nفشل اختبار سلامة صفحة الإجازات. راجع الرسائل أعلاه.");

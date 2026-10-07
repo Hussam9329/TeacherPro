@@ -47,11 +47,12 @@ function harness(options = {}) {
     ["next/server", { NextResponse: { json } }],
     ["@/lib/db", { db }],
     ["@/lib/server-auth", {
-      async requirePermission(_req, permission) {
-        calls.push({ method: "permission", permission });
+      async requireAnyPermission(_req, permissions) {
+        calls.push({ method: "permission", permissions });
         return options.denied ? json({ error: "Forbidden" }, { status: 403 }) : null;
       },
     }],
+    ["@/lib/permission-catalog", { LEAVES_VIEW_PERMISSIONS: ["follow-up.leaves.view", "follow-up.view"] }],
     ["@/lib/exam-course-links", courseLinks.exports],
     ["@/lib/schema-readiness", {
       async withDatabaseSchema(operation) { calls.push({ method: "schema" }); return operation(); },
@@ -72,7 +73,8 @@ function harness(options = {}) {
 test("leave context uses follow-up permission and denies before any database access", async () => {
   const { calls, get } = harness({ denied: true });
   assert.equal((await get()).status, 403);
-  assert.deepEqual(calls, [{ method: "permission", permission: "follow-up.view" }]);
+  // «موظف إجازات» (the leaves permission) and the older «عرض المتابعة» both open it.
+  assert.deepEqual(calls, [{ method: "permission", permissions: ["follow-up.leaves.view", "follow-up.view"] }]);
 });
 
 test("missing student selection is rejected before reading the database", async () => {
