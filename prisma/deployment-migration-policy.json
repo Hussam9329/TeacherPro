@@ -294,5 +294,9 @@
   "20261006090000_call_batches": {
     "kind": "expand",
     "checksum": "e49eb0323972b03f12ed38b5f5306e0f5be829fd84ea79ed03dc38b6a870b7d4"
+  },
+  "20261007090000_call_window_away": {
+    "kind": "expand",
+    "checksum": "3efb577ea1ee981f3ba6780087060fc7d5646fdb5bb164da7c99627b34e260dc"
   }
 }

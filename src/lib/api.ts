@@ -2049,6 +2049,8 @@ export type LiveCallWindowRow = {
   actedToday: number;
   openedAt: string;
   lastSeenAt: string;
+  /** The page is in the background (on a call, screen locked); its batch waits. */
+  away: boolean;
   mine: boolean;
 };
 
@@ -2058,17 +2060,25 @@ export type LiveCallWindowRow = {
  * beat must never be queued and replayed later.
  */
 export const callWindowApi = {
-  beat: async (body: { windowId: string; courseId: string; examId: string }): Promise<boolean> => {
+  /**
+   * A beat. `away`: the page is going to the background (keepalive, so it is
+   * sent even as the page freezes). Answers with the students this window
+   * still holds, or null when the beat failed.
+   */
+  beat: async (body: { windowId: string; courseId: string; examId: string; away?: boolean }): Promise<string[] | null> => {
     try {
       const res = await fetch("/api/student-calls/presence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
+        keepalive: Boolean(body.away),
         body: JSON.stringify(body),
       });
-      return res.ok;
+      if (!res.ok) return null;
+      const data = (await res.json().catch(() => null)) as { held?: unknown } | null;
+      return Array.isArray(data?.held) ? data.held.map(String) : null;
     } catch {
-      return false;
+      return null;
     }
   },
   close: (windowId: string) => {

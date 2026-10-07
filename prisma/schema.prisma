@@ -306,6 +306,8 @@ model CallWindow {
   examId     String   @default("")
   openedAt   DateTime @default(now())
   lastSeenAt DateTime @default(now())
+  /// Set while the page is in the background: the batch stays held until then.
+  awayUntil  DateTime?
   reservations CallReservation[]
 
   @@index([lastSeenAt])

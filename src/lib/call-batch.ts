@@ -4,8 +4,13 @@
  *
  * - A window takes a batch only when asked, and only from students nobody holds.
  * - Any contact action («تم الاتصال», «لم يرد», «الرقم خاطئ») ends the hold.
- * - A window that stops beating (closed, laptop asleep, offline) is dropped
- *   after CALL_WINDOW_TTL_MS and its untouched students go back to everyone.
+ * - A window that stops beating (crashed, offline) is dropped after
+ *   CALL_WINDOW_TTL_MS and its untouched students go back to everyone.
+ * - A window that went to the background (the caller is on a call from the
+ *   same phone, the screen locked) says so, and keeps its batch for
+ *   CALL_WINDOW_AWAY_MS. Closing the page gives the batch back at once.
+ * - A window only shows students it still holds: when a beat finds one gone,
+ *   the list reloads.
  * - «لم يرد» comes back to the shared list after CALL_NO_ANSWER_RETRY_MS.
  *
  * Pure rules only; the database side is call-reservations-server.ts.
@@ -13,6 +18,7 @@
 export const CALL_BATCH_SIZE = 10;
 export const CALL_WINDOW_TTL_MS = 2 * 60 * 1000;
 export const CALL_WINDOW_HEARTBEAT_MS = 30 * 1000;
+export const CALL_WINDOW_AWAY_MS = 15 * 60 * 1000;
 export const CALL_NO_ANSWER_RETRY_MS = 60 * 60 * 1000;
 
 /** A window id is made by the browser; anything else is refused. */
@@ -21,9 +27,15 @@ export function parseCallWindowId(value: unknown): string | null {
   return /^[A-Za-z0-9-]{8,64}$/.test(id) ? id : null;
 }
 
-export function callWindowAlive(lastSeenAt: Date | string, now = new Date()): boolean {
+export function callWindowAlive(
+  lastSeenAt: Date | string,
+  now = new Date(),
+  awayUntil: Date | string | null = null,
+): boolean {
   const seen = new Date(lastSeenAt).getTime();
-  return Number.isFinite(seen) && now.getTime() - seen <= CALL_WINDOW_TTL_MS;
+  if (Number.isFinite(seen) && now.getTime() - seen <= CALL_WINDOW_TTL_MS) return true;
+  const away = awayUntil ? new Date(awayUntil).getTime() : NaN;
+  return Number.isFinite(away) && away >= now.getTime();
 }
 
 type ContactCallLike = {

@@ -135,6 +135,41 @@ const { CALL_BATCH_SIZE } = require("../src/lib/call-batch.ts");
   assert.equal(await server.touchCallWindow(client, { id: "window-a1", owner: owner("u1"), courseId: "c", examId: "e1" }, t3), true);
   step("a window belongs to the account that opened it");
 
+  // The reported case: a caller steps away (a call from the same phone, the
+  // screen locked) and their page goes silent. A page that said «away» keeps
+  // its batch for the whole call; another account never gets those names.
+  await server.releaseCallBatch(client, "window-a1", "e1");
+  await open("window-a1", "u1", "e1", t3);
+  const away = await claim("window-a1", "e1", t3);
+  assert.equal(away.size, 10);
+  await server.touchCallWindow(client, { id: "window-a1", owner: owner("u1"), courseId: "c", examId: "e1" }, t3, { away: true });
+  const t10 = later(10 * 60 * 1000);
+  await server.releaseStaleCallWindows(client, t10);
+  assert.deepEqual(new Set(await server.heldByCallWindow(client, "window-a1", "e1", t10)), away, "ten silent minutes away: still held");
+  await open("window-b2", "u2", "e1", t10);
+  ownerOf["window-b2"] = "u2";
+  const other = await claim("window-b2", "e1", t10);
+  assert.equal([...other].filter((id) => away.has(id)).length, 0, "another account does not get the away window's names");
+  // Back on the page: a plain beat ends «away», and the batch is still there.
+  await open("window-a1", "u1", "e1", t10);
+  assert.equal((await db.query(`SELECT "awayUntil" FROM "CallWindow" WHERE id = 'window-a1'`)).rows[0].awayUntil, null);
+  assert.deepEqual(new Set(await server.heldByCallWindow(client, "window-a1", "e1", t10)), away);
+  step("a caller away on a call keeps their batch; nobody else gets those names");
+
+  // Without «away», two silent minutes still give the batch back, and the
+  // window's next beat learns it holds nothing, so its page drops the names.
+  const t13 = later(13 * 60 * 1000);
+  await open("window-b2", "u2", "e1", t13);
+  await server.releaseStaleCallWindows(client, t13);
+  assert.equal((await server.liveCallHolders(client, "e1", t13)).some((h) => h.windowId === "window-a1"), false);
+  await open("window-a1", "u1", "e1", t13);
+  assert.deepEqual(await server.heldByCallWindow(client, "window-a1", "e1", t13), [], "the returning page learns its batch is gone");
+  // An away window past its grace is dropped too.
+  await server.touchCallWindow(client, { id: "window-b2", owner: owner("u2"), courseId: "c", examId: "e1" }, t13, { away: true });
+  await server.releaseStaleCallWindows(client, later(29 * 60 * 1000));
+  assert.equal((await db.query(`SELECT COUNT(*)::int AS n FROM "CallWindow" WHERE id = 'window-b2'`)).rows[0].n, 0);
+  step("a silent page without «away» loses its batch after two minutes, and learns it on return");
+
   // Who acted is stored on the call row.
   await db.exec(`INSERT INTO "StudentCall" (id, "studentId", "examId", category, status, "actedAt", "actedById", "actedByName")
     VALUES ('call-1', 's01', 'e1', 'grade:x', 'تم الاتصال', now(), 'u1', 'staff u1')`);

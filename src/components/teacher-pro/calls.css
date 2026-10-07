@@ -193,6 +193,7 @@
 }
 .tp-call-live__row > b:first-child { color: var(--foreground); font-size: 0.95rem; }
 .tp-call-live__row span b { color: var(--foreground); font-variant-numeric: tabular-nums; }
+.tp-call-live__away { padding: 0.1rem 0.6rem; border: 1px solid var(--status-warning-border); border-radius: 999px; background: var(--status-warning-bg); color: var(--status-warning-fg); font-size: 0.8rem; font-weight: 700; }
 
 .tp-calls__pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.6rem 1rem; font-size: 0.85rem; color: var(--muted-foreground); }
 .tp-calls__pager b { color: var(--foreground); font-variant-numeric: tabular-nums; }

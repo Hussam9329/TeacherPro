@@ -689,9 +689,13 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   }, [syncKey]);
 
   // «دفعات»: while this window is open on an exam it beats, so the batch it
-  // holds stays its own; when it closes (or the page goes away) the batch
-  // goes back to everyone at once instead of after the timeout.
+  // holds stays its own. In the background (a call from the same phone, the
+  // screen locked) its beats say «away» and the batch waits for it; closing
+  // the page gives the batch back to everyone at once. Each beat answers with
+  // the students the window still holds: if a shown one went to someone else
+  // (the window was gone too long), the list reloads so nobody shares a name.
   const callWindowOpenRef = useRef(false);
+  const callBatchShownRef = useRef<string[]>([]);
   useEffect(() => {
     if (!canManageCalls || !callCourseId || !callExamId) {
       if (callWindowOpenRef.current) {
@@ -701,14 +705,24 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       return;
     }
     callWindowOpenRef.current = true;
-    const beat = () => void callWindowApi.beat({ windowId: callWindowId, courseId: callCourseId, examId: callExamId });
+    const beat = () => {
+      const away = document.visibilityState === "hidden";
+      const sequence = callCandidatesRequestSequenceRef.current;
+      void callWindowApi.beat({ windowId: callWindowId, courseId: callCourseId, examId: callExamId, away }).then((held) => {
+        // A list loaded after this beat left already shows what is held.
+        if (!held || away || sequence !== callCandidatesRequestSequenceRef.current) return;
+        const holding = new Set(held);
+        if (!callBatchShownRef.current.some((studentId) => !holding.has(studentId))) return;
+        toast.warning("بعض أسماء دفعتك راحت لموظف ثاني لأن الصفحة بقت مسكّرة مدة طويلة. تحدثت القائمة.");
+        setCallFilterRefreshKey((current) => current + 1);
+      });
+    };
     const timer = window.setInterval(beat, CALL_WINDOW_HEARTBEAT_MS);
-    const onVisible = () => { if (document.visibilityState === "visible") beat(); };
-    document.addEventListener("visibilitychange", onVisible);
+    document.addEventListener("visibilitychange", beat);
     window.addEventListener("online", beat);
     return () => {
       window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("visibilitychange", beat);
       window.removeEventListener("online", beat);
     };
   }, [canManageCalls, callCourseId, callExamId, callWindowId]);
@@ -718,9 +732,12 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       callWindowOpenRef.current = false;
       callWindowApi.close(callWindowId);
     };
-    window.addEventListener("pagehide", close);
+    // A page kept for «back» may return: it only stepped away (its hidden beat
+    // already said so). Any other unload closes the window.
+    const onPageHide = (event: PageTransitionEvent) => { if (!event.persisted) close(); };
+    window.addEventListener("pagehide", onPageHide);
     return () => {
-      window.removeEventListener("pagehide", close);
+      window.removeEventListener("pagehide", onPageHide);
       close();
     };
   }, [callWindowId]);
@@ -835,6 +852,14 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       : visibleCallRows.filter(
           (row) => !contactStatusMatchesFilter(callContactStatusFilter, callStatusForLog(callLogForRow(row))),
         ).length;
+
+  // The batch students shown without an action yet: the ones this window must
+  // still hold (an action ends the hold on purpose).
+  useEffect(() => {
+    callBatchShownRef.current = callBatchView
+      ? visibleCallRows.filter((row) => !callStatusForLog(callLogForRow(row))).map((row) => row.student.id)
+      : [];
+  });
 
   const callStatValue = (value: number | undefined) => {
     if (callDatabaseStatsLoading && !callDatabaseStats) return "…";
@@ -2107,6 +2132,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                       <b>{window.userName}{window.mine ? " (أنت)" : ""}</b>
                       <span>{[window.courseName, window.examName].filter(Boolean).join(" · ") || "—"}</span>
                       <span>باقي بدفعته: <b>{window.held}</b></span>
+                      {window.away && <span className="tp-call-live__away">خارج الصفحة — دفعته محجوزة لحد ربع ساعة</span>}
                       <span>سوّى اليوم: <b>{window.actedToday}</b></span>
                     </li>
                   ))}

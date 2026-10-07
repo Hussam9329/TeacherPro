@@ -534,6 +534,7 @@ test("«دفعات»: who still needs a call, and the next batch in list order",
   assert.equal(batch.callCaseOpenForBatch({ status: "لم يرد", actedAt: null, createdAt: hoursAgo(30) }, now), true, "old rows use their creation time");
   assert.equal(batch.CALL_BATCH_SIZE, 10);
   assert.equal(batch.CALL_WINDOW_TTL_MS, 2 * 60 * 1000);
+  assert.equal(batch.CALL_WINDOW_AWAY_MS, 15 * 60 * 1000);
   assert.equal(batch.CALL_NO_ANSWER_RETRY_MS, 60 * 60 * 1000);
   const ids = Array.from({ length: 15 }, (_, i) => `s${i}`);
   assert.deepEqual(batch.pickCallBatch(ids, new Set(["s0", "s2"]), 4), ["s1", "s3", "s4", "s5"]);
@@ -544,4 +545,6 @@ test("«دفعات»: who still needs a call, and the next batch in list order",
   assert.equal(batch.parseCallWindowId("bad id with spaces"), null);
   assert.equal(batch.callWindowAlive(hoursAgo(1 / 60), now), true, "a beat a minute ago");
   assert.equal(batch.callWindowAlive(hoursAgo(3 / 60), now), false, "silent for three minutes");
+  assert.equal(batch.callWindowAlive(hoursAgo(10 / 60), now, new Date(now.getTime() + 5 * 60 * 1000)), true, "away on a call");
+  assert.equal(batch.callWindowAlive(hoursAgo(20 / 60), now, hoursAgo(1 / 60)), false, "away past its grace");
 });

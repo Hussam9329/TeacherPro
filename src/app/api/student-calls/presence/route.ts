@@ -10,6 +10,7 @@ import { normalizeListFilter } from "@/lib/all-filter";
 import { parseCallWindowId } from "@/lib/call-batch";
 import {
   closeCallWindow,
+  heldByCallWindow,
   liveCallWindows,
   releaseStaleCallWindows,
   touchCallWindow,
@@ -17,8 +18,10 @@ import {
 import { baghdadTodayKey } from "@/lib/baghdad-time";
 
 /**
- * «دفعات» in إدارة المكالمات. POST: an open window beats (or closes) so the
- * batch it holds stays its own. GET: the admin's «منو شغال هسه».
+ * «دفعات» in إدارة المكالمات. POST: an open window beats (or says it went to
+ * the background, or closes) so the batch it holds stays its own; a beat
+ * answers with the students the window still holds, so the page drops any
+ * that went to someone else. GET: the admin's «منو شغال هسه».
  */
 export async function POST(req: NextRequest) {
   const principal = await requirePermissionPrincipal(req, "follow-up.calls.manage");
@@ -35,12 +38,14 @@ export async function POST(req: NextRequest) {
     const courseId = normalizeListFilter(body?.courseId);
     const examId = normalizeListFilter(body?.examId);
     if (!courseId || !examId) return validationError("اختر الدورة والامتحان أولاً.");
-    const owned = await withDatabaseSchema(() => db.$transaction(async (tx) => {
-      await releaseStaleCallWindows(tx);
-      return touchCallWindow(tx, { id: windowId, owner, courseId, examId });
+    const now = new Date();
+    const held = await withDatabaseSchema(() => db.$transaction(async (tx) => {
+      await releaseStaleCallWindows(tx, now);
+      const owned = await touchCallWindow(tx, { id: windowId, owner, courseId, examId }, now, { away: body?.away === true });
+      return owned ? heldByCallWindow(tx, windowId, examId, now) : null;
     }), "CallWindow");
-    if (!owned) return NextResponse.json({ error: "هذه النافذة لحساب آخر." }, { status: 409 });
-    return NextResponse.json({ ok: true });
+    if (!held) return NextResponse.json({ error: "هذه النافذة لحساب آخر." }, { status: 409 });
+    return NextResponse.json({ ok: true, held });
   } catch (error) {
     return routeErrorResponse(error, "تعذر تحديث نافذة المكالمات.");
   }
@@ -58,6 +63,7 @@ export async function GET(req: NextRequest) {
     const examIds = [...new Set(windows.map((window) => window.examId).filter(Boolean))];
     const userIds = [...new Set(windows.map((window) => window.userId))];
     const todayStart = new Date(`${baghdadTodayKey()}T00:00:00+03:00`);
+    const now = new Date();
     const [courses, exams, acted] = await Promise.all([
       db.course.findMany({ where: { id: { in: courseIds } }, select: { id: true, name: true } }),
       db.exam.findMany({ where: { id: { in: examIds } }, select: { id: true, name: true } }),
@@ -81,6 +87,8 @@ export async function GET(req: NextRequest) {
         actedToday: actedToday.get(window.userId) || 0,
         openedAt: window.openedAt,
         lastSeenAt: window.lastSeenAt,
+        // On a call from the same phone, or the screen locked: the batch waits.
+        away: Boolean(window.awayUntil && new Date(window.awayUntil).getTime() >= now.getTime()),
         mine: window.userId === principal.id,
       })),
     });
