@@ -302,5 +302,9 @@
   "20261007120000_supervisors_full_access": {
     "kind": "audited-data-reconciliation",
     "checksum": "fdfd92f6c357eb1347fa77158a971b4d01cdfc71fc1e0db5326ffdb2433ffcc6"
+  },
+  "20261007130000_supervisor_accounts_own_permissions": {
+    "kind": "audited-data-reconciliation",
+    "checksum": "73c8fc0b124f71b223489aab8f59e75138dd7014a072fe6e0c4ae8d0580d59b5"
   }
 }

@@ -84,6 +84,10 @@ function parsePermissionList(value: unknown): string[] {
   }
 }
 
+function isAccountsPermission(permission: string): boolean {
+  return permission.startsWith('accounts.') || permission === 'page.accounts.view';
+}
+
 function mergePermissions(...values: unknown[]): string[] {
   return Array.from(new Set(values.flatMap(parsePermissionList)));
 }
@@ -108,8 +112,14 @@ export async function findUserByUsername(username: string) {
 }
 
 export function toAuthPrincipal(user: NonNullable<DbUserWithRole>): AuthPrincipal {
-  const permissions = mergePermissions(user.roleRef?.permissions, user.permissions);
   const isAdmin = isAdminUser(user);
+  let permissions = mergePermissions(user.roleRef?.permissions, user.permissions);
+  // The accounts and permissions pages are what sets مدير النظام apart from
+  // the supervisors: whoever holds «إشراف كامل» never gets them, not even
+  // from an old copy of the role kept on the account itself.
+  if (!isAdmin && permissions.includes('system.oversight')) {
+    permissions = permissions.filter((permission) => !isAccountsPermission(permission));
+  }
   return {
     id: user.id,
     username: user.username,

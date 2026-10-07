@@ -141,6 +141,16 @@ must(
         .every((file) => read(file).includes("oversees(principal)")),
     "دور المشرف ياخذ كل الصلاحيات عدا الحسابات والصلاحيات، ويتعامل مثل مدير النظام بباقي النظام",
   );
+  // An old supervisor account keeps its own copy of the old role, accounts
+  // views included: the server drops them and the migration cleans the copy.
+  const cleanup = read("prisma/migrations/20261007130000_supervisor_accounts_own_permissions/migration.sql");
+  must(
+    auth.includes("if (!isAdmin && permissions.includes('system.oversight')) {") &&
+      auth.includes("permissions = permissions.filter((permission) => !isAccountsPermission(permission));") &&
+      cleanup.includes(`WHERE "roleId" = 'role_supervisor' AND "permissions" LIKE '%accounts.%'`) &&
+      cleanup.includes("item.value NOT LIKE 'accounts.%' AND item.value <> 'page.accounts.view'"),
+    "حساب مشرف قديم بنسخته الخاصة من الصلاحيات ما تطلعله الحسابات",
+  );
 }
 
 if (failed) {
