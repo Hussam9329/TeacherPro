@@ -79,6 +79,7 @@ function harness() {
   const reopens = [];
   const toasts = [];
   const copies = [];
+  const opened = [];
   const intervals = new Map();
   let props = {
     open: true,
@@ -154,7 +155,7 @@ function harness() {
   const dependencies = {
     react,
     'react/jsx-runtime': { jsx, jsxs: jsx },
-    'lucide-react': named(['Archive', 'Check', 'CheckCheck', 'ClipboardList', 'Loader2', 'RefreshCw', 'RotateCcw', 'Search', 'Send', 'SlidersHorizontal', 'X']),
+    'lucide-react': named(['Archive', 'Check', 'CheckCheck', 'ClipboardList', 'Loader2', 'Radiation', 'RefreshCw', 'RotateCcw', 'Search', 'Send', 'SlidersHorizontal', 'X']),
     '@/components/ui/button': named(['Button']),
     '@/components/ui/dialog': named(['Dialog', 'DialogContent', 'DialogHeader', 'DialogTitle']),
     '@/components/ui/input': named(['Input']),
@@ -166,9 +167,13 @@ function harness() {
     '@/lib/baghdad-time': loadHelper('src/lib/baghdad-time.ts'),
     '@/lib/format': loadHelper('src/lib/format.ts'),
     '@/lib/call-note-telegram': loadHelper('src/lib/call-note-telegram.ts'),
-    '@/lib/code-closure-contact': { copyText: (text, near) => { copies.push({ text, near }); return Promise.resolve(true); } },
+    '@/lib/code-closure-contact': {
+      ...loadHelper('src/lib/code-closure-contact.ts'),
+      copyText: (text, near) => { copies.push({ text, near }); return Promise.resolve(true); },
+    },
     './student-registry-helpers': loadHelper('src/components/teacher-pro/student-registry-helpers.ts'),
     './ui-kit': named(['EmptyState', 'LoadingState']),
+    './code-closures-dialog.css': {},
   };
   const context = {
     exports: {},
@@ -181,6 +186,7 @@ function harness() {
     Map,
     window: {
       setInterval(callback) { intervals.set(++timer, callback); return timer; },
+      open(url, target, features) { opened.push({ url, target, features }); },
       clearInterval(id) { intervals.delete(id); },
       addEventListener() {},
       removeEventListener() {},
@@ -237,6 +243,8 @@ function harness() {
     },
     // «المعلّقة» / «الأرشيف».
     switchView(key) { walk(tree).find((node) => node.type === 'button' && node.props['data-notes-view'] === key).props.onClick(); render(); },
+    platformButtons() { return walk(tree).filter((node) => node.type === 'button' && String(node.props.className || '').includes('tp-notes__platform')); },
+    opened,
     returns() { return walk(tree).filter((node) => node.type === 'Button' && node.props['data-note-return'] === 'true'); },
     pressedAction() { return walk(tree).find((node) => node.type === 'button' && node.props['data-action-filter'] && node.props['aria-pressed'] === true)?.props['data-action-filter']; },
     text() { return JSON.stringify(tree); },
@@ -579,6 +587,29 @@ const note = (id = 'n1') => ({
   view.switchView('pending');
   assert.equal(view.reads.at(-1).view, 'pending');
   console.log('PASS: completed notes stay in «الأرشيف» and «إرجاع» sends one back.');
+
+  // The platform button from «إغلاق الكودات»: only when the server allows it,
+  // it copies the student's phone the platform's way and opens the platform.
+  view = harness();
+  view.render();
+  view.reads[0].resolve({ notes: [{ ...note('np'), student: { ...note('np').student, phone: null } }] });
+  await view.flush();
+  assert.equal(view.platformButtons().length, 0, 'no platform button without the server\'s permission');
+  view = harness();
+  view.render();
+  const withPhone = { ...note('ph'), student: { ...note('ph').student, phone: '07705550679' } };
+  view.reads[0].resolve({ notes: [withPhone], platform: true });
+  await view.flush();
+  assert.equal(view.platformButtons().length, 1);
+  const platformButton = { tagName: 'BUTTON' };
+  view.platformButtons()[0].props.onClick({ currentTarget: platformButton });
+  await view.flush();
+  assert.equal(view.copies.at(-1).text, '009647705550679');
+  assert.equal(view.copies.at(-1).near, platformButton);
+  assert.deepEqual(view.opened.at(-1), { url: 'https://www.mz-academy.com/ar/teachers/users/active', target: '_blank', features: 'noopener,noreferrer' });
+  assert.match(view.toasts.at(-1).message, /نُسخ رقم الطالب 009647705550679/);
+  assert.equal(view.platformButtons()[0].props['data-done'], true, 'the button shows it was used');
+  console.log('PASS: the platform button copies the phone and opens the platform, as in «إغلاق الكودات».');
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

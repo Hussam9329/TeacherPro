@@ -9,7 +9,7 @@ const CATEGORY = 'call-student-note';
 const courses = [{ id: 'course-a', name: 'الدورة الأولى' }, { id: 'course-b', name: 'الدورة الثانية' }];
 const exams = ['a', 'b', 'c'].map((suffix) => ({ id: `exam-${suffix}`, name: `امتحان ${suffix}` }));
 const students = [
-  { id: 'student-a', name: 'طالب أول', code: 'BIO-A', telegram: '123456789', username: 'student_one', status: 'نشط', courseId: 'course-a' },
+  { id: 'student-a', name: 'طالب أول', code: 'BIO-A', telegram: '123456789', username: 'student_one', phone: '07705550679', status: 'نشط', courseId: 'course-a' },
   { id: 'student-b', name: 'طالب ثان', code: 'BIO-B', telegram: null, username: null, status: 'مفصول', courseId: 'course-b' },
   { id: 'archived', name: 'طالب مؤرشف', code: 'BIO-X', status: 'مؤرشف', courseId: 'course-a' },
 ].map((student) => ({ ...student, course: courses.find((course) => course.id === student.courseId) }));
@@ -61,7 +61,8 @@ function matches(row, where) {
 }
 function project(row, select) {
   if (!row) return null;
-  return Object.fromEntries(Object.entries(select).map(([key, value]) => [key,
+  // Like Prisma, a field selected with `false` is left out.
+  return Object.fromEntries(Object.entries(select).filter(([, value]) => value !== false).map(([key, value]) => [key,
     value === true ? row[key] : project(row[key], value.select),
   ]));
 }
@@ -95,13 +96,14 @@ class CallNoteMutationError extends Error {
 const overrides = {
   '@/lib/db': { db },
   '@/lib/server-auth': {
-    requireAnyPermission: async (_req, requestedPermissions) => {
+    requireAnyPermissionPrincipal: async (_req, requestedPermissions) => {
       assert.deepEqual(requestedPermissions, ['follow-up.calls.view', 'follow-up.view']);
       const { hasPermission } = load('src/lib/server-auth.ts');
       const principal = { isAdmin: false, permissions };
       return requestedPermissions.some((permission) => hasPermission(principal, permission))
-        ? null : NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        ? principal : NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     },
+    oversees: (principal) => principal.permissions.includes('system.oversight'),
   },
   '@/lib/schema-readiness': { withDatabaseSchema: (fn) => fn() },
   '@/lib/route-helpers': { routeErrorResponse: (error) => { throw error; } },
@@ -154,6 +156,14 @@ async function request(query = '') {
   assert.equal(byId['b-general'].contactStatus, 'الرقم خاطئ');
   assert.equal(byId['b-general'].exam, null);
   assert(!byId.resolved && !byId.empty && !byId['archived-note']);
+  // Calls staff without the full student view get no phone and no platform button.
+  assert.equal(all.body.platform, false);
+  assert(!('phone' in byId['a-exam-a'].student), 'the phone is not sent to calls staff');
+  permissions = ['follow-up.calls.view', 'students.view'];
+  const withPlatform = await request();
+  assert.equal(withPlatform.body.platform, true, 'whoever opens «إغلاق الكودات» gets the platform button');
+  assert.equal(withPlatform.body.notes.find((item) => item.id === 'a-exam-a').student.phone, '07705550679');
+  permissions = ['follow-up.calls.view'];
 
   const courseOnly = await request('?courseId=course-a');
   assert.equal(courseOnly.response.status, 200);

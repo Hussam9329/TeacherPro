@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireAnyPermission, requirePermissionPrincipal } from "@/lib/server-auth";
+import { oversees, requireAnyPermissionPrincipal, requirePermissionPrincipal } from "@/lib/server-auth";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { CALL_STUDENT_NOTE_CATEGORY, hasManualCallNote } from "@/lib/call-notes-filter";
@@ -43,8 +43,12 @@ async function loadNoteResolutions(noteIds: string[]) {
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requireAnyPermission(req, ["follow-up.calls.view", "follow-up.view"]);
-  if (authError) return authError;
+  const principal = await requireAnyPermissionPrincipal(req, ["follow-up.calls.view", "follow-up.view"]);
+  if (principal instanceof NextResponse) return principal;
+  // The platform button (open the platform, copy the student's phone) is for
+  // whoever can open «إغلاق الكودات»; nobody else gets the phone from here.
+  const platform = principal.isAdmin || oversees(principal) ||
+    ["students.view", "page.dismissed-students.view"].some((permission) => principal.permissions.includes(permission));
   try {
     const params = new URL(req.url).searchParams;
     const archive = params.get("view") === "archive";
@@ -74,7 +78,7 @@ export async function GET(req: NextRequest) {
           id: true, studentId: true, examId: true, notes: true,
           category: true, noteRevision: true, noteResolved: true, createdAt: true,
           exam: { select: { id: true, name: true } },
-          student: { select: { id: true, name: true, code: true, telegram: true, username: true, courseId: true, course: { select: { id: true, name: true } } } },
+          student: { select: { id: true, name: true, code: true, telegram: true, username: true, phone: platform, courseId: true, course: { select: { id: true, name: true } } } },
         },
         orderBy: archive
           ? [{ createdAt: "desc" }, { id: "desc" }]
@@ -116,7 +120,7 @@ export async function GET(req: NextRequest) {
             ...(resolutions ? { resolvedAt: resolution?.at.toISOString() || null, resolvedBy: resolution?.by || null } : {}),
           };
         }),
-        exam, totalCount: visibleNotes.length, view: archive ? "archive" : "pending",
+        exam, totalCount: visibleNotes.length, view: archive ? "archive" : "pending", platform,
         source: "database",
       };
     }, "StudentCall");

@@ -16,6 +16,8 @@ export type ManagedCallNote = {
     code: string;
     telegram: string | null;
     username: string | null;
+    /** Only for whoever gets the platform button (see `platform`). */
+    phone?: string | null;
     courseId: string;
     course: { id: string; name: string } | null;
   };
@@ -34,6 +36,8 @@ export type CallNotesView = "pending" | "archive";
 export type ManagedCallNotesResponse = {
   notes: ManagedCallNote[];
   totalCount: number;
+  /** The viewer gets the platform button, as in «إغلاق الكودات». */
+  platform?: boolean;
 };
 
 async function responseBody(response: Response) {

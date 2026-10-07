@@ -3,7 +3,7 @@
 import { toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
 import { formatAppDate, formatAppTime } from "@/lib/format";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, Check, CheckCheck, ClipboardList, RefreshCw, RotateCcw, Search, Send, SlidersHorizontal, X } from "lucide-react";
+import { Archive, Check, CheckCheck, ClipboardList, Radiation, RefreshCw, RotateCcw, Search, Send, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -13,9 +13,10 @@ import { toast } from "@/lib/user-toast";
 import { normalizeForSearch } from "@/lib/validation";
 import { contactStatusMatchesFilter, normalizeContactStatusFilter, type ContactStatusFilter } from "@/lib/call-contact-status";
 import { GUARDIAN_NUMBER_NOT_WORKING_MESSAGE, telegramChatWithMessage } from "@/lib/call-note-telegram";
-import { copyText } from "@/lib/code-closure-contact";
+import { copyText, MZ_ACTIVE_USERS_URL, mzPlatformPhone } from "@/lib/code-closure-contact";
 import { describeTelegramHandle } from "./student-registry-helpers";
 import { EmptyState, LoadingState } from "./ui-kit";
+import "./code-closures-dialog.css";
 
 type Props = {
   open: boolean;
@@ -67,6 +68,9 @@ const VIEWS: Array<{ key: CallNotesView; label: string }> = [
 
 export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Props) {
   const [notes, setNotes] = useState<ManagedCallNote[]>([]);
+  // The platform button, as in «إغلاق الكودات», for whoever the server allows.
+  const [platform, setPlatform] = useState(false);
+  const [platformOpened, setPlatformOpened] = useState<Set<string>>(new Set());
   // Completed notes never disappear: they move to «الأرشيف».
   const [view, setView] = useState<CallNotesView>("pending");
   const viewRef = useRef<CallNotesView>("pending");
@@ -103,6 +107,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
       if (controller.signal.aborted || sequence !== requestSequenceRef.current ||
           mutationVersion !== mutationVersionRef.current || requestView !== viewRef.current) return;
       setNotes(result.notes);
+      setPlatform(Boolean(result.platform));
       setLoaded(true);
       setError("");
     } catch (cause) {
@@ -128,6 +133,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
     setFiltersOpen(false);
     viewRef.current = "pending";
     setView("pending");
+    setPlatformOpened(new Set());
     if (!open) return;
     void refresh();
     // The ordinary background sync intentionally waits while dialogs are open.
@@ -330,6 +336,24 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
     });
   }
 
+  // Same as «إغلاق الكودات»: copy the student's phone the way the platform
+  // search expects it (in the click, before the new tab takes the focus the
+  // clipboard needs), then open the platform's active users page.
+  function openPlatform(student: ManagedCallNote["student"], button: Element) {
+    const phone = mzPlatformPhone(student.phone);
+    const copying = phone ? copyText(phone, button) : Promise.resolve(false);
+    window.open(MZ_ACTIVE_USERS_URL, "_blank", "noopener,noreferrer");
+    setPlatformOpened((current) => new Set(current).add(student.id));
+    if (!phone) {
+      toast.error(`لا يوجد رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه في المنصة يدوياً.`);
+      return;
+    }
+    void copying.then((copied) => {
+      if (copied) toast.success(`نُسخ رقم الطالب ${phone}`);
+      else toast.error(`تعذر النسخ تلقائياً. رقم الطالب: ${phone}`);
+    });
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="tp-modal tp-notes" dir="rtl">
@@ -497,6 +521,18 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                           <span className="tp-modal__chip" data-tone="outline">
                             {group.length === 2 ? "ملاحظتان" : `${group.length} ملاحظات`}
                           </span>
+                        )}
+                        {platform && (
+                          <button
+                            type="button"
+                            className="tp-closure-card__danger tp-notes__platform"
+                            data-done={platformOpened.has(student.id) || undefined}
+                            onClick={(event) => openPlatform(student, event.currentTarget)}
+                            aria-label={`فتح المنصة ونسخ رقم هاتف ${student.name}${platformOpened.has(student.id) ? " — تم" : ""}`}
+                            title={platformOpened.has(student.id) ? "تم فتح المنصة ونسخ الرقم" : "فتح المنصة ونسخ رقم هاتف الطالب"}
+                          >
+                            <Radiation aria-hidden="true" />
+                          </button>
                         )}
                         {telegram.href ? (
                           <a
