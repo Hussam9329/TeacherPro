@@ -157,19 +157,18 @@ test("notes filter counts only non-empty manual student notes", () => {
   );
 });
 
-test("phone QR handoff uses a local tel URI with an international Iraqi number", () => {
+test("phone QR handoff dials the local 07 number (no +964 for Android to show as extra digits)", () => {
   assert.equal(
     phoneQr.callPhoneQrValue("0770 123 4567"),
-    "tel:+9647701234567",
+    "tel:07701234567",
   );
   assert.equal(
     phoneQr.callPhoneQrValue("٠٧٨١٢٣٤٥٦٧٨"),
-    "tel:+9647812345678",
+    "tel:07812345678",
   );
-  assert.equal(
-    phoneQr.callPhoneQrValue("+964 750 123 4567"),
-    "tel:+9647501234567",
-  );
+  for (const stored of ["+964 750 123 4567", "00964 750 123 4567", "9647501234567", "7501234567"]) {
+    assert.equal(phoneQr.callPhoneQrValue(stored), "tel:07501234567", stored);
+  }
   assert.equal(phoneQr.callPhoneQrValue(""), "");
 });
 

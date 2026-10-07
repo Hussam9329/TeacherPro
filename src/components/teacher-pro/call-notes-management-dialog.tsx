@@ -12,6 +12,8 @@ import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
 import { normalizeForSearch } from "@/lib/validation";
 import { contactStatusMatchesFilter, normalizeContactStatusFilter, type ContactStatusFilter } from "@/lib/call-contact-status";
+import { GUARDIAN_NUMBER_NOT_WORKING_MESSAGE } from "@/lib/call-note-telegram";
+import { copyText } from "@/lib/code-closure-contact";
 import { describeTelegramHandle } from "./student-registry-helpers";
 import { EmptyState, LoadingState } from "./ui-kit";
 
@@ -257,6 +259,15 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
     )) setExamId("");
   }
 
+  // Copied in the click itself, before the Telegram app takes the focus the
+  // clipboard needs; the link then opens the chat.
+  function copyGuardianMessage(name: string, link: Element) {
+    void copyText(GUARDIAN_NUMBER_NOT_WORKING_MESSAGE, link).then((copied) => {
+      if (copied) toast.success(`انفتحت محادثة ${name} والرسالة منسوخة — الصقها وأرسل.`);
+      else toast.error("تعذر نسخ الرسالة تلقائياً؛ انفتحت المحادثة فقط.");
+    });
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="tp-modal tp-notes" dir="rtl">
@@ -405,7 +416,14 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                           </span>
                         )}
                         {telegram.href ? (
-                          <a href={telegram.href} dir="ltr" className="tp-modal__tg tp-notes__tg" aria-label={`فتح تيليجرام ${student.name}`}>
+                          <a
+                            href={telegram.href}
+                            dir="ltr"
+                            className="tp-modal__tg tp-notes__tg"
+                            onClick={(event) => copyGuardianMessage(student.name, event.currentTarget)}
+                            aria-label={`فتح محادثة ${student.name} في تيليجرام ونسخ رسالة رقم ولي الأمر`}
+                            title="يفتح المحادثة وينسخ رسالة «رقم ولي الأمر ما يشتغل» — الصقها وأرسل"
+                          >
                             <Send className="size-3.5" aria-hidden="true" />
                             @{telegram.value}
                           </a>

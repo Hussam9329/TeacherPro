@@ -67,6 +67,7 @@ function harness() {
   const errors = [];
   const reopens = [];
   const toasts = [];
+  const copies = [];
   const intervals = new Map();
   let props = {
     open: true,
@@ -153,6 +154,8 @@ function harness() {
     '@/lib/call-contact-status': loadHelper('src/lib/call-contact-status.ts'),
     '@/lib/baghdad-time': loadHelper('src/lib/baghdad-time.ts'),
     '@/lib/format': loadHelper('src/lib/format.ts'),
+    '@/lib/call-note-telegram': loadHelper('src/lib/call-note-telegram.ts'),
+    '@/lib/code-closure-contact': { copyText: (text, near) => { copies.push({ text, near }); return Promise.resolve(true); } },
     './student-registry-helpers': loadHelper('src/components/teacher-pro/student-registry-helpers.ts'),
     './ui-kit': named(['EmptyState', 'LoadingState']),
   };
@@ -205,7 +208,7 @@ function harness() {
   }
 
   return {
-    reads, writes, errors, reopens, toasts, render,
+    reads, writes, errors, reopens, toasts, copies, render,
     async flush() {
       // Drain promises originating in the VM realm before applying state updates.
       await new Promise((resolve) => setImmediate(resolve));
@@ -439,6 +442,27 @@ const note = (id = 'n1') => ({
   assert(view.nodes('a').some((node) => node.props.href === 'tg://resolve?domain=current_student'));
   assert(view.text().includes('123456789'));
   assert(!view.text().includes('تيليجرام غير متوفر'), 'a missing Telegram shows nothing');
+  // The Telegram button copies the guardian-number message, word for word, and lets the link open the chat.
+  const chatLink = view.nodes('a').find((node) => node.props.href === 'tg://resolve?domain=current_student');
+  const clicked = { tagName: 'A' };
+  chatLink.props.onClick({ currentTarget: clicked });
+  await view.flush();
+  assert.equal(view.copies.length, 1);
+  assert.equal(view.copies[0].near, clicked, 'copied next to the clicked link, inside the dialog');
+  assert.equal(view.copies[0].text, [
+    'عزيزي الطالب، الكود مالتك متوقف لأن رقم ولي الأمر المسجّل عدنا ما يشتغل.',
+    '',
+    '✅ حتى يرجع يتفعل:',
+    'خلّي ولي أمرك يتصل اتصال عادي (على الرصيد) على رقم المتابعة:',
+    '📞 07750359796',
+    'ويذكر اسمك الرباعي.',
+    '',
+    '⚠️ لازم يكون رقمه آسياسيل أو زين.',
+    '',
+    'خلّي يتصل بأسرع وقت حتى نكمّل إجراءات فتح الكود وما نتأخر عليك 🙏',
+  ].join('\n'));
+  assert.match(view.toasts.at(-1).message, /والرسالة منسوخة/);
+  view.toasts.length = 0;
   const selectAction = (value) => {
     view.nodes('button').find((node) => node.props['data-action-filter'] === value).props.onClick();
     view.render();
