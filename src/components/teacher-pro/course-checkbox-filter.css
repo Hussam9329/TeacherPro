@@ -23,3 +23,13 @@
 .tp-course-filter__option:hover { border-color: var(--ring); }
 .tp-course-filter__option[data-checked] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
 .tp-course-filter__option[data-all] { font-weight: 800; }
+/* «كل الدورات» while only some courses are ticked: a dash, not a tick. */
+.tp-course-filter [data-slot="checkbox"][data-state="indeterminate"] { border-color: var(--primary); }
+.tp-course-filter [data-slot="checkbox"][data-state="indeterminate"] [data-slot="checkbox-indicator"] svg { display: none; }
+.tp-course-filter [data-slot="checkbox"][data-state="indeterminate"] [data-slot="checkbox-indicator"]::before {
+  content: "";
+  inline-size: 0.6rem;
+  block-size: 2px;
+  border-radius: 1px;
+  background: var(--primary);
+}

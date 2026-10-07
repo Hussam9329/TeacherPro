@@ -16,18 +16,23 @@ type Props = {
 
 /**
  * The course filter of a page: «كل الدورات», or one course or several
- * together. Choosing every course one by one is the same as «كل الدورات».
+ * together. With «كل الدورات» every course shows ticked; unticking one keeps
+ * the rest. «كل الدورات» shows a dash while only some are ticked. Ticking
+ * every course is «كل الدورات»; unticking the last one goes back to it too
+ * (a filter of no course would show nothing).
  */
 export function CourseCheckboxFilter({ courses, value, onChange, label = "الدورات" }: Props) {
   const baseId = useId();
   const known = new Set(courses.map((course) => course.id));
   const chosen = value.filter((id) => known.has(id));
   const all = chosen.length === 0;
+  const isChecked = (courseId: string) => all || chosen.includes(courseId);
 
   const toggle = (courseId: string) => {
-    const next = chosen.includes(courseId)
-      ? chosen.filter((id) => id !== courseId)
-      : [...chosen, courseId];
+    const ticked = all ? courses.map((course) => course.id) : chosen;
+    const next = ticked.includes(courseId)
+      ? ticked.filter((id) => id !== courseId)
+      : [...ticked, courseId];
     onChange(next.length === courses.length ? [] : next);
   };
 
@@ -38,12 +43,16 @@ export function CourseCheckboxFilter({ courses, value, onChange, label = "الد
         <span className="tp-course-filter__count">{all ? "الكل" : `${chosen.length} من ${courses.length}`}</span>
       </legend>
       <label htmlFor={`${baseId}-all`} className="tp-course-filter__option" data-all="true" data-checked={all || undefined}>
-        <Checkbox id={`${baseId}-all`} checked={all} onCheckedChange={() => { if (!all) onChange([]); }} />
+        <Checkbox
+          id={`${baseId}-all`}
+          checked={all ? true : "indeterminate"}
+          onCheckedChange={() => { if (!all) onChange([]); }}
+        />
         <span>كل الدورات</span>
       </label>
       <div className="tp-course-filter__list" role="group" aria-label={label}>
         {courses.map((course) => {
-          const checked = chosen.includes(course.id);
+          const checked = isChecked(course.id);
           return (
             <label key={course.id} htmlFor={`${baseId}-${course.id}`} className="tp-course-filter__option" data-checked={checked || undefined}>
               <Checkbox id={`${baseId}-${course.id}`} checked={checked} onCheckedChange={() => toggle(course.id)} />
