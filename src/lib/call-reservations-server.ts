@@ -189,7 +189,6 @@ export async function stillOpenCallCases(
   client: RawClient,
   studentIds: readonly string[],
   examId: string,
-  now = new Date(),
 ): Promise<Set<string>> {
   const ids = [...new Set(studentIds)].sort();
   if (!ids.length) return new Set();
@@ -200,7 +199,7 @@ export async function stillOpenCallCases(
     if (row?.free) free.add(studentId);
   }
   const latest = await latestCallRows(client, ids, examId);
-  return new Set(ids.filter((studentId) => free.has(studentId) && callCaseOpenForBatch(latest.get(studentId), now)));
+  return new Set(ids.filter((studentId) => free.has(studentId) && callCaseOpenForBatch(latest.get(studentId))));
 }
 
 /**
@@ -242,7 +241,7 @@ export async function claimCallBatch(
     const taken = new Set((await liveCallHolders(client, args.examId, now)).map((holder) => holder.studentId));
     const wanted = pickCallBatch(args.openStudentIds.filter((id) => !called.has(id)), taken, args.size - held.size);
     if (!wanted.length) break;
-    const open = await stillOpenCallCases(client, wanted, args.examId, now);
+    const open = await stillOpenCallCases(client, wanted, args.examId);
     for (const studentId of wanted) {
       if (open.has(studentId)) await holdCallCase(client, { id: args.windowId, ownerId: args.ownerId }, studentId, args.examId, now);
       else called.add(studentId);

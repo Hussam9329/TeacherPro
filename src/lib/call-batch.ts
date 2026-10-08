@@ -14,7 +14,8 @@
  * - A student is only called by whoever holds them: outside «دفعتي» (other
  *   chips, search) the numbers show after «خذه للاتصال» holds the student,
  *   and never while someone else holds them.
- * - «لم يرد» comes back to the shared list after CALL_NO_ANSWER_RETRY_MS.
+ * - «لم يرد» is an action like the others: the student is not handed out
+ *   again. Only taking the action back («بدون إجراء») reopens them.
  *
  * Pure rules only; the database side is call-reservations-server.ts.
  */
@@ -28,7 +29,6 @@ export const CALL_WINDOW_AWAY_MS = 15 * 60 * 1000;
  * so it cannot show students that are in someone else's batch.
  */
 export const CALL_CLIENT_PROTOCOL = 2;
-export const CALL_NO_ANSWER_RETRY_MS = 60 * 60 * 1000;
 
 /** A window id is made by the browser; anything else is refused. */
 export function parseCallWindowId(value: unknown): string | null {
@@ -50,18 +50,17 @@ export function callWindowAlive(
 type ContactCallLike = {
   status?: string | null;
   completed?: boolean | null;
-  actedAt?: Date | string | null;
-  createdAt?: Date | string | null;
 };
 
-/** Whether a student still needs a call: no action yet, or «لم يرد» an hour ago or more. */
-export function callCaseOpenForBatch(call: ContactCallLike | null | undefined, now = new Date()): boolean {
+/**
+ * Whether a student still needs a call: no action yet. Any action
+ * («تم الاتصال», «لم يرد», «الرقم خاطئ») closes the case for good.
+ */
+export function callCaseOpenForBatch(call: ContactCallLike | null | undefined): boolean {
   if (!call) return true;
   const status = String(call.status || "").trim();
   if (!status) return !call.completed;
-  if (status !== "لم يرد") return false;
-  const at = new Date(call.actedAt || call.createdAt || 0).getTime();
-  return !Number.isFinite(at) || now.getTime() - at >= CALL_NO_ANSWER_RETRY_MS;
+  return false;
 }
 
 /** The next students for a batch, in list order, skipping anyone already held. */

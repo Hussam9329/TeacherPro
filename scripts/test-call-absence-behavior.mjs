@@ -524,18 +524,19 @@ test("«المخصومين» leaves out leave, grace, passes and fails above the
 test("«دفعات»: who still needs a call, and the next batch in list order", () => {
   const now = new Date("2026-10-06T12:00:00.000Z");
   const hoursAgo = (h) => new Date(now.getTime() - h * 3600_000).toISOString();
-  assert.equal(batch.callCaseOpenForBatch(undefined, now), true, "nobody called yet");
-  assert.equal(batch.callCaseOpenForBatch({ status: "" }, now), true, "an action taken back");
-  assert.equal(batch.callCaseOpenForBatch({ status: "تم الاتصال" }, now), false);
-  assert.equal(batch.callCaseOpenForBatch({ status: "الرقم خاطئ" }, now), false);
-  assert.equal(batch.callCaseOpenForBatch({ status: "", completed: true }, now), false, "legacy completed row");
-  assert.equal(batch.callCaseOpenForBatch({ status: "لم يرد", actedAt: hoursAgo(0.5) }, now), false, "«لم يرد» half an hour ago waits");
-  assert.equal(batch.callCaseOpenForBatch({ status: "لم يرد", actedAt: hoursAgo(1) }, now), true, "«لم يرد» an hour ago comes back");
-  assert.equal(batch.callCaseOpenForBatch({ status: "لم يرد", actedAt: null, createdAt: hoursAgo(30) }, now), true, "old rows use their creation time");
+  assert.equal(batch.callCaseOpenForBatch(undefined), true, "nobody called yet");
+  assert.equal(batch.callCaseOpenForBatch({ status: "" }), true, "an action taken back");
+  assert.equal(batch.callCaseOpenForBatch({ status: "تم الاتصال" }), false);
+  assert.equal(batch.callCaseOpenForBatch({ status: "الرقم خاطئ" }), false);
+  assert.equal(batch.callCaseOpenForBatch({ status: "", completed: true }), false, "legacy completed row");
+  // «لم يرد» is an action like the others: it never comes back on its own.
+  assert.equal(batch.callCaseOpenForBatch({ status: "لم يرد", actedAt: hoursAgo(0.5) }), false, "«لم يرد» half an hour ago");
+  assert.equal(batch.callCaseOpenForBatch({ status: "لم يرد", actedAt: hoursAgo(1) }), false, "«لم يرد» an hour ago stays an action");
+  assert.equal(batch.callCaseOpenForBatch({ status: "لم يرد", actedAt: null, createdAt: hoursAgo(30) }), false, "old «لم يرد» rows stay actions");
+  assert.equal("CALL_NO_ANSWER_RETRY_MS" in batch, false, "no retry timer for «لم يرد»");
   assert.equal(batch.CALL_BATCH_SIZE, 10);
   assert.equal(batch.CALL_WINDOW_TTL_MS, 2 * 60 * 1000);
   assert.equal(batch.CALL_WINDOW_AWAY_MS, 15 * 60 * 1000);
-  assert.equal(batch.CALL_NO_ANSWER_RETRY_MS, 60 * 60 * 1000);
   const ids = Array.from({ length: 15 }, (_, i) => `s${i}`);
   assert.deepEqual(batch.pickCallBatch(ids, new Set(["s0", "s2"]), 4), ["s1", "s3", "s4", "s5"]);
   assert.equal(batch.pickCallBatch(ids, new Set()).length, 10);

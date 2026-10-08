@@ -760,7 +760,8 @@ export async function GET(req: NextRequest) {
         bestCallByStudentId.set(call.studentId, call);
       }
     });
-    const caseOpen = (studentId: string) => callCaseOpenForBatch(bestCallByStudentId.get(studentId), now);
+    // «لم يرد» counts as an action: only students with no action are handed out.
+    const caseOpen = (studentId: string) => callCaseOpenForBatch(bestCallByStudentId.get(studentId));
 
     // Every student this exam has a call for, before any filter.
     const allCases = selectedStudents.flatMap((student) => {
