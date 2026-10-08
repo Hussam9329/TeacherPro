@@ -176,17 +176,26 @@ const { CALL_BATCH_SIZE } = require("../src/lib/call-batch.ts");
   await db.exec(`DELETE FROM "CallReservation"; DELETE FROM "CallWindow";`);
   await open("window-c2", "u3", "e1", t13);
   ownerOf["window-c2"] = "u3";
+  const hoursBefore = (at, h) => new Date(at.getTime() - h * 3600_000).toISOString();
   await db.exec(`INSERT INTO "StudentCall" (id, "studentId", "examId", category, status, completed, "actedAt")
     VALUES ('just-called-1', 's01', 'e1', 'absent', 'تم الاتصال', true, now()),
            ('just-called-2', 's02', 'e1', 'absent', 'لم يرد', false, '${t13.toISOString()}'),
-           ('only-a-note', 's03', 'e1', 'call-student-note', '', false, now())`);
+           ('only-a-note', 's03', 'e1', 'call-student-note', '', false, now()),
+           ('old-no-answer', 's04', 'e1', 'absent', 'لم يرد', false, '${hoursBefore(t13, 30)}'),
+           ('taken-back', 's05', 'e1', 'absent', '', false, '${hoursBefore(t13, 30)}')`);
   const fresh = await claim("window-c2", "e1", t13);
   assert.equal(fresh.has("s01"), false, "a student called a moment ago is not handed out");
-  assert.equal(fresh.has("s02"), false, "nor one who did not answer a moment ago");
+  assert.equal(fresh.has("s02"), false, "nor one marked «لم يرد»");
+  assert.equal(fresh.has("s04"), false, "«لم يرد» is an action, however long ago");
+  assert.equal(fresh.has("s05"), true, "an action taken back («بدون إجراء») is handed out");
   assert.equal(fresh.has("s03"), true, "a note alone is not a call");
   assert.equal(fresh.size, 10, "the batch is filled from the next open students");
-  assert.equal((await db.query(`SELECT COUNT(*)::int AS n FROM "CallReservation" WHERE "studentId" IN ('s01', 's02')`)).rows[0].n, 0);
-  step("a student called while the batch was being picked is let go and replaced");
+  assert.equal((await db.query(`SELECT COUNT(*)::int AS n FROM "CallReservation" WHERE "studentId" IN ('s01', 's02', 's04')`)).rows[0].n, 0);
+  // When each hold began, so «دفعتي» keeps a «لم يرد» taken by hand to call again.
+  const since = await server.callHoldsSince(client, "window-c2", "e1");
+  assert.deepEqual([...since.keys()].sort(), [...fresh].sort());
+  assert(since.has("s05") && since.get("s05") === t13.getTime(), "a hold remembers when it began");
+  step("a student called while the batch was being picked is let go and replaced; «لم يرد» is never handed out again");
 
   // «خذه للاتصال» compares what the page shows with the student's status now.
   assert.equal(await server.currentCallStatus(client, "s01", "e1"), "تم الاتصال");

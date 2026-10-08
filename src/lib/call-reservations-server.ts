@@ -110,6 +110,18 @@ export async function heldByCallWindow(
     .map((holder) => holder.studentId);
 }
 
+/** When each of this window's holds on this exam began (milliseconds). */
+export async function callHoldsSince(
+  client: RawClient,
+  windowId: string,
+  examId: string,
+): Promise<Map<string, number>> {
+  const rows = await client.$queryRaw<Array<{ studentId: string; reservedAt: Date }>>`
+    SELECT "studentId", "reservedAt" FROM "CallReservation"
+    WHERE "windowId" = ${windowId} AND "examId" = ${examId}`;
+  return new Map(rows.map((row) => [row.studentId, new Date(row.reservedAt).getTime()]));
+}
+
 /** How many other windows are open on this exam now («يشتغل ويّاك»). */
 export async function countOtherLiveCallWindows(
   client: RawClient,

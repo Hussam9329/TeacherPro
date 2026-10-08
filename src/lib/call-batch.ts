@@ -1,3 +1,5 @@
+import { normalizeContactStatus } from "@/lib/call-contact-status";
+
 /**
  * «دفعات» in إدارة المكالمات: each open calls window holds a small batch of
  * students that nobody else gets, so two people never call the same student.
@@ -15,7 +17,8 @@
  *   chips, search) the numbers show after «خذه للاتصال» holds the student,
  *   and never while someone else holds them.
  * - «لم يرد» is an action like the others: the student is not handed out
- *   again. Only taking the action back («بدون إجراء») reopens them.
+ *   again. Only taking the action back («بدون إجراء») reopens them; calling
+ *   a «لم يرد» student again is by hand, with «خذه للاتصال».
  *
  * Pure rules only; the database side is call-reservations-server.ts.
  */
@@ -53,14 +56,13 @@ type ContactCallLike = {
 };
 
 /**
- * Whether a student still needs a call: no action yet. Any action
- * («تم الاتصال», «لم يرد», «الرقم خاطئ») closes the case for good.
+ * Whether a student still needs a call: «بدون إجراء», exactly as the page
+ * and its counts show it. Any action («تم الاتصال», «لم يرد», «الرقم خاطئ»)
+ * closes the case for good.
  */
 export function callCaseOpenForBatch(call: ContactCallLike | null | undefined): boolean {
   if (!call) return true;
-  const status = String(call.status || "").trim();
-  if (!status) return !call.completed;
-  return false;
+  return normalizeContactStatus({ status: String(call.status || ""), completed: Boolean(call.completed) }) === "";
 }
 
 /** The next students for a batch, in list order, skipping anyone already held. */

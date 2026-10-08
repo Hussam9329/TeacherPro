@@ -534,6 +534,9 @@ test("«دفعات»: who still needs a call, and the next batch in list order",
   assert.equal(batch.callCaseOpenForBatch({ status: "لم يرد", actedAt: hoursAgo(1) }), false, "«لم يرد» an hour ago stays an action");
   assert.equal(batch.callCaseOpenForBatch({ status: "لم يرد", actedAt: null, createdAt: hoursAgo(30) }), false, "old «لم يرد» rows stay actions");
   assert.equal("CALL_NO_ANSWER_RETRY_MS" in batch, false, "no retry timer for «لم يرد»");
+  // «بدون إجراء» means the same here as on the page and in its counts.
+  assert.equal(batch.callCaseOpenForBatch({ status: "مشغول", completed: false }), true, "an unknown old status shows as «بدون إجراء»");
+  assert.equal(batch.callCaseOpenForBatch({ status: "مشغول", completed: true }), false, "a completed one shows as «تم الاتصال»");
   assert.equal(batch.CALL_BATCH_SIZE, 10);
   assert.equal(batch.CALL_WINDOW_TTL_MS, 2 * 60 * 1000);
   assert.equal(batch.CALL_WINDOW_AWAY_MS, 15 * 60 * 1000);

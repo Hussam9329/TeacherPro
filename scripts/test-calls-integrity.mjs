@@ -462,7 +462,8 @@ assert(
     batch.includes('export const CALL_BATCH_SIZE = 10;') &&
       batch.includes('export const CALL_WINDOW_TTL_MS = 2 * 60 * 1000;') &&
       !batch.includes('CALL_NO_ANSWER_RETRY_MS') &&
-      batch.includes('  if (!status) return !call.completed;\n  return false;') &&
+      batch.includes('normalizeContactStatus(') &&
+      candidates.includes('!caseIds.has(studentId) || actedSinceHeld(studentId)') &&
       migration.includes('CREATE UNIQUE INDEX "CallReservation_studentId_examId_key"') &&
       reservations.includes('ON CONFLICT ("studentId", "examId") DO NOTHING'),
     'الدفعة ١٠ أسماء، والطالب ينحجز لنافذة وحدة بس، والنافذة الساكتة دقيقتين تنفك، و«لم يرد» إجراء ما يرجع يتوزع',

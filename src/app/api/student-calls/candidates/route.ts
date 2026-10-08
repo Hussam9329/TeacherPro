@@ -43,6 +43,7 @@ import {
   parseCallWindowId,
 } from "@/lib/call-batch";
 import {
+  callHoldsSince,
   claimCallBatch,
   countOtherLiveCallWindows,
   dropCallHold,
@@ -824,8 +825,20 @@ export async function GET(req: NextRequest) {
       if (canHold && windowId && ownsWindow) {
         const caseIds = new Set(allCases.map((item) => item.student.id));
         let mine = new Set(holders.filter((holder) => holder.windowId === windowId).map((holder) => holder.studentId));
-        // A held student who no longer needs a call, or left the list, is let go.
-        const finished = [...mine].filter((studentId) => !caseIds.has(studentId) || !caseOpen(studentId));
+        // A held student who left the list, or got an action after the hold
+        // began, is let go. One taken by hand to call again («خذه للاتصال» on
+        // a «لم يرد») keeps their action from before: the hold stays until
+        // the caller saves a new one, so nobody else calls them meanwhile.
+        const heldSince = mine.size
+          ? await withDatabaseSchema(() => callHoldsSince(db, windowId, examId), "CallWindow")
+          : new Map<string, number>();
+        const actedSinceHeld = (studentId: string) => {
+          if (caseOpen(studentId)) return false;
+          const call = bestCallByStudentId.get(studentId);
+          const actedAt = new Date(call?.actedAt || call?.createdAt || 0).getTime();
+          return actedAt > (heldSince.get(studentId) ?? Number.POSITIVE_INFINITY);
+        };
+        const finished = [...mine].filter((studentId) => !caseIds.has(studentId) || actedSinceHeld(studentId));
         if (finished.length) {
           await withDatabaseSchema(() => retryCallTransaction(() => db.$transaction(async (tx) => {
             for (const studentId of finished) await dropCallHold(tx, studentId, examId);
