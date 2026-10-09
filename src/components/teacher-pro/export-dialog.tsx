@@ -18,7 +18,7 @@ import { toast } from "@/lib/user-toast";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 import { buildProfessionalXlsx } from "@/lib/xlsx-export";
 import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
-import { buildReportOpportunityContext, buildReportTimelineEvents, buildStaffTimelineEvents, reportGradeTimelineDates, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, studentReportText, DISMISSED_NO_GRADE_TEXT, DURING_DISMISSAL_GRADE_MARK, examHeldDuringDismissal, isDuringDismissalGrade, reportDismissalPeriods, type ReportBalanceNote, type ReportTimelineEvent, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
+import { buildReportOpportunityContext, buildStaffTimelineEvents, reportGradeTimelineDates, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, studentReportText, DISMISSED_NO_GRADE_TEXT, DURING_DISMISSAL_GRADE_MARK, examHeldDuringDismissal, isDuringDismissalGrade, reportDismissalPeriods, type ReportBalanceNote, type ReportTimelineEvent, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
 import { isBonusOpportunityLog } from "@/lib/bonus-opportunity";
 import { withoutCancelledManualPairs } from "@/lib/opportunity-log-pairs";
 import { GRACE_PERIOD_EXCUSE_LABEL, isStudentInGracePeriod, normalizeGracePeriodRanges } from "@/lib/grace-periods";
@@ -88,6 +88,15 @@ export type StudentDetails = {
   balanceNotes?: ReportBalanceNote[];
   /** Public explanations of recorded changes, interleaved with exam results. */
   timelineEvents?: ReportTimelineEvent[];
+  /**
+   * Per timeline row (by its key): what kind of row it is, the opportunities it
+   * moved and the balance after; plus the sum that explains the balance when
+   * it adds up. Kinds and numbers only, so safe for the student's file.
+   */
+  opportunityView?: {
+    rows: Record<string, { category: StaffOpportunityCategory; delta: number | null; balanceAfter: number | null }>;
+    summary: StaffOpportunitySummary | null;
+  };
   studentSnapshot?: {
     name: string; code: string; status: string; opportunities: number | null; courseName?: string;
     opportunityLimit: number | null; registeredAt: string | null;
@@ -410,11 +419,17 @@ export function getHtmlReportExams(details: StudentDetailsMap) {
 /** Presentation only: the authoritative balance, status and pledge stay intact. */
 export function selectHtmlReportExams(details: StudentDetailsMap, selectedExamIds: string[]): StudentDetailsMap {
   const selected = new Set(selectedExamIds);
-  return Object.fromEntries(Object.entries(details).map(([id, student]) => [id, {
-    ...student,
-    grades: student.grades.filter(grade => Boolean(grade.examId && selected.has(grade.examId))),
-    opportunityLogs: student.opportunityLogs.filter(log => !log.examId || selected.has(log.examId)),
-  }]));
+  return Object.fromEntries(Object.entries(details).map(([id, student]) => {
+    const grades = student.grades.filter(grade => Boolean(grade.examId && selected.has(grade.examId)));
+    return [id, {
+      ...student,
+      grades,
+      opportunityLogs: student.opportunityLogs.filter(log => !log.examId || selected.has(log.examId)),
+      // With exams left out the sum would not match the rows shown.
+      opportunityView: student.opportunityView && grades.length !== student.grades.length
+        ? { ...student.opportunityView, summary: null } : student.opportunityView,
+    }];
+  }));
 }
 
 /**
@@ -494,11 +509,21 @@ export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): Stude
 
 const PUBLIC_GRADE_OUTCOMES = new Set(["ناجح", "راسب", "الدرجة كاملة"]);
 
-type PublicStudentHtmlDetails = Pick<StudentDetails, "activeChapterName" | "timelineEvents"> & {
+/** Each row's kind, the opportunities it moved and the balance after (null when unknown). */
+type PublicRowView = { cat: StaffOpportunityCategory | null; delta: number | null; after: number | null };
+type PublicStudentHtmlDetails = Pick<StudentDetails, "activeChapterName"> & {
+  timelineEvents: Array<Pick<ReportTimelineEvent, "date" | "text" | "kind" | "balanceAfter"> & PublicRowView>;
   grades: Array<Pick<StudentGradeDetail,
     "examName" | "examType" | "examDate" | "timelineDate" | "score" | "fullMark" | "status" | "outcome" | "opportunityEffect" | "opportunityTone" | "duringDismissal"
-  >>;
+  > & PublicRowView>;
+  /** The sum that explains the balance, when it adds up (numbers and labels only). */
+  sum: Pick<StaffOpportunitySummary, "opening" | "openingLabel" | "examDeducted" | "adminAdded" | "adminDeducted" | "bonus"> | null;
 };
+
+function publicRowView(view: StudentDetails["opportunityView"], key: string): PublicRowView {
+  const row = view?.rows[key];
+  return { cat: row?.category ?? null, delta: row?.delta ?? null, after: row?.balanceAfter ?? null };
+}
 
 /** Final public-file boundary. Keep the shared/internal details intact and
  * explicitly copy only fields consumed by this HTML's display and search. */
@@ -510,8 +535,19 @@ function buildPublicStudentHtmlData(details: StudentDetailsMap, students: Studen
     const code = snapshot ? snapshot.code : student.code;
     if (detail) publicDetails.push([student.id, {
       activeChapterName: detail.activeChapterName ?? null,
-      timelineEvents: (detail.timelineEvents || []).map(({ date, text, kind, balanceAfter }) => ({ date, text, kind, balanceAfter })),
-      grades: (detail.grades || []).map(grade => ({
+      timelineEvents: (detail.timelineEvents || []).map(({ date, text, kind, balanceAfter }, index) => ({
+        date, text, kind, balanceAfter, ...publicRowView(detail.opportunityView, `event-${index}`),
+      })),
+      sum: detail.opportunityView?.summary ? {
+        opening: detail.opportunityView.summary.opening,
+        openingLabel: detail.opportunityView.summary.openingLabel,
+        examDeducted: detail.opportunityView.summary.examDeducted,
+        adminAdded: detail.opportunityView.summary.adminAdded,
+        adminDeducted: detail.opportunityView.summary.adminDeducted,
+        bonus: detail.opportunityView.summary.bonus,
+      } : null,
+      grades: (detail.grades || []).map((grade, index) => ({
+        ...publicRowView(detail.opportunityView, `grade-${grade.examId || index}`),
         examName: grade.examName,
         examType: grade.examType,
         examDate: grade.examDate,
@@ -745,8 +781,11 @@ export function buildStudentDetailsFromProfileLog(
   const scopedLogs = rawLogs.filter(log => opportunityLogWithinActiveChapter(log, logScope));
   // Staff windows also get each command's source and reason; the student's
   // report and Telegram file never do.
-  const timelineEvents = (options.staff ? buildStaffTimelineEvents : buildReportTimelineEvents)(scopedLogs, profile.currentChapter?.id,
+  const staffTimelineEvents = buildStaffTimelineEvents(scopedLogs, profile.currentChapter?.id,
     profile.opportunityCommandEffects, profile.student?.opportunityLimit);
+  const timelineEvents = options.staff
+    ? staffTimelineEvents
+    : staffTimelineEvents.map(({ date, text, kind, balanceAfter }) => ({ date, text, kind, balanceAfter }));
   const gracePeriods = normalizeGracePeriodRanges(profile.student?.gracePeriods);
   // The report context is given to every exporter who can see grades or
   // opportunities; the profile's own fields are only a fallback.
@@ -929,7 +968,7 @@ export function buildStudentDetailsFromProfileLog(
     });
 
   const student = profile.student;
-  return {
+  const details: StudentDetails = {
     grades, opportunityLogs, activeChapterName, timelineEvents,
     // Pledges from the full enrollment history must survive exam/chapter filters.
     hasTwoOpportunityPledge: hasTwoOpportunityPledge(rawLogs),
@@ -941,6 +980,19 @@ export function buildStudentDetailsFromProfileLog(
       status: studentStatus, opportunities: reportNumber(student.opportunities),
       opportunityLimit: reportNumber(student.opportunityLimit), registeredAt: registeredAt ? String(registeredAt) : null,
     } : undefined,
+  };
+  details.opportunityView = opportunityViewData({ ...details, timelineEvents: staffTimelineEvents });
+  return details;
+}
+
+/** The kinds and numbers of a student's rows, and the sum when it adds up. */
+function opportunityViewData(details: StudentDetails): NonNullable<StudentDetails["opportunityView"]> {
+  const { rows, summary } = buildStaffOpportunityView(details);
+  const balance = details.studentSnapshot?.opportunities;
+  return {
+    rows: Object.fromEntries(rows.map((row) => [row.key, { category: row.category, delta: row.delta, balanceAfter: row.balanceAfter }])),
+    summary: summary.opening !== null && summary.computed !== null && balance !== null && balance !== undefined && summary.computed === balance
+      ? summary : null,
   };
 }
 
@@ -1149,6 +1201,33 @@ const DETAILS_MODAL_CSS = `
   .tp-timeline-notice strong { color: #12372A; font-size: 14px; line-height: 1.9; }
   .tp-timeline-event-deduct strong { color: #9F1239; }
   .tp-timeline-notice time { color: #5B6674; font-size: 12px; line-height: 1.8; }
+  /* Each kind of row has its own colour and icon (as in the staff window):
+     bonus violet, admin addition green, admin deduction amber, correction grey,
+     exam deduction red, dismissal dark red, chapter start / return blue. */
+  .tp-cat-bonus { --cat: #7C3AED; --cat-ink: #5B21B6; --cat-tint: #F3EEFF; }
+  .tp-cat-admin-add { --cat: #1F8A5B; --cat-ink: #14603F; --cat-tint: #EAF6EF; }
+  .tp-cat-admin-deduct { --cat: #D97706; --cat-ink: #92400E; --cat-tint: #FFF6E5; }
+  .tp-cat-undo { --cat: #64748B; --cat-ink: #475569; --cat-tint: #F1F5F9; }
+  .tp-cat-exam-deduct { --cat: #E11D48; --cat-ink: #9F1239; --cat-tint: #FFF1F2; }
+  .tp-cat-exam-dismissal, .tp-cat-admin-dismissal { --cat: #991B1B; --cat-ink: #7F1D1D; --cat-tint: #FEE2E2; }
+  .tp-cat-chapter-start, .tp-cat-return, .tp-cat-set { --cat: #2563EB; --cat-ink: #1E40AF; --cat-tint: #EDF2FB; }
+  .tp-grades-table tbody tr[class*="tp-cat-"]:not(.tp-cat-exam) { background: var(--cat-tint); }
+  .tp-grades-table tbody tr[class*="tp-cat-"]:not(.tp-cat-exam) > td:first-child { border-inline-start-color: var(--cat); }
+  .tp-timeline-event[class*="tp-cat-"] > td { border-inline-start-color: var(--cat); }
+  .tp-timeline-event[class*="tp-cat-"] strong { color: var(--cat-ink); }
+  .tp-row-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; margin-inline-end: 8px; border-radius: 9px; background: #EEECE3; color: #5B6674; vertical-align: middle; }
+  tr[class*="tp-cat-"]:not(.tp-cat-exam) .tp-row-icon { background: #FFFFFF; color: var(--cat); box-shadow: inset 0 0 0 1px var(--cat); }
+  .tp-timeline-notice .tp-row-icon { align-self: center; }
+  .tp-timeline-notice strong { flex: 1 1 220px; }
+  .tp-delta { display: inline-block; margin-inline-start: 6px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--cat, #ACB0AD); background: #FFFFFF; color: var(--cat-ink, #19293A); font-size: 13px; font-weight: 800; line-height: 1.9; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  /* The sum: where the remaining opportunities came from. */
+  .tp-sum { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; margin-bottom: 16px; padding: 10px; border: 1px solid #E6E3D9; border-radius: 16px; background: #F1EEE2; }
+  .tp-sum-term { display: grid; align-content: center; gap: 2px; min-width: 78px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--cat, #ACB0AD); background: var(--cat-tint, #FFFFFF); text-align: center; }
+  .tp-sum-term b, .tp-sum-term strong { color: var(--cat-ink, #0E1F36); font-size: 20px; font-weight: 900; line-height: 1.4; font-variant-numeric: tabular-nums; }
+  .tp-sum-term small { color: #5B6674; font-size: 12px; font-weight: 700; line-height: 1.5; }
+  .tp-sum-eq { align-self: center; color: #5B6674; font-size: 22px; font-weight: 900; }
+  .tp-sum-result { border-width: 2px; border-color: #19293A; background: #FFFFFF; min-width: 96px; }
+  .tp-sum-result strong { font-size: 26px; }
   .tp-event-title { display: block; font-weight: 700; color: #19293A; margin-bottom: 4px; }
   .tp-event-exam { display: block; font-size: 12px; color: #5B6674; margin-top: 5px; }
   .tp-empty-row td { padding: 20px; color: #5B6674; text-align: center; }
@@ -1286,11 +1365,12 @@ const DETAILS_MODAL_JS = `
     }).join('-');
   }
 
-  function mobileCell(label, valueHtml, extraClass){
+  function mobileCell(label, valueHtml, extraClass, afterHtml){
     var className = extraClass ? ' class="' + extraClass + '"' : '';
     return '<td role="cell" data-label="' + esc(label) + '"' + className + '>'
       + '<span class="tp-mobile-field-label" aria-hidden="true">' + esc(label) + '</span>'
       + '<span class="tp-mobile-field-value">' + valueHtml + '</span>'
+      + (afterHtml || '')
       + '</td>';
   }
 
@@ -1434,6 +1514,28 @@ const DETAILS_MODAL_JS = `
     renderSuggestions(matches);
   }
 
+  // Each kind of row has its own colour and icon, as in the staff window.
+  var CATS = ['exam', 'exam-deduct', 'exam-dismissal', 'bonus', 'admin-add', 'admin-deduct', 'undo', 'admin-dismissal', 'chapter-start', 'return', 'set'];
+  var ICON_PATHS = {
+    exam: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+    minus: '<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>',
+    plus: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+    star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/>',
+    flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+    ban: '<circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/>',
+    undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'
+  };
+  var CAT_ICON = { exam: 'exam', 'exam-deduct': 'minus', 'exam-dismissal': 'ban', bonus: 'star', 'admin-add': 'plus', 'admin-deduct': 'minus', undo: 'undo', 'admin-dismissal': 'ban', 'chapter-start': 'flag', 'return': 'flag', 'set': 'flag' };
+  function rowIcon(cat){
+    var name = CAT_ICON[cat] || 'exam';
+    return '<span class="tp-row-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICON_PATHS[name] + '</svg></span>';
+  }
+  function deltaChip(delta, cat){
+    if (delta === null || delta === undefined || !isFinite(delta) || Number(delta) === 0) return '';
+    var value = Number(delta);
+    return ' <span class="tp-delta"><bdi dir="ltr">' + (cat === 'bonus' ? '⭐ ' : '') + (value > 0 ? '+' : '−') + fmtNum(Math.abs(value)) + '</bdi></span>';
+  }
+
   function showDetails(studentId, studentLabel){
     var data = DATA[studentId];
     var student = STUDENTS.find(function(s){ return String(s.id) === String(studentId); }) || {};
@@ -1446,8 +1548,26 @@ const DETAILS_MODAL_JS = `
     if (titleTextEl) titleTextEl.textContent = studentLabel || student.name || 'درجاتك وفرصك';
     if (gradesTitleEl) gradesTitleEl.textContent = data && data.activeChapterName ? 'درجاتك — ' + data.activeChapterName : 'درجاتك في الامتحانات';
     if (overview) {
-      overview.innerHTML = '<div class="tp-report-summary">'
-        + '<div class="tp-summary-item"><span class="tp-summary-label">فرصك المتبقية</span><strong>' + fmtNum(balance) + '</strong></div></div>';
+      var sum = data && data.sum;
+      if (sum && sum.opening !== null && sum.opening !== undefined) {
+        // Where the remaining opportunities came from, when the record adds up.
+        var terms = [
+          { v: sum.opening, s: '', l: sum.openingLabel || 'بداية الفصل', c: 'chapter-start' },
+          { v: sum.examDeducted, s: '−', l: 'خُصمت بالامتحانات', c: 'exam-deduct' },
+          { v: sum.adminDeducted, s: '−', l: 'خصمت الإدارة', c: 'admin-deduct' },
+          { v: sum.adminAdded, s: '+', l: 'أضافت الإدارة', c: 'admin-add' },
+          { v: sum.bonus, s: '+', l: 'فرص مكافأة', c: 'bonus' }
+        ].filter(function(term, index){ return index === 0 || term.v > 0; });
+        overview.innerHTML = '<div class="tp-sum" aria-label="من وين جات فرصك المتبقية">'
+          + terms.map(function(term){
+            return '<span class="tp-sum-term tp-cat-' + term.c + '"><b dir="ltr">' + term.s + fmtNum(term.v) + '</b><small>' + esc(term.l) + '</small></span>';
+          }).join('')
+          + '<span class="tp-sum-eq" aria-hidden="true">=</span>'
+          + '<span class="tp-sum-term tp-sum-result"><strong>' + fmtNum(balance) + '</strong><small>فرصك المتبقية</small></span></div>';
+      } else {
+        overview.innerHTML = '<div class="tp-report-summary">'
+          + '<div class="tp-summary-item"><span class="tp-summary-label">فرصك المتبقية</span><strong>' + fmtNum(balance) + '</strong></div></div>';
+      }
     }
     if (!data) {
       gradesBody.innerHTML = '<tr class="tp-empty-row tp-error-row" role="row"><td colspan="4" role="cell">تفاصيل هذا الطالب غير موجودة في هذه النسخة. اطلب نسخة جديدة من الإدارة.</td></tr>';
@@ -1466,9 +1586,12 @@ const DETAILS_MODAL_JS = `
         if (entry.event) {
           var event = entry.event;
           var kind = ['add', 'return', 'reset', 'deduct'].indexOf(event.kind) >= 0 ? event.kind : 'reset';
-          return '<tr role="row" class="tp-timeline-event tp-timeline-event-' + kind + '"><td colspan="4" role="cell">'
-            + '<div class="tp-timeline-notice"><strong>' + esc(event.text) + '</strong>'
-            + '<time datetime="' + esc(event.date) + '">' + fmtEventDate(event.date) + '</time></div></td></tr>';
+          var eventCat = CATS.indexOf(event.cat) >= 0 ? event.cat : '';
+          return '<tr role="row" class="tp-timeline-event tp-timeline-event-' + kind + (eventCat ? ' tp-cat-' + eventCat : '') + '"><td colspan="4" role="cell">'
+            + '<div class="tp-timeline-notice">' + rowIcon(eventCat || (kind === 'add' ? 'admin-add' : kind === 'deduct' ? 'admin-deduct' : 'chapter-start'))
+            + '<strong>' + esc(event.text) + '</strong>'
+            + '<time datetime="' + esc(event.date) + '">' + fmtEventDate(event.date) + '</time>'
+            + deltaChip(event.delta, eventCat) + '</div></td></tr>';
         }
         var g = entry.grade;
         var excused = g.status === 'مجاز' || g.status === ${JSON.stringify(GRACE_PERIOD_EXCUSE_LABEL)} || g.status === 'قبل تسجيل الطالب';
@@ -1489,11 +1612,12 @@ const DETAILS_MODAL_JS = `
           ? '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi> ' + ${JSON.stringify(DURING_DISMISSAL_GRADE_MARK)}
           : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>' + pill;
         var effectText = String(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.').trim();
-        return '<tr role="row" class="tp-grade-row-' + tone + ' tp-result-' + result + '">'
-          + mobileCell('الامتحان', '<strong class="tp-event-title">' + esc(g.examName) + '</strong><span class="tp-event-exam">' + esc(g.examType) + '</span>')
+        var gradeCat = CATS.indexOf(g.cat) >= 0 ? g.cat : '';
+        return '<tr role="row" class="tp-grade-row-' + tone + ' tp-result-' + result + (gradeCat ? ' tp-cat-' + gradeCat : '') + '">'
+          + mobileCell('الامتحان', rowIcon(gradeCat || 'exam') + '<strong class="tp-event-title">' + esc(g.examName) + '</strong><span class="tp-event-exam">' + esc(g.examType) + '</span>')
           + mobileCell('تاريخ الامتحان', fmtDate(g.examDate) || 'غير مسجّل')
           + mobileCell('الدرجة', score)
-          + mobileCell('الأثر على الفرص', esc(effectText), 'tp-result-effect')
+          + mobileCell('الأثر على الفرص', esc(effectText), 'tp-result-effect', deltaChip(g.delta, gradeCat))
           + '</tr>';
       }).join('');
       if (!data.grades || !data.grades.length) gradesBody.innerHTML += '<tr class="tp-empty-row" role="row"><td colspan="4" role="cell">لا توجد امتحانات لعرضها في هذه النسخة.</td></tr>';

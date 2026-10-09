@@ -1522,7 +1522,7 @@ check("حركة المنح تعرض أثرها المحسوب الصحيح مع 
     assert.equal(details.grades[1].opportunityEffect, "—");
     assert.match(dom.elements.tpStudentOverview.innerHTML, new RegExp(`<strong>${scenario.after}<\\/strong>`));
     assert.equal(sandbox.STUDENT_LIST[0].opportunities, scenario.after);
-    assert.deepEqual(Object.keys(sandbox.STUDENT_DETAILS.s1).sort(), ["activeChapterName", "grades", "timelineEvents"]);
+    assert.deepEqual(Object.keys(sandbox.STUDENT_DETAILS.s1).sort(), ["activeChapterName", "grades", "sum", "timelineEvents"]);
     assert.doesNotMatch(html, /PRIVATE_|"(?:opportunityCommandEffects|balanceBefore|logId|studentId|settledGradeIds)"\s*:/);
     assert.equal(JSON.stringify(profile), before, "computed display cannot alter grades, pending notes, stored commands or balances");
 
@@ -1882,14 +1882,16 @@ check("ملف HTML ينقل حقول العرض حصراً ويحذف السجل
   const { sandbox } = executeInlineScripts(html, "public-payload-whitelist");
   const publicDetails = JSON.parse(JSON.stringify(sandbox.STUDENT_DETAILS));
   const publicStudents = JSON.parse(JSON.stringify(sandbox.STUDENT_LIST));
-  const detailKeys = ["activeChapterName", "timelineEvents", "grades"].sort();
-  const gradeKeys = ["examName", "examType", "examDate", "timelineDate", "score", "fullMark", "status", "outcome", "opportunityEffect", "opportunityTone", "duringDismissal"].sort();
+  // «sum» explains the balance; cat/delta/after are each row's kind, the
+  // opportunities it moved and the balance after: numbers and kinds only.
+  const detailKeys = ["activeChapterName", "timelineEvents", "grades", "sum"].sort();
+  const gradeKeys = ["examName", "examType", "examDate", "timelineDate", "score", "fullMark", "status", "outcome", "opportunityEffect", "opportunityTone", "duringDismissal", "cat", "delta", "after"].sort();
   const studentKeys = ["id", "name", "code", "courseName", "opportunities", "status"].sort();
   assert.deepEqual(Object.keys(publicDetails).sort(), ["s1", "s2", "s3"]);
   for (const detail of Object.values(publicDetails)) {
     assert.deepEqual(Object.keys(detail).sort(), detailKeys);
     for (const grade of detail.grades) assert.deepEqual(Object.keys(grade).sort(), gradeKeys);
-    for (const event of detail.timelineEvents) assert.deepEqual(Object.keys(event).sort(), ["balanceAfter", "date", "kind", "text"]);
+    for (const event of detail.timelineEvents) assert.deepEqual(Object.keys(event).sort(), ["after", "balanceAfter", "cat", "date", "delta", "kind", "text"]);
   }
   for (const student of publicStudents) assert.deepEqual(Object.keys(student).sort(), studentKeys);
   assert.equal(publicStudents[0].opportunities, 0);
