@@ -89,6 +89,7 @@ function loadExportDialogModule() {
     if (request === "@/lib/baghdad-time") return require(path.join(projectRoot, "src/lib/baghdad-time.ts"));
     if (request === "@/lib/academic-types") return require(path.join(projectRoot, "src/lib/academic-types.ts"));
     if (request === "@/lib/exam-utils") return require(path.join(projectRoot, "src/lib/exam-utils.ts"));
+    if (request === "@/lib/bonus-opportunity") return require(path.join(projectRoot, "src/lib/bonus-opportunity.ts"));
     if (request === "@/lib/active-chapter-report") {
       return require(
         path.join(projectRoot, "src/lib/active-chapter-report.ts"),
@@ -1988,6 +1989,46 @@ check("قياس تقرير اصطناعي من 400 طالب يثبت انخفا�
   assert.ok(metrics.fileAfterBytes < metrics.fileBeforeBytes);
   assert.doesNotMatch(html, /PRIVATE_ADMIN_HISTORY/);
   console.log(`   Synthetic payload size comparison: ${JSON.stringify(metrics)}`);
+});
+
+check("تفاصيل الطالب للموظفين: المكافأة غير الإضافة، والمعادلة تفسّر الفرص المتبقية من السجل", () => {
+  const { buildStaffOpportunityView, staffOpportunityReason } = loadExportDialogModule();
+  // BIO-1111 as the window showed it: chapter start 3, two exam deductions,
+  // a gift, its undo, the gift again, then a bonus from two passes.
+  const grades = [
+    { examId: "x10", examName: "الفصل الثاني - الامتحان العاشر", examType: "تراكمي", examDate: "2026-09-13", timelineDate: "2026-09-13T14:00:00.000Z", score: 0, fullMark: 100, status: "درجة", outcome: "راسب", opportunityEffect: "خُصمت فرصتان", opportunityTone: "deducted" },
+    { examId: "x2", examName: "الامتحان الثاني", examType: "تراكمي", examDate: "2026-09-19", score: 14, fullMark: 50, status: "درجة", outcome: "راسب", opportunityEffect: "خُصمت فرصة", opportunityTone: "deducted" },
+    { examId: "x4", examName: "الامتحان الرابع", examType: "تراكمي", examDate: "2026-09-26", score: 28, fullMark: 50, status: "درجة", outcome: "راسب", opportunityEffect: "لا خصم", opportunityTone: "ordinary" },
+    { examId: "x6", examName: "الامتحان السادس", examType: "تراكمي", examDate: "2026-10-03", score: 41, fullMark: 50, status: "درجة", outcome: "ناجح", opportunityEffect: "لا خصم", opportunityTone: "ordinary" },
+    { examId: "x7", examName: "الامتحان السابع", examType: "يومي", examDate: "2026-10-07", score: 19, fullMark: 20, status: "درجة", outcome: "ناجح", opportunityEffect: "رجعت لك فرصة مكافأة (+1)", opportunityTone: "ordinary" },
+  ];
+  const opportunityLogs = [
+    { examId: "x10", action: "خصم تلقائي", amount: 2, appliedAmount: 2, reason: "", date: "2026-09-13", examName: null },
+    { examId: "x2", action: "خصم تلقائي", amount: 1, appliedAmount: 1, reason: "", date: "2026-09-19", examName: null },
+    { examId: "x7", action: "فرصة مكافأة", amount: 1, reason: "", date: "2026-10-07", examName: null },
+  ];
+  const timelineEvents = [
+    { date: "2026-09-13T13:22:00.000Z", text: "بدأ حساب فرص الفصل برصيد 3 فرص", kind: "reset", balanceAfter: 3, source: "chapter-start", amount: 3, reason: "تسوية تاريخية: تحويل فصل يدوي" },
+    { date: "2026-10-03T12:08:00.000Z", text: "أضافت الإدارة فرصة واحدة — أصبح الرصيد 1", kind: "add", balanceAfter: 1, source: "admin-add", amount: 1, reason: "النطاق: كل الدورات - الحالة: كل الحالات - عدد الفرص: 0 فرصة - عدا المفصولين: لا - هدية من استاذ حسن فلاح" },
+    { date: "2026-10-03T12:23:00.000Z", text: "خصمت الإدارة فرصة واحدة — أصبح الرصيد 0", kind: "deduct", balanceAfter: 0, source: "undo-add", amount: 1, reason: "تراجع موثق عن إضافة: النطاق: كل الدورات - هدية من استاذ حسن فلاح [undo-ref:a]" },
+    { date: "2026-10-03T12:27:00.000Z", text: "أضافت الإدارة فرصة واحدة — أصبح الرصيد 1", kind: "add", balanceAfter: 1, source: "admin-add", amount: 1, reason: "النطاق: كل الدورات - الحالة: نشط بدون فرص - هدية من استاذ حسن فلاح" },
+  ];
+  const { rows, summary } = buildStaffOpportunityView({ grades, opportunityLogs, timelineEvents, activeChapterName: "الفصل الثالث - التكاثر" });
+  assert.deepEqual(rows.map((row) => row.category), ["chapter-start", "exam-deduct", "exam-deduct", "exam", "exam", "admin-add", "undo", "admin-add", "bonus"]);
+  const bonus = rows.find((row) => row.category === "bonus");
+  const gift = rows.find((row) => row.category === "admin-add");
+  assert.equal(bonus.delta, 1);
+  assert.equal(gift.delta, 1);
+  assert.notEqual(bonus.category, gift.category, "a bonus is never shown as an admin addition");
+  assert.equal(gift.reason, "هدية من استاذ حسن فلاح", "only the typed reason, without scope and filters");
+  assert.equal(rows.find((row) => row.category === "undo").delta, -1);
+  assert.equal(rows[0].title, "بداية الفصل الثالث - التكاثر");
+  assert.deepEqual(
+    { opening: summary.opening, examDeducted: summary.examDeducted, adminAdded: summary.adminAdded, adminDeducted: summary.adminDeducted, bonus: summary.bonus, computed: summary.computed },
+    { opening: 3, examDeducted: 3, adminAdded: 2, adminDeducted: 1, bonus: 1, computed: 2 },
+    "3 − 3 + 2 − 1 + 1 = 2, her balance",
+  );
+  assert.equal(staffOpportunityReason("السبب: تعويض غياب مبرر [academic-reactivation-link:x]"), "تعويض غياب مبرر");
 });
 
 if (failures > 0) {

@@ -1,7 +1,7 @@
 "use client";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
-import { useEffect, useState, useMemo } from "react";
+import { Fragment, useEffect, useState, useMemo } from "react";
 import { useTeacherStore, type Student } from "@/lib/teacher-store";
 import {
   opportunityStatsApi,
@@ -29,15 +29,31 @@ import { DEFAULT_MANUAL_RESTORATION_REASON, manualRestorationAmount } from "@/li
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import {
   ExportDialog,
-  buildOpportunityTimeline,
+  buildStaffOpportunityView,
   buildStudentDetailsFromProfileLog,
   formatReportTimelineDate,
   type ExportColumn,
+  type StaffOpportunityCategory,
   type StudentDetails,
   type StudentDetailsMap,
 } from "./export-dialog";
 import { StudentProfileDialog } from "./student-profile-dialog";
-import { ChevronLeft, CircleMinus, CirclePlus, RotateCcw, Target } from "lucide-react";
+import { Ban, ChevronLeft, CircleMinus, CirclePlus, FileText, Flag, RotateCcw, SlidersHorizontal, Star, Target, Undo2, UserX } from "lucide-react";
+
+/** One icon per kind of row in a student's opportunities («التفاصيل»). */
+const STAFF_ROW_ICONS: Record<StaffOpportunityCategory, typeof Star> = {
+  exam: FileText,
+  "exam-deduct": CircleMinus,
+  "exam-dismissal": Ban,
+  bonus: Star,
+  "admin-add": CirclePlus,
+  "admin-deduct": CircleMinus,
+  undo: Undo2,
+  "admin-dismissal": UserX,
+  "chapter-start": Flag,
+  return: RotateCcw,
+  set: SlidersHorizontal,
+};
 import { FormDialogHero } from "./form-dialog";
 import { EmptyState, LoadingState } from "./ui-kit";
 import { ListToolbar } from "./list-toolbar";
@@ -324,7 +340,7 @@ export function OpportunitiesView() {
       .get(detailsStudentId)
       .then((profile) => {
         if (cancelled) return;
-        setDetailsData(profile ? buildStudentDetailsFromProfileLog(profile) : null);
+        setDetailsData(profile ? buildStudentDetailsFromProfileLog(profile, { staff: true }) : null);
         if (!profile) toast.error("تعذر تحميل تفاصيل فرص الطالب.");
       })
       .catch(() => {
@@ -403,8 +419,8 @@ export function OpportunitiesView() {
     [students, serverStudents, detailsStudentId],
   );
 
-  const detailsTimeline = useMemo(
-    () => (detailsData ? buildOpportunityTimeline(detailsData) : []),
+  const detailsView = useMemo(
+    () => (detailsData ? buildStaffOpportunityView(detailsData) : null),
     [detailsData],
   );
 
@@ -1091,46 +1107,99 @@ export function OpportunitiesView() {
               <p className="tp-opp-details__summary">
                 <b>{selectedDetailsStudent.code}</b> · {courseName(selectedDetailsStudent.courseId)} · {selectedDetailsStudent.status}
               </p>
-              <div className="tp-opp-report__balance">
-                <span>الفرص المتبقية</span>
-                <strong>{formatOpportunityBalance(selectedDetailsStudent)}</strong>
-              </div>
+              {(() => {
+                const summary = detailsView?.summary;
+                const current = Number(selectedDetailsStudent.opportunities ?? 0);
+                // An inferred opening (no chapter start recorded) is shown only when it adds up.
+                const showSum = Boolean(summary && summary.opening !== null && (!summary.inferred || summary.computed === current));
+                const terms = summary && showSum ? [
+                  { sign: "−", value: summary.examDeducted, label: "خصم الامتحانات", cat: "exam-deduct" },
+                  { sign: "−", value: summary.adminDeducted, label: "خصم وتراجع الإدارة", cat: "admin-deduct" },
+                  { sign: "+", value: summary.adminAdded, label: "إضافات الإدارة", cat: "admin-add" },
+                  { sign: "+", value: summary.bonus, label: "فرص مكافأة", cat: "bonus" },
+                ].filter((term) => term.value > 0) : [];
+                return (
+                  <div className="tp-oppv__sum" aria-label="من وين جات الفرص المتبقية">
+                    {summary && showSum && (
+                      <>
+                        <span className="tp-oppv__term" data-cat="chapter-start">
+                          <b>{summary.opening}</b><small>{summary.openingLabel}</small>
+                        </span>
+                        {terms.map((term) => (
+                          <span key={term.cat} className="tp-oppv__term" data-cat={term.cat}>
+                            <b><bdi dir="ltr">{term.sign}{term.value}</bdi></b><small>{term.label}</small>
+                          </span>
+                        ))}
+                        <span className="tp-oppv__eq" aria-hidden="true">=</span>
+                      </>
+                    )}
+                    <span className="tp-oppv__term" data-cat="result">
+                      <b>{formatOpportunityBalance(selectedDetailsStudent)}</b><small>الفرص المتبقية</small>
+                    </span>
+                    {summary && showSum && !summary.inferred && summary.computed !== null && summary.computed !== current && (
+                      <p className="tp-oppv__mismatch">مجموع السجل يطلع {summary.computed}، والفرص المتبقية {current}. راجع سجل الطالب.</p>
+                    )}
+                  </div>
+                );
+              })()}
               {detailsLoading && !detailsData ? (
                 <LoadingState title="جاري تحميل سجل الطالب..." />
-              ) : detailsTimeline.length === 0 ? (
+              ) : !detailsView || detailsView.rows.length === 0 ? (
                 <EmptyState compact icon={Target} title="لا توجد امتحانات أو حركات لعرضها" />
               ) : (
                 <>
                   <h3 className="tp-opp-report__title">
-                    {detailsData?.activeChapterName ? `الدرجات — ${detailsData.activeChapterName}` : "الدرجات في الامتحانات"}
+                    {detailsData?.activeChapterName ? `${detailsData.activeChapterName}: الامتحانات والحركات بالترتيب` : "الامتحانات والحركات بالترتيب"}
                   </h3>
-                  {/* Same lines, order and words as «عرض التفاصيل» in the HTML report. */}
-                  <ol className="tp-opp-report">
-                    <li className="tp-opp-report__head" aria-hidden="true">
-                      <span>الامتحان</span><span>تاريخ الامتحان</span><span>الدرجة</span><span>الأثر على الفرص</span>
-                    </li>
-                    {detailsTimeline.map((entry) =>
-                      entry.type === "event" ? (
-                        <li key={entry.key} className="tp-opp-report__event" data-kind={entry.kind}>
-                          <strong>{entry.text}</strong>
-                          <time dateTime={entry.date}>{formatReportTimelineDate(entry.date, true)}</time>
+                  {/* Same rows and order as the HTML report, from the same record. */}
+                  <ol className="tp-oppv">
+                    {detailsView.rows.map((row) => {
+                      const Icon = STAFF_ROW_ICONS[row.category];
+                      const note = row.note
+                        .replace(/رصيدك/g, "رصيده")
+                        .replace(/رجعت لك/g, "رجعت للطالب")
+                        .replace(/وفُصلت/g, "وفُصل");
+                      return (
+                        <Fragment key={row.key}>
+                        {row.opening && detailsView.rows[0] !== row && (
+                          <li className="tp-oppv__divider">من هنا يبدأ حساب الفرص المتبقية</li>
+                        )}
+                        <li className="tp-oppv__row" data-cat={row.category} data-result={row.exam?.result} data-before={row.beforeOpening || undefined}>
+                          <span className="tp-oppv__icon" aria-hidden="true"><Icon /></span>
+                          <div className="tp-oppv__main">
+                            <div className="tp-oppv__title">
+                              <strong>{row.title}</strong>
+                              {row.exam?.type && <span>{row.exam.type}</span>}
+                            </div>
+                            <div className="tp-oppv__meta">
+                              <time dateTime={row.date}>{formatReportTimelineDate(row.date, row.withTime) || "تاريخ غير مسجّل"}</time>
+                              {row.exam && (
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <bdi className="tp-oppv__score">{row.exam.score}</bdi>
+                                  {row.exam.pill && <span className="tp-oppv__pill" data-tone={row.exam.pill.tone}>{row.exam.pill.text}</span>}
+                                  {row.exam.duringDismissal && <span className="tp-oppv__pill">سُجّلت أثناء الفصل</span>}
+                                </>
+                              )}
+                            </div>
+                            {note && note !== "—" && row.delta === null && <div className="tp-oppv__note">{note}</div>}
+                            {row.category === "bonus" && <div className="tp-oppv__note">{note}</div>}
+                            {row.reason && <div className="tp-oppv__reason">السبب: {row.reason}</div>}
+                          </div>
+                          {(row.delta !== null || row.balanceAfter !== null) && (
+                            <div className="tp-oppv__side">
+                              {row.delta !== null && (
+                                <span className="tp-oppv__delta">
+                                  {row.category === "bonus" ? "⭐ " : ""}<bdi dir="ltr">{row.delta > 0 ? "+" : "−"}{Math.abs(row.delta)}</bdi>
+                                </span>
+                              )}
+                              {row.balanceAfter !== null && <span className="tp-oppv__after">الفرص {row.balanceAfter}</span>}
+                            </div>
+                          )}
                         </li>
-                      ) : (
-                        <li key={entry.key} className="tp-opp-report__exam" data-result={entry.result}>
-                          <span className="tp-opp-report__exam-name">
-                            <strong>{entry.examName}</strong>
-                            {entry.examType && <span>{entry.examType}</span>}
-                          </span>
-                          <span className="tp-opp-report__exam-date">{formatReportTimelineDate(entry.examDate) || "غير مسجّل"}</span>
-                          <span className="tp-opp-report__score">
-                            <bdi>{entry.score}</bdi>
-                            {entry.duringDismissal && <small> (سُجّلت أثناء الفصل)</small>}
-                            {entry.pill && <span className="tp-opp-report__pill" data-tone={entry.pill.tone}>{entry.pill.text}</span>}
-                          </span>
-                          <span className="tp-opp-report__effect">{entry.effect}</span>
-                        </li>
-                      ),
-                    )}
+                        </Fragment>
+                      );
+                    })}
                   </ol>
                 </>
               )}

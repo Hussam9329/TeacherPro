@@ -160,6 +160,14 @@ export type ReportTimelineEvent = {
   text: string;
   kind: "add" | "return" | "reset" | "deduct";
   balanceAfter: number | null;
+  /**
+   * Staff windows only, from buildStaffTimelineEvents: which command the line
+   * records, the opportunities it actually moved and the reason typed with
+   * it. buildReportTimelineEvents (what students see) never sets them.
+   */
+  source?: "admin-add" | "admin-deduct" | "undo-add" | "undo-deduct" | "admin-dismissal" | "chapter-start" | "return" | "set";
+  amount?: number | null;
+  reason?: string;
 };
 
 function reportOpportunityCount(amount: number): string {
@@ -206,7 +214,19 @@ function reportCommandEffect(
 /** Present dated commands using effects from the SAME engine that calculates
  * the balance. Older/superseded commands retain only their recorded grant;
  * unknown history never manufactures a running balance. No accounting here. */
+/** The student's lines: date, text, kind and balance only, nothing private. */
 export function buildReportTimelineEvents(
+  logs: readonly Record<string, unknown>[],
+  activeChapterId?: unknown,
+  commandEffects: readonly AcademicOpportunityCommandEffect[] = [],
+  opportunityLimit?: unknown,
+): ReportTimelineEvent[] {
+  return buildStaffTimelineEvents(logs, activeChapterId, commandEffects, opportunityLimit)
+    .map(({ date, text, kind, balanceAfter }) => ({ date, text, kind, balanceAfter }));
+}
+
+/** The same lines for staff windows, with each command's source, amount and reason. */
+export function buildStaffTimelineEvents(
   logs: readonly Record<string, unknown>[],
   activeChapterId?: unknown,
   commandEffects: readonly AcademicOpportunityCommandEffect[] = [],
@@ -261,7 +281,15 @@ export function buildReportTimelineEvents(
         const limit = reportWholeNumber(opportunityLimit);
         if (kind === "add" && limit !== null) text += ` (بحدّ أقصى ${limit} للرصيد)`;
       }
-      events.push({ date, text, kind, balanceAfter: effect?.balanceAfter ?? null });
+      const rawReason = String(log.reason || "");
+      const source = manualDismissal ? "admin-dismissal"
+        : rawReason.includes("تراجع موثق عن إضافة") ? "undo-add"
+          : rawReason.includes("تراجع موثق عن خصم") ? "undo-deduct"
+            : kind === "add" ? "admin-add" : "admin-deduct";
+      events.push({
+        date, text, kind, balanceAfter: effect?.balanceAfter ?? null,
+        source, amount: effect ? effect.amount : amount, reason: rawReason,
+      });
     } else if (isSetter(log)) {
       const balance = targetBalance(log);
       if (balance === null) continue;
@@ -271,7 +299,11 @@ export function buildReportTimelineEvents(
       const text = chapterStart ? `بدأ حساب فرص الفصل برصيد ${count}`
         : returning ? pledge ? `تم قبول التعهّد وإعادة تفعيلك برصيد ${count}` : `أُعيد تفعيلك برصيد ${count}`
         : pledge ? `بعد قبول التعهّد، حُدّد رصيدك بـ ${count}` : `حدّدت الإدارة رصيدك بـ ${count}`;
-      events.push({ date, text, kind: returning ? "return" : "reset", balanceAfter: balance });
+      events.push({
+        date, text, kind: returning ? "return" : "reset", balanceAfter: balance,
+        source: chapterStart ? "chapter-start" : returning ? "return" : "set",
+        amount: balance, reason: String(log.reason || ""),
+      });
     } else if (action === "إعادة تفعيل" || action === "إعادة تفعيل بفرصتين") {
       // The same recovery writes a status row and a balance row, sometimes
       // milliseconds apart. Keep the grant, which carries the actual balance.
@@ -283,7 +315,10 @@ export function buildReportTimelineEvents(
       const legacyTwo = action === "إعادة تفعيل بفرصتين" || (pledge && /فرصتين/.test(String(log.reason || "")));
       const balance = after ?? (legacyTwo ? 2 : null);
       const text = pledge ? "تم قبول التعهّد وإعادة تفعيلك" : "أُعيد تفعيلك";
-      events.push({ date, text: text + (balance === null ? "" : ` برصيد ${reportOpportunityCount(balance)}`), kind: "return", balanceAfter: balance });
+      events.push({
+        date, text: text + (balance === null ? "" : ` برصيد ${reportOpportunityCount(balance)}`), kind: "return", balanceAfter: balance,
+        source: "return", amount: balance, reason: String(log.reason || ""),
+      });
     }
   }
   return events;

@@ -18,7 +18,8 @@ import { toast } from "@/lib/user-toast";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 import { buildProfessionalXlsx } from "@/lib/xlsx-export";
 import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
-import { buildReportOpportunityContext, buildReportTimelineEvents, reportGradeTimelineDates, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, studentReportText, DISMISSED_NO_GRADE_TEXT, DURING_DISMISSAL_GRADE_MARK, examHeldDuringDismissal, isDuringDismissalGrade, reportDismissalPeriods, type ReportBalanceNote, type ReportTimelineEvent, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
+import { buildReportOpportunityContext, buildReportTimelineEvents, buildStaffTimelineEvents, reportGradeTimelineDates, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, studentReportText, DISMISSED_NO_GRADE_TEXT, DURING_DISMISSAL_GRADE_MARK, examHeldDuringDismissal, isDuringDismissalGrade, reportDismissalPeriods, type ReportBalanceNote, type ReportTimelineEvent, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
+import { isBonusOpportunityLog } from "@/lib/bonus-opportunity";
 import { GRACE_PERIOD_EXCUSE_LABEL, isStudentInGracePeriod, normalizeGracePeriodRanges } from "@/lib/grace-periods";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS, type AcademicOpportunityCommandEffect } from "@/lib/academic-types";
 import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
@@ -200,6 +201,181 @@ export function buildOpportunityTimeline(details: StudentDetails): OpportunityTi
         (isEventA && !isEventB ? -1 : !isEventA && isEventB ? 1 : a.order - b.order);
     })
     .map((item) => item.entry);
+}
+
+/* ============== The staff view: the whole picture of a balance ============== */
+
+export type StaffOpportunityCategory =
+  | "exam" | "exam-deduct" | "exam-dismissal" | "bonus"
+  | "admin-add" | "admin-deduct" | "undo" | "admin-dismissal"
+  | "chapter-start" | "return" | "set";
+
+export type StaffOpportunityRow = {
+  key: string;
+  category: StaffOpportunityCategory;
+  /** The day and time the row happened, as the report shows it. */
+  date: string;
+  withTime: boolean;
+  title: string;
+  /** Exam rows: type, grade and pass/fail. */
+  exam?: { type: string; score: string; pill: { text: string; tone: "passed" | "failed" } | null; result: string; duringDismissal: boolean };
+  /** What the row meant for the opportunities, in words, when it moved nothing. */
+  note: string;
+  /** The reason typed with an admin command (filters and markers removed). */
+  reason: string;
+  /** Opportunities the row moved (+ added, − taken); null when none. */
+  delta: number | null;
+  /** The balance right after, when the record holds it. */
+  balanceAfter: number | null;
+  /** Before the movement the current balance counts from. */
+  beforeOpening: boolean;
+  /** The movement the current balance counts from (chapter start, return, set). */
+  opening: boolean;
+};
+
+export type StaffOpportunitySummary = {
+  opening: number | null;
+  openingLabel: string;
+  examDeducted: number;
+  adminAdded: number;
+  adminDeducted: number;
+  bonus: number;
+  /** opening − deductions + additions; null without an opening. */
+  computed: number | null;
+  /**
+   * No recorded opening in the chapter: the sum starts from the chapter's
+   * opportunities (every student starts full) and is only shown when it
+   * lands exactly on the student's balance.
+   */
+  inferred: boolean;
+};
+
+const STAFF_REASON_LABELS = /^(النطاق|الحالة|عدد الفرص|البحث|عدا المفصولين|عدا|المطلوب|المطبّق)\s*:/u;
+
+/** The words someone typed with a command, without its filters and markers. */
+export function staffOpportunityReason(raw: unknown): string {
+  const text = String(raw ?? "")
+    .replace(/\s*\[[^\]]*\]/gu, "")
+    .replace(/^تلقائي:\s*/u, "")
+    .replace(/^تراجع موثق عن (?:إضافة|خصم)\s*:?\s*/u, "")
+    .trim();
+  return text
+    .split(/\s+[-·]\s+/u)
+    .map((part) => part.trim().replace(/^السبب\s*:\s*/u, ""))
+    .filter((part) => part && !STAFF_REASON_LABELS.test(part))
+    .join(" · ");
+}
+
+const STAFF_EVENT_TITLES: Record<NonNullable<ReportTimelineEvent["source"]>, string> = {
+  "admin-add": "إضافة من الإدارة",
+  "admin-deduct": "خصم من الإدارة",
+  "undo-add": "تراجع عن إضافة",
+  "undo-deduct": "تراجع عن خصم",
+  "admin-dismissal": "فصل من الإدارة",
+  "chapter-start": "بداية الفصل",
+  "return": "إرجاع الطالب",
+  "set": "تحديد الفرص من الإدارة",
+};
+
+/**
+ * The student's opportunities for staff: the same rows, order and source as
+ * the HTML report (exam results and recorded commands of the active
+ * chapter), each tagged with what it did, how many opportunities it moved
+ * and the balance after when recorded, plus the sum that explains today's
+ * balance from the latest opening (chapter start, return or set balance).
+ */
+export function buildStaffOpportunityView(details: StudentDetails): { rows: StaffOpportunityRow[]; summary: StaffOpportunitySummary } {
+  const timeline = buildOpportunityTimeline(details);
+  const grades = details.grades || [];
+  const events = details.timelineEvents || [];
+  const logsByExam = new Map<string, StudentOpportunityLogDetail[]>();
+  for (const log of details.opportunityLogs || []) {
+    if (!log.examId) continue;
+    logsByExam.set(log.examId, [...(logsByExam.get(log.examId) || []), log]);
+  }
+  const applied = (log: StudentOpportunityLogDetail) =>
+    Math.max(0, Math.abs(Number(log.appliedAmount ?? log.amount) || 0));
+
+  const rows: StaffOpportunityRow[] = timeline.map((entry) => {
+    if (entry.type === "event") {
+      const event = events[Number(entry.key.replace("event-", ""))];
+      const source = event?.source;
+      const category: StaffOpportunityCategory = source === "undo-add" || source === "undo-deduct" ? "undo"
+        : source === "admin-add" || source === "admin-deduct" || source === "admin-dismissal" || source === "chapter-start" || source === "return" || source === "set"
+          ? source
+          : entry.kind === "add" ? "admin-add" : entry.kind === "deduct" ? "admin-deduct" : entry.kind === "return" ? "return" : "set";
+      const amount = event?.amount ?? null;
+      const setter = category === "chapter-start" || category === "return" || category === "set";
+      const delta = setter || amount === null ? null
+        : source === "admin-add" || source === "undo-deduct" || (!source && entry.kind === "add") ? amount : -amount;
+      const title = source ? STAFF_EVENT_TITLES[source]
+        : entry.kind === "add" ? "إضافة من الإدارة" : entry.kind === "deduct" ? "خصم من الإدارة" : entry.kind === "return" ? "إرجاع الطالب" : "تحديد الفرص";
+      return {
+        key: entry.key,
+        category,
+        date: entry.date,
+        withTime: true,
+        title: category === "chapter-start" && details.activeChapterName ? `بداية ${details.activeChapterName}` : title,
+        note: setter && event?.balanceAfter !== null && event?.balanceAfter !== undefined ? `الفرص صارت ${event.balanceAfter}` : delta === 0 ? "بدون تغيير (الفرص بحدّها الأعلى)" : "",
+        reason: category === "chapter-start" ? "" : staffOpportunityReason(event?.reason),
+        delta: delta === 0 ? null : delta,
+        balanceAfter: event?.balanceAfter ?? null,
+        beforeOpening: false,
+        opening: false,
+      };
+    }
+    const grade = grades.find((item, index) => `grade-${item.examId || index}` === entry.key);
+    const logs = grade?.examId ? logsByExam.get(grade.examId) || [] : [];
+    const bonus = logs.filter(isBonusOpportunityLog).reduce((sum, log) => sum + applied(log), 0);
+    const taken = logs.filter((log) => log.action === "خصم تلقائي").reduce((sum, log) => sum + applied(log), 0);
+    const category: StaffOpportunityCategory = entry.result === "dismissed" ? "exam-dismissal"
+      : bonus > 0 ? "bonus" : taken > 0 || entry.result === "deducted" ? "exam-deduct" : "exam";
+    const delta = bonus > 0 ? bonus : taken > 0 ? -taken : null;
+    return {
+      key: entry.key,
+      category,
+      date: entry.examDate,
+      withTime: false,
+      title: entry.examName,
+      exam: { type: entry.examType, score: entry.score, pill: entry.pill, result: entry.result, duringDismissal: entry.duringDismissal },
+      note: category === "bonus" ? "نجاح ثاني على التوالي" : entry.effect,
+      reason: "",
+      delta,
+      balanceAfter: null,
+      beforeOpening: false,
+      opening: false,
+    };
+  });
+
+  // Today's balance counts from the latest opening.
+  let openingIndex = -1;
+  rows.forEach((row, index) => {
+    if ((row.category === "chapter-start" || row.category === "return" || row.category === "set") && row.balanceAfter !== null) openingIndex = index;
+  });
+  if (openingIndex >= 0) rows[openingIndex].opening = true;
+  const summary: StaffOpportunitySummary = {
+    opening: openingIndex >= 0 ? rows[openingIndex].balanceAfter : null,
+    openingLabel: openingIndex >= 0 ? rows[openingIndex].title : "",
+    examDeducted: 0, adminAdded: 0, adminDeducted: 0, bonus: 0, computed: null, inferred: false,
+  };
+  const limit = details.studentSnapshot?.opportunityLimit;
+  if (openingIndex < 0 && typeof limit === "number" && Number.isFinite(limit)) {
+    summary.opening = limit;
+    summary.openingLabel = details.activeChapterName ? `بداية ${details.activeChapterName}` : "بداية الفصل";
+    summary.inferred = true;
+  }
+  rows.forEach((row, index) => {
+    if (index < openingIndex) { row.beforeOpening = true; return; }
+    if (index === openingIndex || row.delta === null) return;
+    if (row.category === "bonus") summary.bonus += row.delta;
+    else if (row.category === "exam-deduct" || row.category === "exam-dismissal") summary.examDeducted += -row.delta;
+    else if (row.delta > 0) summary.adminAdded += row.delta;
+    else summary.adminDeducted += -row.delta;
+  });
+  if (summary.opening !== null) {
+    summary.computed = summary.opening - summary.examDeducted - summary.adminDeducted + summary.adminAdded + summary.bonus;
+  }
+  return { rows, summary };
 }
 
 /** «7 أكتوبر 2026», and «· 3:15 م» for a change saved at a time (as the report). */
@@ -548,6 +724,7 @@ function reportDismissalEvents(
  */
 export function buildStudentDetailsFromProfileLog(
   profile: StudentProfileLogSnapshot,
+  options: { staff?: boolean } = {},
 ): StudentDetails {
   const { chapterExamIds, activeChapterName } =
     resolveActiveChapterExamFilter(profile);
@@ -564,7 +741,9 @@ export function buildStudentDetailsFromProfileLog(
   const rawLogs = Array.isArray(profile.opportunityLogs) ? profile.opportunityLogs : [];
   const logScope = resolveActiveChapterLogScope(profile);
   const scopedLogs = rawLogs.filter(log => opportunityLogWithinActiveChapter(log, logScope));
-  const timelineEvents = buildReportTimelineEvents(scopedLogs, profile.currentChapter?.id,
+  // Staff windows also get each command's source and reason; the student's
+  // report and Telegram file never do.
+  const timelineEvents = (options.staff ? buildStaffTimelineEvents : buildReportTimelineEvents)(scopedLogs, profile.currentChapter?.id,
     profile.opportunityCommandEffects, profile.student?.opportunityLimit);
   const gracePeriods = normalizeGracePeriodRanges(profile.student?.gracePeriods);
   // The report context is given to every exporter who can see grades or

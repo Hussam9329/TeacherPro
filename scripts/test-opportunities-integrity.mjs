@@ -41,8 +41,8 @@ check(
 );
 check(
   opportunitiesView.includes('.get(detailsStudentId)') &&
-    opportunitiesView.includes('buildStudentDetailsFromProfileLog(profile)') &&
-    opportunitiesView.includes('buildOpportunityTimeline(detailsData)'),
+    opportunitiesView.includes('buildStudentDetailsFromProfileLog(profile, { staff: true })') &&
+    opportunitiesView.includes('buildStaffOpportunityView(detailsData)'),
   'تفاصيل الطالب تجلب سجله من قاعدة البيانات وتعرضه مثل تقرير HTML (نفس البيانات والترتيب)',
 );
 check(
