@@ -10,7 +10,7 @@ import { routeErrorResponse } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { buildStudentRegistrySearchWhere } from "@/lib/student-registry-filters-server";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
-import { normalizeGracePeriodListFilter } from "@/lib/grace-periods";
+import { NEW_STUDENT_GRACE_NOTE, normalizeGracePeriodListFilter } from "@/lib/grace-periods";
 import { graceDateColumn, toGracePeriodRange } from "@/lib/grace-periods-server";
 
 const LIST_LIMIT = 300;
@@ -63,6 +63,10 @@ export async function GET(req: NextRequest) {
       student: studentWhere
         ? { AND: [studentWhere, { status: { not: "مؤرشف" } }] }
         : { status: { not: "مؤرشف" } },
+      // A new student's automatic period is routine once it ended: it stays on
+      // the student's own page, not in the lists (one per student would crowd
+      // out the periods staff gave).
+      NOT: { note: NEW_STUDENT_GRACE_NOTE, endDate: { lt: todayColumn } },
     };
     const currentWhere: Prisma.GracePeriodWhereInput = { ...base, endDate: { gte: todayColumn } };
     const pastWhere: Prisma.GracePeriodWhereInput = { ...base, endDate: { lt: todayColumn } };

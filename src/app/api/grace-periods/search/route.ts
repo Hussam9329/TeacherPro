@@ -9,8 +9,8 @@ import { routeErrorResponse } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { buildStudentRegistrySearchWhere } from "@/lib/student-registry-filters-server";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
-import { gracePeriodState, type GracePeriodRange } from "@/lib/grace-periods";
-import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
+import { gracePeriodState, isEndedNewStudentGrace, type GracePeriodRange } from "@/lib/grace-periods";
+import { toGracePeriodRange } from "@/lib/grace-periods-server";
 
 /** Where the student stands with grace today, for the search result badge. */
 function graceSummary(periods: GracePeriodRange[] | undefined, today: string) {
@@ -43,8 +43,19 @@ export async function GET(req: NextRequest) {
       orderBy: [{ name: "asc" }, { code: "asc" }],
       take: 20,
     }), "Student");
-    const periodsByStudent = await loadActiveGracePeriodsByStudent(db, students.map((student) => student.id));
     const today = baghdadTodayKey();
+    // An ended automatic period of a new student gives no red light.
+    const periodsByStudent = new Map<string, GracePeriodRange[]>();
+    const periodRows = students.length ? await db.gracePeriod.findMany({
+      where: { studentId: { in: students.map((student) => student.id) }, cancelledAt: null },
+      select: { id: true, studentId: true, startDate: true, endDate: true, note: true },
+      orderBy: [{ studentId: "asc" }, { startDate: "asc" }],
+    }) : [];
+    for (const row of periodRows) {
+      const period = { ...toGracePeriodRange(row), note: row.note };
+      if (isEndedNewStudentGrace(period, today)) continue;
+      periodsByStudent.set(row.studentId, [...(periodsByStudent.get(row.studentId) || []), period]);
+    }
     return NextResponse.json(
       {
         today,

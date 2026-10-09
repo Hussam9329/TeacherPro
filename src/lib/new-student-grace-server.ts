@@ -37,6 +37,8 @@ export async function addNewStudentGracePeriods(
   actor: { id: string | null; name: string },
 ): Promise<number> {
   let added = 0;
+  const logEach = students.length === 1;
+  const ranges: string[] = [];
   for (const student of students) {
     if (student.status !== "نشط") continue;
     const range = newStudentGraceRange(student.createdAt);
@@ -54,16 +56,32 @@ export async function addNewStudentGracePeriods(
         updatedByName: actor.name,
       },
     });
+    if (logEach) {
+      await tx.auditLog.create({
+        data: {
+          module: "فترات السماح",
+          action: "إضافة فترة سماح",
+          details: `${student.name} - ${student.code} - ${formatGracePeriod(range)} (${formatGraceDays(NEW_STUDENT_GRACE_DAYS)}) - تلقائية للطالب الجديد من تاريخ تسجيله`,
+          userId: actor.id,
+          userName: actor.name,
+        },
+      });
+    } else if (ranges.length < 20) {
+      ranges.push(`${student.code}: ${formatGracePeriod(range)}`);
+    }
+    added += 1;
+  }
+  // A bulk import gets one line for all its new students.
+  if (!logEach && added > 0) {
     await tx.auditLog.create({
       data: {
         module: "فترات السماح",
         action: "إضافة فترة سماح",
-        details: `${student.name} - ${student.code} - ${formatGracePeriod(range)} (${formatGraceDays(NEW_STUDENT_GRACE_DAYS)}) - تلقائية للطالب الجديد من تاريخ تسجيله`,
+        details: `فترة سماح تلقائية (${formatGraceDays(NEW_STUDENT_GRACE_DAYS)} من تاريخ التسجيل) لـ ${added} طالب جديد من الإضافة الجماعية - ${ranges.join("، ")}${added > ranges.length ? " …" : ""}`,
         userId: actor.id,
         userName: actor.name,
       },
     });
-    added += 1;
   }
   return added;
 }

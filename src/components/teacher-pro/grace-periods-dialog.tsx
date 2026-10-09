@@ -37,8 +37,8 @@ import {
   gracePeriodDays,
   gracePeriodEndFromDays,
   gracePeriodLight,
+  isEndedNewStudentGrace,
   isNewStudentGracePeriod,
-  NEW_STUDENT_GRACE_DAYS,
   gracePeriodState,
   studentGraceLight,
   type GraceLight,
@@ -427,7 +427,9 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
     () => (data?.periods || []).filter((period) => period.id !== currentPeriod?.id),
     [data, currentPeriod],
   );
-  const studentLight = data ? studentGraceLight(activePeriods, today) : null;
+  const studentLight = data
+    ? studentGraceLight(activePeriods.filter((period) => !isEndedNewStudentGrace(period, today)), today)
+    : null;
   const currentLight = currentPeriod ? gracePeriodLight(currentPeriod, today) : null;
   const lock = studentLock(data?.student.status);
 
@@ -602,7 +604,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
           <PeriodDates period={period} />
           {/* Added by the system to every new student from their registration day. */}
           {isNewStudentGracePeriod(period) && (
-            <span className="tp-grace-period__auto">تلقائية: طالب جديد ({formatGraceDays(NEW_STUDENT_GRACE_DAYS)} من تاريخ تسجيله)</span>
+            <span className="tp-grace-period__auto">أُضيفت تلقائياً للطالب الجديد من تاريخ تسجيله</span>
           )}
         </div>
         <div className="tp-grace-period__length">

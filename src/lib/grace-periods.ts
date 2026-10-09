@@ -68,6 +68,18 @@ export function isNewStudentGracePeriod(period: { note?: string | null }): boole
   return String(period.note || "") === NEW_STUDENT_GRACE_NOTE;
 }
 
+/**
+ * Every new student's automatic period ends after three days; once ended it is
+ * routine, so it gives no red light and stays out of the periods lists (the
+ * student's own «الفترات السابقة» still shows it).
+ */
+export function isEndedNewStudentGrace(
+  period: { note?: string | null; endDate: string },
+  todayKey: string,
+): boolean {
+  return isNewStudentGracePeriod(period) && Boolean(todayKey) && period.endDate < todayKey;
+}
+
 /** Strict calendar validation for a YYYY-MM-DD key (rejects 2026-02-30). */
 export function isValidGraceDateKey(value: unknown): value is string {
   return typeof value === "string" && dateKeyToUtc(value) !== null;
