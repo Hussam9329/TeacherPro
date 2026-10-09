@@ -90,6 +90,7 @@ function loadExportDialogModule() {
     if (request === "@/lib/academic-types") return require(path.join(projectRoot, "src/lib/academic-types.ts"));
     if (request === "@/lib/exam-utils") return require(path.join(projectRoot, "src/lib/exam-utils.ts"));
     if (request === "@/lib/bonus-opportunity") return require(path.join(projectRoot, "src/lib/bonus-opportunity.ts"));
+    if (request === "@/lib/opportunity-log-pairs") return require(path.join(projectRoot, "src/lib/opportunity-log-pairs.ts"));
     if (request === "@/lib/active-chapter-report") {
       return require(
         path.join(projectRoot, "src/lib/active-chapter-report.ts"),

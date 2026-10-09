@@ -9,6 +9,7 @@
  * summary, student report) speak simple standard Arabic.
  */
 import { BONUS_OPPORTUNITY_ACTION } from "@/lib/bonus-opportunity";
+import { withoutCancelledManualPairs } from "@/lib/opportunity-log-pairs";
 import { classifyGradeAcademicImpact, type GradeClassificationKind } from "@/lib/grade-classification";
 import { findExamGracePeriod, type GracePeriodRange } from "@/lib/grace-periods";
 import { displayOpportunityReason } from "@/lib/retired-followup-compat";
@@ -252,7 +253,9 @@ function balanceOf(logs: Rec[]): number | null {
   return withBalance.length ? n(withBalance[withBalance.length - 1].balanceAfter) : null;
 }
 
-export function buildStudentStory(input: StudentStoryInput): StudentStory {
+export function buildStudentStory(rawInput: StudentStoryInput): StudentStory {
+  // A mistaken command and its documented undo are not part of the story.
+  const input = { ...rawInput, opportunityLogs: withoutCancelledManualPairs(rawInput.opportunityLogs) };
   const student = input.student;
   const courseId = s(student.courseId);
   const audit = input.audit;

@@ -20,6 +20,7 @@ import { buildProfessionalXlsx } from "@/lib/xlsx-export";
 import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
 import { buildReportOpportunityContext, buildReportTimelineEvents, buildStaffTimelineEvents, reportGradeTimelineDates, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradePresentation, reportGradeOutcome, reportNumber, studentReportText, DISMISSED_NO_GRADE_TEXT, DURING_DISMISSAL_GRADE_MARK, examHeldDuringDismissal, isDuringDismissalGrade, reportDismissalPeriods, type ReportBalanceNote, type ReportTimelineEvent, type ReportGradeTone, type ReportMovementKind } from "@/lib/student-report-presentation";
 import { isBonusOpportunityLog } from "@/lib/bonus-opportunity";
+import { withoutCancelledManualPairs } from "@/lib/opportunity-log-pairs";
 import { GRACE_PERIOD_EXCUSE_LABEL, isStudentInGracePeriod, normalizeGracePeriodRanges } from "@/lib/grace-periods";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS, type AcademicOpportunityCommandEffect } from "@/lib/academic-types";
 import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
@@ -738,7 +739,8 @@ export function buildStudentDetailsFromProfileLog(
   }
 
   const rawGrades = Array.isArray(profile.grades) ? profile.grades : [];
-  const rawLogs = Array.isArray(profile.opportunityLogs) ? profile.opportunityLogs : [];
+  // A mistaken command and its documented undo are not part of the file.
+  const rawLogs = withoutCancelledManualPairs(Array.isArray(profile.opportunityLogs) ? profile.opportunityLogs : []);
   const logScope = resolveActiveChapterLogScope(profile);
   const scopedLogs = rawLogs.filter(log => opportunityLogWithinActiveChapter(log, logScope));
   // Staff windows also get each command's source and reason; the student's
