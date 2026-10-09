@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermission } from "@/lib/server-auth";
+import { requirePermissionPrincipal } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import {
   getPhoneValidationError,
@@ -33,6 +33,7 @@ import {
   routeErrorResponse,
 } from "@/lib/route-helpers";
 import { ensureProtectedGradeMarkers } from "@/lib/protected-grade-markers-server";
+import { addNewStudentGracePeriods } from "@/lib/new-student-grace-server";
 
 type BulkStudentPayload = {
   name?: unknown;
@@ -150,8 +151,8 @@ function getPrismaStudentErrorResponse(error: unknown) {
 }
 
 export async function POST(req: NextRequest) {
-  const authError = await requirePermission(req, "students.add");
-  if (authError) return authError;
+  const principal = await requirePermissionPrincipal(req, "students.add");
+  if (principal instanceof NextResponse) return principal;
 
   const body = await req.json().catch(() => ({}));
   const previewOnly = body.previewOnly === true;
@@ -546,7 +547,7 @@ export async function POST(req: NextRequest) {
           tx,
           normalizedRows.length,
         );
-        const createdStudents: Array<{ id: string }> = [];
+        const createdStudents: Array<{ id: string; name: string; code: string; createdAt: Date; status: string }> = [];
         const executionWarnings: string[] = [];
         for (const [
           rowIndex,
@@ -660,6 +661,11 @@ export async function POST(req: NextRequest) {
         }
         await ensureProtectedGradeMarkers(tx, {
           studentIds: createdStudents.map((student) => student.id),
+        });
+        // Every new student is not held to exams in their first three days.
+        await addNewStudentGracePeriods(tx, createdStudents, {
+          id: principal.id,
+          name: principal.name,
         });
         return { students: createdStudents, warnings: executionWarnings };
       }),

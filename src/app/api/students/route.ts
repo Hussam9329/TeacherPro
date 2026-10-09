@@ -58,6 +58,7 @@ import {
   withStudentMutationToken,
 } from "@/lib/student-mutation-token";
 import { buildStudentRegistryWhere } from "@/lib/student-registry-filters-server";
+import { addNewStudentGracePeriods } from "@/lib/new-student-grace-server";
 
 /**
  * يوزر تيليجرام المستعاد (username): قيمة حرفية بدون @، غير رقمية، غير فريدة.
@@ -572,6 +573,11 @@ export async function POST(req: NextRequest) {
 
         await ensureProtectedGradeMarkers(tx, {
           studentIds: [createdStudent.id],
+        });
+        // A new student is not held to exams in their first three days.
+        await addNewStudentGracePeriods(tx, [createdStudent], {
+          id: principal.id,
+          name: principal.name,
         });
 
         await tx.auditLog.create({

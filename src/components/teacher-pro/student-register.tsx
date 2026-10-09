@@ -802,7 +802,7 @@ export function StudentRegisterView() {
                     className={fieldBaseClass}
                   />
                   <p className="text-xs leading-5 text-muted-foreground">
-                    فترة السماح تُضاف من شاشة «إدارة فترة السماح».
+                    الطالب الجديد ياخذ تلقائياً فترة سماح 3 أيام من هذا التاريخ، وتنعدل أو تنلغى من «إدارة فترة السماح».
                   </p>
                 </div>
               </div>

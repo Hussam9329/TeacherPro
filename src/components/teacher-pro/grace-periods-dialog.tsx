@@ -37,6 +37,8 @@ import {
   gracePeriodDays,
   gracePeriodEndFromDays,
   gracePeriodLight,
+  isNewStudentGracePeriod,
+  NEW_STUDENT_GRACE_DAYS,
   gracePeriodState,
   studentGraceLight,
   type GraceLight,
@@ -589,7 +591,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
 
   /** A period as a toned panel: dates, length and what is left, with its actions. */
   function renderPeriodPanel(
-    period: Pick<GracePeriodRecord, "startDate" | "endDate">,
+    period: Pick<GracePeriodRecord, "startDate" | "endDate"> & { note?: string },
     options: { eyebrow: string; tone: "success" | "warning" | "danger" | "none"; remaining?: string; actions?: ReactNode; note?: ReactNode; cancelled?: boolean },
   ) {
     return (
@@ -598,6 +600,10 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
         <div className="tp-grace-period__when">
           <span className="tp-grace-period__eyebrow">{options.eyebrow}</span>
           <PeriodDates period={period} />
+          {/* Added by the system to every new student from their registration day. */}
+          {isNewStudentGracePeriod(period) && (
+            <span className="tp-grace-period__auto">تلقائية: طالب جديد ({formatGraceDays(NEW_STUDENT_GRACE_DAYS)} من تاريخ تسجيله)</span>
+          )}
         </div>
         <div className="tp-grace-period__length">
           <b>{formatGraceDays(gracePeriodDays(period))}</b>

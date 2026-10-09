@@ -75,11 +75,27 @@ check(
   "مسار الطلاب يرفض حقول السماح القديمة ولا يكتبها",
 );
 
-// 3. GracePeriod rows are written only by the management screen.
-const graceWriters = filesMatching(/\bgracePeriod\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\b/);
+// New students: an automatic 3-day period from the registration day, added
+// in the same transaction that registers them, singly or in bulk.
 check(
-  graceWriters.join(",") === "src/lib/grace-period-plan-server.ts",
-  `كتابة فترات السماح محصورة بإدارة فترة السماح (${graceWriters.join(", ")})`,
+  read("src/lib/grace-periods.ts").includes("export const NEW_STUDENT_GRACE_DAYS = 3;") &&
+    read("src/lib/new-student-grace-server.ts").includes('source: "manual",') &&
+    read("src/lib/new-student-grace-server.ts").includes("gracePeriodEndFromDays(startDate, NEW_STUDENT_GRACE_DAYS)") &&
+    read("src/lib/new-student-grace-server.ts").includes("baghdadDateKey(registeredAt)") &&
+    read("src/app/api/students/route.ts").includes("await addNewStudentGracePeriods(tx, [createdStudent], {") &&
+    read("src/app/api/students/bulk/route.ts").includes("await addNewStudentGracePeriods(tx, createdStudents, {") &&
+    read("src/components/teacher-pro/grace-periods-dialog.tsx").includes("isNewStudentGracePeriod(period)"),
+  "كل طالب جديد (مفرد أو إضافة جماعية) ياخذ فترة سماح تلقائية ٣ أيام من يوم تسجيله بتوقيت بغداد",
+);
+
+// 3. GracePeriod rows are written only by the management screen, and the
+// automatic period of a new student is only ever added (never changed).
+const graceWriters = filesMatching(/\bgracePeriod\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\b/);
+const newStudentGrace = read("src/lib/new-student-grace-server.ts");
+check(
+  graceWriters.sort().join(",") === "src/lib/grace-period-plan-server.ts,src/lib/new-student-grace-server.ts" &&
+    !/\bgracePeriod\.(?:createMany|update|updateMany|upsert|delete|deleteMany)\b/.test(newStudentGrace),
+  `كتابة فترات السماح محصورة بإدارة فترة السماح وإضافة سماح الطالب الجديد (${graceWriters.join(", ")})`,
 );
 
 // 4. Nothing writes the retired «ضمن فترة السماح» placeholder any more.

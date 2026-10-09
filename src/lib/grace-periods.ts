@@ -57,6 +57,17 @@ function dateKeyToUtc(key: string): number | null {
   return new Date(time).toISOString().slice(0, 10) === key ? time : null;
 }
 
+/**
+ * The automatic period every new student gets from their registration day.
+ * It is stored as an ordinary («manual») period; this note marks it.
+ */
+export const NEW_STUDENT_GRACE_DAYS = 3;
+export const NEW_STUDENT_GRACE_NOTE = "فترة سماح تلقائية للطالب الجديد";
+
+export function isNewStudentGracePeriod(period: { note?: string | null }): boolean {
+  return String(period.note || "") === NEW_STUDENT_GRACE_NOTE;
+}
+
 /** Strict calendar validation for a YYYY-MM-DD key (rejects 2026-02-30). */
 export function isValidGraceDateKey(value: unknown): value is string {
   return typeof value === "string" && dateKeyToUtc(value) !== null;

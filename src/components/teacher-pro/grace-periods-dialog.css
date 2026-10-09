@@ -192,6 +192,7 @@ a.tp-grace-card__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--t
 .tp-grace-period__icon svg { inline-size: 1.25rem; block-size: 1.25rem; }
 .tp-grace-period__when { display: grid; gap: 0.15rem; min-inline-size: 0; }
 .tp-grace-period__eyebrow { color: var(--tone-ink); font-size: 0.76rem; font-weight: 800; }
+.tp-grace-period__auto { color: var(--tp-text-muted); font-size: 0.74rem; font-weight: 700; }
 .tp-grace-dates { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.6rem; }
 .tp-grace-dates__one { display: inline-flex; align-items: baseline; gap: 0.35rem; }
 .tp-grace-dates__one small { color: var(--tp-text-muted); font-size: 0.76rem; font-weight: 700; }
