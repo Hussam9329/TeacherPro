@@ -5,7 +5,6 @@ import { useEffect, useState, useMemo } from "react";
 import { useTeacherStore, type Student } from "@/lib/teacher-store";
 import {
   opportunityStatsApi,
-  opportunityLogApi,
   studentApi,
   studentProfileLogApi,
   type OpportunityStatsResponse,
@@ -28,7 +27,15 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { DEFAULT_MANUAL_RESTORATION_REASON, manualRestorationAmount } from "@/lib/manual-restoration";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
-import { ExportDialog, buildStudentDetailsFromProfileLog, type ExportColumn, type StudentDetailsMap } from "./export-dialog";
+import {
+  ExportDialog,
+  buildOpportunityTimeline,
+  buildStudentDetailsFromProfileLog,
+  formatReportTimelineDate,
+  type ExportColumn,
+  type StudentDetails,
+  type StudentDetailsMap,
+} from "./export-dialog";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { ChevronLeft, CircleMinus, CirclePlus, RotateCcw, Target } from "lucide-react";
 import { FormDialogHero } from "./form-dialog";
@@ -80,21 +87,6 @@ type OpportunityStudent = Student & {
   isOpportunityOverLimit?: boolean;
 };
 
-type OpportunityLogWithRelations = {
-  id: string;
-  studentId: string;
-  examId?: string | null;
-  action: string;
-  amount: number;
-  appliedAmount?: number | null;
-  reason?: string | null;
-  date: string;
-  chapterId?: string | null;
-  chapterNameSnapshot?: string | null;
-  student?: { id: string; name: string; code: string; courseId: string; status: string } | null;
-  exam?: { id: string; name: string; date: string; type: string } | null;
-};
-
 export function OpportunitiesView() {
   const {
     students,
@@ -134,8 +126,9 @@ export function OpportunitiesView() {
   ]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const [detailsStudentId, setDetailsStudentId] = useState("");
-  const [detailsLogs, setDetailsLogs] = useState<OpportunityLogWithRelations[]>([]);
-  const [detailsLogsLoading, setDetailsLogsLoading] = useState(false);
+  // «التفاصيل»: the same data and timeline as the HTML report of this page.
+  const [detailsData, setDetailsData] = useState<StudentDetails | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsRefreshKey, setDetailsRefreshKey] = useState(0);
   const [databaseStats, setDatabaseStats] =
     useState<OpportunityStatsResponse | null>(null);
@@ -321,33 +314,27 @@ export function OpportunitiesView() {
 
   useEffect(() => {
     if (!detailsStudentId) {
-      setDetailsLogs([]);
-      setDetailsLogsLoading(false);
+      setDetailsData(null);
+      setDetailsLoading(false);
       return;
     }
     let cancelled = false;
-    setDetailsLogsLoading(true);
-    opportunityLogApi
-      .list({ studentId: detailsStudentId, pageSize: 100 })
-      .then((result) => {
+    setDetailsLoading(true);
+    studentProfileLogApi
+      .get(detailsStudentId)
+      .then((profile) => {
         if (cancelled) return;
-        setDetailsLogs(
-          ((result?.opportunityLogs || []) as unknown as OpportunityLogWithRelations[]).map(
-            (log) => ({
-              ...log,
-              date: log.date ? String(log.date).slice(0, 10) : "",
-            }),
-          ),
-        );
+        setDetailsData(profile ? buildStudentDetailsFromProfileLog(profile) : null);
+        if (!profile) toast.error("تعذر تحميل تفاصيل فرص الطالب.");
       })
       .catch(() => {
         if (!cancelled) {
-          setDetailsLogs([]);
+          setDetailsData(null);
           toast.error("تعذر تحميل تفاصيل فرص الطالب.");
         }
       })
       .finally(() => {
-        if (!cancelled) setDetailsLogsLoading(false);
+        if (!cancelled) setDetailsLoading(false);
       });
 
     return () => {
@@ -416,27 +403,10 @@ export function OpportunitiesView() {
     [students, serverStudents, detailsStudentId],
   );
 
-  const selectedDetailsLogs = useMemo(() => {
-    if (!detailsStudentId) return [];
-    return detailsLogs.length > 0 || detailsLogsLoading
-      ? detailsLogs
-      : (opportunityLogs as OpportunityLogWithRelations[])
-          .filter((log) => log.studentId === detailsStudentId)
-          .sort((a, b) => String(b.date).localeCompare(String(a.date)));
-  }, [detailsLogs, detailsLogsLoading, opportunityLogs, detailsStudentId]);
-
-  const selectedDetailsStats = useMemo(() => {
-    return selectedDetailsLogs.reduce(
-      (acc, log) => {
-        if (log.action === "خصم" || log.action === "خصم تلقائي")
-          acc.deducted += Number(log.appliedAmount ?? log.amount) || 0;
-        if (isOpportunityCreditAction(log.action))
-          acc.added += Number(log.amount) || 0;
-        return acc;
-      },
-      { deducted: 0, added: 0 },
-    );
-  }, [selectedDetailsLogs]);
+  const detailsTimeline = useMemo(
+    () => (detailsData ? buildOpportunityTimeline(detailsData) : []),
+    [detailsData],
+  );
 
   const [profileStudentId, setProfileStudentId] = useState("");
 
@@ -500,52 +470,6 @@ export function OpportunitiesView() {
       return Boolean(opportunityStudent.hasActiveChapter);
     }
     return Boolean(getStudentActiveChapter(student));
-  };
-
-  const cleanOpportunityReason = (reason: string | null | undefined) => {
-    const text = displayOpportunityReason(reason)
-      .replace(/\s*\[academic-reactivation-link:[^\]]+\]/g, "")
-      .trim();
-    return text || "بدون سبب مكتوب";
-  };
-
-  /** One movement as one row: what changed, why, and where it came from. */
-  const renderOpportunityMove = (log: OpportunityLogWithRelations | (typeof opportunityLogs)[number]) => {
-    const reasonText = cleanOpportunityReason(log.reason)
-      .split(/\s+-\s+(?=النطاق:|الحالة:|عدد الفرص:|البحث:|السبب:)/g)
-      .map((part) => part.replace(/^السبب:\s*/, "").trim())
-      .filter(Boolean)
-      .join(" · ");
-    const linkedToReturn = String(log.reason || "").includes("[academic-reactivation-link:");
-    const relatedExam = (log as OpportunityLogWithRelations).exam;
-    const exam = relatedExam || exams.find((item) => item.id === log.examId);
-    const tone =
-      log.action === "خصم" || log.action === "خصم تلقائي"
-        ? "danger"
-        : isOpportunityCreditAction(log.action)
-          ? "success"
-          : "muted";
-    const source = !log.examId
-      ? "حركة يدوية"
-      : exam
-        ? `امتحان ${exam.name}`
-        : "امتحان محذوف";
-    const chapter = log.chapterNameSnapshot || "";
-    return (
-      <li key={log.id} className="tp-opp-move" data-tone={tone}>
-        <span className="tp-opp-move__amount">
-          {displayOpportunityAction(log.action)} {log.amount}
-        </span>
-        <span className="tp-opp-move__text">
-          <span className="tp-opp-move__reason">{reasonText}</span>
-          <span className="tp-opp-move__meta">
-            <b>{formatAppDate(log.date)}</b> · {source}
-            {chapter ? ` · ${chapter}` : ""}
-            {linkedToReturn ? " · مرتبط بإرجاع الطالب" : ""}
-          </span>
-        </span>
-      </li>
-    );
   };
 
   const handleAction = runActionLocked(async () => {
@@ -1166,17 +1090,49 @@ export function OpportunitiesView() {
             <div className="tp-form-dialog__body">
               <p className="tp-opp-details__summary">
                 <b>{selectedDetailsStudent.code}</b> · {courseName(selectedDetailsStudent.courseId)} · {selectedDetailsStudent.status}
-                <span className="tp-opp-details__sep" aria-hidden="true">—</span>
-                خُصم <b>{selectedDetailsStats.deducted}</b> · انضاف <b>{selectedDetailsStats.added}</b> · الفرص <b>{formatOpportunityBalance(selectedDetailsStudent)}</b>
               </p>
-              {detailsLogsLoading ? (
+              <div className="tp-opp-report__balance">
+                <span>الفرص المتبقية</span>
+                <strong>{formatOpportunityBalance(selectedDetailsStudent)}</strong>
+              </div>
+              {detailsLoading && !detailsData ? (
                 <LoadingState title="جاري تحميل سجل الطالب..." />
-              ) : selectedDetailsLogs.length === 0 ? (
-                <EmptyState compact icon={Target} title="لا توجد حركات فرص لهذا الطالب" />
+              ) : detailsTimeline.length === 0 ? (
+                <EmptyState compact icon={Target} title="لا توجد امتحانات أو حركات لعرضها" />
               ) : (
-                <ol className="tp-opp-moves">
-                  {selectedDetailsLogs.map((log) => renderOpportunityMove(log))}
-                </ol>
+                <>
+                  <h3 className="tp-opp-report__title">
+                    {detailsData?.activeChapterName ? `الدرجات — ${detailsData.activeChapterName}` : "الدرجات في الامتحانات"}
+                  </h3>
+                  {/* Same lines, order and words as «عرض التفاصيل» in the HTML report. */}
+                  <ol className="tp-opp-report">
+                    <li className="tp-opp-report__head" aria-hidden="true">
+                      <span>الامتحان</span><span>تاريخ الامتحان</span><span>الدرجة</span><span>الأثر على الفرص</span>
+                    </li>
+                    {detailsTimeline.map((entry) =>
+                      entry.type === "event" ? (
+                        <li key={entry.key} className="tp-opp-report__event" data-kind={entry.kind}>
+                          <strong>{entry.text}</strong>
+                          <time dateTime={entry.date}>{formatReportTimelineDate(entry.date, true)}</time>
+                        </li>
+                      ) : (
+                        <li key={entry.key} className="tp-opp-report__exam" data-result={entry.result}>
+                          <span className="tp-opp-report__exam-name">
+                            <strong>{entry.examName}</strong>
+                            {entry.examType && <span>{entry.examType}</span>}
+                          </span>
+                          <span className="tp-opp-report__exam-date">{formatReportTimelineDate(entry.examDate) || "غير مسجّل"}</span>
+                          <span className="tp-opp-report__score">
+                            <bdi>{entry.score}</bdi>
+                            {entry.duringDismissal && <small> (سُجّلت أثناء الفصل)</small>}
+                            {entry.pill && <span className="tp-opp-report__pill" data-tone={entry.pill.tone}>{entry.pill.text}</span>}
+                          </span>
+                          <span className="tp-opp-report__effect">{entry.effect}</span>
+                        </li>
+                      ),
+                    )}
+                  </ol>
+                </>
               )}
             </div>
           ) : null}

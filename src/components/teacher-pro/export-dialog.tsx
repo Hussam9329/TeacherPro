@@ -94,6 +94,124 @@ export type StudentDetails = {
 
 export type StudentDetailsMap = Record<string, StudentDetails>;
 
+/* ============== The report's timeline, for in-app windows ============== */
+
+/** One line of a student's timeline, exactly as the HTML report shows it. */
+export type OpportunityTimelineEntry =
+  | { type: "event"; key: string; date: string; text: string; kind: "add" | "return" | "reset" | "deduct" }
+  | {
+    type: "grade";
+    key: string;
+    examName: string;
+    examType: string;
+    examDate: string;
+    /** passed / failed / deducted / dismissed / excused / neutral: the row's colour. */
+    result: "passed" | "failed" | "deducted" | "dismissed" | "excused" | "neutral";
+    /** The grade text, e.g. «41 / 50», «غياب», «إجازة». */
+    score: string;
+    /** «ناجح» / «الدرجة كاملة» / «راسب» next to the grade, when there is one. */
+    pill: { text: string; tone: "passed" | "failed" } | null;
+    duringDismissal: boolean;
+    effect: string;
+  };
+
+/** The report's day key: the exam or event day in Baghdad. */
+function reportTimelineDay(value: string): string {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Asia/Baghdad",
+  }).formatToParts(date);
+  return ["year", "month", "day"].map((type) => parts.find((part) => part.type === type)?.value || "").join("-");
+}
+
+function reportNumberText(value: number | null | undefined): string {
+  return value === null || value === undefined || !Number.isFinite(Number(value)) ? "—" : String(Number(value));
+}
+
+/**
+ * The same timeline the HTML report draws in «عرض التفاصيل» (export-dialog's
+ * showDetails): exam results and recorded changes in one list, ordered by day,
+ * then time, with a change before a result of the same moment.
+ */
+export function buildOpportunityTimeline(details: StudentDetails): OpportunityTimelineEntry[] {
+  type Item = { day: string; date: string; order: number; entry: OpportunityTimelineEntry };
+  const grades: Item[] = (details.grades || []).map((g, index) => {
+    const excused = g.status === "مجاز" || g.status === GRACE_PERIOD_EXCUSE_LABEL || g.status === "قبل تسجيل الطالب";
+    const tone = g.opportunityTone && ["ordinary", "excused", "deducted", "dismissed"].includes(g.opportunityTone)
+      ? g.opportunityTone : "ordinary";
+    const passed = g.outcome === "ناجح" || g.outcome === "الدرجة كاملة";
+    const result = tone === "dismissed" ? "dismissed"
+      : tone === "deducted" ? "deducted"
+        : excused || tone === "excused" ? "excused"
+          : passed ? "passed"
+            : g.outcome === "راسب" || g.status === "غائب" || g.status === "غش" ? "failed"
+              : "neutral";
+    const score = g.status === "غش" ? "غش"
+      : g.score === null || g.score === undefined
+        ? g.status === "مجاز" ? "إجازة"
+          : g.status === GRACE_PERIOD_EXCUSE_LABEL ? "مجاز فترة سماح"
+            : g.status === "غائب" ? "غياب"
+              : g.status === PENDING_GRADE_STATUS ? PENDING_GRADE_STATUS
+                : g.status === DISMISSED_NO_GRADE_TEXT ? DISMISSED_NO_GRADE_TEXT
+                  : "بانتظار الدرجة"
+        : `${reportNumberText(g.score)} / ${reportNumberText(g.fullMark)}`;
+    const hasScore = g.status !== "غش" && g.score !== null && g.score !== undefined;
+    const pill = !hasScore || g.duringDismissal ? null
+      : passed ? { text: String(g.outcome), tone: "passed" as const }
+        : g.outcome === "راسب" ? { text: "راسب", tone: "failed" as const } : null;
+    const date = g.timelineDate || g.examDate;
+    return {
+      day: reportTimelineDay(g.examDate),
+      date,
+      order: index,
+      entry: {
+        type: "grade",
+        key: `grade-${g.examId || index}`,
+        examName: g.examName,
+        examType: g.examType,
+        examDate: g.examDate,
+        result,
+        score,
+        pill,
+        duringDismissal: hasScore && g.duringDismissal === true,
+        effect: String(g.opportunityEffect || "لا تتوفر تفاصيل الأثر في هذه النسخة.").trim(),
+      },
+    };
+  });
+  const events: Item[] = (details.timelineEvents || []).map((event, index) => ({
+    day: reportTimelineDay(event.date),
+    date: event.date,
+    order: index,
+    entry: {
+      type: "event",
+      key: `event-${index}`,
+      date: event.date,
+      text: event.text,
+      kind: ["add", "return", "reset", "deduct"].includes(event.kind) ? event.kind : "reset",
+    },
+  }));
+  return [...grades, ...events]
+    .sort((a, b) => {
+      const isEventA = a.entry.type === "event";
+      const isEventB = b.entry.type === "event";
+      return a.day.localeCompare(b.day) ||
+        (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0) ||
+        (isEventA && !isEventB ? -1 : !isEventA && isEventB ? 1 : a.order - b.order);
+    })
+    .map((item) => item.entry);
+}
+
+/** «7 أكتوبر 2026», and «· 3:15 م» for a change saved at a time (as the report). */
+export function formatReportTimelineDate(value: string, withTime = false): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const day = date.toLocaleDateString("ar-EG-u-nu-latn", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Baghdad" });
+  if (!withTime || !value.includes("T")) return day;
+  return `${day} · ${date.toLocaleTimeString("ar-EG-u-nu-latn", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Baghdad" })}`;
+}
+
 /** Derive the choices from the exact report snapshot, after chapter scoping. */
 export function getHtmlReportExams(details: StudentDetailsMap) {
   const exams = new Map<string, { id: string; name: string; date: string; courseNames: string[] }>();

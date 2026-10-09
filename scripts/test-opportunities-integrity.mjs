@@ -40,9 +40,10 @@ check(
   'الواجهة تكشف غياب/تعارض الفصل النشط ولا تفتح إجراءات خطرة بلا فصل صالح',
 );
 check(
-  opportunitiesView.includes('opportunityLogApi') &&
-    opportunitiesView.includes('studentId: detailsStudentId'),
-  'تفاصيل الطالب تجلب سجل الفرص من قاعدة البيانات حسب الطالب ولا تكتفي بسجل الصفحة الحالي',
+  opportunitiesView.includes('.get(detailsStudentId)') &&
+    opportunitiesView.includes('buildStudentDetailsFromProfileLog(profile)') &&
+    opportunitiesView.includes('buildOpportunityTimeline(detailsData)'),
+  'تفاصيل الطالب تجلب سجله من قاعدة البيانات وتعرضه مثل تقرير HTML (نفس البيانات والترتيب)',
 );
 check(
   studentActionRoute.includes('withSerializableTransaction') &&
