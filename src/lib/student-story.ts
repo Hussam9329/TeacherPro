@@ -56,6 +56,12 @@ export type StoryStripItem = { id: string; index: number; name: string; dayKey: 
 
 export type StudentStory = {
   summary: StoryPart[][];
+  /** The pieces of the summary a page lays out on its own: the first line,
+   * the lines worth a highlight (dismissals, bonus progress) and the newest
+   * event. Same words as the summary. */
+  lead: StoryPart[];
+  highlights: StoryPart[][];
+  latest: StoryEvent | null;
   openItems: StoryPart[][];
   strip: StoryStripItem[];
   stripChapterName: string;
@@ -639,6 +645,7 @@ export function buildStudentStory(rawInput: StudentStoryInput): StudentStory {
   const returnEvents = chapterEvents.filter((event) => event.role === "return");
   const lastReturn = returnEvents[returnEvents.length - 1];
   const summary: StoryPart[][] = [];
+  const highlights: StoryPart[][] = [];
   if (status === "مفصول") {
     const why = storyDismissalReason(student.dismissalReason);
     summary.push(storyParts(`${bold(name)} مفصول${lastDismissal ? ` من ${bold(storyDay(lastDismissal.dayKey))}` : ""}${why ? `: ${why}` : ""}.`));
@@ -654,6 +661,7 @@ export function buildStudentStory(rawInput: StudentStoryInput): StudentStory {
   if (lastDismissal && status !== "مفصول") {
     const dismissalCount = dismissalEvents.length;
     summary.push(storyParts(`انفصل ${dismissalCount === 1 ? "مرة وحدة" : `${bold(dismissalCount)} مرات`} بهالفصل، آخرها يوم ${bold(storyDay(lastDismissal.dayKey))}${lastReturn && lastReturn.at > lastDismissal.at ? `، ورجع يوم ${bold(storyDay(lastReturn.dayKey))}` : ""}.`));
+    highlights.push(summary[summary.length - 1]);
   }
   const chapterDeducted = input.opportunityLogs
     .filter((log) => s(log.chapterId) === currentChapterId && (s(log.action) === "خصم تلقائي" || (s(log.action) === "خصم" && !/^فصل الطالب/u.test(s(log.reason)))))
@@ -680,7 +688,10 @@ export function buildStudentStory(rawInput: StudentStoryInput): StudentStory {
     summary.push(storyParts(`${bold(strip.length)} امتحان بهالفصل: ${bits.join("، ")}.`));
   }
   const bonusProgress = n(student.bonusProgress);
-  if (bonusProgress === 1) summary.push(storyParts(`باقي نجاح واحد ويرجعله «${BONUS_OPPORTUNITY_ACTION}».`));
+  if (bonusProgress === 1) {
+    summary.push(storyParts(`باقي نجاح واحد ويرجعله «${BONUS_OPPORTUNITY_ACTION}».`));
+    highlights.push(summary[summary.length - 1]);
+  }
   const newest = newestFirst[0];
   if (newest) summary.push([...storyParts(`آخر شي صار (${bold(storyDay(newest.dayKey))}): `), ...newest.parts]);
 
@@ -746,6 +757,9 @@ export function buildStudentStory(rawInput: StudentStoryInput): StudentStory {
 
   return {
     summary,
+    lead: summary[0] || [],
+    highlights,
+    latest: newest || null,
     openItems,
     strip,
     stripChapterName: input.activeChapter?.name || "",

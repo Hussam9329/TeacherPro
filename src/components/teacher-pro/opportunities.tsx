@@ -33,27 +33,13 @@ import {
   buildStudentDetailsFromProfileLog,
   formatReportTimelineDate,
   type ExportColumn,
-  type StaffOpportunityCategory,
   type StudentDetails,
   type StudentDetailsMap,
 } from "./export-dialog";
 import { StudentProfileDialog } from "./student-profile-dialog";
-import { Ban, ChevronLeft, CircleMinus, CirclePlus, FileText, Flag, RotateCcw, SlidersHorizontal, Star, Target, Undo2, UserX } from "lucide-react";
+import { STAFF_ROW_ICONS, staffRowNote } from "./opportunity-row-icons";
+import { ChevronLeft, CircleMinus, CirclePlus, RotateCcw, Target } from "lucide-react";
 
-/** One icon per kind of row in a student's opportunities («التفاصيل»). */
-const STAFF_ROW_ICONS: Record<StaffOpportunityCategory, typeof Star> = {
-  exam: FileText,
-  "exam-deduct": CircleMinus,
-  "exam-dismissal": Ban,
-  bonus: Star,
-  "admin-add": CirclePlus,
-  "admin-deduct": CircleMinus,
-  undo: Undo2,
-  "admin-dismissal": UserX,
-  "chapter-start": Flag,
-  return: RotateCcw,
-  set: SlidersHorizontal,
-};
 import { FormDialogHero } from "./form-dialog";
 import { EmptyState, LoadingState } from "./ui-kit";
 import { ListToolbar } from "./list-toolbar";
@@ -1155,10 +1141,7 @@ export function OpportunitiesView() {
                   <ol className="tp-oppv">
                     {detailsView.rows.map((row) => {
                       const Icon = STAFF_ROW_ICONS[row.category];
-                      const note = row.note
-                        .replace(/رصيدك/g, "رصيده")
-                        .replace(/رجعت لك/g, "رجعت للطالب")
-                        .replace(/وفُصلت/g, "وفُصل");
+                      const note = staffRowNote(row.note);
                       return (
                         <Fragment key={row.key}>
                         {row.opening && detailsView.rows[0] !== row && (
