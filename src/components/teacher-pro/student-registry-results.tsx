@@ -632,7 +632,7 @@ function StudentRegistryRow({
   const telegramHandle = student.username || (student.telegram && !/^\d+$/.test(student.telegram) ? student.telegram : "");
   const healthBadges = registryHealthBadges(student).filter((badge) => badge.label !== "ناقص بيانات تواصل" && badge.label !== "فرص كاملة");
   const moreActions = studentMoreActions({ student, ...actionProps });
-  // Both numbers are fixed right on the card, as the full edit would.
+  // Both numbers and the Telegram username are fixed right on the card, as the full edit would.
   const quickEdit = actionProps.canEdit && student.status !== ARCHIVED_STUDENT_STATUS;
   return (
     <article
@@ -734,11 +734,16 @@ function StudentRegistryRow({
             {quickEdit ? <StudentContactEdit student={student} field="parentPhone" emptyLabel="رقم ولي الأمر" onSaved={(value) => actionProps.onContactSaved?.(student.id, "parentPhone", value)} /> : null}
           </span>
         ) : null}
-        {telegramHandle ? (
-          <a className="tp-rcard__contact" href={telegramLink(telegramHandle)} target="_blank" rel="noopener noreferrer" dir="ltr">
-            <Send aria-hidden="true" />
-            {telegramHandle.startsWith("@") ? telegramHandle : `@${telegramHandle}`}
-          </a>
+        {telegramHandle || quickEdit ? (
+          <span className="tp-rcard__contact-group">
+            {telegramHandle ? (
+              <a className="tp-rcard__contact" href={telegramLink(telegramHandle)} target="_blank" rel="noopener noreferrer" dir="ltr">
+                <Send aria-hidden="true" />
+                {telegramHandle.startsWith("@") ? telegramHandle : `@${telegramHandle}`}
+              </a>
+            ) : null}
+            {quickEdit ? <StudentContactEdit student={student} field="username" emptyLabel="معرف تيليجرام" onSaved={(value) => actionProps.onContactSaved?.(student.id, "username", value)} /> : null}
+          </span>
         ) : null}
         {missingContacts.length ? (
           <span className="tp-rcard__pill" data-tone="warning">ناقص {missingContacts.join(" و")}</span>

@@ -225,6 +225,7 @@ must(
       notesDialog.includes('field="username"') && notesDialog.includes('[["phone", "الطالب"], ["parentPhone", "ولي الأمر"]]') &&
       registry.includes('<StudentContactEdit student={student} field="phone"') &&
       registry.includes('<StudentContactEdit student={student} field="parentPhone"') &&
+      registry.includes('<StudentContactEdit student={student} field="username" emptyLabel="معرف تيليجرام"') &&
       registry.includes("actionProps.canEdit && student.status !== ARCHIVED_STUDENT_STATUS"),
     "تعديل سريع لليوزر ورقم الطالب ورقم ولي الأمر من الكارت، لمن عنده تعديل الطلاب",
   );
