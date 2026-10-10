@@ -163,7 +163,7 @@ function harness() {
     '@/lib/user-toast': { toast: { error: (error) => errors.push(error), success: (message) => successes.push(message) } },
     '@/lib/validation': validationContext.exports,
     './student-registry-helpers': registryHelpers,
-    './telegram-username-edit': named(['TelegramUsernameEdit']),
+    './student-contact-edit': named(['StudentContactEdit']),
     './ui-kit': named(['EmptyState', 'LoadingState']),
     '@/lib/baghdad-time': loadHelper('@/lib/baghdad-time'),
     '@/lib/format': loadHelper('@/lib/format'),

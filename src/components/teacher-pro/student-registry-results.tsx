@@ -25,6 +25,7 @@ import {
 } from "./student-registry-helpers";
 import { displayReasonText } from "@/lib/reason-display";
 import { RowActionsMenu, type RowAction } from "./row-actions-menu";
+import { StudentContactEdit, type StudentContactField } from "./student-contact-edit";
 import "./student-registry-results.css";
 
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
@@ -335,6 +336,8 @@ type StudentActionsProps = {
   onDismiss: (student: Student) => void;
   onRestore: (student: Student) => void;
   onArchive: (student: Student) => void;
+  /** A number fixed right on the card: the list shows it at once. */
+  onContactSaved?: (studentId: string, field: StudentContactField, value: string | null) => void;
 };
 
 function studentMoreActions({
@@ -629,6 +632,8 @@ function StudentRegistryRow({
   const telegramHandle = student.username || (student.telegram && !/^\d+$/.test(student.telegram) ? student.telegram : "");
   const healthBadges = registryHealthBadges(student).filter((badge) => badge.label !== "ناقص بيانات تواصل" && badge.label !== "فرص كاملة");
   const moreActions = studentMoreActions({ student, ...actionProps });
+  // Both numbers are fixed right on the card, as the full edit would.
+  const quickEdit = actionProps.canEdit && student.status !== ARCHIVED_STUDENT_STATUS;
   return (
     <article
       className="tp-rcard"
@@ -707,17 +712,27 @@ function StudentRegistryRow({
       </div>
 
       <div className="tp-rcard__foot">
-        {sanitizePhoneInput(student.phone || "") ? (
-          <a className="tp-rcard__contact" href={whatsappLink(student.phone)} target="_blank" rel="noopener noreferrer">
-            <Phone aria-hidden="true" />
-            <span dir="ltr" className="tabular-nums">{student.phone}</span>
-          </a>
+        {sanitizePhoneInput(student.phone || "") || quickEdit ? (
+          <span className="tp-rcard__contact-group">
+            {sanitizePhoneInput(student.phone || "") ? (
+              <a className="tp-rcard__contact" href={whatsappLink(student.phone)} target="_blank" rel="noopener noreferrer">
+                <Phone aria-hidden="true" />
+                <span dir="ltr" className="tabular-nums">{student.phone}</span>
+              </a>
+            ) : null}
+            {quickEdit ? <StudentContactEdit student={student} field="phone" emptyLabel="رقم الطالب" onSaved={(value) => actionProps.onContactSaved?.(student.id, "phone", value)} /> : null}
+          </span>
         ) : null}
-        {sanitizePhoneInput(student.parentPhone || "") ? (
-          <a className="tp-rcard__contact" href={whatsappLink(student.parentPhone)} target="_blank" rel="noopener noreferrer">
-            <MessageCircle aria-hidden="true" />
-            ولي الأمر <span dir="ltr" className="tabular-nums">{student.parentPhone}</span>
-          </a>
+        {sanitizePhoneInput(student.parentPhone || "") || quickEdit ? (
+          <span className="tp-rcard__contact-group">
+            {sanitizePhoneInput(student.parentPhone || "") ? (
+              <a className="tp-rcard__contact" href={whatsappLink(student.parentPhone)} target="_blank" rel="noopener noreferrer">
+                <MessageCircle aria-hidden="true" />
+                ولي الأمر <span dir="ltr" className="tabular-nums">{student.parentPhone}</span>
+              </a>
+            ) : null}
+            {quickEdit ? <StudentContactEdit student={student} field="parentPhone" emptyLabel="رقم ولي الأمر" onSaved={(value) => actionProps.onContactSaved?.(student.id, "parentPhone", value)} /> : null}
+          </span>
         ) : null}
         {telegramHandle ? (
           <a className="tp-rcard__contact" href={telegramLink(telegramHandle)} target="_blank" rel="noopener noreferrer" dir="ltr">

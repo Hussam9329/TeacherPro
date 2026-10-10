@@ -16,8 +16,10 @@ export type ManagedCallNote = {
     code: string;
     telegram: string | null;
     username: string | null;
-    /** Only for whoever gets the platform button (see `platform`). */
+    /** Only for whoever gets the platform button (see `platform`) or edits students (`contacts`). */
     phone?: string | null;
+    /** Only for whoever edits students (see `contacts`). */
+    parentPhone?: string | null;
     courseId: string;
     course: { id: string; name: string } | null;
   };
@@ -38,6 +40,8 @@ export type ManagedCallNotesResponse = {
   totalCount: number;
   /** The viewer gets the platform button, as in «إغلاق الكودات». */
   platform?: boolean;
+  /** The viewer edits students: the card shows both numbers with quick edits. */
+  contacts?: boolean;
 };
 
 async function responseBody(response: Response) {

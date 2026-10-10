@@ -15,7 +15,7 @@ import { contactStatusMatchesFilter, normalizeContactStatusFilter, type ContactS
 import { GUARDIAN_NUMBER_NOT_WORKING_MESSAGE, telegramChatWithMessage } from "@/lib/call-note-telegram";
 import { copyText, MZ_ACTIVE_USERS_URL, mzPlatformPhone } from "@/lib/code-closure-contact";
 import { describeTelegramHandle } from "./student-registry-helpers";
-import { TelegramUsernameEdit } from "./telegram-username-edit";
+import { StudentContactEdit, type StudentContactField } from "./student-contact-edit";
 import { EmptyState, LoadingState } from "./ui-kit";
 import "./code-closures-dialog.css";
 
@@ -23,8 +23,6 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canManage: boolean;
-  /** May change the student's Telegram username here (students.edit). */
-  canEditTelegram?: boolean;
 };
 
 const GENERAL_NOTES = "__general__";
@@ -69,10 +67,12 @@ const VIEWS: Array<{ key: CallNotesView; label: string }> = [
   { key: "archive", label: "الأرشيف (المنجزة)" },
 ];
 
-export function CallNotesManagementDialog({ open, onOpenChange, canManage, canEditTelegram = false }: Props) {
+export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Props) {
   const [notes, setNotes] = useState<ManagedCallNote[]>([]);
   // The platform button, as in «إغلاق الكودات», for whoever the server allows.
   const [platform, setPlatform] = useState(false);
+  // Student editors fix the username and both numbers right on the card.
+  const [contacts, setContacts] = useState(false);
   const [platformOpened, setPlatformOpened] = useState<Set<string>>(new Set());
   // Completed notes never disappear: they move to «الأرشيف».
   const [view, setView] = useState<CallNotesView>("pending");
@@ -111,6 +111,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage, canEd
           mutationVersion !== mutationVersionRef.current || requestView !== viewRef.current) return;
       setNotes(result.notes);
       setPlatform(Boolean(result.platform));
+      setContacts(Boolean(result.contacts));
       setLoaded(true);
       setError("");
     } catch (cause) {
@@ -339,6 +340,11 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage, canEd
     });
   }
 
+  // A contact saved from the card shows on every note of that student.
+  const saveContact = (studentId: string, field: StudentContactField, value: string | null) => {
+    setNotes((current) => current.map((item) => item.student.id === studentId ? { ...item, student: { ...item.student, [field]: value } } : item));
+  };
+
   // Same as «إغلاق الكودات»: copy the student's phone the way the platform
   // search expects it (in the click, before the new tab takes the focus the
   // clipboard needs), then open the platform's active users page.
@@ -552,13 +558,33 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage, canEd
                         ) : telegram.value ? (
                           <span dir="ltr" className="tp-modal__tg tp-notes__tg" data-plain="true">{telegram.value}</span>
                         ) : null}
-                        {canEditTelegram && (
-                          <TelegramUsernameEdit
+                        {contacts && (
+                          <StudentContactEdit
                             student={student}
-                            onSaved={(username) => setNotes((current) => current.map((item) => item.student.id === student.id ? { ...item, student: { ...item.student, username } } : item))}
+                            field="username"
+                            onSaved={(value) => saveContact(student.id, "username", value)}
                           />
                         )}
                       </div>
+                      {contacts && (
+                        <div className="tp-notes__contacts">
+                          {([["phone", "الطالب"], ["parentPhone", "ولي الأمر"]] as const).map(([field, label]) => (
+                            <span key={field} className="tp-notes__contact">
+                              <span className="tp-notes__contact-label">{label}</span>
+                              {student[field] ? (
+                                <span dir="ltr" className="tp-notes__contact-value">{student[field]}</span>
+                              ) : (
+                                <span className="tp-notes__contact-value" data-missing="true">ما مسجّل</span>
+                              )}
+                              <StudentContactEdit
+                                student={student}
+                                field={field}
+                                onSaved={(value) => saveContact(student.id, field, value)}
+                              />
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <ol className="tp-notes__items">
                         {group.map((note) => {
                           const noteTone = actionTone(note.contactStatus);

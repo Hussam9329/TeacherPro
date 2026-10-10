@@ -2346,6 +2346,13 @@ export function StudentRegistryView() {
                     setRestoreDialog({ student, open: true })
                   }
                   onArchive={openDeleteDialog}
+                  onContactSaved={(studentId, field, value) =>
+                    setServerStudents((current) =>
+                      current
+                        ? current.map((item) => (item.id === studentId ? { ...item, [field]: value ?? "" } : item))
+                        : current,
+                    )
+                  }
                 />
               )}
 

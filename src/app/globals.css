@@ -3529,11 +3529,12 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
   .tp-pf-card { padding: 0.85rem; }
 }
 
-/* Quick edit of a student's Telegram username on the cards («إغلاق الكودات»,
-   «إدارة ملاحظات المكالمات»): a pencil, then a small inline field. */
+/* Quick edit of a student's contact (Telegram username, the student's and the
+   parent's numbers) on the cards: a pencil, then a small inline field. */
 .tp-tg-edit__open { display: inline-grid; flex: none; place-items: center; inline-size: 2.25rem; block-size: 2.25rem; border: 1px solid var(--border); border-radius: 0.65rem; background: var(--card); color: var(--muted-foreground); cursor: pointer; touch-action: manipulation; transition: background-color 150ms, color 150ms; }
 .tp-tg-edit__open:hover { background: var(--muted); color: var(--foreground); }
 .tp-tg-edit__open svg { inline-size: 0.95rem; block-size: 0.95rem; }
+.tp-tg-edit__open[data-labelled] { inline-size: auto; gap: 0.3rem; padding-inline: 0.6rem; display: inline-flex; align-items: center; border-style: dashed; color: var(--status-warning-fg); font-size: 0.78rem; font-weight: 800; }
 .tp-tg-edit { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; min-width: 0; max-width: 100%; }
 .tp-tg-edit__field { display: inline-flex; align-items: center; gap: 0.15rem; min-width: 0; padding: 0 0.6rem; border: 1px solid var(--primary); border-radius: 0.65rem; background: var(--background); color: var(--muted-foreground); font-weight: 700; }
 .tp-tg-edit__field input { inline-size: 10.5rem; max-inline-size: 52vw; min-block-size: 2.25rem; border: 0; background: transparent; color: var(--foreground); font: inherit; font-weight: 700; outline: none; }

@@ -201,20 +201,32 @@ must(
   );
 }
 
-// The Telegram username is edited right on the cards of «إغلاق الكودات» and
-// «إدارة ملاحظات المكالمات», through the same student edit (students.edit).
+// A student's contact — the Telegram username, the student's and the parent's
+// numbers — is fixed right on the cards («سجل الطلاب», «إغلاق الكودات»,
+// «إدارة ملاحظات المكالمات») through one narrow edit with students.edit.
 {
-  const editor = read("src/components/teacher-pro/telegram-username-edit.tsx");
+  const editor = read("src/components/teacher-pro/student-contact-edit.tsx");
+  const route = read("src/app/api/students/contact/route.ts");
   const dashboard = read("src/components/teacher-pro/dashboard.tsx");
+  const notesDialog = read("src/components/teacher-pro/call-notes-management-dialog.tsx");
+  const notesRoute = read("src/app/api/student-calls/notes/route.ts");
+  const registry = read("src/components/teacher-pro/student-registry-results.tsx");
   must(
-    editor.includes("studentApi.updateTelegramUsername(student.id, username)") &&
-      read("src/app/api/students/telegram-username/route.ts").includes('requirePermissionPrincipal(req, "students.edit")') &&
-      read("src/app/api/students/telegram-username/route.ts").includes("data: { username }") &&
-      ["src/components/teacher-pro/code-closures-dialog.tsx", "src/components/teacher-pro/call-notes-management-dialog.tsx"]
-        .every((file) => { const source = read(file); return source.includes("{canEditTelegram && (") && source.includes("<TelegramUsernameEdit"); }) &&
+    editor.includes("studentApi.updateContact(student.id, field, next)") &&
+      route.includes('requirePermissionPrincipal(req, "students.edit")') &&
+      route.includes('getPhoneValidationError(body.value, FIELDS[field], true)') &&
+      route.includes("getStudentDuplicateMessage(others, identity, current.id)") &&
+      route.includes('action: "تعديل بيانات طالب"') &&
+      read("src/components/teacher-pro/code-closures-dialog.tsx").includes("{canEditContacts && (") &&
       dashboard.includes('actor.permissions?.includes("students.edit")') &&
-      (dashboard.match(/canEditTelegram=\{canEditStudents\}/g) || []).length === 2,
-    "زر تعديل معرف تيليجرام بكارت الطالب بإغلاق الكودات وملاحظات المكالمات، لمن عنده تعديل الطلاب",
+      dashboard.includes("canEditContacts={canEditStudents}") &&
+      notesRoute.includes('const contacts = hasPermission(principal, "students.edit");') &&
+      notesRoute.includes("parentPhone: contacts") &&
+      notesDialog.includes('field="username"') && notesDialog.includes('[["phone", "الطالب"], ["parentPhone", "ولي الأمر"]]') &&
+      registry.includes('<StudentContactEdit student={student} field="phone"') &&
+      registry.includes('<StudentContactEdit student={student} field="parentPhone"') &&
+      registry.includes("actionProps.canEdit && student.status !== ARCHIVED_STUDENT_STATUS"),
+    "تعديل سريع لليوزر ورقم الطالب ورقم ولي الأمر من الكارت، لمن عنده تعديل الطلاب",
   );
 }
 

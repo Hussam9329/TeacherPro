@@ -20,7 +20,7 @@ import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
 import { normalizeForSearch } from "@/lib/validation";
 import { describeTelegramHandle } from "./student-registry-helpers";
-import { TelegramUsernameEdit } from "./telegram-username-edit";
+import { StudentContactEdit } from "./student-contact-edit";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { formatAppDate } from "@/lib/format";
 import { displayReasonText } from "@/lib/reason-display";
@@ -33,7 +33,7 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   canManage: boolean;
   /** May change the student's Telegram username here (students.edit). */
-  canEditTelegram?: boolean;
+  canEditContacts?: boolean;
 };
 
 type StatusFilter = "all" | "checked" | "unchecked";
@@ -44,7 +44,7 @@ const STATUS_FILTERS: Array<{ key: StatusFilter; label: string; tone?: "success"
   { key: "checked", label: "مغلقة", tone: "success" },
 ];
 
-export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditTelegram = false }: Props) {
+export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditContacts = false }: Props) {
   const filterId = useId();
   const [students, setStudents] = useState<CodeClosureStudent[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("unchecked");
@@ -453,9 +453,10 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditTeleg
                               <span dir={telegram.value ? "ltr" : undefined}>{telegram.value || "لا يوجد معرّف"}</span>
                             </span>
                           )}
-                          {canEditTelegram && (
-                            <TelegramUsernameEdit
+                          {canEditContacts && (
+                            <StudentContactEdit
                               student={student}
+                              field="username"
                               onSaved={(username) => setStudents((current) => current.map((item) => item.id === student.id ? { ...item, username } : item))}
                             />
                           )}

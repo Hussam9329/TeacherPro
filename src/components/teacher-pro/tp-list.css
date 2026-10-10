@@ -247,6 +247,8 @@
   overflow-wrap: anywhere;
 }
 .tp-rcard__contact svg { flex-shrink: 0; inline-size: 1rem; block-size: 1rem; }
+/* A number and its quick edit stay together. */
+.tp-rcard__contact-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; min-inline-size: 0; max-inline-size: 100%; }
 a.tp-rcard__contact:hover { border-color: transparent; background: var(--status-info-solid); color: var(--status-info-on); }
 a.tp-rcard__contact:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
 

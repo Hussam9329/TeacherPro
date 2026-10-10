@@ -1608,9 +1608,9 @@ export const studentApi = {
     ),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("students", { id, ...updates }),
-  /** Only the Telegram username, from a card outside «سجل الطلاب». */
-  updateTelegramUsername: (id: string, username: string) =>
-    apiPut("students/telegram-username", { studentId: id, username }),
+  /** One contact (Telegram username, student's or parent's number), from a card. */
+  updateContact: (id: string, field: "username" | "phone" | "parentPhone", value: string) =>
+    apiPut("students/contact", { studentId: id, field, value }),
   remove: (id: string, options: { previewToken: string }) =>
     apiDelete("students", id, { previewToken: options.previewToken }),
 };
