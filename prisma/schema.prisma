@@ -103,7 +103,6 @@ model Student {
   enrollmentArchives StudentEnrollmentArchive[]
   gradeSmartNotes GradeSmartNote[]
   gracePeriods    GracePeriod[]
-  botProblems     BotProblem[]
   callReservations CallReservation[]
 
   @@index([courseId])
@@ -441,25 +440,6 @@ model GracePeriod {
 
   @@index([studentId, startDate])
   @@index([cancelledAt])
-}
-
-/// «مشاكل البوت»: a notebook of Telegram-bot problems, one line per student
-/// and reason. It is read only by its own dashboard window: it writes no audit
-/// log and appears in no profile, story, counter or report.
-model BotProblem {
-  id             String    @id @default(cuid())
-  studentId      String
-  reason         String
-  createdById    String?
-  createdByName  String    @default("")
-  createdAt      DateTime  @default(now())
-  resolvedAt     DateTime?
-  resolvedById   String?
-  resolvedByName String    @default("")
-  student        Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  @@index([resolvedAt, createdAt])
-  @@index([studentId])
 }
 
 model StudentEnrollmentArchive {

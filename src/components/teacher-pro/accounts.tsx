@@ -51,7 +51,6 @@ const PREFERRED_PERMISSION_CATEGORIES = [
   'الحسابات',
   'السجلات',
   'تصفير السجلات',
-  'مشاكل البوت',
   'المواقع',
   'واتساب',
   'نسخ الديمو',
@@ -1322,7 +1321,6 @@ const BACKUP_TABLE_LABELS: Record<string, string> = {
   studentLeaveGradeBackups: 'درجات الإجازات',
   studentEnrollmentArchives: 'أرشيف الاشتراكات',
   permissionCatalog: 'الصلاحيات',
-  botProblems: 'مشاكل البوت',
 };
 
 function BackupTab() {

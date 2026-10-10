@@ -95,7 +95,7 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  await pg.exec(`UPDATE "Student" SET code='BIO-90000' WHERE id='inside'; SELECT setval('"Student_code_seq"',1,true);`);
  await pg.exec(`UPDATE "ExamCourse" SET id='legacy-link-id' WHERE "examId"='e' AND "courseId"='c'`);
   const exported=await backup.GET({});assert.equal(exported.status,200);const snapshot=await exported.json();
-  assert.equal(isolation.at(-1),'RepeatableRead');assert.equal(snapshot.version,11);assert.equal(snapshot.tableCount,24);assert.ok(Array.isArray(snapshot.gracePeriods));assert.ok(Array.isArray(snapshot.botProblems));assert.equal(snapshot.gradeEntryMissingNotes.length,1);
+  assert.equal(isolation.at(-1),'RepeatableRead');assert.equal(snapshot.version,12);assert.equal(snapshot.tableCount,23);assert.ok(Array.isArray(snapshot.gracePeriods));assert.equal(snapshot.botProblems,undefined);assert.equal(snapshot.gradeEntryMissingNotes.length,1);
   const backedUpExam=snapshot.exams.find(exam=>exam.id==='e');const backedUpTelegramOpenAt=new Date(backedUpExam.telegramOpenAt).toISOString();const backedUpTelegramCloseAt=new Date(backedUpExam.telegramCloseAt).toISOString();assert.notEqual(backedUpTelegramOpenAt,backedUpTelegramCloseAt);
  assert.equal(snapshot.opportunityLogs[0].requestedAmount,1);assert.equal(snapshot.users[0].passwordHash,undefined);
  let res=await backup.POST({json:async()=>({version:8,confirm:'RESTORE',mode:'replace',backup:{version:8,courses:snapshot.courses}})});assert.equal(res.status,400);

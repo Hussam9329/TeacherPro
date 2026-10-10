@@ -396,15 +396,6 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
     level: "manage",
     description: "استعادة آخر نسخة احتياطية أنشئت قبل تصفير السجلات.",
   },
-  // مشاكل البوت: a notebook in its own dashboard window. Only the admin has it
-  // until it is given to a role or an account.
-  {
-    id: "bot-problems.manage",
-    label: "مشاكل البوت",
-    category: "مشاكل البوت",
-    level: "manage",
-    description: "فتح نافذة «مشاكل البوت» بلوحة النظام: إضافة مشكلة لطالب، وتعليمها محلولة أو إرجاعها.",
-  },
   // السجلات
   {
     id: "logs.view",

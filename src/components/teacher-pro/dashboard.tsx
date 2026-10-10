@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react
 import { Button } from "@/components/ui/button";
 import {
   BookOpen,
-  Bot,
   CalendarCheck,
   CalendarClock,
   ChartColumn,
@@ -30,7 +29,6 @@ import { useLatestRequest } from "@/hooks/use-latest-request";
 import { refreshShortcutAlerts, useShortcutAlerts } from "@/hooks/use-shortcut-alerts";
 import { CallNotesManagementDialog } from "./call-notes-management-dialog";
 import { CallsDialog } from "./calls-dialog";
-import { BotProblemsDialog } from "./bot-problems-dialog";
 import { CodeClosuresDialog } from "./code-closures-dialog";
 import { GracePeriodsDialog } from "./grace-periods-dialog";
 import { LeavesDialog, LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog";
@@ -125,13 +123,6 @@ export function DashboardView({
     actor.permissions?.includes("follow-up.manage")
   ));
   const [leavesOpen, setLeavesOpen] = useState(false);
-  // «مشاكل البوت»: the admin, and accounts given its permission.
-  const canUseBotProblems = Boolean(actor && (
-    actor.username?.trim().toLowerCase() === "admin" ||
-    actor.roleId === "role_admin" ||
-    actor.permissions?.includes("bot-problems.manage")
-  ));
-  const [botProblemsOpen, setBotProblemsOpen] = useState(false);
   useEffect(() => {
     if (!canViewLeaves) return;
     const openFromLink = () => {
@@ -313,7 +304,7 @@ export function DashboardView({
         ))}
       </div>
 
-      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canViewGracePeriods || canViewLeaves || canUseBotProblems) && (
+      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canViewGracePeriods || canViewLeaves) && (
         <nav aria-label="اختصارات لوحة التحكم" className="tp-dashboard__navigation">
           <h3 className="text-sm font-bold">الوصول السريع</h3>
           <div className="tp-dashboard__shortcuts">
@@ -413,22 +404,6 @@ export function DashboardView({
                 </span>
               </button>
             )}
-            {canUseBotProblems && (
-              <button
-                type="button"
-                onClick={() => setBotProblemsOpen(true)}
-                aria-haspopup="dialog"
-                data-tone="info"
-                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
-              >
-                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
-                  <Bot />
-                </span>
-                <span className="tp-dashboard__shortcut-label">
-                  مشاكل البوت
-                </span>
-              </button>
-            )}
           </div>
         </nav>
       )}
@@ -456,13 +431,6 @@ export function DashboardView({
           open={leavesOpen}
           onOpenChange={closeAndRefresh(setLeavesOpen)}
           canManage={canManageLeaves}
-        />
-      )}
-      {canUseBotProblems && (
-        <BotProblemsDialog
-          key={`bot-${actor?.id || ""}`}
-          open={botProblemsOpen}
-          onOpenChange={setBotProblemsOpen}
         />
       )}
       {canViewCodeClosures && (

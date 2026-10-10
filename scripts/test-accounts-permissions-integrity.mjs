@@ -135,7 +135,7 @@ must(
       catalog.includes('id: "system.oversight",') &&
       auth.includes('return hasPermission(principal, "system.oversight");') &&
       supervisorList.includes("system.oversight") && supervisorList.includes("backup.restore") &&
-      supervisorList.includes("bot-problems.manage") && !supervisorList.some((id) => id.startsWith("accounts.")) &&
+      !supervisorList.some((id) => id.startsWith("accounts.")) &&
       migration.includes(`WHERE "id" = 'role_supervisor'`) &&
       ["src/app/api/student-calls/presence/route.ts", "src/app/api/student-calls/candidates/route.ts", "src/app/api/student-calls/route.ts", "src/app/api/students/route.ts", "src/app/api/logs/route.ts"]
         .every((file) => read(file).includes("oversees(principal)")),
@@ -177,11 +177,27 @@ must(
     }) &&
       ["src/components/teacher-pro/grade-entry.tsx", "src/app/api/student-calls/candidates/route.ts", "src/app/api/student-calls/stats/route.ts"]
         .every((file) => !read(file).includes("student.telegram,")) &&
-      !read("src/components/teacher-pro/bot-problems-dialog.tsx").includes("${problem.student.telegram}") &&
       !read("src/components/teacher-pro/call-notes-management-dialog.tsx").includes("${note.student.telegram") &&
       read("src/components/teacher-pro/code-closures-dialog.tsx").includes('${student.username || ""}') &&
       read("src/components/teacher-pro/student-registry-helpers.ts").includes("studentUsername.includes(username)"),
     "البحث بكل الصفحات يلكه التيليجرام باليوزر المستعاد، مو بالمعرف الرقمي",
+  );
+}
+
+// «مشاكل البوت» was removed from its roots: no window, route, permission or
+// backup table is left, and the migration takes its id off every role and account.
+{
+  const gone = ["src/app/api/bot-problems/route.ts", "src/components/teacher-pro/bot-problems-dialog.tsx", "src/lib/bot-problems.ts", "src/lib/bot-problems-client.ts"];
+  const cleanup = read("prisma/migrations/20261010120000_remove_bot_problems_permission/migration.sql");
+  must(
+    gone.every((file) => !fs.existsSync(path.join(root, file))) &&
+      !store.includes("bot-problems.manage") &&
+      !read("src/lib/server-auth.ts").includes("bot-problems") &&
+      !read("src/components/teacher-pro/dashboard.tsx").includes("مشاكل البوت") &&
+      !read("src/app/api/backup/route.ts").includes("'botProblems'") &&
+      !read("prisma/schema.prisma").includes("model BotProblem") &&
+      cleanup.includes(`UPDATE "Role" SET "permissions" = kept`) && cleanup.includes(`UPDATE "AppUser" SET "permissions" = kept`),
+    "«مشاكل البوت» انشالت من جذورها: لا زر ولا نافذة ولا صلاحية ولا جدول بالنسخ الاحتياطية",
   );
 }
 

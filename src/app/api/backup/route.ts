@@ -29,9 +29,10 @@ type AnyDelegate = { upsert: (args: any) => Promise<any>; createMany: (args: any
 //  - v8: prior complete operational backup contract.
 //  - v9: Exam Telegram submission-window timestamps round-trip.
 //  - v10: GracePeriod rows (the only source of grace periods).
-//  - v11 (current): BotProblem rows («مشاكل البوت» notebook).
+//  - v11: BotProblem rows (a notebook since removed).
+//  - v12 (current): without BotProblem; a v11 backup's rows are skipped.
 // ============================================================================
-const BACKUP_VERSION = 11;
+const BACKUP_VERSION = 12;
 
 const RESTORE_CONFIRMATION_TOKEN = 'RESTORE';
 
@@ -61,7 +62,6 @@ const RESTORE_ORDER = [
   'studentCallHistoryMigrationRuns',
   'studentCallHistoryBackups',
   'gradeEntryMissingNotes',
-  'botProblems',
 ] as const;
 
 // ============================================================================
@@ -348,7 +348,12 @@ async function executeRestore(
           ...RESTORE_ORDER.map(key => `"${PRISMA_TABLE_NAMES[key]}"`),
           ...CALL_WINDOW_TABLES.map(name => `"${name}"`),
         ].join(', ');
-        await tx.$executeRaw(Prisma.raw(`TRUNCATE TABLE ${names} RESTART IDENTITY`));
+        // A retired table still references Student, so it joins the same
+        // statement when the database has it.
+        const retired = RETIRED_TABLES
+          .map(name => `CASE WHEN to_regclass('"${name}"') IS NOT NULL THEN ', "${name}"' ELSE '' END`)
+          .join(' || ');
+        await tx.$executeRaw(Prisma.raw(`DO $restore$ BEGIN EXECUTE 'TRUNCATE TABLE ${names.replace(/'/g, "''")}' || ${retired} || ' RESTART IDENTITY'; END $restore$`));
       }
 
       // Insert/upsert in forward FK order (parents first)
@@ -617,7 +622,6 @@ async function restoreTable(
       case 'studentCallHistoryMigrationRuns':
       case 'studentCallHistoryBackups':
       case 'gradeEntryMissingNotes':
-      case 'botProblems':
         for (const row of batch) {
           await upsertRecord(tx[MODEL_NAMES[table]] as unknown as AnyDelegate, row as Record<string, unknown>, mode);
           updated++;
@@ -644,6 +648,9 @@ async function restoreTable(
 
 /** «دفعات» in إدارة المكالمات: live state of open windows, not data to restore. */
 const CALL_WINDOW_TABLES = ['CallReservation', 'CallWindow'];
+// Tables of features since removed: never backed up, never dropped by a
+// deployment. A replace restore empties them with the rest when they exist.
+const RETIRED_TABLES = ['BotProblem'] as const;
 
 // Map internal table keys to PostgreSQL table names (for TRUNCATE)
 const PRISMA_TABLE_NAMES: Record<string, string> = {
@@ -670,7 +677,6 @@ const PRISMA_TABLE_NAMES: Record<string, string> = {
   studentCallHistoryMigrationRuns: 'StudentCallHistoryMigrationRun',
   studentCallHistoryBackups: 'StudentCallHistoryBackup',
   gradeEntryMissingNotes: 'GradeEntryMissingNote',
-  botProblems: 'BotProblem',
 };
 
 const MODEL_NAMES = {
@@ -683,7 +689,6 @@ const MODEL_NAMES = {
   logs: 'auditLog', logClearBackups: 'logClearBackup',
   studentCallHistoryMigrationRuns: 'studentCallHistoryMigrationRun',
   studentCallHistoryBackups: 'studentCallHistoryBackup', gradeEntryMissingNotes: 'gradeEntryMissingNote',
-  botProblems: 'botProblem',
 } as const;
 
 async function upsertRecord(delegate: AnyDelegate, row: Record<string, unknown>, _mode: 'merge' | 'replace'): Promise<'inserted' | 'updated' | 'skipped'> {

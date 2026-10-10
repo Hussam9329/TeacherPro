@@ -306,5 +306,9 @@
   "20261007130000_supervisor_accounts_own_permissions": {
     "kind": "audited-data-reconciliation",
     "checksum": "73c8fc0b124f71b223489aab8f59e75138dd7014a072fe6e0c4ae8d0580d59b5"
+  },
+  "20261010120000_remove_bot_problems_permission": {
+    "kind": "audited-data-reconciliation",
+    "checksum": "6be275e326aaa93b24d8e3b5f49106e8a8aa0797d95db5ce5d10fd0581fc86e3"
   }
 }
