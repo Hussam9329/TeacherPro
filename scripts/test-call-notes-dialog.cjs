@@ -172,6 +172,7 @@ function harness() {
       copyText: (text, near) => { copies.push({ text, near }); return Promise.resolve(true); },
     },
     './student-registry-helpers': loadHelper('src/components/teacher-pro/student-registry-helpers.ts'),
+    './telegram-username-edit': named(['TelegramUsernameEdit']),
     './ui-kit': named(['EmptyState', 'LoadingState']),
     './code-closures-dialog.css': {},
   };
