@@ -776,6 +776,7 @@ export async function PUT(req: NextRequest) {
       duplicateSource,
       mergedIdentity,
       String(id),
+      "edit",
     );
     if (duplicateMessage) {
       return NextResponse.json({ error: duplicateMessage }, { status: 409 });

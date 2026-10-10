@@ -215,7 +215,7 @@ must(
     editor.includes("studentApi.updateContact(student.id, field, next)") &&
       route.includes('requirePermissionPrincipal(req, "students.edit")') &&
       route.includes('getPhoneValidationError(body.value, FIELDS[field], true)') &&
-      route.includes("getStudentDuplicateMessage(others, identity, current.id)") &&
+      route.includes('getStudentDuplicateMessage(others, identity, current.id, "edit")') &&
       route.includes('action: "تعديل بيانات طالب"') &&
       read("src/components/teacher-pro/code-closures-dialog.tsx").includes("{canEditContacts && (") &&
       dashboard.includes('actor.permissions?.includes("students.edit")') &&
@@ -227,6 +227,17 @@ must(
       registry.includes('<StudentContactEdit student={student} field="parentPhone"') &&
       registry.includes("actionProps.canEdit && student.status !== ARCHIVED_STUDENT_STATUS"),
     "تعديل سريع لليوزر ورقم الطالب ورقم ولي الأمر من الكارت، لمن عنده تعديل الطلاب",
+  );
+  // A duplicate found while changing a student says the change was not saved,
+  // and whose the number is; adding a student keeps its own message.
+  const utils = read("src/lib/student-utils.ts");
+  must(
+    utils.includes('action: "add" | "edit" = "add"') &&
+      utils.includes("ما انحفظ التعديل: رقم الهاتف مسجّل للطالب${owner}.") &&
+      utils.includes("لا يمكن إضافة الطالب: رقم الهاتف مسجل مسبقاً لطالب آخر") &&
+      /getStudentDuplicateMessage\(\s*duplicateSource,\s*mergedIdentity,\s*String\(id\),\s*"edit",\s*\)/.test(read("src/app/api/students/route.ts")) &&
+      /editDialog\.id,\s*"edit",\s*\)/.test(read("src/components/teacher-pro/student-registry.tsx")),
+    "رسالة الرقم المكرر بالتعديل تقول ما انحفظ التعديل ولمن الرقم",
   );
 }
 

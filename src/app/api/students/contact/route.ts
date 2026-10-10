@@ -68,7 +68,7 @@ export async function PUT(req: NextRequest) {
           const others = phoneKey
             ? await tx.student.findMany({ where: { phoneKey, NOT: { id: current.id } }, select: { id: true, name: true, phone: true, telegram: true }, take: 5 })
             : [];
-          const duplicate = getStudentDuplicateMessage(others, identity, current.id);
+          const duplicate = getStudentDuplicateMessage(others, identity, current.id, "edit");
           if (duplicate) throw new ContactEditError(duplicate, 409);
           data.phoneKey = phoneKey;
         }
@@ -94,7 +94,7 @@ export async function PUT(req: NextRequest) {
     if (error instanceof ArchivedStudent) return archivedStudentLockedResponse();
     if (error instanceof ContactEditError) return validationError(error.message, error.status);
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return validationError("رقم الطالب مسجّل لطالب ثاني.", 409);
+      return validationError("ما انحفظ التعديل: رقم الهاتف مسجّل لطالب ثاني.", 409);
     }
     return routeErrorResponse(error, "تعذر حفظ بيانات التواصل.");
   }

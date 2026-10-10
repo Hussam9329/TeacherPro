@@ -62,6 +62,8 @@ export function getStudentDuplicateMessage(
   students: StudentDuplicateCandidate[],
   candidate: StudentDuplicateCandidate,
   excludeId?: string,
+  /** «edit» when an existing student's data is being changed, not a student added. */
+  action: "add" | "edit" = "add",
 ): string | null {
   const candidateTelegram = normalizeTelegramIdentifier(candidate.telegram);
   const candidatePhone = normalizePhoneForDuplicate(candidate.phone);
@@ -76,6 +78,20 @@ export function getStudentDuplicateMessage(
   });
 
   if (!duplicate) return null;
+  if (action === "edit") {
+    // Changing a student: say the change was not saved, and whose it is.
+    const owner = duplicate.name ? ` «${duplicate.name}»` : " ثاني";
+    if (candidateTelegram && normalizeTelegramIdentifier(duplicate.telegram) === candidateTelegram) {
+      return `ما انحفظ التعديل: معرف التيليجرام مسجّل للطالب${owner}.`;
+    }
+    if (candidatePhone && normalizePhoneForDuplicate(duplicate.phone) === candidatePhone) {
+      return `ما انحفظ التعديل: رقم الهاتف مسجّل للطالب${owner}.`;
+    }
+    if (candidateName && normalizeStudentName(duplicate.name) === candidateName) {
+      return "ما انحفظ التعديل: الاسم الرباعي مسجّل لطالب ثاني.";
+    }
+    return "ما انحفظ التعديل: بياناته مكررة ويه طالب ثاني.";
+  }
   if (candidateTelegram && normalizeTelegramIdentifier(duplicate.telegram) === candidateTelegram) {
     return 'لا يمكن إضافة الطالب: معرف التيليجرام مسجل مسبقاً لطالب آخر';
   }

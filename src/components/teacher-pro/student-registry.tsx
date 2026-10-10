@@ -1377,6 +1377,7 @@ export function StudentRegistryView() {
         telegram: form.telegram,
       },
       editDialog.id,
+      "edit",
     );
     if (duplicateMessage) return duplicateMessage.replace("إضافة", "تعديل");
 
