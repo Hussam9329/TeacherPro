@@ -104,6 +104,7 @@ const overrides = {
         ? principal : NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     },
     oversees: (principal) => principal.permissions.includes('system.oversight'),
+    hasPermission: (principal, permission) => load('src/lib/server-auth.ts').hasPermission(principal, permission),
   },
   '@/lib/schema-readiness': { withDatabaseSchema: (fn) => fn() },
   '@/lib/route-helpers': { routeErrorResponse: (error) => { throw error; } },
