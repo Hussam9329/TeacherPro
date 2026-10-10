@@ -252,6 +252,14 @@ test("the fullscreen profile exposes loading, failure, and modal semantics", () 
   assert.match(profileDialogSource, /!href\s*\|\|\s*href\s*===\s*["']#["']/);
   assert.match(profileDialogSource, /databaseStatsSnapshotVersion\s*!==\s*databaseProfileSnapshotVersion/);
   assert.match(profileDialogSource, /visibleStudentLog\.map/);
+  // «الخلاصة»: the tiles count the chapter's exams as the summary does, the
+  // follow-up card is the story's newest follow-up, every recorded decision
+  // stays among the movements, and a zero balance keeps its warning.
+  assert.match(profileDialogSource, /value: story\.counts\.absent/);
+  assert.match(profileDialogSource, /story\.latestFollowUp/);
+  assert.match(profileDialogSource, /\.filter\(\(row\) => !row\.exam \|\| row\.delta !== null \|\| row\.category === "exam-dismissal"\)/);
+  assert.match(profileDialogSource, /balanceValue === 0\)\)/);
+  assert.match(profileDialogSource, /buildStudentDetailsFromProfileLog\(result, \{ staff: true \}\)/);
 });
 
 test("the mobile profile uses the dynamic viewport and wrapping statistics navigation", () => {

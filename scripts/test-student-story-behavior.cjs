@@ -199,6 +199,23 @@ scenario("summary, strip and open items", () => {
   assert.match(summary.join(" "), /باقي نجاح واحد ويرجعله «فرصة مكافأة»\./);
   assert.equal(story.strip.length, 13);
   assert.deepEqual(story.strip.map((item) => item.kind), ["pass", "loss", "neutral", "loss", "neutral", "pass", "pass", "fail", "loss", "loss", "loss", "pending", "pass"]);
+  // The pieces a page lays out on its own are the summary's own lines.
+  const plain = (parts) => parts.map((part) => part.t).join("");
+  assert.equal(plain(story.lead), summary[0]);
+  assert.deepEqual(story.highlights.map(plain), [
+    "انفصل مرة وحدة بهالفصل، آخرها يوم 4 نوفمبر 2026، ورجع يوم 8 نوفمبر 2026.",
+    "باقي نجاح واحد ويرجعله «فرصة مكافأة».",
+  ]);
+  assert.equal(plain(story.deducted), "انخصمت عليه 5 فرص بهالفصل، ورجعتله «فرصة مكافأة».");
+  assert.deepEqual(story.counts, { total: 13, pass: 4, fail: 1, loss: 2, absent: 3, neutral: 2, pending: 1, missing: 0 });
+  assert.equal(story.latest, story.groups[0].days[0].events[0]);
+  // The newest follow-up is the unanswered call note of 1 November.
+  assert.equal(story.latestFollowUp.dayKey, "2026-11-01");
+  // A later call about an exam wins, at its own time and with the exam's name.
+  const laterCall = buildStudentStory({ ...input, calls: [...input.calls,
+    { id: "c9", examId: "x9", category: "absent", target: "parent", status: "تم الرد", completedAt: "2026-11-15T10:00:00.000Z", createdAt: "2026-11-15T09:50:00.000Z" }] });
+  assert.equal(laterCall.latestFollowUp.dayKey, "2026-11-15");
+  assert.match(plain(laterCall.latestFollowUp.parts), /^امتحان يومي 9: /);
   const open = story.openItems.map((parts) => parts.map((part) => part.t).join(""));
   assert.deepEqual(open, [
     "درجة امتحان يومي 12 (66) معلّقة تنتظر قرار.",

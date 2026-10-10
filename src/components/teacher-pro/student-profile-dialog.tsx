@@ -23,7 +23,7 @@ import {
   type StudentProfileStatsResponse,
 } from "@/lib/api";
 import {
-  AlertCircle, ArrowRightIcon, ArrowUpDown, Award, ChevronDown, CircleAlert, CircleCheck, CircleMinus,
+  AlertCircle, ArrowRightIcon, Award, ChevronDown, CircleAlert, CircleCheck, CircleMinus,
   Info, Phone, Star, XIcon,
 } from "lucide-react";
 import {
@@ -75,8 +75,6 @@ const STORY_FILTERS: Array<[StoryFilter, string]> = [
 /** «الخلاصة» lays the file out at a glance; the other tabs are the story, filtered. */
 type ProfileView = "overview" | StoryFilter;
 const PROFILE_TABS: Array<[ProfileView, string]> = [["overview", "الخلاصة"], ...STORY_FILTERS];
-/** Rows that open a count: the balance is set, not moved. */
-const OPENING_CATEGORIES = new Set(["chapter-start", "return", "set"]);
 const MOVES_SHOWN = 5;
 const STORY_PAGE = 60;
 
@@ -245,8 +243,9 @@ function BalanceRing({
   large?: boolean;
   children: React.ReactNode;
 }) {
-  const ratio = value === null ? 0 : limit && limit > 0 ? Math.max(0, Math.min(1, value / limit)) : value > 0 ? 1 : 0;
-  const tone = value === null ? "none" : value <= 0 ? "empty" : limit !== null && value >= limit ? "full" : "part";
+  // Without a limit there is nothing to fill: the number alone.
+  const ratio = value === null || !limit || limit <= 0 ? 0 : Math.max(0, Math.min(1, value / limit));
+  const tone = value === null ? "none" : value <= 0 ? "empty" : limit === null ? "none" : value >= limit ? "full" : "part";
   const circumference = 2 * Math.PI * 16;
   return (
     <span className="tp-pf-ring" data-large={large || undefined} data-tone={tone} role="img" aria-label={label}>
@@ -340,16 +339,17 @@ export function StudentProfileDialog({
   const [storyVisibleCount, setStoryVisibleCount] = useState(STORY_PAGE);
   const [view, setView] = useState<ProfileView>("overview");
   const storyFilter: StoryFilter = view === "overview" ? "all" : view;
-  const [examsOldestFirst, setExamsOldestFirst] = useState(false);
   // The opportunities report of the active chapter, from the same record
   // and builder as the HTML report and «التفاصيل» in الفرص.
   const [databaseDetails, setDatabaseDetails] = useState<StudentDetails | null>(null);
+  const [databaseDetailsFailed, setDatabaseDetailsFailed] = useState(false);
   // The technical system log stays out of the story: one link at the bottom,
   // for those who may read the logs.
   const [showSystemLog, setShowSystemLog] = useState(false);
   const [shareStatus, setShareStatus] = useState("");
   const [manualRefreshKey, setManualRefreshKey] = useState(0);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
+  const tabsRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
   const initialFocusRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -429,7 +429,8 @@ export function StudentProfileDialog({
   // «الخلاصة»: the chapter's exams and the opportunities' movements, from the
   // report's rows, plus the latest follow-up from the story.
   const overview = useMemo(() => {
-    if (!hasAuthoritativeProfile || !databaseDetails) return null;
+    // Without one active chapter the report is not scoped to a chapter.
+    if (!hasAuthoritativeProfile || !databaseDetails || !databaseDetails.activeChapterName) return null;
     const { rows, summary } = buildStaffOpportunityView(databaseDetails);
     const exams = rows.filter((row) => row.exam);
     // An exam's balance after it, as its own recorded movement saved it.
@@ -455,7 +456,7 @@ export function StudentProfileDialog({
       }
     }
     const moves = rows
-      .filter((row) => row.delta !== null || OPENING_CATEGORIES.has(row.category) || row.category === "exam-dismissal" || row.category === "admin-dismissal")
+      .filter((row) => !row.exam || row.delta !== null || row.category === "exam-dismissal")
       .map((row) => ({ row, after: row.balanceAfter ?? examBalance.get(row.key) ?? runningBalance.get(row.key) ?? null }))
       .reverse();
     return {
@@ -463,24 +464,8 @@ export function StudentProfileDialog({
       moves,
       summary,
       limit: databaseDetails.studentSnapshot?.opportunityLimit ?? null,
-      counts: {
-        total: exams.length,
-        pass: exams.filter((row) => row.exam?.pill?.tone === "passed").length,
-        loss: exams.filter((row) => row.category === "exam-deduct" || row.category === "exam-dismissal").length,
-        fail: exams.filter((row) => row.exam?.pill?.tone === "failed" && row.delta === null && row.category === "exam").length,
-      },
     };
   }, [hasAuthoritativeProfile, databaseDetails]);
-  const lastFollowUp = useMemo(() => {
-    if (!story) return null;
-    for (const group of story.groups) {
-      for (const day of group.days) {
-        const event = day.events.find((item) => item.cats.includes("follow"));
-        if (event) return event;
-      }
-    }
-    return null;
-  }, [story]);
 
   useEffect(() => {
     if (!open) return;
@@ -490,8 +475,8 @@ export function StudentProfileDialog({
   useEffect(() => {
     setShowSystemLog(false);
     setView("overview");
-    setExamsOldestFirst(false);
     setDatabaseDetails(null);
+    setDatabaseDetailsFailed(false);
     setShareStatus("");
     setDatabaseStats(null);
     setDatabaseStatsLoading(false);
@@ -586,6 +571,7 @@ export function StudentProfileDialog({
           details = null;
         }
         setDatabaseDetails(details);
+        setDatabaseDetailsFailed(!details);
         setDatabaseCanReadLogs(Boolean(result.sections?.logs));
         setDatabaseEnrollmentArchives(result.enrollmentArchives || []);
         const remoteStudent = (result as typeof result & { student?: Student | null }).student;
@@ -870,10 +856,17 @@ export function StudentProfileDialog({
 
   const chapterName = story?.stripChapterName || databaseDetails?.activeChapterName || "";
   const profileCourseName = courseName(profileStudent.courseId);
-  const balanceValue = statsForStudent ? getOpportunityBalance(statsForStudent) : null;
-  const balanceLimit = statsForStudent ? getOpportunityLimit(statsForStudent) : null;
-  const showLead = Boolean(story && story.lead.length && (profileStudent.status !== "نشط" || !story.stripChapterName));
-  const examRows = overview ? (examsOldestFirst ? overview.exams : [...overview.exams].reverse()) : [];
+  // The balance from the stats, or from the profile's own snapshot when the
+  // stats could not load.
+  const snapshot = databaseDetails?.studentSnapshot;
+  const balanceValue = statsForStudent ? getOpportunityBalance(statsForStudent)
+    : typeof snapshot?.opportunities === "number" ? snapshot.opportunities : null;
+  const balanceLimit = statsForStudent ? getOpportunityLimit(statsForStudent)
+    : typeof snapshot?.opportunityLimit === "number" ? snapshot.opportunityLimit : null;
+  const balanceText = statsForStudent ? formatOpportunityBalance(statsForStudent, { separator: " من " })
+    : balanceValue !== null ? `${balanceValue}${balanceLimit !== null ? ` من ${balanceLimit}` : ""}` : "";
+  const showLead = Boolean(story && story.lead.length && (profileStudent.status !== "نشط" || !story.stripChapterName || balanceValue === 0));
+  const examRows = overview ? [...overview.exams].reverse() : [];
   const moveLimit = overview?.limit ?? balanceLimit;
   const sum = overview?.summary;
   // An inferred opening (no chapter start recorded) is shown only when it adds up.
@@ -884,12 +877,34 @@ export function StudentProfileDialog({
     { sign: "+", value: sum.adminAdded, label: "إضافات الإدارة", cat: "admin-add" },
     { sign: "+", value: sum.bonus, label: "فرص مكافأة", cat: "bonus" },
   ].filter((term) => term.value > 0) : [];
+  // The chapter's exams counted as the summary counts them, in its words.
+  const tiles = story && story.stripChapterName ? [
+    { key: "total", label: "امتحان بهالفصل", value: story.counts.total, tone: undefined },
+    { key: "pass", label: "نجاح", value: story.counts.pass, tone: "pass" },
+    { key: "fail", label: "راسب بدون خصم", value: story.counts.fail, tone: "fail" },
+    { key: "loss", label: "درجة خصم", value: story.counts.loss, tone: "loss" },
+    { key: "absent", label: "غياب", value: story.counts.absent, tone: "loss" },
+    { key: "neutral", label: "ما انحسب", value: story.counts.neutral, tone: undefined },
+    { key: "pending", label: "معلّقة", value: story.counts.pending, tone: "fail" },
+    { key: "missing", label: "ما انكتبت", value: story.counts.missing, tone: undefined },
+  ].filter((tile) => tile.key === "total" || tile.value > 0) : [];
+  const notes = story ? [...story.highlights, ...(!showSum && story.deducted ? [story.deducted] : [])] : [];
   const LatestIcon = story?.latest
     ? story.latest.tone === "pass" || story.latest.tone === "good" ? Award
       : story.latest.tone === "loss" || story.latest.tone === "danger" ? CircleMinus
         : story.latest.tone === "fail" ? CircleAlert : Info
     : Info;
   const initial = Array.from(profileStudent.name.trim())[0] || "؟";
+  // Opening a section from further down starts it under the tabs.
+  const openView = (next: ProfileView) => {
+    setView(next);
+    const scroller = contentScrollRef.current;
+    const tabs = tabsRef.current;
+    if (!scroller || !tabs) return;
+    const top = tabs.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 8;
+    if (scroller.scrollTop > top) scroller.scrollTo({ top, behavior: "auto" });
+  };
+  const chapterCardsState: "ready" | "failed" | "none" = overview ? "ready" : databaseDetailsFailed ? "failed" : "none";
 
   const storyBody = !story ? (
     profileLogPending ? (
@@ -931,25 +946,16 @@ export function StudentProfileDialog({
     </>
   ) : (
     <>
-      {story.openItems.length ? (
-        <section className="tp-story__open" aria-label="يحتاج متابعة">
-          <h3 className="tp-story__label">يحتاج متابعة</h3>
-          <ul>
-            {story.openItems.map((parts, index) => <li key={index}><StoryText parts={parts} /></li>)}
-          </ul>
-        </section>
-      ) : null}
-
-      {overview || story.latest ? (
-        <section className="tp-pf-stats" aria-label="الخلاصة بالأرقام">
-          {overview ? (
+      {tiles.length || story.latest ? (
+        <section className="tp-pf-stats" aria-label="الخلاصة">
+          {tiles.length ? (
             <dl className="tp-pf-tiles">
-              <div className="tp-pf-tile"><dt>امتحان بهالفصل</dt><dd>{overview.counts.total}</dd></div>
-              <div className="tp-pf-tile" data-tone="pass"><dt>نجاح</dt><dd>{overview.counts.pass}</dd></div>
-              {overview.counts.fail ? (
-                <div className="tp-pf-tile" data-tone="fail"><dt>راسب بدون خصم</dt><dd>{overview.counts.fail}</dd></div>
-              ) : null}
-              <div className="tp-pf-tile" data-tone="loss"><dt>درجة خصم</dt><dd>{overview.counts.loss}</dd></div>
+              {tiles.map((tile) => (
+                <div key={tile.key} className="tp-pf-tile" data-tone={tile.tone}>
+                  <dt>{tile.label}</dt>
+                  <dd>{tile.value}</dd>
+                </div>
+              ))}
             </dl>
           ) : null}
           {story.latest ? (
@@ -967,144 +973,142 @@ export function StudentProfileDialog({
         </section>
       ) : null}
 
-      {story.highlights.length ? (
+      {notes.length ? (
         <ul className="tp-pf-notes">
-          {story.highlights.map((parts, index) => (
+          {notes.map((parts, index) => (
             <li key={index}><Info aria-hidden="true" /><span><StoryText parts={parts} /></span></li>
           ))}
         </ul>
       ) : null}
 
-      <div className="tp-pf-grid">
-        <section className="tp-pf-card" aria-labelledby="tp-pf-exams-title">
-          <header className="tp-pf-card__head">
-            <div className="min-w-0">
-              <h3 id="tp-pf-exams-title">
-                امتحانات {chapterName || "الفصل"}
-                {overview ? <span className="tp-pf-count">{overview.exams.length}</span> : null}
-              </h3>
-              {profileCourseName ? <p>{profileCourseName}</p> : null}
-            </div>
-            {overview && overview.exams.length > 1 ? (
-              <button
-                type="button"
-                className="tp-student-profile__control tp-pf-sort"
-                onClick={() => setExamsOldestFirst((value) => !value)}
-                aria-label={examsOldestFirst ? "الترتيب: الأقدم أولاً، اضغط للأحدث أولاً" : "الترتيب: الأحدث أولاً، اضغط للأقدم أولاً"}
-              >
-                <ArrowUpDown className="size-4 shrink-0" aria-hidden="true" />
-                {examsOldestFirst ? "الأقدم أولاً" : "الأحدث أولاً"}
-              </button>
-            ) : null}
-          </header>
-          {examRows.length === 0 ? (
-            <EmptyState compact title="لا توجد امتحانات أو حركات لعرضها" />
-          ) : (
-            <div className="tp-pf-exams">
-              <div className="tp-pf-exams__head" aria-hidden="true">
-                <span>الامتحان</span><span>التاريخ</span><span>الدرجة</span><span>الحالة</span>
-              </div>
-              <ul>
-                {examRows.map((row) => {
-                  const status = examStatus(row);
-                  const StatusIcon = EXAM_STATUS_ICONS[status.tone];
-                  return (
-                    <li key={row.key} className="tp-pf-exam" data-cat={row.category} data-before={row.beforeOpening || undefined}>
-                      <div className="tp-pf-exam__name">
-                        <strong>{row.title}</strong>
-                        {row.exam?.type ? <small>{row.exam.type}</small> : null}
-                        {row.exam?.duringDismissal ? <small className="tp-pf-exam__flag">سُجّلت أثناء الفصل</small> : null}
-                      </div>
-                      <time className="tp-pf-exam__date" dateTime={row.date}>{formatReportTimelineDate(row.date) || "—"}</time>
-                      <span className="tp-pf-exam__score">
-                        {row.category === "bonus" ? <Award role="img" aria-label="فرصة مكافأة" /> : null}
-                        <bdi>{row.exam?.score || "—"}</bdi>
-                      </span>
-                      <span className="tp-pf-exam__status" data-tone={status.tone}>
-                        {status.text ? <StatusIcon aria-hidden="true" /> : null}
-                        <span>{status.text}</span>
-                        {row.category === "bonus" ? <DeltaChip row={row} /> : null}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-          <button type="button" className="tp-pf-more" onClick={() => setView("grades")}>
-            عرض الدرجات <ChevronDown className="tp-pf-more__icon" aria-hidden="true" />
-          </button>
-        </section>
-
-        <div className="tp-pf-side">
-          <section className="tp-pf-card" aria-labelledby="tp-pf-moves-title">
+      <div className="tp-pf-grid" data-single={chapterCardsState === "none" || undefined}>
+        {chapterCardsState !== "none" ? (
+          <section className="tp-pf-card" aria-labelledby="tp-pf-exams-title">
             <header className="tp-pf-card__head">
               <div className="min-w-0">
-                <h3 id="tp-pf-moves-title">الفرص والقرارات</h3>
-                {chapterName ? <p>{chapterName}</p> : null}
+                <h3 id="tp-pf-exams-title">
+                  امتحانات {chapterName}
+                  {overview ? <span className="tp-pf-count">{overview.exams.length}</span> : null}
+                </h3>
+                {profileCourseName ? <p>{profileCourseName}</p> : null}
               </div>
+              {examRows.length > 1 ? <span className="tp-pf-card__order">من الأحدث إلى الأقدم</span> : null}
             </header>
-            {sum && showSum ? (
-              <div className="tp-oppv__sum tp-pf-sum" aria-label="من وين جات الفرص المتبقية">
-                <span className="tp-oppv__term" data-cat="chapter-start">
-                  <b>{sum.opening}</b><small>{sum.openingLabel}</small>
-                </span>
-                {sumTerms.map((term) => (
-                  <span key={term.cat} className="tp-oppv__term" data-cat={term.cat}>
-                    <b><bdi dir="ltr">{term.sign}{term.value}</bdi></b><small>{term.label}</small>
-                  </span>
-                ))}
-                <span className="tp-oppv__eq" aria-hidden="true">=</span>
-                <span className="tp-oppv__term" data-cat="result">
-                  <b>{statsForStudent ? formatOpportunityBalance(statsForStudent) : balanceValue}</b><small>الفرص المتبقية</small>
-                </span>
-                {!sum.inferred && sum.computed !== null && sum.computed !== balanceValue ? (
-                  <p className="tp-oppv__mismatch">مجموع السجل يطلع {sum.computed}، والفرص المتبقية {balanceValue}. راجع سجل الطالب.</p>
-                ) : null}
-              </div>
-            ) : null}
-            {!overview || overview.moves.length === 0 ? (
+            {chapterCardsState === "failed" ? (
+              <div role="alert"><EmptyState compact icon={AlertCircle} title="تعذر تحميل ملف الطالب." /></div>
+            ) : examRows.length === 0 ? (
               <EmptyState compact title="لا توجد امتحانات أو حركات لعرضها" />
             ) : (
-              <ol className="tp-pf-moves">
-                {overview.moves.slice(0, MOVES_SHOWN).map(({ row, after }) => {
-                  const Icon = STAFF_ROW_ICONS[row.category];
-                  const note = staffRowNote(row.note);
-                  const sub = row.reason ? `السبب: ${row.reason}` : note && note !== "—" ? note : "";
-                  return (
-                    <li key={row.key} className="tp-pf-move" data-cat={row.category}>
-                      <span className="tp-pf-move__mark" aria-hidden="true"><Icon /></span>
-                      <div className="tp-pf-move__main">
-                        <p className="tp-pf-move__title"><strong>{row.title}</strong><DeltaChip row={row} /></p>
-                        {sub ? <p className="tp-pf-move__sub">{sub}</p> : null}
-                        <time dateTime={row.date}>{formatReportTimelineDate(row.date, row.withTime) || "تاريخ غير مسجّل"}</time>
-                      </div>
-                      {after !== null ? (
-                        <BalanceRing
-                          value={after}
-                          limit={moveLimit}
-                          label={`الفرص بعدها ${after}${moveLimit !== null ? ` من ${moveLimit}` : ""}`}
-                        >
-                          <bdi dir="ltr">{after}{moveLimit !== null ? `/${moveLimit}` : ""}</bdi>
-                        </BalanceRing>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ol>
+              <div className="tp-pf-exams">
+                <div className="tp-pf-exams__head" aria-hidden="true">
+                  <span>الامتحان</span><span>التاريخ</span><span>الدرجة</span><span>الحالة</span>
+                </div>
+                <ul>
+                  {examRows.map((row) => {
+                    const status = examStatus(row);
+                    const StatusIcon = EXAM_STATUS_ICONS[status.tone];
+                    return (
+                      <li key={row.key} className="tp-pf-exam" data-cat={row.category} data-before={row.beforeOpening || undefined}>
+                        <div className="tp-pf-exam__name">
+                          <strong>{row.title}</strong>
+                          {row.exam?.type ? <small>{row.exam.type}</small> : null}
+                          {row.exam?.duringDismissal ? <small className="tp-pf-exam__flag">سُجّلت أثناء الفصل</small> : null}
+                        </div>
+                        <time className="tp-pf-exam__date" dateTime={row.date}>{formatReportTimelineDate(row.date) || "—"}</time>
+                        <span className="tp-pf-exam__score">
+                          {row.category === "bonus" ? <Award role="img" aria-label="فرصة مكافأة" /> : null}
+                          <bdi>{row.exam?.score || "—"}</bdi>
+                        </span>
+                        <span className="tp-pf-exam__status" data-tone={status.tone}>
+                          {status.text ? <StatusIcon aria-hidden="true" /> : null}
+                          <span>{status.text}</span>
+                          {row.category === "bonus" ? <DeltaChip row={row} /> : null}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
-            <button type="button" className="tp-pf-more" onClick={() => setView("decisions")}>
-              عرض الفرص والقرارات <ChevronDown className="tp-pf-more__icon" aria-hidden="true" />
+            <button type="button" className="tp-pf-more" onClick={() => openView("grades")}>
+              الدرجات <ChevronDown className="tp-pf-more__icon" aria-hidden="true" />
             </button>
           </section>
+        ) : null}
 
-          {lastFollowUp ? (
+        <div className="tp-pf-side">
+          {chapterCardsState !== "none" ? (
+            <section className="tp-pf-card" aria-labelledby="tp-pf-moves-title">
+              <header className="tp-pf-card__head">
+                <div className="min-w-0">
+                  <h3 id="tp-pf-moves-title">الفرص والقرارات</h3>
+                  {chapterName ? <p>{chapterName}</p> : null}
+                </div>
+              </header>
+              {sum && showSum ? (
+                <div className="tp-oppv__sum tp-pf-sum" aria-label="من وين جات الفرص المتبقية">
+                  <span className="tp-oppv__term" data-cat="chapter-start">
+                    <b>{sum.opening}</b><small>{sum.openingLabel}</small>
+                  </span>
+                  {sumTerms.map((term) => (
+                    <span key={term.cat} className="tp-oppv__term" data-cat={term.cat}>
+                      <b><bdi dir="ltr">{term.sign}{term.value}</bdi></b><small>{term.label}</small>
+                    </span>
+                  ))}
+                  <span className="tp-oppv__eq" aria-hidden="true">=</span>
+                  <span className="tp-oppv__term" data-cat="result">
+                    <b>{statsForStudent ? formatOpportunityBalance(statsForStudent) : balanceValue}</b><small>الفرص المتبقية</small>
+                  </span>
+                  {!sum.inferred && sum.computed !== null && sum.computed !== balanceValue ? (
+                    <p className="tp-oppv__mismatch">مجموع السجل يطلع {sum.computed}، والفرص المتبقية {balanceValue}. راجع سجل الطالب.</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {chapterCardsState === "failed" ? (
+                <div role="alert"><EmptyState compact icon={AlertCircle} title="تعذر تحميل ملف الطالب." /></div>
+              ) : !overview || overview.moves.length === 0 ? (
+                <EmptyState compact title="لا توجد امتحانات أو حركات لعرضها" />
+              ) : (
+                <ol className="tp-pf-moves">
+                  {overview.moves.slice(0, MOVES_SHOWN).map(({ row, after }) => {
+                    const Icon = STAFF_ROW_ICONS[row.category];
+                    const note = staffRowNote(row.note);
+                    const sub = row.reason ? `السبب: ${row.reason}` : note && note !== "—" ? note : "";
+                    return (
+                      <li key={row.key} className="tp-pf-move" data-cat={row.category}>
+                        <span className="tp-pf-move__mark" aria-hidden="true"><Icon /></span>
+                        <div className="tp-pf-move__main">
+                          <p className="tp-pf-move__title"><strong>{row.title}</strong><DeltaChip row={row} /></p>
+                          {sub ? <p className="tp-pf-move__sub">{sub}</p> : null}
+                          <time dateTime={row.date}>{formatReportTimelineDate(row.date, row.withTime) || "تاريخ غير مسجّل"}</time>
+                        </div>
+                        {after !== null ? (
+                          <BalanceRing
+                            value={after}
+                            limit={moveLimit}
+                            label={`الفرص بعد هالشي: ${after}${moveLimit !== null ? ` من ${moveLimit}` : ""}`}
+                          >
+                            <bdi dir="ltr">{after}{moveLimit !== null ? `/${moveLimit}` : ""}</bdi>
+                          </BalanceRing>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+              <button type="button" className="tp-pf-more" onClick={() => openView("decisions")}>
+                الفرص والقرارات <ChevronDown className="tp-pf-more__icon" aria-hidden="true" />
+              </button>
+            </section>
+          ) : null}
+
+          {story.latestFollowUp ? (
             <section className="tp-pf-card tp-pf-follow" aria-labelledby="tp-pf-follow-title">
               <span className="tp-pf-follow__icon" aria-hidden="true"><Phone /></span>
               <div className="min-w-0">
-                <h3 id="tp-pf-follow-title">آخر متابعة</h3>
-                <p className="tp-pf-follow__text"><StoryText parts={lastFollowUp.parts} /></p>
-                <p className="tp-story__meta">{[storyDay(lastFollowUp.dayKey), storyMeta(lastFollowUp.time, lastFollowUp.by)].filter(Boolean).join(" · ")}</p>
+                <h3 id="tp-pf-follow-title">المتابعة</h3>
+                <p className="tp-pf-follow__text"><StoryText parts={story.latestFollowUp.parts} /></p>
+                <p className="tp-story__meta">{[storyDay(story.latestFollowUp.dayKey), storyMeta(story.latestFollowUp.time, story.latestFollowUp.by)].filter(Boolean).join(" · ")}</p>
               </div>
             </section>
           ) : null}
@@ -1212,12 +1216,12 @@ export function StudentProfileDialog({
                   large
                   value={isDismissedNow ? 0 : balanceValue}
                   limit={balanceLimit}
-                  label={isDismissedNow ? "مفصول" : statsForStudent ? `الفرص ${formatOpportunityBalance(statsForStudent, { separator: " من " })}` : "جاري تحميل الفرص"}
+                  label={isDismissedNow ? "مفصول" : balanceText ? `الفرص ${balanceText}` : "الفرص —"}
                 >
                   {isDismissedNow ? (
                     <b className="tp-pf-ring__word">مفصول</b>
                   ) : balanceValue === null ? (
-                    <b>…</b>
+                    <b>{statsPending ? "…" : "—"}</b>
                   ) : (
                     <>
                       <b>{balanceValue}</b>
@@ -1229,13 +1233,13 @@ export function StudentProfileDialog({
               </div>
             </section>
 
-            <div className="tp-story__filters tp-pf-tabs" role="group" aria-label="أقسام ملف الطالب">
+            <div ref={tabsRef} className="tp-story__filters tp-pf-tabs" role="group" aria-label="فلترة القصة">
               {PROFILE_TABS.map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
                   aria-pressed={view === key}
-                  onClick={() => setView(key)}
+                  onClick={() => openView(key)}
                   className="tp-pf-tab"
                 >
                   {label}
@@ -1243,10 +1247,18 @@ export function StudentProfileDialog({
               ))}
             </div>
 
+            {story?.openItems.length ? (
+              <section className="tp-story__open" aria-label="يحتاج متابعة">
+                <h3 className="tp-story__label">يحتاج متابعة</h3>
+                <ul>
+                  {story.openItems.map((parts, index) => <li key={index}><StoryText parts={parts} /></li>)}
+                </ul>
+              </section>
+            ) : null}
+
             {storyBody}
 
-            {view === "overview" ? (
-              <>
+            <>
                 <div className="tp-pf-folds">
                   <details className="tp-pf-fold">
                     <summary>
@@ -1322,8 +1334,7 @@ export function StudentProfileDialog({
                     ) : null}
                   </details>
                 ) : null}
-              </>
-            ) : null}
+            </>
           </div>
         </div>
       </div>

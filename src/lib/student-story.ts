@@ -62,6 +62,12 @@ export type StudentStory = {
   lead: StoryPart[];
   highlights: StoryPart[][];
   latest: StoryEvent | null;
+  /** «انخصمت عليه … بهالفصل» on its own, for a page that shows the sum elsewhere. */
+  deducted: StoryPart[] | null;
+  /** The chapter's exams counted as the summary counts them. */
+  counts: { total: number; pass: number; fail: number; loss: number; absent: number; neutral: number; pending: number; missing: number };
+  /** The newest follow-up: a call (also one made about an exam), a leave or a grace period. */
+  latestFollowUp: { at: string; dayKey: string; time: string; by: string; parts: StoryPart[] } | null;
   openItems: StoryPart[][];
   strip: StoryStripItem[];
   stripChapterName: string;
@@ -667,8 +673,10 @@ export function buildStudentStory(rawInput: StudentStoryInput): StudentStory {
     .filter((log) => s(log.chapterId) === currentChapterId && (s(log.action) === "خصم تلقائي" || (s(log.action) === "خصم" && !/^فصل الطالب/u.test(s(log.reason)))))
     .reduce((sum, log) => sum + Math.abs(Number(log.amount) || 0), 0);
   const chapterBonuses = input.opportunityLogs.filter((log) => s(log.chapterId) === currentChapterId && s(log.action) === BONUS_OPPORTUNITY_ACTION).length;
+  let deducted: StoryPart[] | null = null;
   if (chapterDeducted > 0) {
     summary.push(storyParts(`انخصمت عليه ${bold(storyOpportunityCount(chapterDeducted))} بهالفصل${chapterBonuses ? `، ورجعتله ${chapterBonuses === 1 ? "«فرصة مكافأة»" : `${bold(chapterBonuses)} «فرص مكافأة»`}` : ""}.`));
+    deducted = summary[summary.length - 1];
   }
   const counted = { pass: 0, fail: 0, loss: 0, absent: 0, neutral: 0, pending: 0, missing: 0 };
   for (const item of strip) {
@@ -693,6 +701,21 @@ export function buildStudentStory(rawInput: StudentStoryInput): StudentStory {
     highlights.push(summary[summary.length - 1]);
   }
   const newest = newestFirst[0];
+  // A call about an exam sits under the exam's event, at its own time.
+  let latestFollowUp: StudentStory["latestFollowUp"] = null;
+  for (const event of events) {
+    const candidates = event.subs.length
+      ? event.subs.map((sub) => {
+        const exam = event.id.startsWith("exam-") ? examById.get(event.id.slice(5)) : undefined;
+        return { ...sub, parts: exam ? [...storyParts(`${bold(examTypeName(exam))}: `), ...sub.parts] : sub.parts };
+      })
+      : event.cats.includes("follow") ? [event] : [];
+    for (const item of candidates) {
+      if (!latestFollowUp || item.at > latestFollowUp.at) {
+        latestFollowUp = { at: item.at, dayKey: item.dayKey, time: item.time, by: item.by, parts: item.parts };
+      }
+    }
+  }
   if (newest) summary.push([...storyParts(`آخر شي صار (${bold(storyDay(newest.dayKey))}): `), ...newest.parts]);
 
   // ── Open items ──
@@ -760,6 +783,9 @@ export function buildStudentStory(rawInput: StudentStoryInput): StudentStory {
     lead: summary[0] || [],
     highlights,
     latest: newest || null,
+    deducted,
+    counts: { total: strip.length, ...counted },
+    latestFollowUp,
     openItems,
     strip,
     stripChapterName: input.activeChapter?.name || "",
