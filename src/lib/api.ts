@@ -1608,6 +1608,9 @@ export const studentApi = {
     ),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("students", { id, ...updates }),
+  /** Only the Telegram username, from a card outside «سجل الطلاب». */
+  updateTelegramUsername: (id: string, username: string) =>
+    apiPut("students/telegram-username", { studentId: id, username }),
   remove: (id: string, options: { previewToken: string }) =>
     apiDelete("students", id, { previewToken: options.previewToken }),
 };

@@ -15,6 +15,7 @@ import { contactStatusMatchesFilter, normalizeContactStatusFilter, type ContactS
 import { GUARDIAN_NUMBER_NOT_WORKING_MESSAGE, telegramChatWithMessage } from "@/lib/call-note-telegram";
 import { copyText, MZ_ACTIVE_USERS_URL, mzPlatformPhone } from "@/lib/code-closure-contact";
 import { describeTelegramHandle } from "./student-registry-helpers";
+import { TelegramUsernameEdit } from "./telegram-username-edit";
 import { EmptyState, LoadingState } from "./ui-kit";
 import "./code-closures-dialog.css";
 
@@ -22,6 +23,8 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canManage: boolean;
+  /** May change the student's Telegram username here (students.edit). */
+  canEditTelegram?: boolean;
 };
 
 const GENERAL_NOTES = "__general__";
@@ -66,7 +69,7 @@ const VIEWS: Array<{ key: CallNotesView; label: string }> = [
   { key: "archive", label: "الأرشيف (المنجزة)" },
 ];
 
-export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Props) {
+export function CallNotesManagementDialog({ open, onOpenChange, canManage, canEditTelegram = false }: Props) {
   const [notes, setNotes] = useState<ManagedCallNote[]>([]);
   // The platform button, as in «إغلاق الكودات», for whoever the server allows.
   const [platform, setPlatform] = useState(false);
@@ -549,6 +552,12 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                         ) : telegram.value ? (
                           <span dir="ltr" className="tp-modal__tg tp-notes__tg" data-plain="true">{telegram.value}</span>
                         ) : null}
+                        {canEditTelegram && (
+                          <TelegramUsernameEdit
+                            student={student}
+                            onSaved={(username) => setNotes((current) => current.map((item) => item.student.id === student.id ? { ...item, student: { ...item.student, username } } : item))}
+                          />
+                        )}
                       </div>
                       <ol className="tp-notes__items">
                         {group.map((note) => {

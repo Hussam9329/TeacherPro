@@ -3529,6 +3529,24 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
   .tp-pf-card { padding: 0.85rem; }
 }
 
+/* Quick edit of a student's Telegram username on the cards («إغلاق الكودات»,
+   «إدارة ملاحظات المكالمات»): a pencil, then a small inline field. */
+.tp-tg-edit__open { display: inline-grid; flex: none; place-items: center; inline-size: 2.25rem; block-size: 2.25rem; border: 1px solid var(--border); border-radius: 0.65rem; background: var(--card); color: var(--muted-foreground); cursor: pointer; touch-action: manipulation; transition: background-color 150ms, color 150ms; }
+.tp-tg-edit__open:hover { background: var(--muted); color: var(--foreground); }
+.tp-tg-edit__open svg { inline-size: 0.95rem; block-size: 0.95rem; }
+.tp-tg-edit { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; min-width: 0; max-width: 100%; }
+.tp-tg-edit__field { display: inline-flex; align-items: center; gap: 0.15rem; min-width: 0; padding: 0 0.6rem; border: 1px solid var(--primary); border-radius: 0.65rem; background: var(--background); color: var(--muted-foreground); font-weight: 700; }
+.tp-tg-edit__field input { inline-size: 10.5rem; max-inline-size: 52vw; min-block-size: 2.25rem; border: 0; background: transparent; color: var(--foreground); font: inherit; font-weight: 700; outline: none; }
+.tp-tg-edit__field:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
+.tp-tg-edit__save, .tp-tg-edit__cancel { display: inline-grid; place-items: center; inline-size: 2.25rem; block-size: 2.25rem; border-radius: 0.65rem; cursor: pointer; touch-action: manipulation; }
+.tp-tg-edit__save { border: 0; background: var(--primary); color: var(--primary-foreground); }
+.tp-tg-edit__cancel { border: 1px solid var(--border); background: var(--card); color: var(--muted-foreground); }
+.tp-tg-edit__save:disabled, .tp-tg-edit__cancel:disabled { cursor: wait; opacity: 0.6; }
+.tp-tg-edit__save svg, .tp-tg-edit__cancel svg { inline-size: 1rem; block-size: 1rem; }
+.tp-tg-edit__error { flex-basis: 100%; margin: 0; color: var(--status-danger-fg); font-size: 0.75rem; font-weight: 700; }
+:is(.tp-tg-edit__open, .tp-tg-edit__save, .tp-tg-edit__cancel):focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .tp-tg-edit__open { transition: none; } }
+
 /* Pages that share one sidebar entry: tabs to switch, buttons to add. */
 .tp-section-group {
   display: flex;

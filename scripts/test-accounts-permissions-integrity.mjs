@@ -201,6 +201,23 @@ must(
   );
 }
 
+// The Telegram username is edited right on the cards of «إغلاق الكودات» and
+// «إدارة ملاحظات المكالمات», through the same student edit (students.edit).
+{
+  const editor = read("src/components/teacher-pro/telegram-username-edit.tsx");
+  const dashboard = read("src/components/teacher-pro/dashboard.tsx");
+  must(
+    editor.includes("studentApi.updateTelegramUsername(student.id, username)") &&
+      read("src/app/api/students/telegram-username/route.ts").includes('requirePermissionPrincipal(req, "students.edit")') &&
+      read("src/app/api/students/telegram-username/route.ts").includes("data: { username }") &&
+      ["src/components/teacher-pro/code-closures-dialog.tsx", "src/components/teacher-pro/call-notes-management-dialog.tsx"]
+        .every((file) => { const source = read(file); return source.includes("{canEditTelegram && (") && source.includes("<TelegramUsernameEdit"); }) &&
+      dashboard.includes('actor.permissions?.includes("students.edit")') &&
+      (dashboard.match(/canEditTelegram=\{canEditStudents\}/g) || []).length === 2,
+    "زر تعديل معرف تيليجرام بكارت الطالب بإغلاق الكودات وملاحظات المكالمات، لمن عنده تعديل الطلاب",
+  );
+}
+
 if (failed) {
   console.error("\nفشل اختبار إدارة الحسابات والصلاحيات.");
   process.exit(1);

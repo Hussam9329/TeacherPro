@@ -94,6 +94,12 @@ export function DashboardView({
   // registry and nothing else. dismissed-management is gated by students.view.
   const hasFullStudentsView = canAccess("dismissed-management");
   const canViewCodeClosures = hasFullStudentsView;
+  // The quick Telegram username edit on the cards is the student edit itself.
+  const canEditStudents = Boolean(actor && (
+    actor.username?.trim().toLowerCase() === "admin" ||
+    actor.roleId === "role_admin" ||
+    actor.permissions?.includes("students.edit")
+  ));
   const canManageCodeClosures = Boolean(actor && (
     actor.username?.trim().toLowerCase() === "admin" ||
     actor.roleId === "role_admin" ||
@@ -415,6 +421,7 @@ export function DashboardView({
           open={callNotesOpen}
           onOpenChange={closeAndRefresh(setCallNotesOpen)}
           canManage={canManageCallNotes}
+          canEditTelegram={canEditStudents}
         />
       )}
       {canViewGracePeriods && (
@@ -439,6 +446,7 @@ export function DashboardView({
           open={codeClosuresOpen}
           onOpenChange={closeAndRefresh(setCodeClosuresOpen)}
           canManage={canManageCodeClosures}
+          canEditTelegram={canEditStudents}
         />
       )}
     </div>
