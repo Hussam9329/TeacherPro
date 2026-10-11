@@ -295,14 +295,17 @@ model StudentCall {
   @@index([category, examId, noteResolved])
 }
 
-/// «إحصائيات المكالمات»: how many calls a course needs on one Baghdad day,
-/// entered by the admin or a supervisor. What was done is counted from the
-/// call actions themselves.
+/// «إحصائيات المكالمات»: how many calls a course needs on one Baghdad day —
+/// the «المخصومين» of the course's latest exam on that day, recorded on its
+/// own. What was done is counted from the call actions themselves.
 model CallDailyTarget {
   id            String   @id @default(cuid())
   day           String
   courseId      String
   target        Int
+  /// The exam the number was counted from.
+  examId        String   @default("")
+  examName      String   @default("")
   updatedById   String?
   updatedByName String   @default("")
   updatedAt     DateTime @default(now()) @updatedAt

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { DateInput } from "@/components/ui/date-input";
-import { formatAppDate, toLatinDigits } from "@/lib/format";
+import { formatAppDate } from "@/lib/format";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
 import { callDailyStatsApi, type CallDailyStatsResponse } from "@/lib/call-daily-stats-client";
 import { EmptyState, LoadingState } from "./ui-kit";
@@ -19,20 +19,17 @@ function percent(rate: number | null): string {
   return rate === null ? "—" : `${Math.round(rate * 100)}%`;
 }
 
-type SaveState = { saving?: boolean; error?: string; saved?: boolean };
-
 /**
  * «إحصائيات المكالمات»: one day of calls for the admin and the supervisors —
  * what each employee did and on which courses, and each course against the
- * number it needed that day (entered here, saved on its own).
+ * number it needed that day: the «المخصومين» of its latest exam, recorded
+ * on its own.
  */
 export function CallsStatsPanel() {
   const [day, setDay] = useState(() => baghdadTodayKey());
   const [data, setData] = useState<CallDailyStatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [saveState, setSaveState] = useState<Record<string, SaveState>>({});
   const requestRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async (wanted: string) => {
@@ -44,8 +41,6 @@ export function CallsStatsPanel() {
       const result = await callDailyStatsApi.get(wanted, controller.signal);
       if (controller.signal.aborted) return;
       setData(result);
-      setDrafts({});
-      setSaveState({});
       setError("");
     } catch (cause) {
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "تعذر تحميل إحصائيات المكالمات.");
@@ -60,44 +55,6 @@ export function CallsStatsPanel() {
   }, [day, load]);
 
   const today = data?.today || baghdadTodayKey();
-
-  const saveTarget = async (courseId: string) => {
-    if (!data || drafts[courseId] === undefined) return;
-    const raw = toLatinDigits(drafts[courseId]).trim();
-    const target = raw === "" ? null : Number(raw);
-    if (target !== null && (!Number.isInteger(target) || target < 0)) {
-      setSaveState((current) => ({ ...current, [courseId]: { error: "اكتب رقم صحيح من 0 فما فوق." } }));
-      return;
-    }
-    const before = data.courses.find((course) => course.id === courseId)?.target ?? null;
-    if (target === before) {
-      setDrafts(({ [courseId]: _, ...rest }) => rest);
-      return;
-    }
-    setSaveState((current) => ({ ...current, [courseId]: { saving: true } }));
-    try {
-      const saved = await callDailyStatsApi.setTarget(data.day, courseId, target);
-      setData((current) => {
-        if (!current) return current;
-        const courses = current.courses.map((course) => course.id !== courseId ? course : {
-          ...course,
-          target: saved.target,
-          remaining: Math.max(0, (saved.target || 0) - course.done),
-          rate: saved.target ? course.done / saved.target : null,
-        });
-        const total = courses.reduce((sum, course) => sum + (course.target || 0), 0);
-        return {
-          ...current,
-          courses,
-          totals: { ...current.totals, target: total, remaining: Math.max(0, total - current.totals.done), rate: total ? current.totals.done / total : null },
-        };
-      });
-      setDrafts(({ [courseId]: _, ...rest }) => rest);
-      setSaveState((current) => ({ ...current, [courseId]: { saved: true } }));
-    } catch (cause) {
-      setSaveState((current) => ({ ...current, [courseId]: { error: cause instanceof Error ? cause.message : "تعذر الحفظ." } }));
-    }
-  };
 
   return (
     <section className="tp-cstats" aria-label="إحصائيات المكالمات">
@@ -138,7 +95,7 @@ export function CallsStatsPanel() {
             <div className="tp-cstats__kpi">
               <dt>إجمالي المطلوب</dt>
               <dd>{data.totals.target}</dd>
-              <small>مجموع المطلوب من الدورات</small>
+              <small>مجموع المخصومين بالدورات</small>
             </div>
             <div className="tp-cstats__kpi" data-tone="done">
               <dt>إجمالي المنجز</dt>
@@ -198,7 +155,7 @@ export function CallsStatsPanel() {
           <section className="tp-cstats__card" aria-labelledby="tp-cstats-courses">
             <header className="tp-cstats__head">
               <h3 id="tp-cstats-courses">الدورات: المطلوب والمنجز</h3>
-              <p>أدخل العدد المطلوب لكل دورة بهذا اليوم؛ يُحفظ تلقائياً. المنجز يُحسب من إجراءات الموظفين.</p>
+              <p>العدد المطلوب لكل دورة هو عدد «المخصومين» بآخر امتحان إلها لهذا اليوم، ويتسجل تلقائياً. المنجز يُحسب من إجراءات الموظفين.</p>
             </header>
             {data.courses.length === 0 ? (
               <EmptyState compact title="لا توجد دورات فعّالة" />
@@ -208,37 +165,14 @@ export function CallsStatsPanel() {
                   <span>الدورة</span><span>العدد المطلوب</span><span>المنجز</span><span>المتبقي</span><span>نسبة الإنجاز</span>
                 </div>
                 {data.courses.map((course) => {
-                  const state = saveState[course.id] || {};
-                  const draft = drafts[course.id];
                   const rate = course.rate === null ? 0 : Math.min(1, course.rate);
                   return (
                     <div key={course.id || "none"} className="tp-cstats__trow">
-                      <span className="tp-cstats__cname">{course.name}</span>
-                      <span className="tp-cstats__target">
-                        {course.id ? (
-                          <>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              dir="ltr"
-                              aria-label={`العدد المطلوب لدورة ${course.name}`}
-                              placeholder="—"
-                              value={draft ?? (course.target === null ? "" : String(course.target))}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setDrafts((current) => ({ ...current, [course.id]: value }));
-                                setSaveState((current) => ({ ...current, [course.id]: {} }));
-                              }}
-                              onBlur={() => void saveTarget(course.id)}
-                              onKeyDown={(event) => { if (event.key === "Enter") (event.target as HTMLInputElement).blur(); }}
-                              aria-invalid={state.error ? true : undefined}
-                            />
-                            {state.saving ? <Loader2 className="tp-cstats__state animate-spin motion-reduce:animate-none" aria-label="جاري الحفظ" /> : null}
-                            {state.saved ? <span className="tp-cstats__saved" role="status">انحفظ</span> : null}
-                            {state.error ? <span className="tp-cstats__error" role="alert">{state.error}</span> : null}
-                          </>
-                        ) : "—"}
+                      <span className="tp-cstats__cname">
+                        {course.name}
+                        {course.examName ? <small>المخصومين: {course.examName}</small> : null}
                       </span>
+                      <span className="tp-cstats__num" data-label="العدد المطلوب">{course.target === null ? "—" : course.target}</span>
                       <span className="tp-cstats__num" data-label="المنجز">{course.done}</span>
                       <span className="tp-cstats__num" data-label="المتبقي">{course.target === null ? "—" : course.remaining}</span>
                       <span className="tp-cstats__rate" data-label="نسبة الإنجاز">

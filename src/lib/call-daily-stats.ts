@@ -23,7 +23,16 @@ export type CallActionLogLine = {
   userName: string | null;
 };
 
-export type CallDailyCourse = { id: string; name: string; target: number | null; done: number; remaining: number; rate: number | null };
+export type CallDailyCourse = {
+  id: string;
+  name: string;
+  target: number | null;
+  /** The exam the required number was counted from («المخصومين»). */
+  examName: string;
+  done: number;
+  remaining: number;
+  rate: number | null;
+};
 export type CallDailyEmployee = {
   key: string;
   name: string;
@@ -62,6 +71,8 @@ export function buildCallDailyStats(input: {
   courseNames?: Map<string, string>;
   /** courseId → target for the day */
   targets: Map<string, number>;
+  /** courseId → the exam the target was counted from */
+  targetExams?: Map<string, string>;
 }): CallDailyStats {
   // The last status each employee left on each call during the day.
   const last = new Map<string, { actor: string; name: string; courseId: string; status: string }>();
@@ -105,7 +116,15 @@ export function buildCallDailyStats(input: {
   const courses: CallDailyCourse[] = courseIds.map((id) => {
     const target = input.targets.has(id) ? input.targets.get(id)! : null;
     const done = doneByCourse.get(id) || 0;
-    return { id, name: courseName(id), target, done, remaining: Math.max(0, (target || 0) - done), rate: rateOf(done, target) };
+    return {
+      id,
+      name: courseName(id),
+      target,
+      examName: input.targetExams?.get(id) || "",
+      done,
+      remaining: Math.max(0, (target || 0) - done),
+      rate: rateOf(done, target),
+    };
   });
 
   const target = courses.reduce((sum, course) => sum + (course.target || 0), 0);

@@ -314,5 +314,9 @@
   "20261011120000_call_daily_targets": {
     "kind": "expand",
     "checksum": "60476d24ad2152bf1d73a16aa1b3b9ecb5c36e86d9500df2c7e24a4890315701"
+  },
+  "20261011150000_call_daily_target_exam": {
+    "kind": "expand",
+    "checksum": "90d06c594081f5723579cd63d0ed2a2e4f6fb3699f2d4febf21b21e8ef5921af"
   }
 }

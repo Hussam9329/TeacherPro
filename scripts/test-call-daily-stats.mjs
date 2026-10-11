@@ -40,7 +40,9 @@ const stats = buildCallDailyStats({
   studentCourse: new Map([["s1", "c1"], ["s2", "c1"], ["s3", "c2"], ["s4", "c2"]]),
   courses: [{ id: "c1", name: "صيفية اولى" }, { id: "c2", name: "شتوية ثانية" }, { id: "c3", name: "اعفاء" }],
   targets: new Map([["c1", 10], ["c2", 1]]),
+  targetExams: new Map([["c1", "امتحان 7"]]),
 });
+assert.equal(stats.courses[0].examName, "امتحان 7");
 
 // Most actions first; a tie in alphabetical order.
 assert.deepEqual(stats.employees.map((employee) => [employee.name, employee.total]), [["سارة", 2], ["علي", 2]]);
@@ -65,10 +67,14 @@ assert.equal(range.from.toISOString(), "2026-10-10T21:00:00.000Z");
 assert.equal(range.to.toISOString(), "2026-10-11T21:00:00.000Z");
 assert.equal(baghdadDayRange("11-10-2026"), null);
 
-// Only the admin and the supervisors read or set it; targets are their own table.
+// Only the admin and the supervisors read it. The required number is the
+// «المخصومين» count «المكالمات» shows for the course's latest exam on the day,
+// recorded on its own; today follows the list, a past day keeps its number.
 const route = read("src/app/api/student-calls/daily-stats/route.ts");
 assert.ok(route.includes("if (!oversees(principal))"));
-assert.ok(route.includes("db.callDailyTarget.upsert"));
+assert.ok(route.includes('statusFilter: "discounted"') && route.includes('import { GET as callCandidates } from "../candidates/route";'));
+assert.ok(route.includes("if (saved && day !== today)") && route.includes("db.callDailyTarget.upsert"));
+assert.ok(!route.includes("export async function PUT"), "nobody types the required number");
 assert.ok(route.includes('action: { in: [CALL_ACTION_SET, CALL_ACTION_CLEARED] }'));
 const dashboard = read("src/components/teacher-pro/dashboard.tsx");
 assert.ok(dashboard.includes('actor.permissions?.includes("system.oversight")') && dashboard.includes("canSeeStats={canSeeCallStats}"));
@@ -77,6 +83,7 @@ assert.ok(calls.includes('"المكالمات", data.status ? "تحديث حال
 const migration = read("prisma/migrations/20261011120000_call_daily_targets/migration.sql");
 const policy = JSON.parse(read("prisma/deployment-migration-policy.json"));
 assert.equal(policy["20261011120000_call_daily_targets"].kind, "expand");
+assert.equal(policy["20261011150000_call_daily_target_exam"].kind, "expand");
 assert.ok(migration.includes('CREATE TABLE "CallDailyTarget"') && !/\bDROP\b/i.test(migration.replace(/--[^\n]*/g, "")));
 
 console.log("كل اختبارات إحصائيات المكالمات نجحت.");

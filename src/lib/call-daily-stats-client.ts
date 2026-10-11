@@ -19,13 +19,4 @@ export const callDailyStatsApi = {
     });
     return body(response, "تعذر تحميل إحصائيات المكالمات. أعد المحاولة.");
   },
-  async setTarget(day: string, courseId: string, target: number | null): Promise<{ target: number | null }> {
-    const response = await fetch("/api/student-calls/daily-stats", {
-      method: "PUT",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ day, courseId, target }),
-    });
-    return body(response, "تعذر حفظ العدد المطلوب. أعد المحاولة.");
-  },
 };
