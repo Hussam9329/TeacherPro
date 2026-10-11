@@ -310,5 +310,9 @@
   "20261010120000_remove_bot_problems_permission": {
     "kind": "audited-data-reconciliation",
     "checksum": "6be275e326aaa93b24d8e3b5f49106e8a8aa0797d95db5ce5d10fd0581fc86e3"
+  },
+  "20261011120000_call_daily_targets": {
+    "kind": "expand",
+    "checksum": "60476d24ad2152bf1d73a16aa1b3b9ecb5c36e86d9500df2c7e24a4890315701"
   }
 }

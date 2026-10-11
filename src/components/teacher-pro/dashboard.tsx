@@ -95,6 +95,12 @@ export function DashboardView({
   const hasFullStudentsView = canAccess("dismissed-management");
   const canViewCodeClosures = hasFullStudentsView;
   // The quick contact edits on the cards are the student edit itself.
+  // «إحصائيات المكالمات»: the admin («مدير عام») and the supervisors.
+  const canSeeCallStats = Boolean(actor && (
+    actor.username?.trim().toLowerCase() === "admin" ||
+    actor.roleId === "role_admin" ||
+    actor.permissions?.includes("system.oversight")
+  ));
   const canEditStudents = Boolean(actor && (
     actor.username?.trim().toLowerCase() === "admin" ||
     actor.roleId === "role_admin" ||
@@ -414,7 +420,7 @@ export function DashboardView({
         </nav>
       )}
       {canViewCallNotes && (
-        <CallsDialog open={callsOpen} onOpenChange={closeAndRefresh(setCallsOpen)} />
+        <CallsDialog open={callsOpen} onOpenChange={closeAndRefresh(setCallsOpen)} canSeeStats={canSeeCallStats} />
       )}
       {canViewCallNotes && (
         <CallNotesManagementDialog

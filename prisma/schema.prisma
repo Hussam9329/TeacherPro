@@ -295,6 +295,22 @@ model StudentCall {
   @@index([category, examId, noteResolved])
 }
 
+/// «إحصائيات المكالمات»: how many calls a course needs on one Baghdad day,
+/// entered by the admin or a supervisor. What was done is counted from the
+/// call actions themselves.
+model CallDailyTarget {
+  id            String   @id @default(cuid())
+  day           String
+  courseId      String
+  target        Int
+  updatedById   String?
+  updatedByName String   @default("")
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  @@unique([day, courseId])
+  @@index([day])
+}
+
 /// An open «إدارة المكالمات» window. It beats every few seconds while open;
 /// one that stops beating is dropped with the names it held.
 model CallWindow {
