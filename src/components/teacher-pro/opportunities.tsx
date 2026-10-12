@@ -1129,7 +1129,14 @@ export function OpportunitiesView() {
                   </div>
                 );
               })()}
-              <BonusTracePanel studentId={selectedDetailsStudent.id} refreshKey={`${detailsRefreshKey}:${refreshKey}:${syncKey}`} />
+              <BonusTracePanel
+                studentId={selectedDetailsStudent.id}
+                refreshKey={`${detailsRefreshKey}:${refreshKey}:${syncKey}`}
+                onRecalculated={() => {
+                  setRefreshKey((key) => key + 1);
+                  setDetailsRefreshKey((key) => key + 1);
+                }}
+              />
               {detailsLoading && !detailsData ? (
                 <LoadingState title="جاري تحميل سجل الطالب..." />
               ) : !detailsView || detailsView.rows.length === 0 ? (

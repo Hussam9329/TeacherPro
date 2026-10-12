@@ -1823,6 +1823,8 @@ export const studentProfileStatsApi = {
 export const studentBonusTraceApi = {
   get: (studentId: string) =>
     apiGet<AcademicBonusTrace>(`students/bonus-trace?${buildQueryString({ studentId })}`),
+  /** Only when the saved record differs from the calculation. */
+  recalculate: (studentId: string) => apiPost("students/bonus-trace", { studentId }),
 };
 
 export const studentProfileLogApi = {
