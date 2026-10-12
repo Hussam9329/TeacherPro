@@ -505,4 +505,33 @@ scenario("43 a reset holds only what it removed", () => {
   const both = run([["s", 70, { day: 2 }], ["s", 80, { day: 3 }], ["s", 75, { day: 4 }], ["s", 90, { day: 5 }]], { cap: 4, logs: [adminReset(3, 2, 1)] });
   assert.equal(balance(both), 3); assert.equal(both.bonuses.length, 1);
 });
+scenario("trace: every decision is explained and the trace never changes the result", () => {
+  const traced = (events, extra) => {
+    const state = build(events, extra);
+    const trace = [];
+    const result = recalculateAcademicState(state, new Set(["student"]), { onBonusTrace: (event) => trace.push(event) });
+    const plain = recalculateAcademicState(build(events, extra), new Set(["student"]));
+    assert.deepEqual(result, plain);
+    return { trace, student: result.students[0] };
+  };
+  const earned = traced([["a"], ["s", 77], ["leave"], ["s", 69]]);
+  assert.deepEqual(earned.trace.map((e) => [e.examId, e.kind]),
+    [["e1", "break"], ["e2", "first"], ["e3", "neutral"], ["e4", "earned"], ["", "summary"]]);
+  assert.match(earned.trace[0].detail, /^غياب: العدّ يرجع من الصفر$/);
+  assert.match(earned.trace[2].detail, /مجاز/);
+  assert.match(earned.trace[3].detail, /رجعت فرصة مكافأة/);
+  assert.equal(earned.trace[3].balance, 3);
+  const waiting = traced([["a"], ["s", 77], ["missing"], ["s", 69]]);
+  assert.deepEqual(waiting.trace.map((e) => e.kind), ["break", "first", "waiting", "summary"]);
+  assert.match(waiting.trace[2].detail, /«امتحان 3»/);
+  assert.equal(waiting.trace.at(-1).detail, "فرصة مكافأة مستحقة، تنتظر درجة «امتحان 3»");
+  const broken = traced([["a"], ["s", 77], ["s", 45]]);
+  assert.deepEqual(broken.trace.map((e) => e.kind), ["break", "first", "break", "summary"]);
+  assert.match(broken.trace[2].detail, /^راسب بدون خصم \(45، النجاح 60\): العدّ يرجع من الصفر، وانمسح نجاح «امتحان 2»$/);
+  const full = traced([["s", 77]]);
+  assert.deepEqual(full.trace.map((e) => e.kind), ["full", "summary"]);
+  assert.match(full.trace[0].detail, /الفرص مكتملة \(3 من 3\)/);
+  const before = traced([["a", null, { day: -3 }], ["s", 70, { day: -2 }], ["s", 80, { day: 1 }]]);
+  assert.deepEqual(before.trace.map((e) => e.kind), ["before-start", "before-start", "first", "summary"]);
+});
 console.log(`bonus opportunity behavior: ${count} scenarios passed`);

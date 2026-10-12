@@ -25,6 +25,8 @@ import {
   isBonusOpportunityLog,
 } from "./bonus-opportunity";
 import type {
+  AcademicBonusTraceEvent,
+  AcademicBonusTraceKind,
   AcademicChapter,
   AcademicCourseChapter,
   AcademicExam,
@@ -453,6 +455,8 @@ export function recalculateAcademicState(
   options: {
     respectLegacyReactivationDates?: boolean;
     onOpportunityCommand?: (effect: AcademicOpportunityCommandEffect) => void;
+    /** Staff explanation of each «فرصة مكافأة» decision; read-only. */
+    onBonusTrace?: (event: AcademicBonusTraceEvent) => void;
   } = {},
 ): AcademicRecalculationResult {
   const examsById = new Map(state.exams.map((exam) => [exam.id, exam]));
@@ -808,6 +812,7 @@ export function recalculateAcademicState(
         dismissalPriority = priority;
       }
       if (exam) {
+        traceBonus(exam, "dismissed", `انفصل الطالب: ${reason}`);
         consumeAllRemainingOpportunities(
           exam,
           sourceId || exam.id,
@@ -1035,6 +1040,31 @@ export function recalculateAcademicState(
         !isExamInStudentGracePeriod(student, exam))
       .sort((a, b) => examOrderKey(a).localeCompare(examOrderKey(b)));
     const bonusRecoverable = () => Math.max(0, bonusCap - opportunities - bonusHold);
+    // Hoisted: setDismissal reports through it, only ever from the grade
+    // loop below, after everything it reads is set.
+    function traceBonus(exam: AcademicExam, kind: AcademicBonusTraceKind, detail: string) {
+      if (!options.onBonusTrace) return;
+      options.onBonusTrace(Object.freeze({
+        studentId: student.id,
+        examId: exam.id,
+        examName: exam.name,
+        examDate: String(exam.date || ""),
+        kind,
+        detail,
+        balance: opportunities,
+        cap: bonusCap,
+        hold: bonusHold,
+        bonusCount,
+      }));
+    }
+    const traceNeutral = (exam: AcademicExam | undefined, detail: string) => {
+      if (exam) traceBonus(exam, "neutral", detail);
+    };
+    const bonusFullDetail = () => bonusCount >= BONUS_LIMIT_PER_CHAPTER
+      ? `أخذ الحد الأعلى (${BONUS_LIMIT_PER_CHAPTER}) من فرص المكافأة بهذا الفصل`
+      : opportunities >= bonusCap
+        ? `الفرص مكتملة (${opportunities} من ${bonusCap})، ما كو شي يرجع`
+        : `النقص (${bonusCap - opportunities}) كله خصم أو إعادة تعيين يدوي من الإدارة (${bonusHold})، وهذا ما يرجع بالنجاح`;
     const resetBonusStreak = (exam: AcademicExam) => {
       bonusStreak = 0;
       bonusFirstPass = null;
@@ -1043,11 +1073,17 @@ export function recalculateAcademicState(
       if (key > bonusLastKey) bonusLastKey = key;
     };
     const countBonusPass = (exam: AcademicExam, grade: AcademicGrade, score: number) => {
-      if (dismissed || dayKey(exam.date) < BONUS_START_DAY) return;
-      if (examOrderKey(exam) <= bonusLastKey) return;
+      if (dismissed) return traceBonus(exam, "dismissed", "الطالب مفصول، فالنجاح ما ينحسب");
+      if (dayKey(exam.date) < BONUS_START_DAY) {
+        return traceBonus(exam, "before-start", `نجاح قبل بداية «فرصة المكافأة» (${BONUS_START_DAY})، ما ينحسب`);
+      }
+      if (examOrderKey(exam) <= bonusLastKey) {
+        return traceBonus(exam, "before-opening", `نجاح قبل النقطة اللي بدأ منها العدّ (${bonusLastKey.slice(0, 10)})، ما ينحسب`);
+      }
       // A full balance has nothing to earn back, and passes before a loss
       // never count toward it.
       if (bonusCount >= BONUS_LIMIT_PER_CHAPTER || bonusRecoverable() <= 0) {
+        traceBonus(exam, bonusCount >= BONUS_LIMIT_PER_CHAPTER ? "limit" : "full", `نجاح ${score} ما ينحسب: ${bonusFullDetail()}`);
         resetBonusStreak(exam);
         return;
       }
@@ -1055,6 +1091,7 @@ export function recalculateAcademicState(
         bonusStreak = 1;
         bonusFirstPass = { exam, score };
         bonusLastKey = examOrderKey(exam);
+        traceBonus(exam, "first", `نجاح ${score}: 1 من ${BONUS_PASSES_REQUIRED} نحو فرصة مكافأة`);
         return;
       }
       // The pair is the previous counted pass and this one. Only a missing
@@ -1070,6 +1107,7 @@ export function recalculateAcademicState(
         if (!bonusWaitingExam) bonusWaitingExam = missing;
         bonusFirstPass = { exam, score };
         bonusLastKey = examOrderKey(exam);
+        traceBonus(exam, "waiting", `نجاح ${score} بعد «${first?.exam.name || ""}»، بس بيناتهم امتحان «${missing.name}» (${dayKey(missing.date)}) ما مدخلة درجته؛ الفرصة تنتظر درجته`);
         return;
       }
       opportunities = Math.min(bonusCap, opportunities + 1);
@@ -1082,6 +1120,7 @@ export function recalculateAcademicState(
         1,
         `${BONUS_OPPORTUNITY_ACTION}: نجاح متتالي في «${first?.exam.name || ""}» (${first?.score ?? ""}) و«${exam.name}» (${score})`,
       );
+      traceBonus(exam, "earned", `نجاح ${score} بعد «${first?.exam.name || ""}» (${first?.score ?? ""}): رجعت فرصة مكافأة`);
       resetBonusStreak(exam);
     };
     const applyExamLoss = (
@@ -1089,13 +1128,14 @@ export function recalculateAcademicState(
       penalty: number,
       effect: ReturnType<typeof applyOpportunityPenalty>,
       historicalZero: boolean,
+      reason: string,
     ) => {
       const shadowEffect = applyOpportunityPenalty(bonusShadow, penalty);
       bonusShadow = shadowEffect.after;
       if (shadowEffect.dismissalTrigger && !historicalZero && !effect.dismissalTrigger) {
         bonusSavedAt.add(exam.id);
       }
-      breakBonusStreak(exam);
+      breakBonusStreak(exam, reason);
     };
     // A day's exams count toward the streak in exam order. A loss (a result
     // that can deduct) replayed before a pass of an earlier exam of its day
@@ -1124,7 +1164,16 @@ export function recalculateAcademicState(
     }
     const deferredBreaks: Array<{ after: number; exam: AcademicExam }> = [];
     let visitIndex = -1;
-    function breakBonusStreak(exam: AcademicExam) {
+    function breakBonusStreak(exam: AcademicExam, reason: string) {
+      if (options.onBonusTrace) {
+        const lost = bonusWaitingExam
+          ? `، وانلغت الفرصة اللي كانت تنتظر درجة «${(bonusWaitingExam as AcademicExam).name}»`
+          : bonusStreak === 1 && bonusFirstPass
+            ? `، وانمسح نجاح «${(bonusFirstPass as { exam: AcademicExam }).exam.name}»`
+            : "";
+        if (dayKey(exam.date) < BONUS_START_DAY) traceBonus(exam, "before-start", `${reason}، قبل بداية «فرصة المكافأة» (${BONUS_START_DAY})`);
+        else traceBonus(exam, "break", `${reason}: العدّ يرجع من الصفر${lost}`);
+      }
       const after = breakAfterVisit.get(visitIndex);
       if (after === undefined) resetBonusStreak(exam);
       else deferredBreaks.push({ after, exam });
@@ -1145,40 +1194,77 @@ export function recalculateAcademicState(
       // Retain historical grades above to resolve recorded pledge grants.
       // Their exam effects cannot cross the chapter boundary, even when an
       // old settlement note requests an academic effect.
-      if (eventExam && examChapterExclusion(eventExam, student.courseId, activeChapter?.id)) continue;
+      if (eventExam && examChapterExclusion(eventExam, student.courseId, activeChapter?.id)) {
+        traceNeutral(eventExam, "امتحان من فصل ثاني، ما يدخل بحساب هذا الفصل");
+        continue;
+      }
       applyCommandsThrough(ledgerDate);
-      if (settledGradeIds.has(grade.id)) continue;
+      if (settledGradeIds.has(grade.id)) {
+        traceNeutral(eventExam, "نتيجة قبل بداية الرصيد الحالي (شملتها تسوية أو إعادة تعيين)، ما تحسب ولا تقطع");
+        continue;
+      }
       const exam = examsById.get(grade.examId);
       if (!exam) continue;
-      if (grade.academicEffectExcluded) continue;
-      if (grade.status === "مجاز" || historicalGradeExclusion(grade, exam, historicalSettlementDate)) continue;
-      if (!isExamAvailableForEntry(exam)) continue;
-      if (!isGradeEntered(grade, exam)) continue;
+      if (grade.academicEffectExcluded) {
+        traceNeutral(exam, "النتيجة مستثناة من الحساب، ما تحسب ولا تقطع");
+        continue;
+      }
+      if (grade.status === "مجاز") {
+        traceNeutral(exam, "مجاز، ما يحسب ولا يقطع");
+        continue;
+      }
+      if (historicalGradeExclusion(grade, exam, historicalSettlementDate)) {
+        traceNeutral(exam, "نتيجة قديمة قبل تسوية تاريخية، ما تحسب ولا تقطع");
+        continue;
+      }
+      if (!isExamAvailableForEntry(exam)) {
+        traceNeutral(exam, "الامتحان معطّل أو ما حان وقته، فدرجته ما تنحسب");
+        continue;
+      }
+      if (!isGradeEntered(grade, exam)) {
+        traceNeutral(exam, "ما مدخلة درجة لهذا الامتحان");
+        continue;
+      }
       // Eligibility still belongs to the exam day, including after an exam
       // date correction. The credit boundary above changes ledger ordering,
       // not registration, leave/grace or reactivation eligibility.
       const gradeEventDate = dayKey(
         exam.date || grade.updatedAt || grade.createdAt || "",
       );
-      if (reactivationStartDate && gradeEventDate < reactivationStartDate)
+      if (reactivationStartDate && gradeEventDate < reactivationStartDate) {
+        traceNeutral(exam, `قبل إعادة التفعيل (${reactivationStartDate})، ما يحسب ولا يقطع`);
         continue;
+      }
       if (
         manualDismissal &&
         manualDismissalDate &&
         gradeEventDate &&
         gradeEventDate < manualDismissalDate
-      )
+      ) {
+        traceNeutral(exam, `قبل الفصل اليدوي (${manualDismissalDate})، ما يحسب ولا يقطع`);
         continue;
-      if (!isExamOnOrAfterStudentRegistration(student, exam)) continue;
+      }
+      if (!isExamOnOrAfterStudentRegistration(student, exam)) {
+        traceNeutral(exam, "قبل تسجيل الطالب، ما يحسب ولا يقطع");
+        continue;
+      }
       if (
         normalizedLeaves.some((leave) =>
           studentLeaveAppliesToExam(leave, student.id, exam),
         )
-      )
+      ) {
+        traceNeutral(exam, "ضمن إجازة، ما يحسب ولا يقطع");
         continue;
-      if (isExamInStudentGracePeriod(student, exam)) continue;
+      }
+      if (isExamInStudentGracePeriod(student, exam)) {
+        traceNeutral(exam, "ضمن فترة سماح، ما يحسب ولا يقطع");
+        continue;
+      }
       const gradeHasEffect = gradeHasAcademicEffect(grade, exam);
-      if (isProtectedLinkedSourceGrade(grade) && gradeHasEffect) continue;
+      if (isProtectedLinkedSourceGrade(grade) && gradeHasEffect) {
+        traceNeutral(exam, "نتيجة رجع عليها الطالب بإعادة تفعيل، ما تحسب ولا تقطع");
+        continue;
+      }
       if (grade.status === "غش") {
         cheatCount += 1;
         if (cheatCount === 1) {
@@ -1210,6 +1296,7 @@ export function recalculateAcademicState(
       }
 
       if (exam.noDiscount) {
+        traceNeutral(exam, "امتحان «بدون خصم»، ما يحسب ولا يقطع");
         continue;
       }
 
@@ -1256,7 +1343,7 @@ export function recalculateAcademicState(
             penalty,
           );
           opportunities = opportunityEffect.after;
-          applyExamLoss(exam, penalty, opportunityEffect, historicalZeroIntroduced);
+          applyExamLoss(exam, penalty, opportunityEffect, historicalZeroIntroduced, "غياب");
           if (opportunityEffect.deducted > 0) {
             addAutomaticLog(
               exam,
@@ -1301,7 +1388,7 @@ export function recalculateAcademicState(
           } else if (score >= Number(exam.passMark)) {
             countBonusPass(exam, grade, score);
           } else {
-            breakBonusStreak(exam);
+            breakBonusStreak(exam, `راسب بالفاينل (${score}، النجاح ${exam.passMark})`);
           }
           continue;
         }
@@ -1309,7 +1396,7 @@ export function recalculateAcademicState(
           countBonusPass(exam, grade, score);
         } else if (score > exam.discountMark) {
           // راسب غير مخصوم: no deduction, but the streak starts over.
-          breakBonusStreak(exam);
+          breakBonusStreak(exam, `راسب بدون خصم (${score}، النجاح ${exam.passMark})`);
         }
         if (score <= exam.discountMark) {
           const penalty = examPenaltyValue(exam);
@@ -1318,7 +1405,7 @@ export function recalculateAcademicState(
             penalty,
           );
           opportunities = opportunityEffect.after;
-          applyExamLoss(exam, penalty, opportunityEffect, historicalZeroIntroduced);
+          applyExamLoss(exam, penalty, opportunityEffect, historicalZeroIntroduced, `درجة ${score} ضمن الخصم (${exam.discountMark} أو أقل)`);
           if (opportunityEffect.deducted > 0) {
             addAutomaticLog(
               exam,
@@ -1373,6 +1460,30 @@ export function recalculateAcademicState(
     const bonusWaitingExamName = bonusProgress === BONUS_PROGRESS_WAITING
       ? (bonusWaitingExam as AcademicExam | null)?.name || null
       : null;
+    if (options.onBonusTrace) {
+      const waiting = bonusWaitingExam as AcademicExam | null;
+      const firstPass = bonusFirstPass as { exam: AcademicExam; score: number } | null;
+      options.onBonusTrace(Object.freeze({
+        studentId: student.id,
+        examId: "",
+        examName: "",
+        examDate: "",
+        kind: "summary" as const,
+        detail: dismissed
+          ? "الطالب مفصول، والمفصول ما ياخذ فرصة مكافأة"
+          : !canEarnBonus
+            ? bonusFullDetail()
+            : waiting
+              ? `فرصة مكافأة مستحقة، تنتظر درجة «${waiting.name}»`
+              : bonusStreak === 1 && firstPass
+                ? `نجاح 1 من ${BONUS_PASSES_REQUIRED} («${firstPass.exam.name}»)؛ إذا نجح بالامتحان الجاي ترجع فرصة`
+                : "ما كو نجاح محسوب هسه؛ يحتاج نجاحين متتاليين بعد آخر غياب أو رسوب",
+        balance: opportunities,
+        cap: bonusCap,
+        hold: bonusHold,
+        bonusCount,
+      }));
+    }
 
     if (student.status === "مفصول" && !dismissed) {
       // The one implicit return: a «فرصة مكافأة» earned before the stored
@@ -1473,6 +1584,8 @@ export function getActiveChapterForStudent(
 }
 
 export type {
+  AcademicBonusTraceEvent,
+  AcademicBonusTraceKind,
   AcademicChapter,
   AcademicCourseChapter,
   AcademicExam,

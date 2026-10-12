@@ -170,3 +170,48 @@ export interface AcademicOpportunityCommandEffect {
   readonly amount: number;
   readonly cap: number;
 }
+
+/**
+ * Read-only «فرصة مكافأة» decision of the current replay for one result
+ * (or, for "summary", the student's state at the end), so staff can see why
+ * a student earned a bonus or not.
+ */
+export type AcademicBonusTraceKind =
+  | "first"
+  | "earned"
+  | "waiting"
+  | "break"
+  | "neutral"
+  | "before-start"
+  | "before-opening"
+  | "full"
+  | "limit"
+  | "dismissed"
+  | "summary";
+
+export interface AcademicBonusTraceEvent {
+  readonly studentId: string;
+  readonly examId: string;
+  readonly examName: string;
+  readonly examDate: string;
+  readonly kind: AcademicBonusTraceKind;
+  readonly detail: string;
+  /** Balance at this point of the replay. */
+  readonly balance: number;
+  readonly cap: number;
+  /** Shortfall an administrator removed by hand; passes never restore it. */
+  readonly hold: number;
+  /** Bonuses counted toward the chapter's limit so far. */
+  readonly bonusCount: number;
+}
+
+export interface AcademicBonusTrace {
+  studentId: string;
+  /** Each result's «فرصة مكافأة» decision, in replay order. */
+  events: AcademicBonusTraceEvent[];
+  /** Where the student stands at the end of the replay. */
+  summary: AcademicBonusTraceEvent | null;
+  /** What is saved now, and what a recalculation would save. */
+  stored: { opportunities: number; status: string; bonuses: number; bonusProgress: number };
+  replay: { opportunities: number; status: string; bonuses: number; bonusProgress: number };
+}

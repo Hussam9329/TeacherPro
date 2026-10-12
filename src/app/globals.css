@@ -3583,3 +3583,38 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
   color: var(--primary);
 }
 .tp-section-group__item:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/* «فرصة المكافأة: ليش تكافأ أو ما تكافأ؟» in «التفاصيل». */
+.tp-btrace { border: 1px solid var(--border); border-radius: 1rem; background: var(--card); }
+.tp-btrace__head { display: grid; gap: 0.2rem; padding: 0.65rem 0.85rem; cursor: pointer; list-style: none; }
+.tp-btrace__head::-webkit-details-marker { display: none; }
+.tp-btrace__head strong { font-size: 0.88rem; font-weight: 850; }
+.tp-btrace__head strong::after { content: " ▾"; color: var(--muted-foreground); font-size: 0.75rem; }
+.tp-btrace[open] .tp-btrace__head strong::after { content: " ▴"; }
+.tp-btrace__lead { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--status-info-fg); font-size: 0.8rem; font-weight: 750; line-height: 1.65; }
+.tp-btrace__lead svg { inline-size: 0.9rem; block-size: 0.9rem; }
+.tp-btrace__body { display: grid; gap: 0.55rem; padding: 0 0.85rem 0.85rem; }
+.tp-btrace__rule { margin: 0; color: var(--muted-foreground); font-size: 0.76rem; font-weight: 650; line-height: 1.7; }
+.tp-btrace__facts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; }
+.tp-btrace__facts div { display: grid; padding: 0.3rem 0.6rem; border-radius: 0.7rem; background: color-mix(in srgb, var(--muted) 35%, var(--card)); }
+.tp-btrace__facts dt { color: var(--muted-foreground); font-size: 0.7rem; font-weight: 750; }
+.tp-btrace__facts dd { margin: 0; font-size: 0.9rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.tp-btrace__stale { margin: 0; padding: 0.5rem 0.7rem; border-radius: 0.7rem; background: var(--status-warning-bg); color: var(--status-warning-fg); font-size: 0.78rem; font-weight: 800; line-height: 1.7; }
+.tp-btrace__list { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 0.8rem; overflow: hidden; }
+.tp-btrace__row { display: grid; gap: 0.1rem; padding: 0.5rem 0.75rem; border-inline-start: 3px solid transparent; }
+.tp-btrace__row + .tp-btrace__row { border-block-start: 1px solid var(--border); }
+.tp-btrace__row[data-tone="good"] { border-inline-start-color: var(--status-success-fg); background: color-mix(in srgb, var(--status-success-bg) 55%, var(--card)); }
+.tp-btrace__row[data-tone="info"] { border-inline-start-color: var(--status-info-fg); }
+.tp-btrace__row[data-tone="warn"] { border-inline-start-color: var(--status-warning-fg); }
+.tp-btrace__row[data-tone="bad"] { border-inline-start-color: var(--status-danger-fg); }
+.tp-btrace__row[data-tone="muted"] { opacity: 0.7; }
+.tp-btrace__title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.5rem; }
+.tp-btrace__title strong { font-size: 0.85rem; font-weight: 800; overflow-wrap: anywhere; }
+.tp-btrace__title time { color: var(--muted-foreground); font-size: 0.74rem; font-weight: 700; }
+.tp-btrace__chip { padding: 0 0.45rem; border-radius: 999px; background: var(--muted); color: var(--muted-foreground); font-size: 0.7rem; font-weight: 800; line-height: 1.75; white-space: nowrap; }
+.tp-btrace__chip[data-tone="good"] { background: var(--status-success-bg); color: var(--status-success-fg); }
+.tp-btrace__chip[data-tone="info"] { background: var(--status-info-bg); color: var(--status-info-fg); }
+.tp-btrace__chip[data-tone="warn"] { background: var(--status-warning-bg); color: var(--status-warning-fg); }
+.tp-btrace__chip[data-tone="bad"] { background: var(--status-danger-bg); color: var(--status-danger-fg); }
+.tp-btrace__detail { margin: 0; font-size: 0.8rem; font-weight: 650; line-height: 1.7; overflow-wrap: anywhere; }
+.tp-btrace__balance { color: var(--muted-foreground); font-size: 0.7rem; font-weight: 700; }

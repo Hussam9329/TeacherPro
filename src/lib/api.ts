@@ -1,4 +1,5 @@
 import type { StoryAuditFacts } from "@/lib/student-story-audit";
+import type { AcademicBonusTrace } from "@/lib/academic-types";
 import { withReadDeadline } from "./read-deadline";
 import { getOutboxOwner, ownerHeaders, requestSessionCheck } from "./outbox-session";
 import {
@@ -1816,6 +1817,12 @@ export const studentProfileStatsApi = {
       `students/profile-stats${queryString ? `?${queryString}` : ""}`,
     );
   },
+};
+
+/** «ليش ما تكافأ؟»: every «فرصة مكافأة» decision of one student, read-only. */
+export const studentBonusTraceApi = {
+  get: (studentId: string) =>
+    apiGet<AcademicBonusTrace>(`students/bonus-trace?${buildQueryString({ studentId })}`),
 };
 
 export const studentProfileLogApi = {

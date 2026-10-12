@@ -22,6 +22,8 @@ import {
   recalculateAcademicState,
 } from "@/lib/academic-engine";
 import type {
+  AcademicBonusTrace,
+  AcademicBonusTraceEvent,
   AcademicChapter,
   AcademicCourseChapter,
   AcademicExam,
@@ -1169,6 +1171,51 @@ export async function previewStudentsAcademicState(
         recalculableStudentIdSet.has(log.studentId) &&
         isAutomaticOpportunityLog(log),
     ),
+  };
+}
+
+/**
+ * Read-only: replays one student exactly as a recalculation does and
+ * explains every «فرصة مكافأة» decision. Nothing is written.
+ */
+export async function buildAcademicBonusTrace(
+  client: PrismaClientLike,
+  studentId: string,
+): Promise<AcademicBonusTrace | null> {
+  const state = await loadAcademicStateForStudents(client, [studentId]);
+  const stored = state.students.find((student) => student.id === studentId);
+  if (!stored || stored.status === "مؤرشف") return null;
+  const events: AcademicBonusTraceEvent[] = [];
+  const result = recalculateAcademicState(state, new Set([studentId]), {
+    onBonusTrace: (event) => {
+      if (event.studentId === studentId) events.push(event);
+    },
+  });
+  const replayed = result.students.find((student) => student.id === studentId) || stored;
+  const chapterId = getActiveChapterForStudent(stored, state.courseChapters, state.chapters)?.id || "";
+  const bonuses = (logs: AcademicOpportunityLog[]) => logs.filter((log) =>
+    log.studentId === studentId && log.action === BONUS_OPPORTUNITY_ACTION &&
+    (!chapterId || log.chapterId === chapterId)).length;
+  const storedProgress = await client.student.findUnique({
+    where: { id: studentId },
+    select: { bonusProgress: true },
+  });
+  return {
+    studentId,
+    events: events.filter((event) => event.kind !== "summary"),
+    summary: events.filter((event) => event.kind === "summary").at(-1) || null,
+    stored: {
+      opportunities: Number(stored.opportunities ?? 0),
+      status: String(stored.status || ""),
+      bonuses: bonuses(state.opportunityLogs),
+      bonusProgress: Number(storedProgress?.bonusProgress ?? 0),
+    },
+    replay: {
+      opportunities: Number(replayed.opportunities ?? 0),
+      status: String(replayed.status || ""),
+      bonuses: bonuses(result.opportunityLogs),
+      bonusProgress: Number(replayed.bonusProgress ?? 0),
+    },
   };
 }
 
