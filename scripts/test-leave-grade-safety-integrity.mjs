@@ -52,31 +52,35 @@ must(
   "يجب حماية POST وPUT معاً وإرجاع كود التأكيد للواجهتين.",
 );
 
+// Owner's decision: on the manual screens a typed numeric grade ends the
+// covering leave by itself, like a grade from Correction. The screens send
+// the confirmation themselves; the server still refuses any writer that
+// does not send it.
 must(
-  gradeEntry.includes("requestLeaveEndGradeConfirmation") &&
-    gradeEntry.includes("confirmEndLeave: options.confirmLeaveEnd === true") &&
-    gradeEntry.includes("errorPayload.code === LEAVE_END_CONFIRMATION_REQUIRED_CODE") &&
+  !gradeEntry.includes("requestLeaveEndGradeConfirmation") &&
+    !gradeEntry.includes("LEAVE_END_CONFIRMATION_REQUIRED_CODE") &&
+    gradeEntry.includes('const confirmEndLeave = status === "درجة";') &&
+    (gradeEntry.match(/^\s+confirmEndLeave,$/gm) || []).length >= 2 &&
     gradeEntry.includes("تم اعتماد الدرجة وإنهاء الإجازة وإعادة احتساب الطالب."),
-  "واجهة الدرجات تحذر قبل الحفظ وتتعامل أيضاً مع إجازة ظهرت من تبويب آخر",
-  "يجب أن تغطي الواجهة التحذير المحلي ورفض السيرفر بسبب إجازة لم تكن محملة محلياً.",
+  "ورقة الإدخال تنهي الإجازة تلقائياً عند درجة رقمية وتبلغ المستخدم بالنتيجة",
+  "يجب أن ترسل ورقة الإدخال تأكيد إنهاء الإجازة مع كل درجة رقمية بدون نافذة سؤال.",
 );
 
 must(
-  gradeRecords.includes("leaveEndEditConfirmOpen") &&
-    gradeRecords.includes("LEAVE_END_CONFIRMATION_REQUIRED_CODE") &&
-    gradeRecords.includes("confirmEndLeave: options.confirmLeaveEnd === true") &&
-    gradeRecords.includes("اعتماد الدرجة وإنهاء الإجازة"),
-  "سجل الدرجات يعيد المحاولة فقط بعد تأكيد المستخدم الصريح",
-  "يجب ألا يبقى PUT في سجل الدرجات قادراً على إنهاء الإجازة دون نافذة تأكيد.",
+  !gradeRecords.includes("leaveEndEditConfirmOpen") &&
+    !gradeRecords.includes("LEAVE_END_CONFIRMATION_REQUIRED_CODE") &&
+    gradeRecords.includes('confirmEndLeave: editDialog.status === "درجة"') &&
+    gradeRecords.includes("تم اعتماد الدرجة وإنهاء الإجازة وإعادة احتساب الطالب."),
+  "سجل الدرجات ينهي الإجازة تلقائياً عند تعديل درجة رقمية ويبلغ المستخدم",
+  "يجب أن يرسل تعديل سجل الدرجات تأكيد إنهاء الإجازة مع كل درجة رقمية بدون نافذة سؤال.",
 );
 
 must(
   offlineOutbox.includes("confirmEndLeave: boolean") &&
     offlineOutbox.includes("confirmEndLeave: item.confirmEndLeave") &&
-    gradeEntry.includes("confirmEndLeave: options.confirmLeaveEnd === true") &&
-    gradeEntry.includes("clearGradeEntryOfflineSave(offlineAttempt.key)"),
-  "التأكيد الصريح يبقى محفوظاً إذا تأجل حفظ الدرجة بسبب انقطاع الإنترنت",
-  "يجب حفظ التأكيد عند إعادة الإرسال وحذف المحاولة غير المؤكدة إذا ألغى المستخدم.",
+    (gradeEntry.match(/^\s+confirmEndLeave,$/gm) || []).length >= 2,
+  "إنهاء الإجازة يبقى محفوظاً مع الدرجة إذا تأجل الحفظ بسبب انقطاع الإنترنت",
+  "يجب حفظ تأكيد إنهاء الإجازة مع الدرجة المؤجلة وإرساله عند إعادة الإرسال.",
 );
 
 must(

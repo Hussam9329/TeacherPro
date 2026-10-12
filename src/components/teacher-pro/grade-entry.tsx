@@ -29,7 +29,6 @@ import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import type { GradeStatus } from "@/lib/academic-types";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
 import {
-  clearGradeEntryOfflineSave,
   confirmGradeEntryOfflineAttempt,
   flushGradeEntryOfflineSaves,
   getGradeEntryOfflineSaves,
@@ -101,10 +100,6 @@ import {
 } from "@/lib/grace-periods";
 import { applyOpportunityPenalty } from "@/lib/opportunity-balance";
 import { countAllManualGradesForExam } from "@/lib/grade-entry-stats";
-import {
-  LEAVE_END_CONFIRMATION_MESSAGE,
-  LEAVE_END_CONFIRMATION_REQUIRED_CODE,
-} from "@/lib/grade-leave-safety";
 import {
   examMatchesAcademicFilters,
   getAcademicCourseProgramFilterOptions,
@@ -958,25 +953,6 @@ export function GradeEntryView() {
     );
   };
 
-  const requestLeaveEndGradeConfirmation = (
-    studentId: string,
-    onConfirm: () => void,
-    onCancel?: () => void,
-  ) => {
-    const student = studentById.get(studentId);
-    const leave = getStudentLeaveForSelectedExam(studentId);
-    setPendingConfirm({
-      title: "تأكيد إنهاء إجازة الطالب",
-      description: `${LEAVE_END_CONFIRMATION_MESSAGE}${
-        leave?.reason ? ` سبب الإجازة: ${leave.reason}.` : ""
-      }${student?.name ? ` الطالب: ${student.name}.` : ""} هل تريد المتابعة؟`,
-      confirmLabel: "اعتماد الدرجة وإنهاء الإجازة",
-      destructive: true,
-      onConfirm,
-      onCancel,
-    });
-  };
-
   const requestReactivatedStudentGradeEdit = (
     studentId: string,
     draftOverride: DraftGrade | undefined,
@@ -1471,7 +1447,6 @@ export function GradeEntryView() {
     options: {
       silent?: boolean;
       skipReactivationWarning?: boolean;
-      confirmLeaveEnd?: boolean;
     } = {},
   ) => {
     if (!selectedExam) return;
@@ -1542,21 +1517,9 @@ export function GradeEntryView() {
       }
     }
 
-    if (
-      leave &&
-      status === "درجة" &&
-      typeof score === "number" &&
-      Number.isFinite(score) &&
-      !options.confirmLeaveEnd
-    ) {
-      requestLeaveEndGradeConfirmation(studentId, () => {
-        void saveGrade(studentId, draft, {
-          ...options,
-          confirmLeaveEnd: true,
-        });
-      });
-      return;
-    }
+    // Owner's decision: a typed numeric grade ends the covering leave by
+    // itself, without a confirmation, exactly like a grade from Correction.
+    const confirmEndLeave = status === "درجة";
 
     if (
       !options.skipReactivationWarning &&
@@ -1604,7 +1567,7 @@ export function GradeEntryView() {
           notes: draft.notes,
           expectedUpdatedAt: currentGrade?.updatedAt || "",
           expectMissing: !currentGrade,
-          confirmEndLeave: options.confirmLeaveEnd === true,
+          confirmEndLeave,
         });
         if (offlineAttempt) {
           markGradeEntryOfflineAttempted(offlineAttempt);
@@ -1617,32 +1580,11 @@ export function GradeEntryView() {
           notes: draft.notes,
           expectedUpdatedAt: currentGrade?.updatedAt || "",
           expectMissing: !currentGrade,
-          confirmEndLeave: options.confirmLeaveEnd === true,
+          confirmEndLeave,
         });
         if (selectedExamIdRef.current !== examAtRequest.id) return;
 
         if (!result.ok || result.queued) {
-          const errorPayload = (result.data || {}) as { code?: string };
-          if (
-            !result.queued &&
-            errorPayload.code === LEAVE_END_CONFIRMATION_REQUIRED_CODE &&
-            !options.confirmLeaveEnd
-          ) {
-            setRowSaveStates((prev) => ({
-              ...prev,
-              [studentId]: { phase: "dirty", message: "بانتظار تأكيد إنهاء الإجازة" },
-            }));
-            requestLeaveEndGradeConfirmation(studentId, () => {
-              void saveGrade(studentId, draft, {
-                ...options,
-                confirmLeaveEnd: true,
-              });
-            }, () => {
-              if (offlineAttempt) clearGradeEntryOfflineSave(offlineAttempt.key);
-            });
-            return;
-          }
-
           const reconciled = await reconcileFailedGradeSave(
             examAtRequest.id,
             studentId,

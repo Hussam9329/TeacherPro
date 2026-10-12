@@ -83,10 +83,6 @@ import {
   gradeStatusFilterOptions,
   type GradeStatusFilter,
 } from "@/lib/grade-status-filters";
-import {
-  LEAVE_END_CONFIRMATION_MESSAGE,
-  LEAVE_END_CONFIRMATION_REQUIRED_CODE,
-} from "@/lib/grade-leave-safety";
 import "./tp-modal.css";
 import "./grade-records.css";
 
@@ -338,7 +334,6 @@ export function GradeRecordsView() {
   });
   const [reactivationEditConfirmOpen, setReactivationEditConfirmOpen] =
     useState(false);
-  const [leaveEndEditConfirmOpen, setLeaveEndEditConfirmOpen] = useState(false);
   const { locked: isDeletingGrade, runLocked: runDeleteGradeLocked } =
     useActionLock();
 
@@ -833,9 +828,7 @@ export function GradeRecordsView() {
     return { grade, score: rawScore };
   };
 
-  const saveEditGradeUnchecked = async (
-    options: { confirmLeaveEnd?: boolean } = {},
-  ) => {
+  const saveEditGradeUnchecked = async () => {
     if (!canRunGradeRecordActions) {
       toast.error("انتظر تحميل سجل الدرجات قبل تعديل الدرجة.");
       return;
@@ -849,19 +842,12 @@ export function GradeRecordsView() {
       score,
       notes: editDialog.notes,
       expectedUpdatedAt: grade.updatedAt || "",
-      confirmEndLeave: options.confirmLeaveEnd === true,
+      // Owner's decision: a typed numeric grade ends the covering leave by
+      // itself, without a confirmation, exactly like a grade from Correction.
+      confirmEndLeave: editDialog.status === "درجة",
     });
 
     if (!result.ok || result.queued) {
-      const errorPayload = (result.data || {}) as { code?: string };
-      if (
-        !result.queued &&
-        errorPayload.code === LEAVE_END_CONFIRMATION_REQUIRED_CODE &&
-        !options.confirmLeaveEnd
-      ) {
-        setLeaveEndEditConfirmOpen(true);
-        return;
-      }
       if (result.status === 409) setServerRefreshKey((key) => key + 1);
       toast.error(result.error || "تعذر تعديل الدرجة.");
       return;
@@ -1588,32 +1574,6 @@ export function GradeRecordsView() {
               }}
             >
               متابعة
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog
-        open={leaveEndEditConfirmOpen}
-        onOpenChange={setLeaveEndEditConfirmOpen}
-      >
-        <AlertDialogContent dir="rtl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد إنهاء إجازة الطالب</AlertDialogTitle>
-            <AlertDialogDescription>
-              {LEAVE_END_CONFIRMATION_MESSAGE} هل تريد المتابعة؟
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                setLeaveEndEditConfirmOpen(false);
-                void saveEditGradeUnchecked({ confirmLeaveEnd: true });
-              }}
-            >
-              اعتماد الدرجة وإنهاء الإجازة
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
