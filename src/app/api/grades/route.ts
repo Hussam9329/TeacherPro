@@ -44,6 +44,7 @@ import {
   type GradeSmartNoteCategory,
   upsertGradeSmartNote,
 } from "@/lib/grade-smart-notes-server";
+import { BONUS_OPPORTUNITY_ACTION } from "@/lib/bonus-opportunity";
 import { assertGradeStatusScoreConsistency } from "@/lib/grade-status-score-validation";
 import { bulkAbsenceClearWhere } from "@/lib/bulk-absence-clear";
 
@@ -718,8 +719,20 @@ export async function POST(req: NextRequest) {
       async (tx) => {
         const existingGrade = await tx.grade.findUnique({
           where: { studentId_examId: { studentId, examId } },
-          select: { updatedAt: true },
+          select: { updatedAt: true, status: true, score: true },
         });
+        // Read-only: where the student stood when this save began, in the
+        // same transaction (the Correction app reports it to the student).
+        const [studentBeforeRow, bonusLogsBefore] = await Promise.all([
+          tx.student.findUnique({ where: { id: studentId }, select: { opportunities: true, status: true } }),
+          tx.opportunityLog.findMany({ where: { studentId, action: BONUS_OPPORTUNITY_ACTION }, select: { id: true } }),
+        ]);
+        const studentBefore = {
+          opportunities: studentBeforeRow ? Number(studentBeforeRow.opportunities ?? 0) : null,
+          status: studentBeforeRow?.status ?? null,
+          bonusLogIds: bonusLogsBefore.map((log) => log.id),
+          grade: existingGrade ? { status: existingGrade.status, score: existingGrade.score === null ? null : Number(existingGrade.score) } : null,
+        };
 
         // Leave and dismissal attempts remain structured smart notes. Grace
         // is never intercepted here: the grade is stored as entered and the
@@ -756,6 +769,7 @@ export async function POST(req: NextRequest) {
             });
             if (resolvedGrade) {
               return {
+                studentBefore,
                 capturedAsSmartNote: false as const,
                 pendingSmartNote: false as const,
                 grade: resolvedGrade,
@@ -767,6 +781,7 @@ export async function POST(req: NextRequest) {
               };
             }
             return {
+              studentBefore,
               capturedAsSmartNote: true as const,
               pendingSmartNote: false as const,
               smartNoteConflict: true as const,
@@ -781,6 +796,7 @@ export async function POST(req: NextRequest) {
           }
 
           return {
+            studentBefore,
             capturedAsSmartNote: true as const,
             pendingSmartNote: true as const,
             grade: null,
@@ -831,7 +847,7 @@ export async function POST(req: NextRequest) {
           const after = await tx.student.findUnique({ where: { id: studentId }, select: { status: true } });
           if (after?.status !== "نشط") throw new BonusReturnNotConfirmedError();
         }
-        return { ...writeback, capturedAsSmartNote: false as const };
+        return { ...writeback, studentBefore, capturedAsSmartNote: false as const };
       },
     );
     let result: Awaited<ReturnType<typeof attemptGradeWrite>>;

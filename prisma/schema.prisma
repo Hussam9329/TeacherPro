@@ -314,6 +314,20 @@ model CallDailyTarget {
   @@index([day])
 }
 
+/// One request from the Correction app, by its idempotency key: the same key
+/// again returns the stored response instead of saving the result twice.
+model CorrectionReceipt {
+  key       String   @id
+  kind      String
+  studentId String
+  examId    String
+  request   String
+  response  String
+  createdAt DateTime @default(now())
+
+  @@index([studentId, examId])
+}
+
 /// An open «إدارة المكالمات» window. It beats every few seconds while open;
 /// one that stops beating is dropped with the names it held.
 model CallWindow {

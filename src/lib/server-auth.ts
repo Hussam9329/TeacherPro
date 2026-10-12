@@ -132,7 +132,8 @@ export function toAuthPrincipal(user: NonNullable<DbUserWithRole>): AuthPrincipa
   };
 }
 
-export async function createSessionToken(userId: string): Promise<string> {
+/** `maxAgeSeconds`: a shorter life for a session used once by a server (Correction). */
+export async function createSessionToken(userId: string, maxAgeSeconds = SESSION_MAX_AGE_SECONDS): Promise<string> {
   const user = await findUserById(userId);
   if (!user || !user.active) throw new Error("Account unavailable");
   const now = Math.floor(Date.now() / 1000);
@@ -140,7 +141,7 @@ export async function createSessionToken(userId: string): Promise<string> {
     sub: userId,
     version: user.sessionVersion,
     iat: now,
-    exp: now + SESSION_MAX_AGE_SECONDS,
+    exp: now + Math.max(1, Math.min(SESSION_MAX_AGE_SECONDS, Math.trunc(maxAgeSeconds))),
   };
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   return `${encodedPayload}.${await sign(encodedPayload)}`;

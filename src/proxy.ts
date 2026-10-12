@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkOrigin } from '@/lib/csrf';
 import { requireBotToken } from '@/lib/bot-integration-auth';
+import { CORRECTION_INTEGRATION_PATHS, requireCorrectionToken } from '@/lib/correction-integration-auth';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -16,6 +17,10 @@ export function proxy(req: NextRequest) {
   }
   if (['/api/bot/opportunities', '/api/bot/students/resolve', '/api/bot/students/link'].includes(url.pathname) && req.method === 'POST') {
     return requireBotToken(req) || NextResponse.next();
+  }
+  // The Correction app is a server, not a browser: its own token, no Origin.
+  if (CORRECTION_INTEGRATION_PATHS.includes(url.pathname) && req.method === 'POST') {
+    return requireCorrectionToken(req) || NextResponse.next();
   }
   const error = checkOrigin(req);
   if (error) return error;
