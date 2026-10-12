@@ -136,7 +136,8 @@ async function post(body) {
   assert.equal(res.status, 200);
   assert.deepEqual(state.restored.map((call) => [call.studentId, call.amount]), [["d1", 3]]);
   assert.deepEqual(state.logs.map((log) => [log.studentId, log.appliedAmount]), [["a1", 2]]);
-  assert.deepEqual(state.recalculated, ["a1"]);
+  // Active targets are brought up to date first, then recalculated after the add.
+  assert.deepEqual(state.recalculated, ["a1", "a1"]);
   assert.equal(res.data.updatedStudents, 2);
   console.log("PASS: mixed lists add to active students as before and return dismissed ones within the chapter cap");
 

@@ -1097,8 +1097,36 @@ export async function recalculateStudentsAcademicState(
   );
   // A student who is no longer dismissed keeps no held grade: each becomes a
   // grade with no effect, or is deleted when its exam has an official grade.
-  await settleHeldGradesOfActiveStudents(client, recalculableStudentIds);
-  return persisted;
+  const settledHeld = await settleHeldGradesOfActiveStudents(client, recalculableStudentIds);
+  // Those rows are new inputs: an exam that was «missing» now has a result,
+  // so a «فرصة مكافأة» waiting on it may be due. Replay these students once
+  // more, keeping the same preserved history, so what is saved is what the
+  // rules give for the final state.
+  const resettled = uniqueIds(settledHeld
+    .filter((item) => item.gradeIds.length > 0 || item.deleted > 0)
+    .map((item) => item.studentId));
+  if (resettled.length === 0) return persisted;
+  const againState = await loadAcademicStateForStudents(client, resettled);
+  const againIds = new Set(resettled);
+  const again = recalculateAcademicState(againState, againIds);
+  const keep = new Set(preservedHistory);
+  again.opportunityLogs = [
+    ...again.opportunityLogs.filter((log) => !keep.has(log.id)),
+    ...againState.opportunityLogs.filter((log) => keep.has(log.id)),
+  ];
+  const settledAgain = settledAutomaticHistory(againState, again, againIds);
+  for (const log of settledAgain) keep.add(log.id);
+  again.opportunityLogs.push(...settledAgain);
+  const persistedAgain = await persistAcademicRecalculation(client, resettled, again, keep, againState.opportunityLogs);
+  return {
+    studentIds: persisted.studentIds,
+    students: [...persisted.students.filter((student) => !againIds.has(student.id)), ...persistedAgain.students],
+    opportunityLogs: [...persisted.opportunityLogs.filter((log) => !againIds.has(log.studentId)), ...persistedAgain.opportunityLogs],
+    automaticOpportunityLogs: [
+      ...persisted.automaticOpportunityLogs.filter((log) => !againIds.has(log.studentId)),
+      ...persistedAgain.automaticOpportunityLogs,
+    ],
+  };
 }
 
 /** A score entered for a dismissed student is held as a smart note, except
@@ -1195,6 +1223,8 @@ function savedVersusReplay(
   const bonuses = (logs: AcademicOpportunityLog[]) => logs.filter((log) =>
     log.studentId === studentId && log.action === BONUS_OPPORTUNITY_ACTION &&
     (!chapterId || log.chapterId === chapterId)).length;
+  // What a recalculation saves: the replay plus the settled history it keeps.
+  const savedByRecalculation = [...result.opportunityLogs, ...settledAutomaticHistory(state, result, new Set([studentId]))];
   return {
     stored: {
       opportunities: Number(stored.opportunities ?? 0),
@@ -1205,8 +1235,10 @@ function savedVersusReplay(
     replay: {
       opportunities: Number(replayed.opportunities ?? 0),
       status: String(replayed.status || ""),
-      bonuses: bonuses(result.opportunityLogs),
-      bonusProgress: Number(replayed.bonusProgress ?? 0),
+      bonuses: bonuses(savedByRecalculation),
+      // A student the engine does not replay (no single active chapter)
+      // keeps the stored progress, exactly as the save does.
+      bonusProgress: replayed.bonusProgress === undefined ? storedBonusProgress : Number(replayed.bonusProgress),
     },
   };
 }
@@ -1356,11 +1388,25 @@ export async function bonusDependentStudentIds(
   ]);
   const courseIds = uniqueIds(links.map((link) => link.courseId));
   if (!exam || courseIds.length === 0) return [];
-  const [counting, bonusLogs] = await Promise.all([
+  // A bonus that waited on this exam and was later cancelled by a break
+  // leaves no trace in the saved record: anyone with a result on or after
+  // this exam's day may have a pair that counts once it changes.
+  const laterExams = await client.exam.findMany({ where: { date: { gte: exam.date } }, select: { id: true } });
+  const laterGrades = laterExams.length
+    ? await client.grade.findMany({ where: { examId: { in: laterExams.map((item) => item.id) } }, select: { studentId: true } })
+    : [];
+  const laterStudentIds = uniqueIds(laterGrades.map((grade) => grade.studentId));
+  const [counting, laterResults, bonusLogs] = await Promise.all([
     client.student.findMany({
       where: { courseId: { in: courseIds }, status: { not: "مؤرشف" }, bonusProgress: { gte: 1 } },
       select: { id: true },
     }),
+    laterStudentIds.length
+      ? client.student.findMany({
+          where: { id: { in: laterStudentIds }, courseId: { in: courseIds }, status: { not: "مؤرشف" } },
+          select: { id: true },
+        })
+      : Promise.resolve([] as Array<{ id: string }>),
     client.opportunityLog.findMany({
       where: {
         action: BONUS_OPPORTUNITY_ACTION,
@@ -1373,6 +1419,7 @@ export async function bonusDependentStudentIds(
   return uniqueIds([
     ...counting.map((student) => student.id),
     ...bonusLogs.map((log) => log.studentId),
+    ...laterResults.map((student) => student.id),
   ]);
 }
 

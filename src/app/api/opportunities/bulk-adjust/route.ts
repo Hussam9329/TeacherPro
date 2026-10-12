@@ -149,6 +149,23 @@ async function handleFilterBasedBulkAdjust(
         }> = [];
         const appliedStudentIds: string[] = [];
         const dismissedToReturn: Array<{ id: string; cap: number }> = [];
+        // A saved balance can be behind the rules (a result written outside
+        // the app, an input changed without a recalculation). Bring the
+        // targets up to date first, so the command starts from the real
+        // balance and status, never from a stale one.
+        // Dismissed students go through the restoration service instead.
+        const refreshIds = targetRows
+          .filter((student) => student.activeChapter && student.status !== "مفصول")
+          .map((student) => student.id);
+        if (refreshIds.length > 0) {
+          const fresh = await recalculateStudentsAcademicState(refreshIds, { tx });
+          const freshById = new Map(fresh.students.map((student) => [student.id, student]));
+          for (const student of targetRows) {
+            const current = freshById.get(student.id);
+            if (current?.opportunities !== undefined) student.opportunities = Number(current.opportunities);
+            if (current?.status) student.status = current.status;
+          }
+        }
         for (const student of targetRows) {
           const activeChapter = student.activeChapter;
           if (!activeChapter) continue;

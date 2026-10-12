@@ -156,7 +156,7 @@ export async function settleHeldGradesOfActiveStudents(
   tx: Prisma.TransactionClient,
   studentIds: string[],
   actor: GradeSmartNoteResolutionActor = SYSTEM_RESOLUTION_ACTOR,
-): Promise<DismissedPendingGradeMigrationResult[]> {
+): Promise<Array<DismissedPendingGradeMigrationResult & { studentId: string }>> {
   if (studentIds.length === 0) return [];
   const held = await tx.gradeSmartNote.findMany({
     where: {
@@ -168,9 +168,9 @@ export async function settleHeldGradesOfActiveStudents(
     select: { studentId: true },
     distinct: ["studentId"],
   });
-  const results: DismissedPendingGradeMigrationResult[] = [];
+  const results: Array<DismissedPendingGradeMigrationResult & { studentId: string }> = [];
   for (const { studentId } of held) {
-    results.push(await migrateDismissedPendingGradesAfterActivation(tx, studentId, actor));
+    results.push({ ...(await migrateDismissedPendingGradesAfterActivation(tx, studentId, actor)), studentId });
   }
   return results;
 }

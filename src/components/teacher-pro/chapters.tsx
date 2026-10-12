@@ -1426,7 +1426,7 @@ export function ChaptersView() {
           <FormDialogHero
             icon={RefreshCw}
             title="معاينة أثر تغيير فرص الفصل"
-            description="عدد الفرص تغيّر، لذلك يجب اختيار هل تحفظ الفصل فقط أم تزامن أرصدة الطلاب فوراً من القواعد الحالية."
+            description="عدد الفرص تغيّر. «حفظ ومزامنة الطلاب الآن» يحسب أرصدتهم هسه؛ «حفظ الفصل فقط» يخليها للصيانة الليلية (3 الفجر) اللي تحسب كل طالب رصيده ما يطابق القواعد."
           />
           {chapterSyncDialog.preview ? (
             <div className="tp-form-dialog__body text-sm">

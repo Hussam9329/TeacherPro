@@ -1063,7 +1063,12 @@ export async function PUT(req: NextRequest) {
               : {}),
           },
         });
-        return { grade, academicRecalculation: null };
+        // A note can decide whether an old result counts (historical
+        // settlement markers), so the student is recalculated like any edit.
+        const academicRecalculation = body.notes !== undefined
+          ? await recalculateStudentsAcademicState([freshTargetGrade.studentId], { tx })
+          : null;
+        return { grade, academicRecalculation };
       }
 
       const nextStatus = String(body.status ?? freshTargetGrade.status);
