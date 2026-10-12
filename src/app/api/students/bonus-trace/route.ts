@@ -10,18 +10,10 @@ import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { archivedStudentLockedResponse, assertStudentsNotArchived, isArchivedStudentError } from "@/lib/archived-student-guard";
-import { buildAcademicBonusTrace, recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { buildAcademicBonusTrace, isAcademicRecordStale, recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import type { AcademicBonusTrace } from "@/lib/academic-types";
 
 const NOT_FOUND = "الطالب غير موجود أو مؤرشف.";
-
-/** The saved record differs from what a recalculation gives now. */
-function isStale(trace: AcademicBonusTrace): boolean {
-  return trace.stored.opportunities !== trace.replay.opportunities ||
-    trace.stored.bonuses !== trace.replay.bonuses ||
-    trace.stored.status !== trace.replay.status ||
-    trace.stored.bonusProgress !== trace.replay.bonusProgress;
-}
 
 const snapshot = (side: AcademicBonusTrace["stored"]) => ({
   opportunities: side.opportunities, bonuses: side.bonuses, status: side.status, bonusProgress: side.bonusProgress,
@@ -61,7 +53,7 @@ export async function POST(req: NextRequest) {
     if (!studentId) return validationError("الطالب مطلوب.");
     const before = await buildAcademicBonusTrace(db, studentId);
     if (!before) return NextResponse.json({ error: NOT_FOUND }, { status: 404 });
-    if (!isStale(before)) return NextResponse.json({ ...before, recalculated: false });
+    if (!isAcademicRecordStale(before)) return NextResponse.json({ ...before, recalculated: false });
     await withDatabaseSchema(() => withSerializableTransaction(async (tx) => {
       await assertStudentsNotArchived(tx, [studentId]);
       await recalculateStudentsAcademicState([studentId], { tx });

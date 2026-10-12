@@ -215,3 +215,13 @@ export interface AcademicBonusTrace {
   stored: { opportunities: number; status: string; bonuses: number; bonusProgress: number };
   replay: { opportunities: number; status: string; bonuses: number; bonusProgress: number };
 }
+
+/** A student whose saved record differs from what a recalculation gives now. */
+export interface AcademicStaleRecord {
+  studentId: string;
+  code: string;
+  name: string;
+  courseId: string;
+  stored: AcademicBonusTrace["stored"];
+  replay: AcademicBonusTrace["replay"];
+}

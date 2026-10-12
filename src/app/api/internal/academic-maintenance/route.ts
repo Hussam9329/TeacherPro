@@ -7,6 +7,8 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import { settleDueScheduledExamActivations } from "@/lib/scheduled-exam-activation-server";
+import { healStaleAcademicRecordsWithin } from "@/lib/academic-recalculate-server";
+import { writeSystemAuditLog } from "@/lib/audit-log-server";
 
 function safeEqual(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left);
@@ -25,9 +27,11 @@ function isAuthorizedCron(req: NextRequest): boolean {
 }
 
 /**
- * Daily academic maintenance for the time-driven transition that cannot rely
- * on a user write request: scheduled exam activation. Grace periods need no
- * nightly work; they are evaluated from exam dates at read time.
+ * Daily academic maintenance for what cannot rely on a user write request:
+ * scheduled exam activation, then self-healing of saved records that differ
+ * from the calculation (a result written to the database outside the app,
+ * or an input changed without recalculating). Grace periods need no nightly
+ * work; they are evaluated from exam dates at read time.
  */
 export async function GET(req: NextRequest) {
   if (!isAuthorizedCron(req)) {
@@ -37,6 +41,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const startedAt = Date.now();
   try {
     await db.loginRateBucket.deleteMany({ where: { expiresAt: { lt: new Date() } } });
     const scheduledActivation = {
@@ -56,10 +61,30 @@ export async function GET(req: NextRequest) {
       if (result.scanned < 25 || result.activated === 0) break;
     }
 
+    // Leave room under maxDuration for the response and the audit line.
+    const staleRecords = await healStaleAcademicRecordsWithin({
+      deadline: startedAt + 90_000,
+      day: Math.floor(startedAt / 86_400_000),
+    });
+    if (staleRecords.healed.length || staleRecords.stillStale.length) {
+      await writeSystemAuditLog("إدارة الفرص", "إصلاح تلقائي لطلاب ما يطابق محفوظهم الحساب", {
+        scanned: staleRecords.scanned,
+        complete: staleRecords.complete,
+        healed: staleRecords.healed.map((record) => ({ studentId: record.studentId, code: record.code, before: record.stored, after: record.replay })),
+        stillStale: staleRecords.stillStale.map((record) => record.studentId),
+      });
+    }
+
     return NextResponse.json(
       {
         ok: true,
         scheduledActivation,
+        staleRecords: {
+          scanned: staleRecords.scanned,
+          complete: staleRecords.complete,
+          healed: staleRecords.healed.length,
+          stillStale: staleRecords.stillStale.length,
+        },
         settledAt: new Date().toISOString(),
       },
       { headers: { "Cache-Control": "no-store" } },

@@ -3620,3 +3620,17 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
 .tp-btrace__chip[data-tone="bad"] { background: var(--status-danger-bg); color: var(--status-danger-fg); }
 .tp-btrace__detail { margin: 0; font-size: 0.8rem; font-weight: 650; line-height: 1.7; overflow-wrap: anywhere; }
 .tp-btrace__balance { color: var(--muted-foreground); font-size: 0.7rem; font-weight: 700; }
+
+/* «فحص الحسابات»: students whose saved record differs from the calculation. */
+.tp-stale__progress { display: inline-flex; align-items: center; gap: 0.4rem; margin: 0; color: var(--status-info-fg); font-size: 0.82rem; font-weight: 750; }
+.tp-stale__progress svg { inline-size: 1rem; block-size: 1rem; }
+.tp-stale__lead { margin: 0; color: var(--status-warning-fg); font-size: 0.82rem; font-weight: 800; line-height: 1.7; }
+.tp-stale__list { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 0.8rem; overflow: hidden; }
+.tp-stale__row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.3rem 0.8rem; padding: 0.55rem 0.75rem; }
+.tp-stale__row + .tp-stale__row { border-block-start: 1px solid var(--border); }
+.tp-stale__who { display: grid; min-inline-size: 0; }
+.tp-stale__who strong { font-size: 0.86rem; font-weight: 800; overflow-wrap: anywhere; }
+.tp-stale__who span { color: var(--muted-foreground); font-size: 0.74rem; font-weight: 700; }
+.tp-stale__diff { display: grid; justify-items: end; gap: 0.1rem; font-size: 0.76rem; font-weight: 750; text-align: end; }
+.tp-stale__diff span { color: var(--muted-foreground); }
+.tp-stale__diff span[data-tone="replay"] { color: var(--status-success-fg); }

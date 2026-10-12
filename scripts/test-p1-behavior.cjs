@@ -89,10 +89,14 @@ function command(action,amount,date,extra={}) {return {id:'l'+date,studentId:'s'
  pass('logging out ends this device only; other devices on the same account stay signed in');
 
  mocks.set('@/lib/scheduled-exam-activation-server',{settleDueScheduledExamActivations:async()=>({scanned:0,activated:0,recalculatedStudents:0,examIds:[]})});
+ let healCalls=[];
+ mocks.set('@/lib/academic-recalculate-server',{healStaleAcademicRecordsWithin:async(options)=>{healCalls.push(options);return{scanned:4,healed:[],stillStale:[],complete:true}}});
  process.env.CRON_SECRET='p1-local-test';
  const cron=source('app/api/internal/academic-maintenance/route.ts');
- const cronResult=await cron.GET({headers:new Headers({authorization:'Bearer p1-local-test'})});assert.equal(cronResult.status,200);assert.equal((await cronResult.json()).graceSettlement,undefined);
- pass('real maintenance route no longer settles grace');
+ const cronResult=await cron.GET({headers:new Headers({authorization:'Bearer p1-local-test'})});assert.equal(cronResult.status,200);
+ const cronBody=await cronResult.json();assert.equal(cronBody.graceSettlement,undefined);
+ assert.equal(healCalls.length,1);assert.ok(healCalls[0].deadline>Date.now());assert.deepEqual(cronBody.staleRecords,{scanned:4,complete:true,healed:0,stillStale:0});
+ pass('real maintenance route no longer settles grace, and heals saved records that differ from the calculation');
 
  mocks.set('@/lib/server-auth',{requirePermission:async()=>null,getAuthPrincipal:async()=>({id:'admin',username:'admin'})});
  for(const route of ['opportunity-logs']) {

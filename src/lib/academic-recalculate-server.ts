@@ -24,6 +24,7 @@ import {
 import type {
   AcademicBonusTrace,
   AcademicBonusTraceEvent,
+  AcademicStaleRecord,
   AcademicChapter,
   AcademicCourseChapter,
   AcademicExam,
@@ -1178,37 +1179,28 @@ export async function previewStudentsAcademicState(
  * Read-only: replays one student exactly as a recalculation does and
  * explains every «فرصة مكافأة» decision. Nothing is written.
  */
-export async function buildAcademicBonusTrace(
-  client: PrismaClientLike,
+type SavedVersusReplay = AcademicBonusTrace["stored"];
+
+/** One student's saved record next to what the replay gives now. */
+function savedVersusReplay(
+  state: AcademicStateInput,
+  result: ReturnType<typeof recalculateAcademicState>,
   studentId: string,
-): Promise<AcademicBonusTrace | null> {
-  const state = await loadAcademicStateForStudents(client, [studentId]);
+  storedBonusProgress: number,
+): { stored: SavedVersusReplay; replay: SavedVersusReplay } | null {
   const stored = state.students.find((student) => student.id === studentId);
   if (!stored || stored.status === "مؤرشف") return null;
-  const events: AcademicBonusTraceEvent[] = [];
-  const result = recalculateAcademicState(state, new Set([studentId]), {
-    onBonusTrace: (event) => {
-      if (event.studentId === studentId) events.push(event);
-    },
-  });
   const replayed = result.students.find((student) => student.id === studentId) || stored;
   const chapterId = getActiveChapterForStudent(stored, state.courseChapters, state.chapters)?.id || "";
   const bonuses = (logs: AcademicOpportunityLog[]) => logs.filter((log) =>
     log.studentId === studentId && log.action === BONUS_OPPORTUNITY_ACTION &&
     (!chapterId || log.chapterId === chapterId)).length;
-  const storedProgress = await client.student.findUnique({
-    where: { id: studentId },
-    select: { bonusProgress: true },
-  });
   return {
-    studentId,
-    events: events.filter((event) => event.kind !== "summary"),
-    summary: events.filter((event) => event.kind === "summary").at(-1) || null,
     stored: {
       opportunities: Number(stored.opportunities ?? 0),
       status: String(stored.status || ""),
       bonuses: bonuses(state.opportunityLogs),
-      bonusProgress: Number(storedProgress?.bonusProgress ?? 0),
+      bonusProgress: storedBonusProgress,
     },
     replay: {
       opportunities: Number(replayed.opportunities ?? 0),
@@ -1217,6 +1209,138 @@ export async function buildAcademicBonusTrace(
       bonusProgress: Number(replayed.bonusProgress ?? 0),
     },
   };
+}
+
+/** The saved record differs from what a recalculation gives now. */
+export function isAcademicRecordStale(record: { stored: SavedVersusReplay; replay: SavedVersusReplay }): boolean {
+  return record.stored.opportunities !== record.replay.opportunities ||
+    record.stored.status !== record.replay.status ||
+    record.stored.bonuses !== record.replay.bonuses ||
+    record.stored.bonusProgress !== record.replay.bonusProgress;
+}
+
+/**
+ * Read-only: replays one student exactly as a recalculation does and
+ * explains every «فرصة مكافأة» decision. Nothing is written.
+ */
+export async function buildAcademicBonusTrace(
+  client: PrismaClientLike,
+  studentId: string,
+): Promise<AcademicBonusTrace | null> {
+  const state = await loadAcademicStateForStudents(client, [studentId]);
+  const events: AcademicBonusTraceEvent[] = [];
+  const result = recalculateAcademicState(state, new Set([studentId]), {
+    onBonusTrace: (event) => {
+      if (event.studentId === studentId) events.push(event);
+    },
+  });
+  const storedProgress = await client.student.findUnique({
+    where: { id: studentId },
+    select: { bonusProgress: true },
+  });
+  const compared = savedVersusReplay(state, result, studentId, Number(storedProgress?.bonusProgress ?? 0));
+  if (!compared) return null;
+  return {
+    studentId,
+    events: events.filter((event) => event.kind !== "summary"),
+    summary: events.filter((event) => event.kind === "summary").at(-1) || null,
+    ...compared,
+  };
+}
+
+/**
+ * Read-only: of one page of students (by id, after `cursor`), or of the
+ * given students, those whose saved record differs from what a
+ * recalculation gives now — a result written to the database outside the
+ * app, or an input that changed without recalculating them.
+ */
+export async function scanStaleAcademicRecords(
+  client: PrismaClientLike,
+  options: { cursor?: string; limit?: number; skip?: number; studentIds?: string[] } = {},
+): Promise<{ stale: AcademicStaleRecord[]; scanned: number; nextCursor: string | null }> {
+  const limit = Math.min(300, Math.max(1, Math.trunc(Number(options.limit ?? 100)) || 100));
+  const select = { id: true, code: true, name: true, courseId: true, bonusProgress: true } as const;
+  const page = options.studentIds
+    ? await client.student.findMany({
+        where: { id: { in: uniqueIds(options.studentIds) }, status: { not: "مؤرشف" } },
+        select,
+        orderBy: { id: "asc" },
+      })
+    : await client.student.findMany({
+        where: { status: { not: "مؤرشف" }, ...(options.cursor ? { id: { gt: options.cursor } } : {}) },
+        select,
+        orderBy: { id: "asc" },
+        take: limit,
+        ...(options.skip ? { skip: options.skip } : {}),
+      });
+  if (page.length === 0) return { stale: [], scanned: 0, nextCursor: null };
+  const ids = page.map((student) => student.id);
+  const state = await loadAcademicStateForStudents(client, ids);
+  const result = recalculateAcademicState(state, new Set(ids));
+  const stale: AcademicStaleRecord[] = [];
+  for (const student of page) {
+    const compared = savedVersusReplay(state, result, student.id, Number(student.bonusProgress ?? 0));
+    if (compared && isAcademicRecordStale(compared)) {
+      stale.push({ studentId: student.id, code: student.code, name: student.name, courseId: student.courseId, ...compared });
+    }
+  }
+  const nextCursor = options.studentIds || page.length < limit ? null : page[page.length - 1].id;
+  return { stale, scanned: page.length, nextCursor };
+}
+
+/**
+ * Of the given students, recalculates and saves — through the same path a
+ * grade save takes — only those still stale, and reports what changed.
+ */
+export async function healStaleAcademicRecords(
+  studentIds: string[],
+): Promise<{ healed: AcademicStaleRecord[]; stillStale: AcademicStaleRecord[] }> {
+  const { stale } = await scanStaleAcademicRecords(db, { studentIds });
+  for (const group of chunks(stale.map((record) => record.studentId), 25)) {
+    await recalculateStudentsAcademicState(group);
+  }
+  const after = stale.length
+    ? await scanStaleAcademicRecords(db, { studentIds: stale.map((record) => record.studentId) })
+    : { stale: [] as AcademicStaleRecord[] };
+  const stillStaleIds = new Set(after.stale.map((record) => record.studentId));
+  return {
+    healed: stale.filter((record) => !stillStaleIds.has(record.studentId)),
+    stillStale: after.stale,
+  };
+}
+
+/**
+ * Nightly self-healing: scans students page by page (starting at a page
+ * that moves each day, so a large school is covered over the nights the
+ * time allows) and recalculates, through the ordinary path, every one whose
+ * saved record differs from the calculation, whatever wrote it.
+ */
+export async function healStaleAcademicRecordsWithin(options: {
+  deadline: number;
+  pageSize?: number;
+  day?: number;
+}): Promise<{ scanned: number; healed: AcademicStaleRecord[]; stillStale: AcademicStaleRecord[]; complete: boolean }> {
+  const pageSize = options.pageSize ?? 150;
+  const total = await db.student.count({ where: { status: { not: "مؤرشف" } } });
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const firstPage = Math.abs(Math.trunc(options.day ?? 0)) % pages;
+  const healed: AcademicStaleRecord[] = [];
+  const stillStale: AcademicStaleRecord[] = [];
+  let scanned = 0;
+  let visited = 0;
+  for (; visited < pages && Date.now() < options.deadline; visited += 1) {
+    const page = (firstPage + visited) % pages;
+    const found = await scanStaleAcademicRecords(db, { limit: pageSize, skip: page * pageSize });
+    scanned += found.scanned;
+    if (found.stale.length && Date.now() < options.deadline) {
+      const result = await healStaleAcademicRecords(found.stale.map((record) => record.studentId));
+      healed.push(...result.healed);
+      stillStale.push(...result.stillStale);
+    } else {
+      stillStale.push(...found.stale);
+    }
+  }
+  return { scanned, healed, stillStale, complete: visited >= pages };
 }
 
 /** Students whose «فرصة مكافأة» can change when an exam they have no grade

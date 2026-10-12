@@ -1,5 +1,5 @@
 import type { StoryAuditFacts } from "@/lib/student-story-audit";
-import type { AcademicBonusTrace } from "@/lib/academic-types";
+import type { AcademicBonusTrace, AcademicStaleRecord } from "@/lib/academic-types";
 import { withReadDeadline } from "./read-deadline";
 import { getOutboxOwner, ownerHeaders, requestSessionCheck } from "./outbox-session";
 import {
@@ -1817,6 +1817,15 @@ export const studentProfileStatsApi = {
       `students/profile-stats${queryString ? `?${queryString}` : ""}`,
     );
   },
+};
+
+/** «فحص الحسابات»: students whose saved record differs from the calculation. */
+export const staleRecordsApi = {
+  scan: (cursor?: string) =>
+    apiGet<{ stale: AcademicStaleRecord[]; scanned: number; nextCursor: string | null }>(
+      `students/stale-records?${buildQueryString({ cursor: cursor || "", limit: 100 })}`,
+    ),
+  fix: (studentIds: string[]) => apiPost("students/stale-records", { studentIds }),
 };
 
 /** «ليش ما تكافأ؟»: every «فرصة مكافأة» decision of one student, read-only. */

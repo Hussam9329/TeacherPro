@@ -38,6 +38,7 @@ import {
 } from "./export-dialog";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { BonusTracePanel } from "./bonus-trace-panel";
+import { StaleRecordsDialog } from "./stale-records-dialog";
 import { STAFF_ROW_ICONS, staffRowNote } from "./opportunity-row-icons";
 import { ChevronLeft, CircleMinus, CirclePlus, RotateCcw, Target } from "lucide-react";
 
@@ -793,6 +794,7 @@ export function OpportunitiesView() {
                   : null
               }
             />
+            <StaleRecordsDialog courseName={courseName} onFixed={() => setRefreshKey((key) => key + 1)} />
           </>
         }
         chips={[
