@@ -674,54 +674,73 @@ export function OpportunitiesView() {
     const total = studentIds.length;
     onProgress(0, total);
     const result: StudentDetailsMap = {};
-    const failedStudentIds = new Set<string>();
-    let completed = 0;
+    let loaded = 0;
 
-    const concurrency = 6;
-    const queue = [...studentIds];
-
-    const worker = async () => {
-      while (queue.length > 0) {
-        const studentId = queue.shift();
-        if (!studentId) break;
-        if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-
-        try {
-          const profile = await studentProfileLogApi.get(studentId);
-          if (profile) {
-            result[studentId] = buildStudentDetailsFromProfileLog(profile);
-            const snapshot = result[studentId].studentSnapshot;
-            if (snapshot && profile.student?.courseId) snapshot.courseName = courseName(String(profile.student.courseId));
-          } else {
-            failedStudentIds.add(studentId);
-            console.error(
-              `[opportunities] profile-log returned no data for ${studentId}`,
-            );
-          }
-        } catch (error) {
-          if (error instanceof Error && error.name === "AbortError") throw error;
-          failedStudentIds.add(studentId);
-          console.error(
-            `[opportunities] profile-log failed for ${studentId}:`,
-            error,
-          );
-        }
-
-        completed += 1;
-        onProgress(completed, total);
+    const loadOne = async (studentId: string): Promise<boolean> => {
+      try {
+        const profile = await studentProfileLogApi.get(studentId);
+        if (!profile) return false;
+        result[studentId] = buildStudentDetailsFromProfileLog(profile);
+        const snapshot = result[studentId].studentSnapshot;
+        if (snapshot && profile.student?.courseId) snapshot.courseName = courseName(String(profile.student.courseId));
+        return true;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") throw error;
+        console.error(`[opportunities] profile-log failed for ${studentId}:`, error);
+        return false;
       }
     };
 
-    await Promise.all(
-      Array.from(
-        { length: Math.min(concurrency, Math.max(1, studentIds.length)) },
-        () => worker(),
-      ),
-    );
+    // One pass over the students still missing; returns those that failed.
+    const runPass = async (ids: string[], concurrency: number): Promise<string[]> => {
+      const queue = [...ids];
+      const failed: string[] = [];
+      const worker = async () => {
+        while (queue.length > 0) {
+          const studentId = queue.shift();
+          if (!studentId) break;
+          if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+          if (await loadOne(studentId)) {
+            loaded += 1;
+            onProgress(loaded, total);
+          } else {
+            failed.push(studentId);
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, ids.length)) }, () => worker()));
+      return failed;
+    };
 
-    if (failedStudentIds.size > 0) {
+    const wait = (ms: number) => new Promise<void>((resolve, reject) => {
+      const timer = window.setTimeout(resolve, ms);
+      signal.addEventListener("abort", () => {
+        window.clearTimeout(timer);
+        reject(new DOMException("Aborted", "AbortError"));
+      }, { once: true });
+    });
+
+    // A student whose details did not load (a slow or busy server) is asked
+    // again on its own, more gently each round, so the report completes
+    // without anyone pressing «إعادة المحاولة».
+    const rounds = [
+      { delay: 0, concurrency: 4 },
+      { delay: 1500, concurrency: 2 },
+      { delay: 4000, concurrency: 2 },
+      { delay: 8000, concurrency: 1 },
+      { delay: 15000, concurrency: 1 },
+      { delay: 30000, concurrency: 1 },
+    ];
+    let pending = [...studentIds];
+    for (const round of rounds) {
+      if (pending.length === 0) break;
+      if (round.delay) await wait(round.delay);
+      pending = await runPass(pending, round.concurrency);
+    }
+
+    if (pending.length > 0) {
       throw new Error(
-        `تعذر إكمال تقرير HTML لأن تفاصيل ${failedStudentIds.size} من أصل ${total} طالب لم تُحمّل. يرجى إعادة المحاولة لإنشاء التقرير كاملاً.`,
+        `تعذر إكمال تقرير HTML: النظام ما رجّع تفاصيل ${pending.length} من أصل ${total} طالب حتى بعد ${rounds.length} محاولات. تأكد من الاتصال وحاول بعد شوية.`,
       );
     }
 

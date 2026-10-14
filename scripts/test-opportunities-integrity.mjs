@@ -193,9 +193,11 @@ check(
 check(
   exportDialog.includes('const interactiveMode = Boolean(') &&
     exportDialog.includes('options.studentDetails && options.studentList') &&
-    opportunitiesView.includes('const failedStudentIds = new Set<string>()') &&
-    opportunitiesView.includes('يرجى إعادة المحاولة لإنشاء التقرير كاملاً'),
-  'التقرير لا يدخل وضع البحث بمدخلات ناقصة ولا ينشئ ملفاً جزئياً عند فشل تفاصيل طالب',
+    opportunitiesView.includes('pending = await runPass(pending, round.concurrency);') &&
+    opportunitiesView.includes('{ delay: 30000, concurrency: 1 },') &&
+    opportunitiesView.includes('if (pending.length > 0) {') &&
+    opportunitiesView.includes('تعذر إكمال تقرير HTML: النظام ما رجّع تفاصيل'),
+  'التقرير يعيد تحميل تفاصيل الطالب اللي فشلت تلقائياً على جولات، وما ينشئ ملفاً جزئياً إذا بقت ناقصة',
 );
 
 check(
