@@ -1,5 +1,6 @@
 import type { StoryAuditFacts } from "@/lib/student-story-audit";
 import type { AcademicBonusTrace, AcademicStaleRecord } from "@/lib/academic-types";
+import type { TextShortcut, TextShortcutInput } from "@/lib/text-shortcuts";
 import { withReadDeadline } from "./read-deadline";
 import { getOutboxOwner, ownerHeaders, requestSessionCheck } from "./outbox-session";
 import {
@@ -1834,6 +1835,21 @@ export const studentBonusTraceApi = {
     apiGet<AcademicBonusTrace>(`students/bonus-trace?${buildQueryString({ studentId })}`),
   /** Only when the saved record differs from the calculation. */
   recalculate: (studentId: string) => apiPost("students/bonus-trace", { studentId }),
+};
+
+/**
+ * «اختصارات»: the ready texts of the admin and the supervisors. Edits carry
+ * what the window loaded, so they are refused (never queued and replayed
+ * later) when someone else changed the buttons in between.
+ */
+export const textShortcutsApi = {
+  list: () => apiGetResponse<{ shortcuts: TextShortcut[] }>("text-shortcuts"),
+  add: (id: string, input: TextShortcutInput) => apiPost("text-shortcuts", { id, ...input }),
+  edit: (shortcut: TextShortcut, input: TextShortcutInput) =>
+    apiPut("text-shortcuts", { id: shortcut.id, ...input, expectedUpdatedAt: shortcut.updatedAt }),
+  reorder: (order: string[], expectedRevision: string) =>
+    apiPut("text-shortcuts", { order, expectedRevision }),
+  remove: (id: string) => apiDelete("text-shortcuts", id),
 };
 
 export const studentProfileLogApi = {

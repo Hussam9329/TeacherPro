@@ -12,6 +12,7 @@ import {
   FilePlus2,
   ListChecks,
   LockKeyhole,
+  MessageSquareText,
   PenLine,
   PhoneCall,
   Shield,
@@ -32,6 +33,7 @@ import { CallsDialog } from "./calls-dialog";
 import { CodeClosuresDialog } from "./code-closures-dialog";
 import { GracePeriodsDialog } from "./grace-periods-dialog";
 import { LeavesDialog, LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog";
+import { TextShortcutsDialog } from "./text-shortcuts-dialog";
 // One look for the management windows opened from here.
 import "./tp-modal.css";
 
@@ -101,6 +103,13 @@ export function DashboardView({
     actor.roleId === "role_admin" ||
     actor.permissions?.includes("system.oversight")
   ));
+  // «اختصارات»: the ready texts of the admin and the supervisors.
+  const canUseTextShortcuts = Boolean(actor && (
+    actor.username?.trim().toLowerCase() === "admin" ||
+    actor.roleId === "role_admin" ||
+    actor.permissions?.includes("system.oversight")
+  ));
+  const [textShortcutsOpen, setTextShortcutsOpen] = useState(false);
   const canEditStudents = Boolean(actor && (
     actor.username?.trim().toLowerCase() === "admin" ||
     actor.roleId === "role_admin" ||
@@ -316,7 +325,7 @@ export function DashboardView({
         ))}
       </div>
 
-      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canViewGracePeriods || canViewLeaves) && (
+      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canViewGracePeriods || canViewLeaves || canUseTextShortcuts) && (
         <nav aria-label="اختصارات لوحة التحكم" className="tp-dashboard__navigation">
           <h3 className="text-sm font-bold">الوصول السريع</h3>
           <div className="tp-dashboard__shortcuts">
@@ -416,8 +425,27 @@ export function DashboardView({
                 </span>
               </button>
             )}
+            {canUseTextShortcuts && (
+              <button
+                type="button"
+                onClick={() => setTextShortcutsOpen(true)}
+                aria-haspopup="dialog"
+                data-tone="info"
+                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
+              >
+                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                  <MessageSquareText />
+                </span>
+                <span className="tp-dashboard__shortcut-label">
+                  اختصارات
+                </span>
+              </button>
+            )}
           </div>
         </nav>
+      )}
+      {canUseTextShortcuts && (
+        <TextShortcutsDialog open={textShortcutsOpen} onOpenChange={setTextShortcutsOpen} />
       )}
       {canViewCallNotes && (
         <CallsDialog open={callsOpen} onOpenChange={closeAndRefresh(setCallsOpen)} canSeeStats={canSeeCallStats} />

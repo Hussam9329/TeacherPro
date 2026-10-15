@@ -11,7 +11,7 @@ import {
  * column used by the application. Keep this in sync with the newest migration.
  */
 export const REQUIRED_DATABASE_MIGRATION =
-  '20261012180000_correction_receipts';
+  '20261015120000_text_shortcuts';
 
 const SCHEMA_NOT_READY_MESSAGE =
   'نسخة قاعدة البيانات أقدم من نسخة النظام. يلزم مسؤول النظام تطبيق تحديثات قاعدة البيانات قبل إعادة المحاولة.';

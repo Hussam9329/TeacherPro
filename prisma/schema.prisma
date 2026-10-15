@@ -314,6 +314,23 @@ model CallDailyTarget {
   @@index([day])
 }
 
+/// «اختصارات»: a ready text (كليشة) the admin and the supervisors copy with
+/// one click, e.g. «شرح الآلية». Shared by all of them, in their order.
+model TextShortcut {
+  id            String   @id @default(cuid())
+  label         String
+  text          String
+  sortOrder     Int      @default(0)
+  createdById   String?
+  createdByName String   @default("")
+  updatedById   String?
+  updatedByName String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  @@index([sortOrder])
+}
+
 /// One request from the Correction app, by its idempotency key: the same key
 /// again returns the stored response instead of saving the result twice.
 model CorrectionReceipt {

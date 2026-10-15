@@ -322,5 +322,9 @@
   "20261012180000_correction_receipts": {
     "kind": "expand",
     "checksum": "008ff7176d896d52e28d4f72eaf99fa42f2dac75d9421c88fa04ed078e3b9c1c"
+  },
+  "20261015120000_text_shortcuts": {
+    "kind": "expand",
+    "checksum": "f15e4d78e003a1c14223047c6384adb56c39e37f5ad6f53e705ce21511c7a1be"
   }
 }

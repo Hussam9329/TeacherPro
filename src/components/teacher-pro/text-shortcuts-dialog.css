@@ -1,0 +1,134 @@
+/* «اختصارات»: a grid of copy buttons; each shows its name and the start of
+   its text. «تعديل الأزرار» adds the edit / delete / order row under each. */
+
+.tp-modal.tp-shortcuts[data-slot="dialog-content"] { max-width: 56rem; }
+
+.tp-shortcuts__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@container (min-width: 34rem) {
+  .tp-shortcuts__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container (min-width: 50rem) {
+  .tp-shortcuts__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.tp-shortcuts__item { display: grid; align-content: start; gap: 0.5rem; min-width: 0; }
+.tp-shortcuts__item[data-wide="true"] { grid-column: 1 / -1; }
+
+.tp-shortcuts__copy {
+  display: grid;
+  align-content: start;
+  gap: 0.4rem;
+  width: 100%;
+  min-height: 5.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--tp-border-strong);
+  border-inline-start: 4px solid var(--tp-primary);
+  border-radius: 1rem;
+  background: var(--tp-surface);
+  color: var(--tp-text);
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+.tp-shortcuts__copy:hover {
+  background: var(--tp-primary-tint);
+  box-shadow: 0 12px 28px -20px color-mix(in srgb, var(--tp-deep) 55%, transparent);
+}
+.tp-shortcuts__copy:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
+.tp-shortcuts__copy:active { transform: scale(0.985); }
+.tp-shortcuts__copy[data-copied="true"] {
+  border-color: var(--status-success-border);
+  border-inline-start-color: var(--status-success-vivid);
+  background: var(--status-success-bg);
+}
+
+.tp-shortcuts__label { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; min-width: 0; }
+.tp-shortcuts__name { min-width: 0; font-size: 0.98rem; font-weight: 750; line-height: 1.6; overflow-wrap: anywhere; }
+.tp-shortcuts__state {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.2rem;
+  color: var(--tp-text-muted);
+  font-size: 0.74rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.tp-shortcuts__state svg { width: 1rem; height: 1rem; }
+.tp-shortcuts__copy[data-copied="true"] .tp-shortcuts__state { color: var(--status-success-fg); }
+
+.tp-shortcuts__preview {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--tp-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.75;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.tp-shortcuts__manage { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.tp-shortcuts__move { display: inline-flex; margin-inline-start: auto; }
+.tp-shortcuts__move [data-slot="button"] { width: 2.25rem; height: 2.25rem; }
+.tp-shortcuts__delete[data-slot="button"] { color: var(--status-danger-fg); }
+.tp-shortcuts__meta { flex-basis: 100%; color: var(--tp-text-muted); font-size: 0.72rem; }
+
+.tp-shortcuts__editor {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--tp-primary) 25%, var(--tp-border));
+  border-radius: 1rem;
+  background: var(--tp-panel);
+  scroll-margin: 1rem;
+}
+.tp-shortcuts__editor h3 { margin: 0; color: var(--tp-text); font-size: 1rem; font-weight: 750; overflow-wrap: anywhere; }
+.tp-shortcuts__textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 11rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 0.85rem;
+  background: var(--tp-surface);
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.8;
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.tp-shortcuts__textarea::placeholder { color: color-mix(in srgb, var(--tp-text-muted) 75%, transparent); }
+.tp-shortcuts__textarea:focus-visible { border-color: var(--tp-primary); box-shadow: 0 0 0 3px var(--tp-focus); }
+.tp-shortcuts__counter { justify-self: end; color: var(--tp-text-muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+
+.tp-shortcuts__confirm {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  background: var(--status-danger-bg);
+  color: var(--status-danger-fg);
+  font-size: 0.85rem;
+  font-weight: 650;
+  line-height: 1.8;
+}
+.tp-shortcuts__confirm p { margin: 0; overflow-wrap: anywhere; }
+
+.tp-modal__error:has(> [data-slot="button"]) { align-items: center; flex-wrap: wrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tp-shortcuts__copy { transition: none; }
+  .tp-shortcuts__copy:active { transform: none; }
+}
