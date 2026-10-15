@@ -313,7 +313,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
           </div>
 
           {filtersOpen && (
-            <div className="tp-modal__fields tp-modal__panel">
+            <div className="tp-modal__fields tp-modal__panel tp-closures__filters">
               <label className="tp-modal__field">
                 <span>اسم الدورة</span>
                 <div className="tp-modal__select-wrap" data-plain="true">
@@ -332,20 +332,22 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                   </select>
                 </div>
               </label>
-              <fieldset className="tp-closures__dates">
-                <legend>حسب التاريخ</legend>
-                <div role="group" aria-label="التاريخ اللي ينطبق عليه «من / إلى»" className="tp-closures__date-kind">
-                  {([["dismissal", "تاريخ الفصل"], ["closure", "تاريخ اغلاق الكود"]] as const).map(([key, label]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className="tp-modal__filter"
-                      aria-pressed={dateField === key}
-                      onClick={() => setDateField(key)}
-                    >
-                      <span className="tp-modal__filter-label">{label}</span>
-                    </button>
-                  ))}
+              <div role="group" aria-labelledby={`${filterId}-dates`} className="tp-closures__dates">
+                <div className="tp-closures__dates-head">
+                  <span id={`${filterId}-dates`} className="tp-closures__dates-title">حسب التاريخ</span>
+                  <div role="group" aria-label="التاريخ اللي ينطبق عليه «من / إلى»" className="tp-closures__seg">
+                    {([["dismissal", "تاريخ الفصل"], ["closure", "تاريخ اغلاق الكود"]] as const).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className="tp-closures__seg-btn"
+                        aria-pressed={dateField === key}
+                        onClick={() => setDateField(key)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="tp-closures__range">
                   <label className="tp-modal__field">
@@ -357,18 +359,20 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                     <DateInput aria-label={`${dateField === "closure" ? "تاريخ اغلاق الكود" : "تاريخ الفصل"} إلى`} value={dateTo} onChange={setDateTo} />
                   </label>
                 </div>
-                <p className="tp-closures__date-hint">
-                  {dateField === "closure"
-                    ? "يطلع بس الكودات المغلقة اللي انغلقت ضمن هالمدة."
-                    : "يطلع بس الطلاب اللي انفصلوا ضمن هالمدة."}
-                  {" "}خلي أي خانة فارغة حتى تبقى المدة مفتوحة من ذاك الطرف.
-                </p>
-                {dateFiltered && (
-                  <Button type="button" variant="ghost" size="sm" className="tp-closures__date-clear" onClick={clearDates}>
-                    <X className="size-4" aria-hidden="true" />مسح التاريخ
-                  </Button>
-                )}
-              </fieldset>
+                <div className="tp-closures__dates-foot">
+                  <p className="tp-closures__date-hint">
+                    {dateField === "closure"
+                      ? "يطلع بس الكودات اللي انغلقت ضمن هالمدة."
+                      : "يطلع بس الطلاب اللي انفصلوا ضمن هالمدة."}
+                    {" "}خانة فارغة = مفتوحة من ذاك الطرف.
+                  </p>
+                  {dateFiltered && (
+                    <Button type="button" variant="ghost" size="sm" className="tp-closures__date-clear" onClick={clearDates}>
+                      <X className="size-4" aria-hidden="true" />مسح التاريخ
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
