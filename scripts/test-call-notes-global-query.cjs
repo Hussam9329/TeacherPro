@@ -23,7 +23,7 @@ const call = (id, studentId, examId, status, createdAt, extra = {}) => ({
 });
 const rows = [
   note('a-exam-a', 'student-a', 'exam-a'),
-  note('a-exam-b', 'student-a', 'exam-b'),
+  note('a-exam-b', 'student-a', 'exam-b', { actedByName: 'موظفة المكالمات', actedAt: '2026-09-20T09:00:00.000Z' }),
   note('a-exam-c', 'student-a', 'exam-c'),
   note('a-general', 'student-a', null),
   note('b-exam-b', 'student-b', 'exam-b'),
@@ -76,6 +76,15 @@ const db = {
   examCourse: { findFirst: async ({ where }) => {
     reads.push('examCourse');
     return where.courseId === 'course-a' || where.examId === 'exam-b' ? { id: 'link' } : null;
+  } },
+  // «السجلات»: who wrote a note saved before its author was kept on it.
+  auditLog: { findMany: async () => {
+    reads.push('auditLog');
+    return [
+      { userName: 'كاتب أول', time: new Date('2026-09-20T08:00:00.000Z'), details: JSON.stringify({ source: 'call-note-management', before: null, after: { id: 'a-exam-a' } }) },
+      { userName: 'كاتب ثاني', time: new Date('2026-09-20T08:30:00.000Z'), details: JSON.stringify({ source: 'call-note-management', before: { id: 'a-exam-a' }, after: { id: 'a-exam-a' } }) },
+      { userName: 'سطر بلا ملاحظة', time: new Date('2026-09-20T08:40:00.000Z'), details: 'ليس JSON' },
+    ];
   } },
   studentCall: { findMany: async ({ where, select, orderBy }) => {
     reads.push('studentCall');
@@ -139,8 +148,11 @@ async function request(query = '') {
   assert.equal(all.response.headers.get('Cache-Control'), 'no-store');
   assert.equal(all.body.totalCount, 6);
   assert.equal(all.body.exam, null);
-  assert.deepEqual(reads, ['studentCall', 'studentCall'], 'Global queue uses two set-based reads, with no student/exam N+1.');
+  assert.deepEqual(reads, ['studentCall', 'auditLog', 'studentCall'], 'Global queue uses set-based reads (notes, their authors from the log, contacts), with no student/exam N+1.');
   const byId = Object.fromEntries(all.body.notes.map((item) => [item.id, item]));
+  assert.equal(byId['a-exam-b'].authorName, 'موظفة المكالمات', 'A note keeps the name of the employee who wrote it.');
+  assert.equal(byId['a-exam-a'].authorName, 'كاتب ثاني', 'An older note takes from «السجلات» whoever last wrote its text.');
+  assert.equal(byId['a-general'].authorName, null, 'No author is invented when nobody is recorded.');
   assert.equal(byId['a-exam-a'].student.telegram, '123456789');
   assert.equal(byId['a-exam-a'].student.username, 'student_one');
   assert.equal(byId['b-exam-b'].student.telegram, null);

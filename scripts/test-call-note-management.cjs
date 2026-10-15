@@ -37,11 +37,11 @@ function adapter(sql) {
     studentCall: {
       findUnique: ({ where }) => one('SELECT * FROM "StudentCall" WHERE id=$1', [where.id]),
       findFirst: ({ where }) => one('SELECT * FROM "StudentCall" WHERE "studentId"=$1 AND "examId" IS NOT DISTINCT FROM $2 AND category=$3 ORDER BY "createdAt" DESC,id DESC LIMIT 1', [where.studentId, where.examId, where.category]),
-      create: ({ data }) => one('INSERT INTO "StudentCall" (id,"studentId","examId",category,notes,"noteResolved","noteRevision") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *', [`note-${++sequence}`, data.studentId, data.examId, data.category, data.notes, data.noteResolved, data.noteRevision]),
+      create: ({ data }) => one('INSERT INTO "StudentCall" (id,"studentId","examId",category,notes,"noteResolved","noteRevision","actedById","actedByName","actedAt") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *', [`note-${++sequence}`, data.studentId, data.examId, data.category, data.notes, data.noteResolved, data.noteRevision, data.actedById ?? null, data.actedByName ?? null, data.actedAt ?? null]),
       update: ({ where, data }) => {
         const values = [where.id];
         const sets = Object.entries(data).map(([key, value]) => {
-          assert(['notes', 'noteResolved', 'noteRevision'].includes(key));
+          assert(['notes', 'noteResolved', 'noteRevision', 'actedById', 'actedByName', 'actedAt'].includes(key));
           values.push(key === 'noteRevision' ? value.increment : value);
           return `"${key}" = ${key === 'noteRevision' ? `"${key}" + ` : ''}$${values.length}`;
         });
@@ -66,7 +66,8 @@ function adapter(sql) {
       target text NOT NULL DEFAULT '',phone text NOT NULL DEFAULT '',status text NOT NULL DEFAULT '',
       completed boolean NOT NULL DEFAULT false,"completedAt" timestamp,
       notes text NOT NULL DEFAULT '',"createdAt" timestamp NOT NULL DEFAULT now(),
-      "noteResolved" boolean NOT NULL DEFAULT false,"noteRevision" integer NOT NULL DEFAULT 0
+      "noteResolved" boolean NOT NULL DEFAULT false,"noteRevision" integer NOT NULL DEFAULT 0,
+      "actedById" text,"actedByName" text,"actedAt" timestamp
     );
     CREATE UNIQUE INDEX ON "StudentCall" ("studentId",coalesce("examId",''),category);
     CREATE TABLE "AuditLog" (id serial PRIMARY KEY,module text,action text,details text,"userId" text,"userName" text);
@@ -101,6 +102,8 @@ function adapter(sql) {
 
   const created = (await save('اتصل بولي الأمر', 0)).studentCall;
   assert.equal(created.noteRevision, 1);
+  assert.equal(created.actedByName, actor.name, 'The note keeps who wrote it.');
+  assert.equal(created.actedById, actor.id);
   assert.equal(created.noteResolved, false);
   assert.equal((await note('general')).examId, null);
   assert.equal((await note('general')).notes, 'ملاحظة عامة محفوظة');
@@ -120,6 +123,7 @@ function adapter(sql) {
 
   const edited = (await save('أعد الاتصال غداً', 1)).studentCall;
   assert.equal(edited.noteRevision, 2);
+  assert.equal(edited.actedByName, actor.name, 'Editing the text records who wrote the new text.');
   assert.equal(edited.noteResolved, false);
   await assert.rejects(resolve(created.id, 1), /تغيّرت الملاحظة/);
   assert.equal((await note(created.id)).noteResolved, false);

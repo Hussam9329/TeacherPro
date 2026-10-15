@@ -3,7 +3,7 @@
 import { toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
 import { formatAppDate, formatAppTime } from "@/lib/format";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, Check, CheckCheck, ClipboardList, Radiation, RefreshCw, RotateCcw, Search, Send, SlidersHorizontal, X } from "lucide-react";
+import { Archive, Check, CheckCheck, ClipboardList, Radiation, RefreshCw, RotateCcw, Search, Send, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -632,6 +632,12 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                                 )}
                               </div>
                               <p className="tp-notes__text">{note.notes}</p>
+                              {note.authorName ? (
+                                <p className="tp-notes__author">
+                                  <UserRound className="size-3.5" aria-hidden="true" />
+                                  كتبها: {note.authorName}
+                                </p>
+                              ) : null}
                               {view === "archive" && (
                                 <p className="tp-notes__resolved">
                                   <CheckCheck className="size-3.5" aria-hidden="true" />

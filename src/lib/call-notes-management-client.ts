@@ -30,6 +30,9 @@ export type ManagedCallNote = {
   /** «الأرشيف» only: when the note was completed and by whom, if logged. */
   resolvedAt?: string | null;
   resolvedBy?: string | null;
+  /** The employee who wrote the note's current text. */
+  authorName?: string | null;
+  authoredAt?: string | null;
 };
 
 /** «المعلّقة» (waiting) or «الأرشيف» (completed). */

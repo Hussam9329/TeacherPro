@@ -77,14 +77,16 @@ async function writeNoteText(
     }
     return { studentCall: null, deleted: true };
   }
+  // Who wrote the note's current text (shown on the student's card).
+  const author = { actedById: actor.id || null, actedByName: actor.name || null, actedAt: new Date() };
   const studentCall = existing
     ? await tx.studentCall.update({ where: { id: existing.id }, data: {
-        notes, noteResolved: false, noteRevision: { increment: 1 },
+        notes, noteResolved: false, noteRevision: { increment: 1 }, ...author,
       } })
     : await tx.studentCall.create({ data: {
         studentId: input.studentId, examId: input.examId,
         category: CALL_STUDENT_NOTE_CATEGORY, notes,
-        noteResolved: false, noteRevision: 1,
+        noteResolved: false, noteRevision: 1, ...author,
       } });
   await auditNote(tx, actor, existing ? "تعديل ملاحظة مكالمات" : "إضافة ملاحظة مكالمات", existing, studentCall);
   return { studentCall, deleted: false };

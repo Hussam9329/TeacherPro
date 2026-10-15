@@ -42,6 +42,39 @@ async function loadNoteResolutions(noteIds: string[]) {
   return found;
 }
 
+/** Who last wrote each note's text, from «السجلات» (notes saved before the
+ * author was kept on the note itself). */
+async function loadNoteAuthors(notes: Array<{ id: string; createdAt: Date | string }>): Promise<Map<string, { by: string; at: string }>> {
+  const authors = new Map<string, { by: string; at: string }>();
+  if (notes.length === 0) return authors;
+  const ids = new Set(notes.map((note) => note.id));
+  const times = notes.map((note) => new Date(note.createdAt).getTime()).filter(Number.isFinite);
+  const since = new Date((times.length ? Math.min(...times) : 0) - 60_000);
+  // The name is a courtesy: the list still shows if «السجلات» cannot be read.
+  const rows = await Promise.resolve().then(() => db.auditLog.findMany({
+    where: {
+      module: "المكالمات",
+      action: { in: ["إضافة ملاحظة مكالمات", "تعديل ملاحظة مكالمات"] },
+      time: { gte: since },
+    },
+    select: { userName: true, time: true, details: true },
+    orderBy: { time: "asc" },
+  })).catch((error: unknown) => {
+    console.error("[call-notes] note authors from the log:", error);
+    return [] as Array<{ userName: string | null; time: Date; details: string | null }>;
+  });
+  for (const row of rows) {
+    try {
+      const after = (JSON.parse(String(row.details || "")) as { after?: { id?: string } } | null)?.after;
+      const id = String(after?.id || "");
+      if (id && ids.has(id) && row.userName) authors.set(id, { by: row.userName, at: row.time.toISOString() });
+    } catch {
+      // A line that is not JSON names no note.
+    }
+  }
+  return authors;
+}
+
 export async function GET(req: NextRequest) {
   const principal = await requireAnyPermissionPrincipal(req, ["follow-up.calls.view", "follow-up.view"]);
   if (principal instanceof NextResponse) return principal;
@@ -80,6 +113,7 @@ export async function GET(req: NextRequest) {
         select: {
           id: true, studentId: true, examId: true, notes: true,
           category: true, noteRevision: true, noteResolved: true, createdAt: true,
+          actedByName: true, actedAt: true,
           exam: { select: { id: true, name: true } },
           student: { select: { id: true, name: true, code: true, telegram: true, username: true, phone: platform || contacts, parentPhone: contacts, courseId: true, course: { select: { id: true, name: true } } } },
         },
@@ -90,6 +124,9 @@ export async function GET(req: NextRequest) {
       });
       const visibleNotes = notes.filter(hasManualCallNote);
       const resolutions = archive ? await loadNoteResolutions(visibleNotes.map((note) => note.id)) : null;
+      // A note saved before its author was kept on it: «السجلات» name who
+      // last wrote its text.
+      const loggedAuthors = await loadNoteAuthors(visibleNotes.filter((note) => !note.actedByName));
       const studentIds = [...new Set(visibleNotes.map((note) => note.studentId))];
       const calls = studentIds.length ? await db.studentCall.findMany({
         where: { studentId: { in: studentIds }, category: { not: CALL_STUDENT_NOTE_CATEGORY } },
@@ -115,8 +152,11 @@ export async function GET(req: NextRequest) {
             ? contactByExam.get(contactKey(note.studentId, note.examId))
             : latestContactByStudent.get(note.studentId);
           const resolution = resolutions?.get(note.id);
+          const logged = loggedAuthors.get(note.id);
           return {
             ...note,
+            authorName: note.actedByName || logged?.by || null,
+            authoredAt: note.actedByName && note.actedAt ? new Date(note.actedAt).toISOString() : logged?.at || null,
             scope: note.examId ? "exam" : "general",
             contactStatus: normalizeContactStatus(contact),
             contactExam: contact?.exam || null,
