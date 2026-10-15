@@ -222,3 +222,16 @@ a.tp-closure-card__telegram[data-done]::after {
   .tp-modal .tp-closures__reason-toggle { grid-column: 1 / -1; justify-self: stretch; }
   .tp-closure-card__row { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Filter window: the date range sits under the course, as one group. */
+.tp-closures__dates { display: grid; gap: 0.6rem; min-width: 0; margin: 0; padding: 0.7rem; border: 1px solid var(--tp-border); border-radius: 0.85rem; background: var(--tp-surface, var(--tp-panel)); }
+.tp-closures__dates legend { padding: 0 0.35rem; color: var(--tp-text-muted); font-size: 0.74rem; font-weight: 800; }
+.tp-closures__date-kind { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.tp-closures__range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+.tp-closures__date-hint { margin: 0; color: var(--tp-text-muted); font-size: 0.74rem; font-weight: 650; line-height: 1.7; }
+.tp-closures__date-clear { justify-self: start; }
+.tp-closure-card__closed { display: block; color: var(--status-success-fg); font-size: 0.76rem; font-weight: 750; }
+/* On a phone «من» and «إلى» stack, so the whole date shows. */
+@media (max-width: 560px) {
+  .tp-closures__range { grid-template-columns: 1fr; }
+}

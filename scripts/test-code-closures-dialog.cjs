@@ -155,6 +155,7 @@ function harness() {
     '@/components/ui/checkbox': named(['Checkbox']),
     '@/components/ui/dialog': named(['Dialog', 'DialogContent', 'DialogHeader', 'DialogTitle']),
     '@/components/ui/input': named(['Input']),
+    '@/components/ui/date-input': named(['DateInput']),
     '@/lib/code-closures-client': { codeClosuresApi: api },
     // The real phone/notice/link helpers; only the clipboard is recorded.
     '@/lib/code-closure-contact': { ...contactHelpers, copyText: (text, near) => { copies.push({ text, near }); return Promise.resolve(copyWorks); } },

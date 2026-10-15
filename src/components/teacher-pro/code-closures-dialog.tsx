@@ -23,6 +23,7 @@ import { describeTelegramHandle } from "./student-registry-helpers";
 import { StudentContactEdit } from "./student-contact-edit";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { formatAppDate } from "@/lib/format";
+import { DateInput } from "@/components/ui/date-input";
 import { displayReasonText } from "@/lib/reason-display";
 import { EmptyState, LoadingState } from "./ui-kit";
 import "./tp-modal.css";
@@ -37,6 +38,8 @@ type Props = {
 };
 
 type StatusFilter = "all" | "checked" | "unchecked";
+/** Which day «من / إلى» reads: the dismissal or the code's closing. */
+type DateField = "dismissal" | "closure";
 
 const STATUS_FILTERS: Array<{ key: StatusFilter; label: string; tone?: "success" | "warning" }> = [
   { key: "all", label: "الكل" },
@@ -56,6 +59,9 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [selectedCourseName, setSelectedCourseName] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [dateField, setDateField] = useState<DateField>("dismissal");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [expandedReasonIds, setExpandedReasonIds] = useState<Set<string>>(new Set());
   // Contact steps clicked here, shown at once while the shared mark is saved.
   const [clickedSteps, setClickedSteps] = useState<Record<string, number>>({});
@@ -107,6 +113,9 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
     setCourseId("");
     setStatusFilter("unchecked");
     setFiltersOpen(false);
+    setDateField("dismissal");
+    setDateFrom("");
+    setDateTo("");
     setExpandedReasonIds(new Set());
     if (!open) return;
     void refresh();
@@ -226,13 +235,21 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
     return [...values].sort((left, right) => left[1].localeCompare(right[1], "ar"));
   }, [students]);
 
+  // «من / إلى» in either order; a day outside it, or no day at all, is hidden.
+  const [rangeStart, rangeEnd] = dateFrom && dateTo && dateFrom > dateTo ? [dateTo, dateFrom] : [dateFrom, dateTo];
+  const dateFiltered = Boolean(rangeStart || rangeEnd);
   const scopedStudents = useMemo(() => {
     const query = normalizeForSearch(search.replace(/^\s*@+/, "")); // «@ali» finds the username «ali»
     return students.filter((student) => {
       if (courseId && student.courseId !== courseId) return false;
+      if (rangeStart || rangeEnd) {
+        const at = dateField === "closure" ? student.codeClosedAt : student.lastDismissalAt;
+        const day = at ? baghdadDateKey(at) : "";
+        if (!day || (rangeStart && day < rangeStart) || (rangeEnd && day > rangeEnd)) return false;
+      }
       return !query || normalizeForSearch(`${student.name} ${student.code} ${student.username || ""}`).includes(query);
     });
-  }, [students, courseId, search]);
+  }, [students, courseId, search, dateField, rangeStart, rangeEnd]);
   const checkedCount = scopedStudents.filter((student) => student.dismissedChecked).length;
   const counts = { all: scopedStudents.length, checked: checkedCount, unchecked: scopedStudents.length - checkedCount };
   const visibleStudents = useMemo(() => scopedStudents.filter((student) => {
@@ -240,11 +257,18 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
     if (statusFilter === "unchecked") return !student.dismissedChecked;
     return true;
   }), [scopedStudents, statusFilter]);
-  const hasFilters = Boolean(search.trim() || courseId || statusFilter !== "unchecked");
+  const hasFilters = Boolean(search.trim() || courseId || dateFiltered || statusFilter !== "unchecked");
+  const activePanelFilters = Number(Boolean(courseId)) + Number(dateFiltered);
+
+  function clearDates() {
+    setDateFrom("");
+    setDateTo("");
+  }
 
   function clearFilters() {
     setSearch("");
     setCourseId("");
+    clearDates();
     setStatusFilter("unchecked");
   }
 
@@ -273,7 +297,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
             >
               <SlidersHorizontal className="size-4" aria-hidden="true" />
               تصفية
-              {courseId && <span className="tp-modal__filter-badge">1</span>}
+              {activePanelFilters > 0 && <span className="tp-modal__filter-badge">{activePanelFilters}</span>}
             </Button>
             <Button
               type="button"
@@ -308,6 +332,43 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                   </select>
                 </div>
               </label>
+              <fieldset className="tp-closures__dates">
+                <legend>حسب التاريخ</legend>
+                <div role="group" aria-label="التاريخ اللي ينطبق عليه «من / إلى»" className="tp-closures__date-kind">
+                  {([["dismissal", "تاريخ الفصل"], ["closure", "تاريخ اغلاق الكود"]] as const).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className="tp-modal__filter"
+                      aria-pressed={dateField === key}
+                      onClick={() => setDateField(key)}
+                    >
+                      <span className="tp-modal__filter-label">{label}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="tp-closures__range">
+                  <label className="tp-modal__field">
+                    <span>من</span>
+                    <DateInput aria-label={`${dateField === "closure" ? "تاريخ اغلاق الكود" : "تاريخ الفصل"} من`} value={dateFrom} onChange={setDateFrom} />
+                  </label>
+                  <label className="tp-modal__field">
+                    <span>إلى</span>
+                    <DateInput aria-label={`${dateField === "closure" ? "تاريخ اغلاق الكود" : "تاريخ الفصل"} إلى`} value={dateTo} onChange={setDateTo} />
+                  </label>
+                </div>
+                <p className="tp-closures__date-hint">
+                  {dateField === "closure"
+                    ? "يطلع بس الكودات المغلقة اللي انغلقت ضمن هالمدة."
+                    : "يطلع بس الطلاب اللي انفصلوا ضمن هالمدة."}
+                  {" "}خلي أي خانة فارغة حتى تبقى المدة مفتوحة من ذاك الطرف.
+                </p>
+                {dateFiltered && (
+                  <Button type="button" variant="ghost" size="sm" className="tp-closures__date-clear" onClick={clearDates}>
+                    <X className="size-4" aria-hidden="true" />مسح التاريخ
+                  </Button>
+                )}
+              </fieldset>
             </div>
           )}
 
@@ -394,6 +455,11 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                                 {formatAppDate(baghdadDateKey(student.lastDismissalAt), "غير مسجل")}
                               </time>
                             ) : <span className="tp-closure-card__date" data-missing="true">غير مسجل</span>}
+                            {student.dismissedChecked && student.codeClosedAt ? (
+                              <span className="tp-closure-card__closed">
+                                أُغلق الكود <time dateTime={student.codeClosedAt}>{formatAppDate(baghdadDateKey(student.codeClosedAt), "")}</time>
+                              </span>
+                            ) : null}
                           </span>
                           <Button
                             type="button"

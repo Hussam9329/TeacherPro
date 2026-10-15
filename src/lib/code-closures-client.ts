@@ -19,6 +19,8 @@ export type CodeClosureStudent = {
   course: { id: string; name: string } | null;
   dismissalReason: string | null;
   lastDismissalAt: string | null;
+  /** When the code was closed (from «السجلات»); null while it is open or unknown. */
+  codeClosedAt?: string | null;
   dismissalExamName: string | null;
   dismissalOutcome: string | null;
 };

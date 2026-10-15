@@ -40,6 +40,38 @@ function dismissalOutcome(
   return score === null ? null : `${score} من ${fullMark}`;
 }
 
+/**
+ * When each closed code was closed: the latest «اغلاق كود الطالب المفصول»
+ * in «السجلات» since the student's current dismissal (every close goes
+ * through setDismissedCheck, which writes that line). One read; a missing
+ * date never blocks the list.
+ */
+async function codeClosedTimes(students: Array<{ id: string; lastDismissalAt: string | null }>): Promise<Map<string, string>> {
+  const closedAt = new Map<string, string>();
+  if (students.length === 0) return closedAt;
+  const dismissedAt = new Map(students.map((student) => [student.id, student.lastDismissalAt ? Date.parse(student.lastDismissalAt) : 0]));
+  const known = [...dismissedAt.values()];
+  const since = known.every((time) => time > 0) ? new Date(Math.min(...known)) : null;
+  const rows = await Promise.resolve().then(() => db.auditLog.findMany({
+    where: { module: "سجل الطلاب", action: "اغلاق كود الطالب المفصول", ...(since ? { time: { gte: since } } : {}) },
+    select: { time: true, details: true },
+    orderBy: { time: "asc" },
+  })).catch((error: unknown) => {
+    console.error("[code-closures] closing dates from the log:", error);
+    return [] as Array<{ time: Date; details: string | null }>;
+  });
+  for (const row of rows) {
+    try {
+      const studentId = String((JSON.parse(String(row.details || "")) as { studentId?: string } | null)?.studentId || "");
+      const from = dismissedAt.get(studentId);
+      if (from !== undefined && row.time.getTime() >= from) closedAt.set(studentId, row.time.toISOString());
+    } catch {
+      // A line that is not JSON names no student.
+    }
+  }
+  return closedAt;
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, "students.view");
   if (authError) return authError;
@@ -117,9 +149,13 @@ export async function GET(req: NextRequest) {
       };
     });
     const checkedCount = students.reduce((count, student) => count + Number(student.dismissedChecked), 0);
+    const closedAt = await codeClosedTimes(students.filter((student) => student.dismissedChecked));
 
     return NextResponse.json({
-      students,
+      students: students.map((student) => ({
+        ...student,
+        codeClosedAt: student.dismissedChecked ? closedAt.get(student.id) ?? null : null,
+      })),
       totalCount: students.length,
       checkedCount,
       uncheckedCount: students.length - checkedCount,

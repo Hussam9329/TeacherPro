@@ -143,6 +143,15 @@ new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/di
           const rows = (await sql.query('SELECT "studentId","examId",status,score FROM "Grade"')).rows;
           return rows.filter((row) => pairs.some((pair) => pair.studentId === row.studentId && pair.examId === row.examId));
         });
+      } }, auditLog: { findMany: async (args) => {
+        assert.equal(args.where.action, "اغلاق كود الطالب المفصول", "only closing lines are read for the closing date");
+        return [
+          // Closed during an earlier dismissal: not this dismissal's closing.
+          { time: new Date("2026-09-20T08:00:00.000Z"), details: JSON.stringify({ studentId: "student-0003" }) },
+          { time: new Date("2026-09-24T08:00:00.000Z"), details: JSON.stringify({ studentId: "student-0003" }) },
+          { time: new Date("2026-09-24T09:00:00.000Z"), details: JSON.stringify({ studentId: "student-0004" }) },
+          { time: new Date("2026-09-24T10:00:00.000Z"), details: "ليس JSON" },
+        ];
       } } } },
       "@/lib/schema-readiness": { withDatabaseSchema: async (read, model) => { schemaChecks.push(model); return read(); } },
       "@/lib/route-helpers": { routeErrorResponse: (_error, message) => NextResponse.json({ error: message }, { status: 500 }) },
@@ -192,6 +201,8 @@ new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/di
     assert.equal(telegramOnlyStudent.lastDismissalAt, "2026-09-21T12:00:00.000Z", "the recorded dismissal date supersedes the older automatic log, not the note creation date");
     assert.equal(noTelegramStudent.lastDismissalAt, "2026-09-22T12:00:00.000Z", "legacy action notes can supply their own date when dismissalDate is absent");
     assert.equal(checkedStudent.lastDismissalAt, "2026-09-23T12:00:00.000Z", "reactivation movements and notes must never count as dismissal events");
+    assert.equal(checkedStudent.codeClosedAt, "2026-09-24T08:00:00.000Z", "the closing date is the latest close since this dismissal");
+    assert.equal(data.students.find((student) => student.id === "student-0004").codeClosedAt, null, "an open code has no closing date");
     assert.equal(data.students.find((student) => student.id === "student-0004").lastDismissalAt, null, "no date is fabricated for students without dismissal evidence");
     assert.equal(data.students.find((student) => student.id === "student-0005").lastDismissalAt, "2026-09-24T12:00:00.000Z", "a newer manual dismissal movement supersedes an older action note");
     assert.equal(data.students.find((student) => student.id === "student-0006").lastDismissalAt, null, "unrelated notes and movements are not dismissal evidence");
