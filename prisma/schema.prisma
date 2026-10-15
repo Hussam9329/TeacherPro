@@ -333,13 +333,16 @@ model TextShortcut {
 
 /// «إحصائيات المكالمات»: the required number of a course for one cumulative
 /// (or final) exam, its «المخصومين». One number per exam, whatever the day:
-/// it only grows while the exam is the course's latest (late grades), never
-/// drops while the calls go on, and stays once a newer exam comes.
+/// the part with entered grades only grows while the exam is the course's
+/// latest, never drops while the calls go on, and stays once a newer exam comes.
 model CallExamTarget {
   id            String   @id @default(cuid())
   courseId      String
   examId        String
   target        Int
+  /// The kept part: «المخصومين» with an entered grade. Students with no grade
+  /// yet are added live. Null on rows from before it: counted again.
+  recorded      Int?
   examName      String   @default("")
   updatedById   String?
   updatedByName String   @default("")

@@ -39,9 +39,10 @@ function readDay(value: unknown): string | null {
 
 /**
  * The number «المكالمات» shows for a course and an exam with «المخصومين» or
- * «الدرجات الكاملة» chosen: the same list, asked for its count only.
+ * «الدرجات الكاملة» chosen: the same list, asked for its count only — and how
+ * many of them are there only because no grade is entered yet.
  */
-async function callListCount(req: NextRequest, courseId: string, examId: string, statusFilter: "discounted" | "full"): Promise<number | null> {
+async function callListCount(req: NextRequest, courseId: string, examId: string, statusFilter: "discounted" | "full"): Promise<{ total: number; missing: number } | null> {
   const url = new URL("/api/student-calls/candidates", req.url);
   url.search = new URLSearchParams({
     courseId,
@@ -53,8 +54,10 @@ async function callListCount(req: NextRequest, courseId: string, examId: string,
   }).toString();
   const response = await callCandidates(new NextRequest(url, { headers: req.headers }));
   if (!response.ok) return null;
-  const body = (await response.json().catch(() => null)) as { totalCount?: unknown } | null;
-  return typeof body?.totalCount === "number" ? body.totalCount : null;
+  const body = (await response.json().catch(() => null)) as { totalCount?: unknown; missingCount?: unknown } | null;
+  if (typeof body?.totalCount !== "number") return null;
+  const missing = typeof body.missingCount === "number" ? Math.min(body.missingCount, body.totalCount) : 0;
+  return { total: body.totalCount, missing };
 }
 
 type StatsExam = { id: string; name: string; date: Date; courseIds: string };
@@ -71,14 +74,18 @@ function latestExam(exams: StatsExam[], courseId: string, end: number): StatsExa
 /** The end of a Baghdad day for exam dates (an exam's date is its Baghdad day). */
 const examDayEnd = (day: string) => Date.parse(`${day}T00:00:00Z`) + 24 * 60 * 60 * 1000;
 
+const timeOfLine = (line: { time: Date } | undefined) => (line ? line.time.getTime() : 0);
+
 /**
  * One Baghdad day, cumulative and final exams only (a daily exam never shows):
  * each employee's actions by course that day, and each course against its
  * latest cumulative exam — the required number is one number for the exam,
- * its «المخصومين». While the exam is the course's latest the number only
- * grows (grades entered late), never drops while the calls go on; once a
- * newer exam comes it stays as it is. The work done counts every day of the
- * exam up to the end of the chosen one.
+ * its «المخصومين». The part with an entered grade is kept: while the exam is
+ * the course's latest it only grows (grades entered late), never drops while
+ * the calls go on, and once a newer exam comes it stays as it is. Students
+ * with no grade entered yet (an absence from the day after the exam) are
+ * added as they are now, so entering a passing grade for one takes them out.
+ * The work done counts every day of the exam up to the end of the chosen one.
  */
 export async function GET(req: NextRequest) {
   const principal = await requireOverseer(req);
@@ -109,14 +116,14 @@ export async function GET(req: NextRequest) {
         const latest = latestExam(exams, course.id, todayEnd);
         if (latest) current.set(course.id, latest);
       }
-      const shownExamIds = [...new Set([...shown.values()].map((exam) => exam.id))];
-      const [saved, legacy] = await Promise.all([
-        db.callExamTarget.findMany({ where: { examId: { in: shownExamIds } }, select: { courseId: true, examId: true, target: true } }),
-        // The numbers recorded per day before: the largest one starts the exam's number.
-        db.callDailyTarget.groupBy({ by: ["courseId", "examId"], where: { examId: { in: shownExamIds } }, _max: { target: true } }),
-      ]);
-      const savedTarget = new Map(saved.map((row) => [`${row.courseId}|${row.examId}`, row.target]));
-      const legacyTarget = new Map(legacy.map((row) => [`${row.courseId}|${row.examId}`, row._max.target ?? null]));
+      const shownExams = [...new Map([...shown.values()].map((exam) => [exam.id, exam])).values()];
+      // The old numbers per day are not read: they counted students with no
+      // grade entered yet, which would stay in the number for good.
+      const saved = await db.callExamTarget.findMany({
+        where: { examId: { in: shownExams.map((exam) => exam.id) }, recorded: { not: null } },
+        select: { courseId: true, examId: true, recorded: true },
+      });
+      const savedTarget = new Map(saved.map((row) => [`${row.courseId}|${row.examId}`, row.recorded as number]));
 
       const courseExams = new Map<string, CallCourseExam>();
       for (const course of courses) {
@@ -127,36 +134,57 @@ export async function GET(req: NextRequest) {
           callListCount(req, course.id, exam.id, "discounted"),
           callListCount(req, course.id, exam.id, "full"),
         ]);
-        const kept = savedTarget.get(key) ?? legacyTarget.get(key) ?? null;
+        const kept = savedTarget.get(key) ?? null;
         const isLatest = current.get(course.id)?.id === exam.id;
-        // Only the latest exam follows the list, and only upwards; an older
-        // one keeps its number (or takes one the first time it is seen).
+        // «المخصومين» with an entered grade: only the latest exam follows the
+        // list, and only upwards; an older one keeps its number (or takes one
+        // the first time it is seen).
+        const recorded = discounted === null ? null : discounted.total - discounted.missing;
         const wanted = isLatest
-          ? (discounted === null ? kept : Math.max(kept ?? 0, discounted))
-          : (kept ?? discounted);
-        let target = wanted;
+          ? (recorded === null ? kept : Math.max(kept ?? 0, recorded))
+          : (kept ?? recorded);
+        let stored = wanted;
         if (wanted !== null && wanted !== savedTarget.get(key)) {
-          const rows = await db.$queryRaw<Array<{ target: number }>>`
-            INSERT INTO "CallExamTarget" ("id", "courseId", "examId", "target", "examName", "updatedById", "updatedByName", "updatedAt")
-            VALUES (${randomUUID()}, ${course.id}, ${exam.id}, ${wanted}::integer, ${exam.name}, ${principal.id}, ${principal.name || ""}, NOW())
+          // "recorded" is the kept part; a row from before it (null) is
+          // counted again from the list instead of trusted.
+          const rows = await db.$queryRaw<Array<{ recorded: number }>>`
+            INSERT INTO "CallExamTarget" ("id", "courseId", "examId", "target", "recorded", "examName", "updatedById", "updatedByName", "updatedAt")
+            VALUES (${randomUUID()}, ${course.id}, ${exam.id}, ${wanted}::integer, ${wanted}::integer, ${exam.name}, ${principal.id}, ${principal.name || ""}, NOW())
             ON CONFLICT ("courseId", "examId") DO UPDATE SET
-              "target" = CASE WHEN ${isLatest}::boolean THEN GREATEST("CallExamTarget"."target", EXCLUDED."target") ELSE "CallExamTarget"."target" END,
+              "recorded" = CASE
+                WHEN "CallExamTarget"."recorded" IS NULL THEN EXCLUDED."recorded"
+                WHEN ${isLatest}::boolean THEN GREATEST("CallExamTarget"."recorded", EXCLUDED."recorded")
+                ELSE "CallExamTarget"."recorded" END,
+              "target" = CASE
+                WHEN "CallExamTarget"."recorded" IS NULL THEN EXCLUDED."recorded"
+                WHEN ${isLatest}::boolean THEN GREATEST("CallExamTarget"."recorded", EXCLUDED."recorded")
+                ELSE "CallExamTarget"."recorded" END,
               "examName" = EXCLUDED."examName",
-              "updatedAt" = CASE WHEN EXCLUDED."target" > "CallExamTarget"."target" AND ${isLatest}::boolean THEN NOW() ELSE "CallExamTarget"."updatedAt" END
-            RETURNING "target"`;
-          target = rows[0]?.target ?? wanted;
+              "updatedAt" = NOW()
+            RETURNING "recorded"`;
+          stored = rows[0]?.recorded ?? wanted;
         }
-        courseExams.set(course.id, { examId: exam.id, examName: exam.name, target, discounted, full });
+        // Students with no grade entered yet count as they are now.
+        const target = stored === null ? null : stored + (discounted?.missing ?? 0);
+        courseExams.set(course.id, { examId: exam.id, examName: exam.name, target, discounted: discounted?.total ?? null, full: full?.total ?? null });
       }
 
-      // The calls log up to the end of the day, from the oldest exam shown on
-      // (the courses count every day of their exam; the employees only the day).
-      const oldestShown = Math.min(range.from.getTime(), ...[...shown.values()].map((exam) => exam.date.getTime() - 24 * 60 * 60 * 1000));
+      // The calls log up to the end of the day: the whole day (the employees),
+      // and before it only each shown exam's own lines from its date on (the
+      // courses count every day of their exam).
+      const DAY_MS = 24 * 60 * 60 * 1000;
       const lines = await db.auditLog.findMany({
         where: {
           module: CALL_ACTION_LOG_MODULE,
           action: { in: [CALL_ACTION_SET, CALL_ACTION_CLEARED] },
-          time: { gte: new Date(oldestShown), lt: range.to },
+          time: { lt: range.to },
+          OR: [
+            { time: { gte: range.from } },
+            ...shownExams.map((exam) => ({
+              time: { gte: new Date(exam.date.getTime() - DAY_MS) },
+              details: { contains: `"examId":${JSON.stringify(exam.id)}` },
+            })),
+          ],
         },
         select: { time: true, action: true, details: true, userId: true, userName: true },
         orderBy: { time: "asc" },
@@ -173,10 +201,24 @@ export async function GET(req: NextRequest) {
           return false;
         }
       }));
-      const students = studentIds.length
-        ? await db.student.findMany({ where: { id: { in: studentIds } }, select: { id: true, courseId: true } })
-        : [];
-      const otherCourseIds = [...new Set(students.map((student) => student.courseId))].filter((id) => !courses.some((course) => course.id === id));
+      const [students, moves] = studentIds.length
+        ? await Promise.all([
+          db.student.findMany({ where: { id: { in: studentIds } }, select: { id: true, courseId: true } }),
+          // A student moved to another course: their calls before the move
+          // stay with the course they were in.
+          db.studentEnrollmentArchive.findMany({
+            where: { studentId: { in: studentIds }, resetKind: "course-transfer", createdAt: { gte: new Date(timeOfLine(lines[0])) } },
+            select: { studentId: true, fromCourseId: true, createdAt: true },
+            orderBy: { createdAt: "asc" },
+          }),
+        ])
+        : [[], []];
+      const courseMoves = new Map<string, Array<{ at: Date; fromCourseId: string }>>();
+      for (const move of moves) {
+        courseMoves.set(move.studentId, [...(courseMoves.get(move.studentId) || []), { at: move.createdAt, fromCourseId: move.fromCourseId }]);
+      }
+      const otherCourseIds = [...new Set([...students.map((student) => student.courseId), ...moves.map((move) => move.fromCourseId)])]
+        .filter((id) => !courses.some((course) => course.id === id));
       const otherCourses = otherCourseIds.length
         ? await db.course.findMany({ where: { id: { in: otherCourseIds } }, select: { id: true, name: true } })
         : [];
@@ -185,6 +227,7 @@ export async function GET(req: NextRequest) {
         day: range,
         examTypes: new Map(examTypes.map((exam) => [exam.id, exam.type])),
         studentCourse: new Map(students.map((student) => [student.id, student.courseId])),
+        courseMoves,
         courses,
         courseNames: new Map(otherCourses.map((course) => [course.id, course.name])),
         courseExams,

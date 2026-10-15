@@ -1060,6 +1060,9 @@ export async function GET(req: NextRequest) {
       exams: courseExams.map(toClientExam),
       studentCalls,
       totalCount,
+      // Of them, the students listed only because no grade is entered yet
+      // (an absence the day after the exam): «إحصائيات المكالمات» keeps them apart.
+      missingCount: sortedMatching.filter((item) => item.absenceSource === "missing").length,
       page,
       pageSize,
       totalPages,

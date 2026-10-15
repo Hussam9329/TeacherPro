@@ -330,5 +330,9 @@
   "20261015180000_call_exam_targets": {
     "kind": "expand",
     "checksum": "de808e324315625d618453817275942eeca57c54ab70936a7282019e4e097704"
+  },
+  "20261015210000_call_exam_target_recorded": {
+    "kind": "expand",
+    "checksum": "13662a4ab09227d44bea5404367a3c8026db6e886491d2f93689fe42b438795f"
   }
 }

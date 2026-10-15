@@ -151,12 +151,12 @@ export function CallsStatsPanel() {
             <div className="tp-cstats__kpi" data-tone={data.totals.remaining > 0 ? "left" : undefined}>
               <dt>إجمالي المتبقي</dt>
               <dd>{data.totals.remaining}</dd>
-              <small>المطلوب − المنجز</small>
+              <small>مجموع المتبقي بكل دورة</small>
             </div>
             <div className="tp-cstats__kpi">
               <dt>نسبة الإنجاز</dt>
               <dd>{percent(data.totals.rate)}</dd>
-              <small>المنجز من المطلوب</small>
+              <small>المنجز من المطلوب، كل دورة لحد عددها</small>
             </div>
           </dl>
 
@@ -203,7 +203,8 @@ export function CallsStatsPanel() {
               <div>
                 <h3 id="tp-cstats-courses">الدورات: المطلوب والمنجز</h3>
                 <p>
-                  المطلوب لكل دورة رقم واحد لآخر امتحان تراكمي إلها: عدد «المخصومين» بيه. يزيد إذا انضافت درجات متأخرة وما ينقص.
+                  المطلوب لكل دورة رقم واحد لآخر امتحان تراكمي إلها: عدد «المخصومين» بيه. يزيد إذا انضافت درجات خصم متأخرة، وما ينقص إذا طالب انعذر أو انشال خصمه.
+                  الطالب اللي ما انضافت درجته بعد ينحسب لحد ما تنضاف.
                   المنجز: كل طالب انسوى عليه إجراء بهذا الامتحان لحد هذا اليوم، مرة وحدة.
                 </p>
               </div>

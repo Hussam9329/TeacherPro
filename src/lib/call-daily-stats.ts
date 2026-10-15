@@ -129,8 +129,10 @@ export function buildCallDailyStats(input: {
   day: { from: Date; to: Date };
   /** examId → type, for every exam the lines name. */
   examTypes: Map<string, string>;
-  /** studentId → courseId */
+  /** studentId → courseId now */
   studentCourse: Map<string, string>;
+  /** studentId → the moves to another course, oldest first: a call before a move belongs to the course left. */
+  courseMoves?: Map<string, Array<{ at: Date | string; fromCourseId: string }>>;
   /** Every course to list (active ones), with its name. */
   courses: Array<{ id: string; name: string }>;
   /** Extra names for courses that are no longer listed (archived). */
@@ -138,6 +140,12 @@ export function buildCallDailyStats(input: {
   /** courseId → its latest cumulative exam on the day, with the numbers. */
   courseExams: Map<string, CallCourseExam>;
 }): CallDailyStats {
+  // The course a student was in at a moment: the first move after it says
+  // which course they left; with none they are still in their course now.
+  const courseAt = (studentId: string, time: number) =>
+    input.courseMoves?.get(studentId)?.find((move) => new Date(move.at).getTime() > time)?.fromCourseId
+    ?? input.studentCourse.get(studentId)
+    ?? NO_COURSE_ID;
   const from = input.day.from.getTime();
   const to = input.day.to.getTime();
   const counted = (examId: string) => isCallStatsExamType(input.examTypes.get(examId));
@@ -148,20 +156,21 @@ export function buildCallDailyStats(input: {
   // Employees: the last status each one left on each call during the day.
   const last = new Map<string, { actor: string; name: string; courseId: string; status: string }>();
   // Courses: the status of each call at the end of the day, and whether it was touched that day.
-  const callState = new Map<string, { status: string; today: boolean }>();
+  const callState = new Map<string, { status: string; today: boolean; courseId: string }>();
   for (const line of ordered) {
     const facts = parseDetails(line.details);
     if (!facts || !counted(facts.examId)) continue;
     const status = line.action === CALL_ACTION_CLEARED ? "" : facts.status;
     const inDay = timeOf(line) >= from;
+    const courseId = courseAt(facts.studentId, timeOf(line));
     const callKey = `${facts.studentId}|${facts.examId}`;
-    callState.set(callKey, { status, today: Boolean(callState.get(callKey)?.today) || inDay });
+    callState.set(callKey, { status, today: Boolean(callState.get(callKey)?.today) || inDay, courseId });
     if (!inDay) continue;
     const actor = line.userId ? `id:${line.userId}` : `name:${String(line.userName || "").trim()}`;
     last.set(`${actor}|${callKey}`, {
       actor,
       name: String(line.userName || "").trim() || "مستخدم",
-      courseId: input.studentCourse.get(facts.studentId) ?? NO_COURSE_ID,
+      courseId,
       status,
     });
   }
@@ -187,8 +196,8 @@ export function buildCallDailyStats(input: {
   const doneByCourse = new Map<string, { done: number; today: number }>();
   for (const [key, state] of callState) {
     if (!state.status) continue;
-    const [studentId, examId] = key.split("|");
-    const courseId = input.studentCourse.get(studentId) ?? NO_COURSE_ID;
+    const examId = key.slice(key.indexOf("|") + 1);
+    const courseId = state.courseId;
     if (input.courseExams.get(courseId)?.examId !== examId) continue;
     const sum = doneByCourse.get(courseId) || { done: 0, today: 0 };
     sum.done += 1;
@@ -243,7 +252,8 @@ export function buildCallDailyStats(input: {
       done,
       doneToday: sum((course) => course.doneToday),
       remaining: sum((course) => course.remaining),
-      rate: rateOf(done, target || null),
+      // The same numbers as «المتبقي»: a course over its number adds only its number.
+      rate: rateOf(target - sum((course) => course.remaining), target || null),
       discounted: sum((course) => course.discounted),
       full: sum((course) => course.full),
       actions,

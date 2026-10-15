@@ -64,7 +64,8 @@ const stats = buildCallDailyStats({
 
 // Employees: the day only, cumulative and final exams only.
 assert.deepEqual(stats.employees.map((employee) => [employee.name, employee.total]), [["سارة", 3], ["علي", 2]]);
-const byName = (name) => stats.employees.find((employee) => employee.name === name);
+const byNameIn = (result, name) => result.employees.find((employee) => employee.name === name);
+const byName = (name) => byNameIn(stats, name);
 assert.deepEqual(byName("علي").courses, [{ id: "c1", name: "صيفية اولى", count: 2 }]);
 assert.deepEqual(byName("سارة").courses.map((course) => [course.name, course.count]).sort(), [["شتوية ثانية", 2], ["صيفية اولى", 1]]);
 assert.deepEqual(byName("علي").statuses, [{ status: "تم الاتصال", count: 2 }]);
@@ -91,6 +92,24 @@ const over = buildCallDailyStats({
 });
 assert.deepEqual(over.courses.map((course) => course.remaining), [0, 3]);
 assert.equal(over.totals.remaining, 3, "a course over its number does not hide another course's work");
+assert.equal(over.totals.rate, 0.25, "the overall rate agrees with what is left");
+
+// A student who moved course: calls before the move stay with the course left.
+const moved = buildCallDailyStats({
+  lines: [
+    line("2026-10-10T08:00:00Z", ali, "s1", "e1", "تم الاتصال"),
+    line("2026-10-10T08:05:00Z", ali, "s2", "e1", "تم الاتصال"),
+    line("2026-10-11T07:00:00Z", sara, "s1", "e2", "لم يرد"), // after the move, in c2
+  ],
+  day, examTypes,
+  studentCourse: new Map([["s1", "c2"], ["s2", "c1"]]),
+  courseMoves: new Map([["s1", [{ at: "2026-10-10T20:00:00Z", fromCourseId: "c1" }]]]),
+  courses: [{ id: "c1", name: "أ" }, { id: "c2", name: "ب" }],
+  courseExams: new Map([["c1", { examId: "e1", examName: "x", target: 2, discounted: 1, full: 0 }], ["c2", { examId: "e2", examName: "y", target: 1, discounted: 1, full: 0 }]]),
+});
+assert.deepEqual(moved.courses.map((course) => [course.id, course.done, course.remaining]), [["c1", 2, 0], ["c2", 1, 0]]);
+assert.deepEqual(byNameIn(moved, "سارة").courses.map((course) => course.id), ["c2"]);
+
 
 // A Baghdad day is 21:00 UTC the day before to 21:00 UTC that day.
 const range = baghdadDayRange("2026-10-11");
@@ -106,8 +125,18 @@ assert.ok(route.includes("if (!oversees(principal))"));
 assert.ok(route.includes('import { GET as callCandidates } from "../candidates/route";'));
 assert.ok(route.includes('callListCount(req, course.id, exam.id, "discounted")') && route.includes('callListCount(req, course.id, exam.id, "full")'));
 assert.ok(route.includes("type: { in: [...CALL_STATS_EXAM_TYPES] }"), "a daily exam is never a course's exam here");
-assert.ok(route.includes('ON CONFLICT ("courseId", "examId") DO UPDATE') && route.includes('GREATEST("CallExamTarget"."target", EXCLUDED."target")'), "the number only grows");
-assert.ok(route.includes("? (discounted === null ? kept : Math.max(kept ?? 0, discounted))") && route.includes(": (kept ?? discounted)"));
+assert.ok(route.includes('ON CONFLICT ("courseId", "examId") DO UPDATE') && route.includes('GREATEST("CallExamTarget"."recorded", EXCLUDED."recorded")'), "the kept part only grows");
+assert.ok(route.includes('recorded: { not: null }') && route.includes('WHEN "CallExamTarget"."recorded" IS NULL THEN EXCLUDED."recorded"'), "rows from before the kept part are counted again");
+const recordedMigration = read("prisma/migrations/20261015210000_call_exam_target_recorded/migration.sql");
+assert.ok(recordedMigration.includes('ADD COLUMN IF NOT EXISTS "recorded" INTEGER') && !/\b(DROP|DELETE|UPDATE|TRUNCATE)\b/i.test(recordedMigration.replace(/--[^\n]*/g, "")));
+assert.ok(route.includes("const recorded = discounted === null ? null : discounted.total - discounted.missing;"), "students with no grade yet never enter the kept number");
+assert.ok(route.includes("? (recorded === null ? kept : Math.max(kept ?? 0, recorded))") && route.includes(": (kept ?? recorded)"));
+assert.ok(route.includes("const target = stored === null ? null : stored + (discounted?.missing ?? 0);"), "students with no grade yet count as they are now");
+assert.ok(!route.includes("callDailyTarget"), "the old per-day numbers (with students not graded yet) are not read");
+assert.ok(route.includes('details: { contains: `"examId":${JSON.stringify(exam.id)}` }'), "before the day only the shown exams' lines are loaded");
+assert.ok(route.includes('resetKind: "course-transfer"') && route.includes("courseMoves,"));
+const candidates = read("src/app/api/student-calls/candidates/route.ts");
+assert.ok(candidates.includes('missingCount: sortedMatching.filter((item) => item.absenceSource === "missing").length,'));
 assert.ok(!route.includes("callDailyTarget.upsert"), "no number per day any more");
 assert.ok(!route.includes("export async function PUT"), "nobody types the required number");
 assert.ok(route.includes('action: { in: [CALL_ACTION_SET, CALL_ACTION_CLEARED] }'));
@@ -126,6 +155,7 @@ const policy = JSON.parse(read("prisma/deployment-migration-policy.json"));
 assert.equal(policy["20261011120000_call_daily_targets"].kind, "expand");
 assert.equal(policy["20261011150000_call_daily_target_exam"].kind, "expand");
 assert.equal(policy["20261015180000_call_exam_targets"].kind, "expand");
+assert.equal(policy["20261015210000_call_exam_target_recorded"].kind, "expand");
 assert.ok(migration.includes('CREATE TABLE "CallDailyTarget"') && !/\bDROP\b/i.test(migration.replace(/--[^\n]*/g, "")));
 
 console.log("كل اختبارات إحصائيات المكالمات نجحت.");
