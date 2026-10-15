@@ -326,5 +326,9 @@
   "20261015120000_text_shortcuts": {
     "kind": "expand",
     "checksum": "f15e4d78e003a1c14223047c6384adb56c39e37f5ad6f53e705ce21511c7a1be"
+  },
+  "20261015180000_call_exam_targets": {
+    "kind": "expand",
+    "checksum": "de808e324315625d618453817275942eeca57c54ab70936a7282019e4e097704"
   }
 }

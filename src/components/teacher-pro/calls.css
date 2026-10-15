@@ -598,6 +598,14 @@ a.tp-qr-tile:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in s
 
 .tp-cstats__card { min-width: 0; padding: 0.9rem; border: 1px solid var(--border); border-radius: 1.1rem; background: var(--card); }
 .tp-cstats__head { margin-bottom: 0.7rem; }
+.tp-cstats__head[data-tools] { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.6rem 1rem; }
+.tp-cstats__head[data-tools] > div:first-child { flex: 1 1 18rem; min-width: 0; }
+.tp-cstats__extras { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; }
+.tp-cstats__extra { display: inline-flex; align-items: center; gap: 0.3rem; min-height: 2.25rem; padding: 0.3rem 0.75rem; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--muted-foreground); font-size: 0.78rem; font-weight: 800; cursor: pointer; touch-action: manipulation; }
+.tp-cstats__extra:hover { background: var(--muted); }
+.tp-cstats__extra[aria-pressed="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--card)); color: var(--foreground); }
+.tp-cstats__extra svg { inline-size: 0.9rem; block-size: 0.9rem; }
+.tp-cstats__extra:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .tp-cstats__head h3 { margin: 0; font-size: 1rem; font-weight: 900; }
 .tp-cstats__head p { margin: 0.15rem 0 0; color: var(--muted-foreground); font-size: 0.78rem; line-height: 1.7; }
 
@@ -615,13 +623,16 @@ a.tp-qr-tile:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in s
 .tp-cstats__total { min-inline-size: 2.6rem; padding: 0.2rem 0.6rem; border-radius: 0.7rem; background: var(--primary); color: var(--primary-foreground); font-size: 1.05rem; font-weight: 900; text-align: center; font-variant-numeric: tabular-nums; }
 
 .tp-cstats__table { display: grid; border: 1px solid var(--border); border-radius: 0.85rem; overflow: hidden; }
-.tp-cstats__trow { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 0.7fr) minmax(0, 0.7fr) minmax(0, 1.2fr); align-items: center; gap: 0.6rem; padding: 0.6rem 0.85rem; }
+.tp-cstats__trow { display: grid; grid-template-columns: var(--tp-cstats-cols, minmax(0, 1.5fr) repeat(3, minmax(0, 0.8fr)) minmax(0, 1.2fr)); align-items: center; gap: 0.6rem; padding: 0.6rem 0.85rem; }
 .tp-cstats__trow + .tp-cstats__trow { border-block-start: 1px solid var(--border); }
 .tp-cstats__trow[data-head] { background: color-mix(in srgb, var(--muted) 45%, var(--card)); color: var(--muted-foreground); font-size: 0.76rem; font-weight: 800; }
 .tp-cstats__trow[data-sum] { background: color-mix(in srgb, var(--muted) 45%, var(--card)); font-weight: 900; }
 .tp-cstats__cname { display: grid; font-size: 0.9rem; font-weight: 850; overflow-wrap: anywhere; }
 .tp-cstats__cname small { color: var(--muted-foreground); font-size: 0.72rem; font-weight: 700; }
 .tp-cstats__num { font-size: 0.95rem; font-weight: 850; font-variant-numeric: tabular-nums; }
+.tp-cstats__num small { display: block; color: var(--muted-foreground); font-size: 0.7rem; font-weight: 700; }
+.tp-cstats__num[data-tone="discounted"] { color: var(--status-danger-fg); }
+.tp-cstats__num[data-tone="full"] { color: var(--status-success-fg); }
 .tp-cstats__rate { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 850; font-variant-numeric: tabular-nums; }
 .tp-cstats__bar { flex: 1; min-inline-size: 3rem; block-size: 0.5rem; border-radius: 999px; background: var(--muted); overflow: hidden; }
 .tp-cstats__bar i { display: block; block-size: 100%; border-radius: inherit; background: var(--status-warning-vivid); }
@@ -635,4 +646,4 @@ a.tp-qr-tile:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in s
   .tp-cstats__cname { grid-column: 1 / -1; }
   .tp-cstats__trow > [data-label]::before { content: attr(data-label) " "; color: var(--muted-foreground); font-size: 0.72rem; font-weight: 700; }
   }
-@media (prefers-reduced-motion: reduce) { .tp-cstats__nav, .tp-cstats__switch { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .tp-cstats__nav, .tp-cstats__switch, .tp-cstats__extra { transition: none; } }

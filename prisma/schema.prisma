@@ -331,6 +331,25 @@ model TextShortcut {
   @@index([sortOrder])
 }
 
+/// «إحصائيات المكالمات»: the required number of a course for one cumulative
+/// (or final) exam, its «المخصومين». One number per exam, whatever the day:
+/// it only grows while the exam is the course's latest (late grades), never
+/// drops while the calls go on, and stays once a newer exam comes.
+model CallExamTarget {
+  id            String   @id @default(cuid())
+  courseId      String
+  examId        String
+  target        Int
+  examName      String   @default("")
+  updatedById   String?
+  updatedByName String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  @@unique([courseId, examId])
+  @@index([examId])
+}
+
 /// One request from the Correction app, by its idempotency key: the same key
 /// again returns the stored response instead of saving the result twice.
 model CorrectionReceipt {

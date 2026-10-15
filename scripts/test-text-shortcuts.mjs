@@ -262,6 +262,5 @@ test("the table comes from an additive migration the deploy policy knows", () =>
   assert.doesNotMatch(sql, /\b(DROP|TRUNCATE|RENAME|DELETE|UPDATE)\b/i);
   const policy = JSON.parse(read("prisma/deployment-migration-policy.json"));
   assert.equal(policy["20261015120000_text_shortcuts"]?.kind, "expand");
-  assert.match(read("src/lib/schema-readiness.ts"), /'20261015120000_text_shortcuts'/);
   assert.match(read("package.json"), /test:text-shortcuts/);
 });

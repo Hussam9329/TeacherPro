@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { AlertCircle, Check, ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { DateInput } from "@/components/ui/date-input";
 import { formatAppDate } from "@/lib/format";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
@@ -19,18 +19,64 @@ function percent(rate: number | null): string {
   return rate === null ? "—" : `${Math.round(rate * 100)}%`;
 }
 
+const count = (value: number | null) => (value === null ? "—" : value);
+
+/** The optional columns of «المطلوب والمنجز», remembered on this device. */
+type ExtraColumns = { discounted: boolean; full: boolean };
+const EXTRA_COLUMNS_KEY = "tp-cstats-extra-columns";
+const EXTRA_COLUMNS_DEFAULT: ExtraColumns = { discounted: true, full: true };
+
+function readExtraColumns(): ExtraColumns {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(EXTRA_COLUMNS_KEY) || "null") as Partial<ExtraColumns> | null;
+    if (!saved || typeof saved !== "object") return EXTRA_COLUMNS_DEFAULT;
+    return { discounted: saved.discounted !== false, full: saved.full !== false };
+  } catch {
+    return EXTRA_COLUMNS_DEFAULT;
+  }
+}
+
+function saveExtraColumns(value: ExtraColumns) {
+  try {
+    window.localStorage.setItem(EXTRA_COLUMNS_KEY, JSON.stringify(value));
+  } catch {
+    // Private windows may refuse; the choice then lasts until the window closes.
+  }
+}
+
 /**
- * «إحصائيات المكالمات»: one day of calls for the admin and the supervisors —
- * what each employee did and on which courses, and each course against the
- * number it needed that day: the «المخصومين» of its latest exam, recorded
- * on its own.
+ * «إحصائيات المكالمات»: the calls of the cumulative and final exams only, for
+ * the admin and the supervisors — what each employee did on the day and on
+ * which courses, and each course against its latest cumulative exam: one
+ * required number for the exam (its «المخصومين»), and the work done on it up
+ * to the end of the day.
  */
 export function CallsStatsPanel() {
   const [day, setDay] = useState(() => baghdadTodayKey());
   const [data, setData] = useState<CallDailyStatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [extra, setExtra] = useState<ExtraColumns>(EXTRA_COLUMNS_DEFAULT);
   const requestRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    setExtra(readExtraColumns());
+  }, []);
+
+  const toggleExtra = (key: keyof ExtraColumns) => {
+    setExtra((value) => {
+      const next = { ...value, [key]: !value[key] };
+      saveExtraColumns(next);
+      return next;
+    });
+  };
+  // Name, the chosen extra columns, then required / done / left / rate.
+  const columns = [
+    "minmax(0, 1.5fr)",
+    ...(extra.discounted ? ["minmax(0, 0.8fr)"] : []),
+    ...(extra.full ? ["minmax(0, 0.8fr)"] : []),
+    "minmax(0, 0.8fr)", "minmax(0, 0.8fr)", "minmax(0, 0.7fr)", "minmax(0, 1.2fr)",
+  ].join(" ");
 
   const load = useCallback(async (wanted: string) => {
     requestRef.current?.abort();
@@ -95,12 +141,12 @@ export function CallsStatsPanel() {
             <div className="tp-cstats__kpi">
               <dt>إجمالي المطلوب</dt>
               <dd>{data.totals.target}</dd>
-              <small>مجموع المخصومين بالدورات</small>
+              <small>مخصومين آخر امتحان تراكمي لكل دورة</small>
             </div>
             <div className="tp-cstats__kpi" data-tone="done">
               <dt>إجمالي المنجز</dt>
               <dd>{data.totals.done}</dd>
-              <small>مجموع إجراءات الموظفين</small>
+              <small>لحد هذا اليوم · منها اليوم {data.totals.doneToday}</small>
             </div>
             <div className="tp-cstats__kpi" data-tone={data.totals.remaining > 0 ? "left" : undefined}>
               <dt>إجمالي المتبقي</dt>
@@ -117,7 +163,7 @@ export function CallsStatsPanel() {
           <section className="tp-cstats__card" aria-labelledby="tp-cstats-employees">
             <header className="tp-cstats__head">
               <h3 id="tp-cstats-employees">إنجاز الموظفين</h3>
-              <p>كل إجراء على مكالمة (طالب وامتحان) سجّله الموظف بهذا اليوم، وعلى أي دورات.</p>
+              <p>كل إجراء سجّله الموظف بهذا اليوم على مكالمة امتحان تراكمي (طالب وامتحان)، وعلى أي دورات. الامتحانات اليومية ما تنحسب هنا.</p>
             </header>
             {data.employees.length === 0 ? (
               <EmptyState compact title="ما سجّل أي موظف إجراء بهذا اليوم" />
@@ -146,23 +192,41 @@ export function CallsStatsPanel() {
                 <li className="tp-cstats__employee" data-sum="true">
                   <div className="tp-cstats__who"><strong>مجموع إنجاز الفريق</strong></div>
                   <div className="tp-cstats__courses" />
-                  <span className="tp-cstats__total">{data.totals.done}</span>
+                  <span className="tp-cstats__total">{data.totals.actions}</span>
                 </li>
               </ul>
             )}
           </section>
 
           <section className="tp-cstats__card" aria-labelledby="tp-cstats-courses">
-            <header className="tp-cstats__head">
-              <h3 id="tp-cstats-courses">الدورات: المطلوب والمنجز</h3>
-              <p>العدد المطلوب لكل دورة هو عدد «المخصومين» بآخر امتحان إلها لهذا اليوم، ويتسجل تلقائياً. المنجز يُحسب من إجراءات الموظفين.</p>
+            <header className="tp-cstats__head" data-tools="true">
+              <div>
+                <h3 id="tp-cstats-courses">الدورات: المطلوب والمنجز</h3>
+                <p>
+                  المطلوب لكل دورة رقم واحد لآخر امتحان تراكمي إلها: عدد «المخصومين» بيه. يزيد إذا انضافت درجات متأخرة وما ينقص.
+                  المنجز: كل طالب انسوى عليه إجراء بهذا الامتحان لحد هذا اليوم، مرة وحدة.
+                </p>
+              </div>
+              <div role="group" aria-label="أعمدة إضافية" className="tp-cstats__extras">
+                <button type="button" className="tp-cstats__extra" aria-pressed={extra.discounted} onClick={() => toggleExtra("discounted")}>
+                  {extra.discounted ? <Check aria-hidden="true" /> : null}
+                  المخصومين
+                </button>
+                <button type="button" className="tp-cstats__extra" aria-pressed={extra.full} onClick={() => toggleExtra("full")}>
+                  {extra.full ? <Check aria-hidden="true" /> : null}
+                  الدرجات الكاملة
+                </button>
+              </div>
             </header>
             {data.courses.length === 0 ? (
               <EmptyState compact title="لا توجد دورات فعّالة" />
             ) : (
-              <div className="tp-cstats__table">
+              <div className="tp-cstats__table" style={{ "--tp-cstats-cols": columns } as CSSProperties}>
                 <div className="tp-cstats__trow" data-head="true" aria-hidden="true">
-                  <span>الدورة</span><span>العدد المطلوب</span><span>المنجز</span><span>المتبقي</span><span>نسبة الإنجاز</span>
+                  <span>الدورة</span>
+                  {extra.discounted ? <span>المخصومين</span> : null}
+                  {extra.full ? <span>الدرجات الكاملة</span> : null}
+                  <span>العدد المطلوب</span><span>المنجز</span><span>المتبقي</span><span>نسبة الإنجاز</span>
                 </div>
                 {data.courses.map((course) => {
                   const rate = course.rate === null ? 0 : Math.min(1, course.rate);
@@ -170,10 +234,15 @@ export function CallsStatsPanel() {
                     <div key={course.id || "none"} className="tp-cstats__trow">
                       <span className="tp-cstats__cname">
                         {course.name}
-                        {course.examName ? <small>المخصومين: {course.examName}</small> : null}
+                        <small>{course.examName ? `امتحان: ${course.examName}` : "ما كو امتحان تراكمي بعد"}</small>
                       </span>
-                      <span className="tp-cstats__num" data-label="العدد المطلوب">{course.target === null ? "—" : course.target}</span>
-                      <span className="tp-cstats__num" data-label="المنجز">{course.done}</span>
+                      {extra.discounted ? <span className="tp-cstats__num" data-label="المخصومين" data-tone={course.discounted === null ? undefined : "discounted"}>{count(course.discounted)}</span> : null}
+                      {extra.full ? <span className="tp-cstats__num" data-label="الدرجات الكاملة" data-tone={course.full === null ? undefined : "full"}>{count(course.full)}</span> : null}
+                      <span className="tp-cstats__num" data-label="العدد المطلوب">{count(course.target)}</span>
+                      <span className="tp-cstats__num" data-label="المنجز">
+                        {course.done}
+                        {course.doneToday ? <small>اليوم {course.doneToday}</small> : null}
+                      </span>
                       <span className="tp-cstats__num" data-label="المتبقي">{course.target === null ? "—" : course.remaining}</span>
                       <span className="tp-cstats__rate" data-label="نسبة الإنجاز">
                         <span className="tp-cstats__bar" aria-hidden="true"><i style={{ inlineSize: `${rate * 100}%` }} data-full={rate >= 1 || undefined} /></span>
@@ -184,8 +253,13 @@ export function CallsStatsPanel() {
                 })}
                 <div className="tp-cstats__trow" data-sum="true">
                   <span className="tp-cstats__cname">المجموع</span>
+                  {extra.discounted ? <span className="tp-cstats__num" data-label="المخصومين" data-tone="discounted">{data.totals.discounted}</span> : null}
+                  {extra.full ? <span className="tp-cstats__num" data-label="الدرجات الكاملة" data-tone="full">{data.totals.full}</span> : null}
                   <span className="tp-cstats__num" data-label="العدد المطلوب">{data.totals.target}</span>
-                  <span className="tp-cstats__num" data-label="المنجز">{data.totals.done}</span>
+                  <span className="tp-cstats__num" data-label="المنجز">
+                    {data.totals.done}
+                    {data.totals.doneToday ? <small>اليوم {data.totals.doneToday}</small> : null}
+                  </span>
                   <span className="tp-cstats__num" data-label="المتبقي">{data.totals.remaining}</span>
                   <span className="tp-cstats__num" data-label="نسبة الإنجاز">{percent(data.totals.rate)}</span>
                 </div>
