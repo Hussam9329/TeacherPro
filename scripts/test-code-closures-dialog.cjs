@@ -551,7 +551,7 @@ function selectCourse(view, value) {
   view.render();
   assert.deepEqual(view.copies.map((copy) => copy.text), ['009647705550679'], 'the phone is copied in the platform search form');
   assert.equal(view.copies[0].near, clicked, 'the copy happens next to the clicked button, inside the dialog');
-  assert.deepEqual(view.opened, [['https://www.mz-academy.com/ar/teachers/users/active#tp-close=009647705550679', '_blank', 'noopener,noreferrer']], 'the link carries the phone for «أداة مرماز» to close the code');
+  assert.deepEqual(view.opened, [[`https://www.mz-academy.com/ar/teachers/users/active#${new URLSearchParams({ 'tp-close': '009647705550679', 'tp-name': dangerous.name })}`, '_blank', 'noopener,noreferrer']], 'the link carries the phone and the name for «أداة مرماز» to close the code');
   assert.deepEqual(view.contacts[0].args, [dangerous.id, 'platform', 3], 'the mark is saved for this dismissal episode');
   assert.equal(dangerButtons()[0].props['data-done'], true, 'highlighted at once, before the save returns');
   assert.equal(view.writes.length, 0, 'contact steps never change the closed-code flag');

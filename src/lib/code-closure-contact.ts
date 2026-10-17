@@ -17,13 +17,19 @@ export function mzPlatformPhone(phone: string | null | undefined): string {
 }
 
 /**
- * The platform page carrying the phone for «أداة مرماز» (the team's
- * Tampermonkey script, section 20), which searches for it and closes the code
- * once the user confirms. The fragment never reaches the platform's server,
- * and without the script the page opens as before.
+ * The platform page carrying the phone and the name for «أداة مرماز» (the
+ * team's Tampermonkey script, section 20): it searches by the phone, then by
+ * the name when no phone matches, and closes the code once the user confirms.
+ * The fragment never reaches the platform's server, and without the script
+ * the page opens as before.
  */
-export function mzCloseCodeUrl(platformPhone: string): string {
-  return /^00964\d{9,10}$/.test(platformPhone) ? `${MZ_ACTIVE_USERS_URL}#tp-close=${platformPhone}` : MZ_ACTIVE_USERS_URL;
+export function mzCloseCodeUrl(platformPhone: string, studentName?: string | null): string {
+  const request = new URLSearchParams();
+  if (/^00964\d{9,10}$/.test(platformPhone)) request.set("tp-close", platformPhone);
+  const name = (studentName ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+  if (name) request.set("tp-name", name);
+  const fragment = request.toString();
+  return fragment ? `${MZ_ACTIVE_USERS_URL}#${fragment}` : MZ_ACTIVE_USERS_URL;
 }
 
 /** A missing exam or result stays as its placeholder so it is filled before sending. */

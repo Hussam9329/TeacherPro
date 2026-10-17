@@ -216,10 +216,10 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
     // Copy first: the new tab takes the focus the clipboard needs. The copy
     // stays for whoever has no «أداة مرماز» (Tampermonkey) to close it.
     const copying = phone ? copyText(phone, button) : Promise.resolve(false);
-    window.open(mzCloseCodeUrl(phone), "_blank", "noopener,noreferrer");
+    window.open(mzCloseCodeUrl(phone, student.name), "_blank", "noopener,noreferrer");
     markStep(student, "platform");
     if (!phone) {
-      toast.error(`لا يوجد رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه في المنصة يدوياً.`);
+      toast.error(`لا يوجد رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه بالاسم في المنصة.`);
       return;
     }
     void copying.then((copied) => {
