@@ -8,9 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { codeClosuresApi, type CodeClosureStudent } from "@/lib/code-closures-client";
 import {
-  MZ_ACTIVE_USERS_URL,
   buildDismissalNotice,
   copyText,
+  mzCloseCodeUrl,
   mzPlatformPhone,
   telegramNoticeHref,
   type ClosureContactStep,
@@ -213,9 +213,10 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
 
   function openPlatform(student: CodeClosureStudent, button: Element) {
     const phone = mzPlatformPhone(student.phone);
-    // Copy first: the new tab takes the focus the clipboard needs.
+    // Copy first: the new tab takes the focus the clipboard needs. The copy
+    // stays for whoever has no «إغلاق كود مرماز» extension to close it.
     const copying = phone ? copyText(phone, button) : Promise.resolve(false);
-    window.open(MZ_ACTIVE_USERS_URL, "_blank", "noopener,noreferrer");
+    window.open(mzCloseCodeUrl(phone), "_blank", "noopener,noreferrer");
     markStep(student, "platform");
     if (!phone) {
       toast.error(`لا يوجد رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه في المنصة يدوياً.`);
@@ -496,8 +497,8 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                             className="tp-closure-card__danger"
                             data-done={platformDone || undefined}
                             onClick={(event) => openPlatform(student, event.currentTarget)}
-                            aria-label={`فتح المنصة ونسخ رقم هاتف ${student.name}${platformDone ? " — تم" : ""}`}
-                            title={platformDone ? "تم فتح المنصة ونسخ الرقم" : "فتح المنصة ونسخ رقم هاتف الطالب"}
+                            aria-label={`فتح المنصة لإغلاق كود ${student.name} ونسخ رقم هاتفه${platformDone ? " — تم" : ""}`}
+                            title={platformDone ? "تم فتح المنصة ونسخ الرقم" : "فتح المنصة لإغلاق كود الطالب ونسخ رقم هاتفه"}
                           >
                             <Radiation aria-hidden="true" />
                           </button>

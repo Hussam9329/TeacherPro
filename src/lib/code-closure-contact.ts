@@ -16,6 +16,16 @@ export function mzPlatformPhone(phone: string | null | undefined): string {
   return /^00964\d{9,10}$/.test(international) ? international : "";
 }
 
+/**
+ * The platform page carrying the phone for the «إغلاق كود مرماز» browser
+ * extension, which searches for it and closes the code once the user
+ * confirms. The fragment never reaches the platform's server, and without the
+ * extension the page opens as before.
+ */
+export function mzCloseCodeUrl(platformPhone: string): string {
+  return /^00964\d{9,10}$/.test(platformPhone) ? `${MZ_ACTIVE_USERS_URL}#tp-close=${platformPhone}` : MZ_ACTIVE_USERS_URL;
+}
+
 /** A missing exam or result stays as its placeholder so it is filled before sending. */
 export function buildDismissalNotice(examName?: string | null, outcome?: string | null): string {
   return [

@@ -34,6 +34,10 @@ for (const [input, expected] of [
   ["123", ""],
 ]) assert.equal(contact.mzPlatformPhone(input), expected, `phone ${input}`);
 assert.equal(contact.MZ_ACTIVE_USERS_URL, "https://www.mz-academy.com/ar/teachers/users/active");
+assert.equal(contact.mzCloseCodeUrl("009647705550679"), "https://www.mz-academy.com/ar/teachers/users/active#tp-close=009647705550679");
+for (const unusable of ["", "07705550679", "009647705550679&x=1"]) {
+  assert.equal(contact.mzCloseCodeUrl(unusable), contact.MZ_ACTIVE_USERS_URL, `no request for ${unusable || "a missing phone"}`);
+}
 const notice = contact.buildDismissalNotice("يومي 3", "4 من 20");
 assert(notice.startsWith("🚨 **تبليغ رسمي**\n\nتم **فصلك وإغلاق الكود الخاص بك من المنصة** بسبب استنفاد الفرص، وذلك نتيجة:"));
 assert(notice.includes("**الامتحان:** يومي 3\n**الحالة:** 4 من 20"));
