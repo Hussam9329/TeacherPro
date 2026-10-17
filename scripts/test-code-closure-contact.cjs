@@ -35,6 +35,8 @@ for (const [input, expected] of [
 ]) assert.equal(contact.mzPlatformPhone(input), expected, `phone ${input}`);
 assert.equal(contact.MZ_ACTIVE_USERS_URL, "https://www.mz-academy.com/ar/teachers/users/active");
 assert.equal(contact.mzCloseCodeUrl("009647705550679"), "https://www.mz-academy.com/ar/teachers/users/active#tp-close=009647705550679");
+// «أداة مرماز» (Tampermonkey, section 20) reads the phone with exactly this pattern.
+assert.equal(/(?:^#|&)tp-close=(00964\d{9,10})(?:&|$)/.exec(new URL(contact.mzCloseCodeUrl("009647705550679")).hash)?.[1], "009647705550679");
 for (const unusable of ["", "07705550679", "009647705550679&x=1"]) {
   assert.equal(contact.mzCloseCodeUrl(unusable), contact.MZ_ACTIVE_USERS_URL, `no request for ${unusable || "a missing phone"}`);
 }

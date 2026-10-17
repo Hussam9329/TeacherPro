@@ -214,7 +214,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
   function openPlatform(student: CodeClosureStudent, button: Element) {
     const phone = mzPlatformPhone(student.phone);
     // Copy first: the new tab takes the focus the clipboard needs. The copy
-    // stays for whoever has no «إغلاق كود مرماز» extension to close it.
+    // stays for whoever has no «أداة مرماز» (Tampermonkey) to close it.
     const copying = phone ? copyText(phone, button) : Promise.resolve(false);
     window.open(mzCloseCodeUrl(phone), "_blank", "noopener,noreferrer");
     markStep(student, "platform");
