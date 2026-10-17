@@ -16,20 +16,22 @@ export function mzPlatformPhone(phone: string | null | undefined): string {
   return /^00964\d{9,10}$/.test(international) ? international : "";
 }
 
+export type MzCodeAction = "close" | "open";
+
 /**
- * The platform page carrying the phone and the name for «أداة مرماز» (the
- * team's Tampermonkey script, section 20): it searches by the phone, then by
- * the name when no phone matches, and closes the code once the user confirms.
- * The fragment never reaches the platform's server, and without the script
- * the page opens as before.
+ * The platform page carrying a request for «أداة مرماز» (the team's
+ * Tampermonkey script, section 20): close or open the student's code. It
+ * searches by the phone, then by the name when no phone matches, and acts
+ * once the user confirms. The fragment never reaches the platform's server;
+ * without the script, or with a version that does not know the request, the
+ * page just opens.
  */
-export function mzCloseCodeUrl(platformPhone: string, studentName?: string | null): string {
-  const request = new URLSearchParams();
-  if (/^00964\d{9,10}$/.test(platformPhone)) request.set("tp-close", platformPhone);
+export function mzCodeActionUrl(action: MzCodeAction, platformPhone: string, studentName?: string | null): string {
+  const request = new URLSearchParams({ "tp-do": action });
+  if (/^00964\d{9,10}$/.test(platformPhone)) request.set("tp-phone", platformPhone);
   const name = (studentName ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
-  if (name) request.set("tp-name", name);
-  const fragment = request.toString();
-  return fragment ? `${MZ_ACTIVE_USERS_URL}#${fragment}` : MZ_ACTIVE_USERS_URL;
+  if (name) request.set("tp-student", name);
+  return request.has("tp-phone") || request.has("tp-student") ? `${MZ_ACTIVE_USERS_URL}#${request}` : MZ_ACTIVE_USERS_URL;
 }
 
 /** A missing exam or result stays as its placeholder so it is filled before sending. */

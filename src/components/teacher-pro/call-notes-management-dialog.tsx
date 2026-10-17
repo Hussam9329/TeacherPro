@@ -3,7 +3,7 @@
 import { toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
 import { formatAppDate, formatAppTime } from "@/lib/format";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, Check, CheckCheck, ClipboardList, Radiation, RefreshCw, RotateCcw, Search, Send, SlidersHorizontal, UserRound, X } from "lucide-react";
+import { Archive, Check, CheckCheck, ClipboardList, LockKeyholeOpen, Radiation, RefreshCw, RotateCcw, Search, Send, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import { toast } from "@/lib/user-toast";
 import { normalizeForSearch } from "@/lib/validation";
 import { contactStatusMatchesFilter, normalizeContactStatusFilter, type ContactStatusFilter } from "@/lib/call-contact-status";
 import { GUARDIAN_NUMBER_NOT_WORKING_MESSAGE, telegramChatWithMessage } from "@/lib/call-note-telegram";
-import { copyText, MZ_ACTIVE_USERS_URL, mzPlatformPhone } from "@/lib/code-closure-contact";
+import { copyText, mzCodeActionUrl, mzPlatformPhone, type MzCodeAction } from "@/lib/code-closure-contact";
 import { describeTelegramHandle } from "./student-registry-helpers";
 import { StudentContactEdit, type StudentContactField } from "./student-contact-edit";
 import { EmptyState, LoadingState } from "./ui-kit";
@@ -347,14 +347,15 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
 
   // Same as «إغلاق الكودات»: copy the student's phone the way the platform
   // search expects it (in the click, before the new tab takes the focus the
-  // clipboard needs), then open the platform's active users page.
-  function openPlatform(student: ManagedCallNote["student"], button: Element) {
+  // clipboard needs), then open the platform's active users page with the
+  // request for «أداة مرماز»: ☢️ closes the code, its green twin opens it.
+  function openPlatform(student: ManagedCallNote["student"], button: Element, action: MzCodeAction = "close") {
     const phone = mzPlatformPhone(student.phone);
     const copying = phone ? copyText(phone, button) : Promise.resolve(false);
-    window.open(MZ_ACTIVE_USERS_URL, "_blank", "noopener,noreferrer");
-    setPlatformOpened((current) => new Set(current).add(student.id));
+    window.open(mzCodeActionUrl(action, phone, student.name), "_blank", "noopener,noreferrer");
+    if (action === "close") setPlatformOpened((current) => new Set(current).add(student.id));
     if (!phone) {
-      toast.error(`لا يوجد رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه في المنصة يدوياً.`);
+      toast.error(`لا يوجد رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه بالاسم في المنصة.`);
       return;
     }
     void copying.then((copied) => {
@@ -537,10 +538,21 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                             className="tp-closure-card__danger tp-notes__platform"
                             data-done={platformOpened.has(student.id) || undefined}
                             onClick={(event) => openPlatform(student, event.currentTarget)}
-                            aria-label={`فتح المنصة ونسخ رقم هاتف ${student.name}${platformOpened.has(student.id) ? " — تم" : ""}`}
-                            title={platformOpened.has(student.id) ? "تم فتح المنصة ونسخ الرقم" : "فتح المنصة ونسخ رقم هاتف الطالب"}
+                            aria-label={`فتح المنصة لإغلاق كود ${student.name} ونسخ رقم هاتفه${platformOpened.has(student.id) ? " — تم" : ""}`}
+                            title={platformOpened.has(student.id) ? "تم فتح المنصة ونسخ الرقم" : "فتح المنصة لإغلاق كود الطالب ونسخ رقم هاتفه"}
                           >
                             <Radiation aria-hidden="true" />
+                          </button>
+                        )}
+                        {platform && (
+                          <button
+                            type="button"
+                            className="tp-closure-card__restore tp-notes__restore"
+                            onClick={(event) => openPlatform(student, event.currentTarget, "open")}
+                            aria-label={`فتح المنصة لإعادة فتح كود ${student.name} ونسخ رقم هاتفه`}
+                            title="فتح المنصة لإعادة فتح كود الطالب ونسخ رقم هاتفه"
+                          >
+                            <LockKeyholeOpen aria-hidden="true" />
                           </button>
                         )}
                         {telegram.href ? (

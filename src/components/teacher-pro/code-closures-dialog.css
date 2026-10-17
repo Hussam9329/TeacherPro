@@ -146,6 +146,28 @@ a.tp-closure-card__telegram:focus-visible { outline: none; box-shadow: 0 0 0 3px
   .tp-closure-card__danger { animation: none; box-shadow: 0 4px 14px -4px var(--status-danger-vivid); transition: none; }
 }
 
+/* Opens the platform to reopen the code: the calm green twin of the danger button */
+.tp-closure-card__restore {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border: 2px solid var(--status-success-border);
+  border-radius: 50%;
+  background: var(--status-success-bg);
+  color: var(--status-success-fg);
+  cursor: pointer;
+  transition: transform 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+.tp-closure-card__restore svg { inline-size: 1.3rem; block-size: 1.3rem; }
+.tp-closure-card__restore:hover { background: var(--status-success-solid); color: var(--status-success-on); transform: scale(1.07); }
+.tp-closure-card__restore:active { transform: scale(0.93); }
+.tp-closure-card__restore:focus-visible { outline: 3px solid var(--tp-focus); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .tp-closure-card__restore { transition: none; }
+}
+
 /* Done: a green ring and a check, so the step is visibly finished */
 .tp-closure-card__danger[data-done] { animation: none; box-shadow: 0 0 0 3px var(--status-success-vivid); }
 a.tp-closure-card__telegram[data-done] { position: relative; border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success-fg); box-shadow: 0 0 0 3px var(--status-success-vivid); }

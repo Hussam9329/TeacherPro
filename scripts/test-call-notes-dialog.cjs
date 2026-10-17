@@ -41,6 +41,7 @@ function loadHelper(relative) {
   if (helperModules.has(file)) return helperModules.get(file);
   const context = {
     exports: {},
+    URLSearchParams, // a browser global the helpers use
     require(name) {
       if (name.startsWith('@/')) return loadHelper(`src/${name.slice(2)}.ts`);
       if (name.startsWith('.')) return loadHelper(path.resolve(path.dirname(file), `${name}.ts`));
@@ -155,7 +156,7 @@ function harness() {
   const dependencies = {
     react,
     'react/jsx-runtime': { jsx, jsxs: jsx },
-    'lucide-react': named(['Archive', 'Check', 'CheckCheck', 'ClipboardList', 'Loader2', 'Radiation', 'RefreshCw', 'RotateCcw', 'Search', 'Send', 'SlidersHorizontal', 'X']),
+    'lucide-react': named(['Archive', 'Check', 'CheckCheck', 'ClipboardList', 'Loader2', 'LockKeyholeOpen', 'Radiation', 'RefreshCw', 'RotateCcw', 'Search', 'Send', 'SlidersHorizontal', 'X']),
     '@/components/ui/button': named(['Button']),
     '@/components/ui/dialog': named(['Dialog', 'DialogContent', 'DialogHeader', 'DialogTitle']),
     '@/components/ui/input': named(['Input']),
@@ -245,6 +246,7 @@ function harness() {
     // «المعلّقة» / «الأرشيف».
     switchView(key) { walk(tree).find((node) => node.type === 'button' && node.props['data-notes-view'] === key).props.onClick(); render(); },
     platformButtons() { return walk(tree).filter((node) => node.type === 'button' && String(node.props.className || '').includes('tp-notes__platform')); },
+  restoreButtons() { return walk(tree).filter((node) => node.type === 'button' && String(node.props.className || '').includes('tp-notes__restore')); },
     opened,
     returns() { return walk(tree).filter((node) => node.type === 'Button' && node.props['data-note-return'] === 'true'); },
     pressedAction() { return walk(tree).find((node) => node.type === 'button' && node.props['data-action-filter'] && node.props['aria-pressed'] === true)?.props['data-action-filter']; },
@@ -596,6 +598,7 @@ const note = (id = 'n1') => ({
   view.reads[0].resolve({ notes: [{ ...note('np'), student: { ...note('np').student, phone: null } }] });
   await view.flush();
   assert.equal(view.platformButtons().length, 0, 'no platform button without the server\'s permission');
+  assert.equal(view.restoreButtons().length, 0, 'nor its green twin');
   view = harness();
   view.render();
   const withPhone = { ...note('ph'), student: { ...note('ph').student, phone: '07705550679' } };
@@ -607,10 +610,20 @@ const note = (id = 'n1') => ({
   await view.flush();
   assert.equal(view.copies.at(-1).text, '009647705550679');
   assert.equal(view.copies.at(-1).near, platformButton);
-  assert.deepEqual(view.opened.at(-1), { url: 'https://www.mz-academy.com/ar/teachers/users/active', target: '_blank', features: 'noopener,noreferrer' });
+  const mzRequest = (action) => `https://www.mz-academy.com/ar/teachers/users/active#${new URLSearchParams({ 'tp-do': action, 'tp-phone': '009647705550679', 'tp-student': withPhone.student.name })}`;
+  assert.deepEqual(view.opened.at(-1), { url: mzRequest('close'), target: '_blank', features: 'noopener,noreferrer' }, '☢️ asks «أداة مرماز» to close the code');
   assert.match(view.toasts.at(-1).message, /نُسخ رقم الطالب 009647705550679/);
   assert.equal(view.platformButtons()[0].props['data-done'], true, 'the button shows it was used');
-  console.log('PASS: the platform button copies the phone and opens the platform, as in «إغلاق الكودات».');
+  const restoreButtons = view.restoreButtons();
+  assert.equal(restoreButtons.length, 1, 'the green open-code button sits beside ☢️');
+  assert.equal(restoreButtons[0].props.children.type, 'LockKeyholeOpen');
+  const restoreButton = { tagName: 'BUTTON' };
+  restoreButtons[0].props.onClick({ currentTarget: restoreButton });
+  await view.flush();
+  assert.deepEqual(view.opened.at(-1), { url: mzRequest('open'), target: '_blank', features: 'noopener,noreferrer' }, 'the green button asks to open the code');
+  assert.equal(view.copies.at(-1).near, restoreButton, 'it copies the phone too');
+  assert.equal(view.restoreButtons()[0].props['data-done'], undefined, 'opening is not the ☢️ step');
+  console.log('PASS: ☢️ asks «أداة مرماز» to close the code and its green twin to open it; both copy the phone, as in «إغلاق الكودات».');
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

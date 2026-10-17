@@ -34,19 +34,32 @@ for (const [input, expected] of [
   ["123", ""],
 ]) assert.equal(contact.mzPlatformPhone(input), expected, `phone ${input}`);
 assert.equal(contact.MZ_ACTIVE_USERS_URL, "https://www.mz-academy.com/ar/teachers/users/active");
-assert.equal(contact.mzCloseCodeUrl("009647705550679"), "https://www.mz-academy.com/ar/teachers/users/active#tp-close=009647705550679");
+assert.equal(contact.mzCodeActionUrl("close", "009647705550679"), "https://www.mz-academy.com/ar/teachers/users/active#tp-do=close&tp-phone=009647705550679");
 // «أداة مرماز» (Tampermonkey, section 20) reads the fragment as URLSearchParams.
-const closeRequest = (url) => Object.fromEntries(new URLSearchParams(new URL(url).hash.slice(1)));
+const codeRequest = (url) => Object.fromEntries(new URLSearchParams(new URL(url).hash.slice(1)));
 assert.deepEqual(
-  closeRequest(contact.mzCloseCodeUrl("009647705550679", "  رقية   علي & حسين ")),
-  { "tp-close": "009647705550679", "tp-name": "رقية علي & حسين" },
+  codeRequest(contact.mzCodeActionUrl("close", "009647705550679", "  رقية   علي & حسين ")),
+  { "tp-do": "close", "tp-phone": "009647705550679", "tp-student": "رقية علي & حسين" },
   "the name travels with the phone, tidied, and survives & and spaces",
 );
-assert.deepEqual(closeRequest(contact.mzCloseCodeUrl("", "رقية علي")), { "tp-name": "رقية علي" }, "no valid phone: the name alone");
-assert.equal(closeRequest(contact.mzCloseCodeUrl("009647705550679", "ع".repeat(200)))["tp-name"].length, 120, "a long name is cut");
+assert.deepEqual(
+  codeRequest(contact.mzCodeActionUrl("open", "009647705550679", "رقية علي")),
+  { "tp-do": "open", "tp-phone": "009647705550679", "tp-student": "رقية علي" },
+  "the green button asks to open the code",
+);
+assert.deepEqual(codeRequest(contact.mzCodeActionUrl("open", "", "رقية علي")), { "tp-do": "open", "tp-student": "رقية علي" }, "no valid phone: the name alone");
+assert.equal(codeRequest(contact.mzCodeActionUrl("close", "009647705550679", "ع".repeat(200)))["tp-student"].length, 120, "a long name is cut");
+// The keys older versions of the tool read as «close» are never sent, so an
+// «open» request can never close a code in a tool that was not updated.
+for (const action of ["close", "open"]) {
+  const keys = Object.keys(codeRequest(contact.mzCodeActionUrl(action, "009647705550679", "رقية علي")));
+  assert(!keys.includes("tp-close") && !keys.includes("tp-name"), `${action}: no legacy keys`);
+}
 for (const unusable of ["", "07705550679", "009647705550679&x=1"]) {
-  assert.equal(contact.mzCloseCodeUrl(unusable), contact.MZ_ACTIVE_USERS_URL, `no request for ${unusable || "a missing phone"}`);
-  assert.equal(contact.mzCloseCodeUrl(unusable, "  "), contact.MZ_ACTIVE_USERS_URL, "a blank name is no request");
+  for (const action of ["close", "open"]) {
+    assert.equal(contact.mzCodeActionUrl(action, unusable), contact.MZ_ACTIVE_USERS_URL, `no request for ${unusable || "a missing phone"}`);
+    assert.equal(contact.mzCodeActionUrl(action, unusable, "  "), contact.MZ_ACTIVE_USERS_URL, "a blank name is no request");
+  }
 }
 const notice = contact.buildDismissalNotice("يومي 3", "4 من 20");
 assert(notice.startsWith("🚨 **تبليغ رسمي**\n\nتم **فصلك وإغلاق الكود الخاص بك من المنصة** بسبب استنفاد الفرص، وذلك نتيجة:"));

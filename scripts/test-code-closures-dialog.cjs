@@ -150,7 +150,7 @@ function harness() {
     './tp-modal.css': {},
     './code-closures-dialog.css': {},
     'react/jsx-runtime': { jsx, jsxs: jsx },
-    'lucide-react': named(['AlertCircle', 'BookOpen', 'CalendarDays', 'CheckCheck', 'ChevronDown', 'LockKeyhole', 'Loader2', 'MessageCircle', 'Radiation', 'RefreshCw', 'Search', 'SlidersHorizontal', 'UserRound', 'X']),
+    'lucide-react': named(['AlertCircle', 'BookOpen', 'CalendarDays', 'CheckCheck', 'ChevronDown', 'LockKeyhole', 'LockKeyholeOpen', 'Loader2', 'MessageCircle', 'Radiation', 'RefreshCw', 'Search', 'SlidersHorizontal', 'UserRound', 'X']),
     '@/components/ui/button': named(['Button']),
     '@/components/ui/checkbox': named(['Checkbox']),
     '@/components/ui/dialog': named(['Dialog', 'DialogContent', 'DialogHeader', 'DialogTitle']),
@@ -551,7 +551,8 @@ function selectCourse(view, value) {
   view.render();
   assert.deepEqual(view.copies.map((copy) => copy.text), ['009647705550679'], 'the phone is copied in the platform search form');
   assert.equal(view.copies[0].near, clicked, 'the copy happens next to the clicked button, inside the dialog');
-  assert.deepEqual(view.opened, [[`https://www.mz-academy.com/ar/teachers/users/active#${new URLSearchParams({ 'tp-close': '009647705550679', 'tp-name': dangerous.name })}`, '_blank', 'noopener,noreferrer']], 'the link carries the phone and the name for «أداة مرماز» to close the code');
+  const mzRequest = (action) => `https://www.mz-academy.com/ar/teachers/users/active#${new URLSearchParams({ 'tp-do': action, 'tp-phone': '009647705550679', 'tp-student': dangerous.name })}`;
+  assert.deepEqual(view.opened, [[mzRequest('close'), '_blank', 'noopener,noreferrer']], 'the link carries the phone and the name for «أداة مرماز» to close the code');
   assert.deepEqual(view.contacts[0].args, [dangerous.id, 'platform', 3], 'the mark is saved for this dismissal episode');
   assert.equal(dangerButtons()[0].props['data-done'], true, 'highlighted at once, before the save returns');
   assert.equal(view.writes.length, 0, 'contact steps never change the closed-code flag');
@@ -584,6 +585,18 @@ function selectCourse(view, value) {
   assert.equal(view.copies.length, 2, 'nothing is copied without a usable phone');
   assert.equal(view.opened.length, 3, 'the platform still opens');
   assert(view.errors.some((error) => error.includes('لا يوجد رقم هاتف صالح')));
+
+  // The green twin beside ☢️ asks the tool to open the code again.
+  const restoreButtons = () => view.nodes('button').filter((node) => node.props.className === 'tp-closure-card__restore');
+  assert.equal(restoreButtons().length, 2, 'every card has the green open-code button beside ☢️');
+  assert(restoreButtons().every((node) => node.props.children.type === 'LockKeyholeOpen'));
+  const contactsBefore = view.contacts.length;
+  restoreButtons()[0].props.onClick({ currentTarget: clicked });
+  view.render();
+  assert.deepEqual(view.opened.at(-1), [mzRequest('open'), '_blank', 'noopener,noreferrer'], 'the green button asks «أداة مرماز» to open the code');
+  assert.equal(view.copies.at(-1).text, '009647705550679', 'and copies the phone too');
+  assert.equal(view.contacts.length, contactsBefore, 'opening the code is not a contact step of the dismissal');
+  assert.equal(restoreButtons()[0].props['data-done'], undefined);
 
   view.setProps({ canManage: false });
   const before = view.contacts.length;

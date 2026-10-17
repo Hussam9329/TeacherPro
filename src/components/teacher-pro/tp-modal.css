@@ -565,7 +565,8 @@ a.tp-modal__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-foc
 .tp-notes__tg { margin-inline-start: auto; }
 /* The platform button (as in «إغلاق الكودات») leads the card's contact buttons. */
 .tp-notes__platform { margin-inline-start: auto; }
-.tp-notes__platform + .tp-notes__tg { margin-inline-start: 0; }
+.tp-notes__platform + .tp-notes__tg,
+.tp-notes__restore + .tp-notes__tg { margin-inline-start: 0; }
 
 .tp-notes__items { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
 .tp-notes__item {

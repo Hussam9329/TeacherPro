@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { AlertCircle, BookOpen, CalendarDays, CheckCheck, ChevronDown, Loader2, LockKeyhole, MessageCircle, Radiation, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
+import { AlertCircle, BookOpen, CalendarDays, CheckCheck, ChevronDown, Loader2, LockKeyhole, LockKeyholeOpen, MessageCircle, Radiation, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,10 +10,11 @@ import { codeClosuresApi, type CodeClosureStudent } from "@/lib/code-closures-cl
 import {
   buildDismissalNotice,
   copyText,
-  mzCloseCodeUrl,
+  mzCodeActionUrl,
   mzPlatformPhone,
   telegramNoticeHref,
   type ClosureContactStep,
+  type MzCodeAction,
 } from "@/lib/code-closure-contact";
 import { saveDismissedCheck } from "@/lib/dismissed-check-api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
@@ -211,13 +212,15 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
     );
   }
 
-  function openPlatform(student: CodeClosureStudent, button: Element) {
+  // ☢️ closes the code, its green twin opens it again; only closing is a
+  // contact step of the dismissal.
+  function openPlatform(student: CodeClosureStudent, button: Element, action: MzCodeAction = "close") {
     const phone = mzPlatformPhone(student.phone);
     // Copy first: the new tab takes the focus the clipboard needs. The copy
-    // stays for whoever has no «أداة مرماز» (Tampermonkey) to close it.
+    // stays for whoever has no «أداة مرماز» (Tampermonkey) to do it.
     const copying = phone ? copyText(phone, button) : Promise.resolve(false);
-    window.open(mzCloseCodeUrl(phone, student.name), "_blank", "noopener,noreferrer");
-    markStep(student, "platform");
+    window.open(mzCodeActionUrl(action, phone, student.name), "_blank", "noopener,noreferrer");
+    if (action === "close") markStep(student, "platform");
     if (!phone) {
       toast.error(`لا يوجد رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه بالاسم في المنصة.`);
       return;
@@ -501,6 +504,15 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                             title={platformDone ? "تم فتح المنصة ونسخ الرقم" : "فتح المنصة لإغلاق كود الطالب ونسخ رقم هاتفه"}
                           >
                             <Radiation aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="tp-closure-card__restore"
+                            onClick={(event) => openPlatform(student, event.currentTarget, "open")}
+                            aria-label={`فتح المنصة لإعادة فتح كود ${student.name} ونسخ رقم هاتفه`}
+                            title="فتح المنصة لإعادة فتح كود الطالب ونسخ رقم هاتفه"
+                          >
+                            <LockKeyholeOpen aria-hidden="true" />
                           </button>
                           {telegramHref ? (
                             <a
