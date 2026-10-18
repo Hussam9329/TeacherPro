@@ -1312,8 +1312,6 @@ export function TeacherProLayout() {
           sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
         )}
       >
-        <div className="absolute inset-0 pointer-events-none sidebar-aura" />
-
         <div className="tp-sidebar-brand relative">
           <span className="tp-sidebar-brand__icon" aria-hidden="true">
             <Presentation />
