@@ -20,6 +20,7 @@ import {
   Target,
   Users,
   UsersRound,
+  Zap,
 } from "lucide-react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import {
@@ -34,6 +35,7 @@ import { CodeClosuresDialog } from "./code-closures-dialog";
 import { GracePeriodsDialog } from "./grace-periods-dialog";
 import { LeavesDialog, LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog";
 import { TextShortcutsDialog } from "./text-shortcuts-dialog";
+import { StudentTrendChart } from "./student-trend-chart";
 // One look for the management windows opened from here.
 import "./tp-modal.css";
 
@@ -72,6 +74,81 @@ function ShortcutAlert({ count, tone, label }: { count: number | null | undefine
 
 function formatStatsTime(value?: string) {
   return formatBaghdadDateTime(value);
+}
+
+/** «توزيع الطلبة حسب الحالة»: a ring of the total, split by status. */
+function StudentStatusDonut({ stats, loading }: { stats: DashboardStats | null; loading: boolean }) {
+  const total = stats?.totalStudents ?? 0;
+  const parts = stats
+    ? [
+        { key: "active", label: "نشطون", value: stats.activeStudents, color: "var(--chart-2)" },
+        { key: "dismissed", label: "مفصولون", value: stats.dismissedStudents, color: "var(--chart-4)" },
+        {
+          key: "other",
+          label: "حالات أخرى",
+          value: Math.max(0, stats.totalStudents - stats.activeStudents - stats.dismissedStudents),
+          color: "var(--tp-soft)",
+        },
+      ].filter((part) => part.key !== "other" || part.value > 0)
+    : [];
+  const radius = 70;
+  const circumference = 2 * Math.PI * radius;
+  // Rounded ends reach half the ring's width past each part, so the gap
+  // between parts is that width plus a little air; a tiny part stays a dot.
+  const gap = parts.filter((part) => part.value > 0).length > 1 ? 16 + 4 : 0;
+  let offset = 0;
+  const arcs = parts.map((part) => {
+    const length = total ? (part.value / total) * circumference : 0;
+    const arc = { ...part, dash: part.value > 0 ? Math.max(0.5, length - gap) : 0, offset };
+    offset += length;
+    return arc;
+  });
+  const percent = (value: number) => (total ? `${((value / total) * 100).toFixed(1)}%` : "0%");
+
+  return (
+    <section className="tp-dashboard__panel tp-donut" aria-labelledby="tp-donut-title">
+      <header className="tp-dashboard__panel-head">
+        <h3 id="tp-donut-title" className="tp-dashboard__panel-title">توزيع الطلبة حسب الحالة</h3>
+      </header>
+      <div className="tp-donut__body">
+        <div className="tp-donut__ring">
+          <svg viewBox="0 0 180 180" role="img" aria-label={parts.map((part) => `${part.label} ${part.value} (${percent(part.value)})`).join("، ")}>
+            <circle cx="90" cy="90" r={radius} className="tp-donut__track" />
+            <g transform="rotate(-90 90 90)">
+              {arcs.map((arc) => arc.dash > 0 ? (
+                <circle
+                  key={arc.key}
+                  cx="90"
+                  cy="90"
+                  r={radius}
+                  fill="none"
+                  stroke={arc.color}
+                  strokeWidth="16"
+                  strokeLinecap={gap ? "round" : "butt"}
+                  strokeDasharray={`${arc.dash} ${circumference}`}
+                  strokeDashoffset={-arc.offset - gap / 2}
+                />
+              ) : null)}
+            </g>
+          </svg>
+          <div className="tp-donut__center">
+            <span className="tp-donut__total">{loading && !stats ? "…" : total.toLocaleString("en-US")}</span>
+            <span className="tp-donut__caption">إجمالي الطلبة</span>
+          </div>
+        </div>
+        <ul className="tp-donut__legend">
+          {parts.map((part) => (
+            <li key={part.key}>
+              <span className="tp-donut__dot" style={{ background: part.color }} aria-hidden="true" />
+              <span className="tp-donut__label">{part.label}</span>
+              <span className="tp-donut__value">{part.value.toLocaleString("en-US")}</span>
+              <span className="tp-donut__percent">({percent(part.value)})</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
 }
 
 export function DashboardView({
@@ -325,9 +402,17 @@ export function DashboardView({
         ))}
       </div>
 
+      <div className="tp-dashboard__insights">
+        <StudentTrendChart syncKey={syncKey} />
+        <StudentStatusDonut stats={stats} loading={initialLoading} />
+      </div>
+
       {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canViewGracePeriods || canViewLeaves || canUseTextShortcuts) && (
         <nav aria-label="اختصارات لوحة التحكم" className="tp-dashboard__navigation">
-          <h3 className="text-sm font-bold">الوصول السريع</h3>
+          <h3 className="tp-dashboard__heading">
+            <Zap aria-hidden="true" />
+            الوصول السريع
+          </h3>
           <div className="tp-dashboard__shortcuts">
             {visibleShortcuts.map(({ section, title, icon: Icon, tone }) => (
               <a

@@ -44,10 +44,13 @@ import {
   X,
   LogOut,
   ChevronLeft,
+  ChevronDown,
   Plus,
   KeyRound,
   Lock,
   Search,
+  Presentation,
+  UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -516,6 +519,90 @@ function SidebarAlertBadge({ count, label }: { count: number; label?: string }) 
     >
       {count > 99 ? "99+" : count}
     </span>
+  );
+}
+
+/** The signed-in user at the top of the page: name, role, connection, sign-out. */
+function UserMenu({
+  name,
+  role,
+  connectionStatus,
+  connectionLabel,
+  connectionDescription,
+  onLogout,
+}: {
+  name: string;
+  role: string;
+  connectionStatus: string;
+  connectionLabel: string;
+  connectionDescription: string;
+  onLogout: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const menuId = React.useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="tp-user-menu">
+      <button
+        type="button"
+        className="tp-user-menu__trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={menuId}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="tp-user-menu__avatar" aria-hidden="true">
+          <UserRound />
+          <span
+            className={cn("tp-connection-dot tp-user-menu__dot", `tp-connection-dot--${connectionStatus}`)}
+            title={connectionDescription}
+          />
+        </span>
+        <span className="tp-user-menu__copy">
+          <span className="tp-user-menu__name">{name}</span>
+          {role ? <span className="tp-user-menu__role">{role}</span> : null}
+        </span>
+        <ChevronDown className="tp-user-menu__chevron" aria-hidden="true" />
+        <span className="sr-only">، {connectionLabel}</span>
+      </button>
+      {open ? (
+        <div id={menuId} role="menu" className="tp-user-menu__panel">
+          <p className="tp-user-menu__status">
+            <span className={cn("tp-connection-dot", `tp-connection-dot--${connectionStatus}`)} aria-hidden="true" />
+            {connectionLabel}
+          </p>
+          <button
+            type="button"
+            role="menuitem"
+            className="tp-user-menu__item"
+            onClick={() => {
+              setOpen(false);
+              onLogout();
+            }}
+          >
+            <LogOut className="size-4" aria-hidden="true" />
+            تسجيل الخروج
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1204,7 +1291,7 @@ export function TeacherProLayout() {
   }
 
   return (
-    <div className="app-bg tp-readable-ui tp-semantic-colors tp-app-shell flex h-dvh overflow-hidden bg-background" dir="rtl">
+    <div className="app-bg tp-readable-ui tp-semantic-colors tp-app-shell flex h-dvh overflow-hidden bg-background lg:bg-sidebar" dir="rtl">
       <ScheduledExamWorker />
       <a className="tp-skip-link" href="#teacherpro-main-content">
         تجاوز إلى المحتوى الرئيسي
@@ -1221,78 +1308,40 @@ export function TeacherProLayout() {
       <aside
         aria-label="التنقل الرئيسي"
         className={cn(
-          "tp-app-sidebar fixed inset-y-0 right-0 z-50 flex h-dvh w-[min(11rem,calc(100dvw-0.75rem))] max-w-full flex-col overflow-hidden border-l border-sidebar-border bg-sidebar text-sidebar-foreground shadow-2xl transition-transform duration-300 lg:static lg:h-auto lg:w-[9.5rem] lg:shadow-none",
+          "tp-app-sidebar fixed inset-y-0 right-0 z-50 flex h-dvh w-[min(13rem,calc(100dvw-0.75rem))] max-w-full flex-col overflow-hidden bg-sidebar text-sidebar-foreground shadow-2xl transition-transform duration-300 lg:static lg:h-auto lg:w-[10.5rem] lg:shadow-none",
           sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
         )}
       >
         <div className="absolute inset-0 pointer-events-none sidebar-aura" />
 
-        <div className="relative border-b border-sidebar-border p-2.5">
-          <div className="flex items-center gap-1">
-            <div className="min-w-0 flex-1">
-              <h1
-                className="truncate text-base font-extrabold tracking-tight lg:text-lg"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #CD938F, #FBF9EB, #E6E3D9)",
-                  WebkitBackgroundClip: "text",
-                  backgroundClip: "text",
-                  color: "transparent",
-                  filter: "drop-shadow(0 1px 3px color-mix(in srgb, #CD938F 30%, transparent))",
-                }}
-              >
-                TeacherPro
-              </h1>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="lg:hidden text-sidebar-foreground hover:bg-sidebar-accent"
-              onClick={() => setSidebarOpen(false)}
-              aria-label="إغلاق القائمة الجانبية"
-            >
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
-          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 rounded-xl border border-sidebar-border bg-sidebar-foreground/[0.04] px-2 py-1.5">
-            <div
-              className={cn(
-                "tp-connection-dot",
-                `tp-connection-dot--${connectionVisualStatus}`,
-              )}
-              role="status"
-              aria-label={connectionVisualLabel}
-              title={connectionVisualDescription}
-            />
-            <p className="min-w-0 flex-1 truncate text-xs font-semibold text-sidebar-foreground" title={user?.role || ""}>
-              {user?.name || "غير مسجل"}
-            </p>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 shrink-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              title="تسجيل الخروج"
-              aria-label="تسجيل الخروج"
-              onClick={() => {
-                logout();
-                toast.success("تم تسجيل الخروج");
-              }}
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </Button>
-          </div>
-          {!dbLoading && !dbConnected && (
-            <div className="mt-2 rounded-xl border border-night-warning/40 bg-night-warning/10 px-2.5 py-1.5 text-[11px] leading-5 text-night-warning">
-              غير متصل بالنظام؛ قد تبقى التغييرات محليًا حتى عودة الاتصال.
-            </div>
-          )}
+        <div className="tp-sidebar-brand relative">
+          <span className="tp-sidebar-brand__icon" aria-hidden="true">
+            <Presentation />
+          </span>
+          <h1 className="tp-sidebar-brand__name">TeacherPro</h1>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="lg:hidden text-sidebar-foreground hover:bg-sidebar-accent"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="إغلاق القائمة الجانبية"
+          >
+            <X className="w-5 h-5" />
+          </Button>
         </div>
+        {!dbLoading && !dbConnected && (
+          <div className="relative mx-2 mb-2 rounded-xl border border-night-warning/40 bg-night-warning/10 px-2.5 py-1.5 text-[11px] leading-5 text-night-warning">
+            غير متصل بالنظام؛ قد تبقى التغييرات محليًا حتى عودة الاتصال.
+          </div>
+        )}
 
+        {/* The open page's tab joins the page itself: same colour, flat edge
+            towards it and curved corners into it (tp-sidebar-link in globals.css). */}
         <div
-          className="app-scrollbar relative flex-1 overflow-y-auto overscroll-contain py-2.5"
+          className="tp-sidebar-scroll app-scrollbar relative flex-1 overflow-y-auto overscroll-contain"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
-          <nav className="space-y-1 px-1.5" aria-label="صفحات النظام">
+          <nav className="tp-sidebar-nav" aria-label="صفحات النظام">
             {sidebarItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentSection === item.id || sectionParent.get(currentSection) === item.id;
@@ -1304,22 +1353,10 @@ export function TeacherProLayout() {
                   href={sectionHref(item.id)}
                   onClick={(event) => handleSectionLinkClick(event, item.id)}
                   aria-current={isActive ? "page" : undefined}
-                  className={cn(
-                    "group flex min-h-11 w-full touch-manipulation items-center gap-2 rounded-xl px-2 py-1.5 text-right text-[13px] transition-colors duration-200",
-                    isActive
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md shadow-primary/20"
-                      : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                  )}
+                  className="tp-sidebar-link group flex min-h-11 w-full touch-manipulation items-center gap-2.5 text-right"
                 >
-                  <Icon
-                    className={cn(
-                      "size-4 shrink-0",
-                      isActive
-                        ? "text-sidebar-primary-foreground"
-                        : "text-sidebar-foreground/60 group-hover:text-sidebar-accent-foreground",
-                    )}
-                  />
-                  <span className="min-w-0 flex-1 font-semibold leading-5 [overflow-wrap:anywhere]">
+                  <Icon className="tp-sidebar-link__icon" aria-hidden="true" />
+                  <span className="min-w-0 flex-1 leading-5 [overflow-wrap:anywhere]">
                     {item.title}
                   </span>
                   <SidebarAlertBadge count={alertCount} label={sectionAlerts[item.id]?.label} />
@@ -1329,30 +1366,30 @@ export function TeacherProLayout() {
           </nav>
         </div>
 
-        <div className="relative shrink-0 border-t border-sidebar-border bg-sidebar-foreground/[0.03] p-1.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-9 w-full justify-start rounded-xl px-2 text-xs text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        <div className="relative shrink-0 p-2.5">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={theme === "dark"}
+            className="tp-theme-switch"
             onClick={toggleTheme}
           >
-            {theme === "dark" ? (
-              <Sun className="w-4 h-4 ml-1.5" />
-            ) : (
-              <Moon className="w-4 h-4 ml-1.5" />
-            )}
-            {theme === "dark" ? "صباحي" : "ليلي"}
-          </Button>
+            <Moon className="tp-theme-switch__icon" aria-hidden="true" />
+            <span className="tp-theme-switch__label">الوضع الليلي</span>
+            <span className="tp-theme-switch__track" aria-hidden="true">
+              <span className="tp-theme-switch__thumb" />
+            </span>
+          </button>
         </div>
       </aside>
 
       <main
-        className="tp-app-main flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        className="tp-app-main flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
         aria-label="محتوى TeacherPro"
       >
-        <header className="tp-app-header sticky top-0 z-30 border-b border-border/70 bg-background/90 shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-background/78">
-          <div className="tp-app-header__inner flex min-h-[4.5rem] min-w-0 items-center justify-between gap-2.5 px-3 py-2.5 md:min-h-[5.5rem] md:gap-3 md:px-6 md:py-3">
-            <div className="tp-app-header__identity flex min-w-0 flex-1 items-center gap-2.5 md:gap-3.5">
+        <header className="tp-app-header sticky top-0 z-30 bg-background/90 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
+          <div className="tp-app-header__inner flex min-h-[4.5rem] min-w-0 items-center justify-between gap-2.5 px-3 py-2.5 md:min-h-[5.5rem] md:gap-4 md:px-6 md:py-3 xl:px-8">
+            <div className="tp-app-header__identity flex min-w-0 items-center gap-2.5 md:gap-3.5">
               <Button
                 variant="ghost"
                 size="icon"
@@ -1364,39 +1401,59 @@ export function TeacherProLayout() {
                 <Menu className="h-5 w-5" />
               </Button>
 
-              <div className="tp-app-header__page-icon hidden size-11 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-primary/[0.08] text-primary shadow-sm sm:flex md:size-12">
-                <CurrentMenuIcon className="size-5 md:size-[1.375rem]" />
-              </div>
-
-              <div className="tp-app-header__copy min-w-0 flex-1 text-right">
-                <div className="mb-0.5 hidden items-center gap-1.5 text-[11px] font-semibold text-muted-foreground md:flex">
-                  <span>TeacherPro</span>
-                  <ChevronLeft className="size-3.5 opacity-45" />
-                  {currentParentMenu ? (
-                    <>
-                      <span>{currentParentMenu.title}</span>
-                      <ChevronLeft className="size-3.5 opacity-45" />
-                    </>
-                  ) : null}
-                  <span className="truncate text-foreground/75">
-                    {currentMenu?.title || "لوحة النظام"}
-                  </span>
-                </div>
-
+              <div className="tp-app-header__copy min-w-0 text-right">
                 <div className="tp-app-header__title-row flex min-w-0 items-center gap-2">
+                  <CurrentMenuIcon className="tp-app-header__page-icon size-5 shrink-0 text-primary sm:hidden" aria-hidden="true" />
                   <h2
-                    className="truncate text-base font-black tracking-tight text-gradient-brand md:text-xl"
+                    className="tp-app-header__title truncate"
                     title={currentMenu?.title || "لوحة النظام"}
                   >
                     {currentMenu?.title || "لوحة النظام"}
                   </h2>
                 </div>
+                <div className="tp-app-header__crumbs mt-1 hidden items-center gap-1.5 md:flex">
+                  <span className="text-foreground/80">TeacherPro</span>
+                  <ChevronLeft className="size-3.5 opacity-45" aria-hidden="true" />
+                  {currentParentMenu ? (
+                    <>
+                      <span>{currentParentMenu.title}</span>
+                      <ChevronLeft className="size-3.5 opacity-45" aria-hidden="true" />
+                    </>
+                  ) : null}
+                  <span className="truncate">
+                    {currentMenu?.title || "لوحة النظام"}
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="tp-app-header__actions flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-              {/* Connection shows only when it needs attention; the sidebar
-                  dot keeps the everyday state. */}
+            <div className="tp-app-header__actions flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5 sm:gap-2.5">
+              {/* The page's own search, opened from a wide pill (Ctrl+F). */}
+              {sectionsWithPageSearch.has(currentSection) ? (
+                <button
+                  type="button"
+                  className="tp-app-header__search"
+                  title="الانتقال إلى بحث الصفحة (Ctrl+F)"
+                  aria-label="الانتقال إلى خانة البحث في الصفحة الحالية"
+                  onClick={() => {
+                    window.dispatchEvent(
+                      new KeyboardEvent("keydown", {
+                        key: "f",
+                        code: "KeyF",
+                        ctrlKey: true,
+                        bubbles: true,
+                        cancelable: true,
+                      }),
+                    );
+                  }}
+                >
+                  <span className="tp-app-header__search-text">ابحث في الصفحة …</span>
+                  <kbd className="tp-app-header__search-kbd">Ctrl F</kbd>
+                  <Search className="tp-app-header__search-icon" aria-hidden="true" />
+                </button>
+              ) : null}
+              {/* Connection shows only when it needs attention; the dot on the
+                  user's picture keeps the everyday state. */}
               <div role="status" aria-live="polite" className="contents">
                 {connectionVisualStatus === "offline" || connectionVisualStatus === "error" ? (
                   <div
@@ -1435,46 +1492,17 @@ export function TeacherProLayout() {
               {/* Sync status badge removed — updates are now silent.
                   The sync system still works in the background; it just
                   doesn't show a visible indicator to the user. */}
-              {sectionsWithPageSearch.has(currentSection) ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="tp-app-header__search min-h-10 shrink-0 gap-2 rounded-full px-3"
-                  title="الانتقال إلى بحث الصفحة (Ctrl+F)"
-                  aria-label="الانتقال إلى خانة البحث في الصفحة الحالية"
-                  onClick={() => {
-                    window.dispatchEvent(
-                      new KeyboardEvent("keydown", {
-                        key: "f",
-                        code: "KeyF",
-                        ctrlKey: true,
-                        bubbles: true,
-                        cancelable: true,
-                      }),
-                    );
-                  }}
-                >
-                  <Search className="size-4" />
-                  <span className="hidden text-xs font-bold md:inline">بحث الصفحة</span>
-                  <kbd className="hidden rounded-md border border-border/70 bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground xl:inline">
-                    Ctrl F
-                  </kbd>
-                </Button>
-              ) : null}
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={toggleTheme}
-                className="hidden shrink-0 rounded-full sm:inline-flex"
-                aria-label={theme === "dark" ? "تفعيل الوضع الصباحي" : "تفعيل الوضع الليلي"}
-              >
-                {theme === "dark" ? (
-                  <Sun className="h-4 w-4" />
-                ) : (
-                  <Moon className="h-4 w-4" />
-                )}
-              </Button>
+              <UserMenu
+                name={user?.name || "غير مسجل"}
+                role={user?.role || ""}
+                connectionStatus={connectionVisualStatus}
+                connectionLabel={connectionVisualLabel}
+                connectionDescription={connectionVisualDescription}
+                onLogout={() => {
+                  logout();
+                  toast.success("تم تسجيل الخروج");
+                }}
+              />
             </div>
           </div>
         </header>

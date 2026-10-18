@@ -284,11 +284,13 @@
   --chart-3: var(--sig-warning);
   --chart-4: var(--sig-danger);
   --chart-5: var(--tp-soft);
-  --sidebar: var(--tp-deep);
+  /* The rail is a step lighter than the night page, so the open tab (page
+     colour) still stands out of it. */
+  --sidebar: var(--tp-ink);
   --sidebar-foreground: var(--tp-bg);
   --sidebar-primary: var(--tp-bg);
   --sidebar-primary-foreground: var(--tp-deep);
-  --sidebar-accent: var(--tp-ink);
+  --sidebar-accent: color-mix(in srgb, var(--tp-muted) 35%, var(--tp-ink));
   --sidebar-accent-foreground: var(--tp-bg);
   --sidebar-border: color-mix(in srgb, var(--tp-bg) 10%, transparent);
   --sidebar-ring: color-mix(in srgb, var(--tp-bg) 55%, transparent);
@@ -1831,6 +1833,290 @@
   }
 }
 
+/* ═══ App shell: thin navy rail; the open page's tab is cut from the page itself ═══
+   On wide screens the shell is the rail's colour and the page is a cream sheet
+   with a rounded top corner beside it. The open tab has the page's colour,
+   a flat edge towards the page and two inward curves above and below, so it
+   reads as part of the page. Phones keep a plain rounded tab in the drawer. */
+@layer components {
+  .tp-sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-block-size: 5.5rem;
+    padding: 1rem 0.85rem 0.75rem;
+  }
+  .tp-sidebar-brand__icon {
+    display: grid;
+    place-items: center;
+    flex: none;
+    inline-size: 2.35rem;
+    block-size: 2.35rem;
+    border: 1.5px solid color-mix(in srgb, var(--sidebar-foreground) 45%, transparent);
+    border-radius: 0.7rem;
+    color: var(--sidebar-foreground);
+  }
+  .tp-sidebar-brand__icon svg { inline-size: 1.25rem; block-size: 1.25rem; }
+  .tp-sidebar-brand__name {
+    min-inline-size: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--sidebar-foreground);
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+
+  .tp-sidebar-scroll { padding-block: 0.6rem 1rem; padding-inline: 0.6rem; }
+  .tp-sidebar-nav { display: grid; gap: 0.3rem; }
+
+  .tp-sidebar-link {
+    position: relative;
+    padding: 0.6rem 0.75rem;
+    border-radius: 0.95rem;
+    color: color-mix(in srgb, var(--sidebar-foreground) 78%, transparent);
+    font-size: 0.875rem;
+    font-weight: 650;
+    transition: background-color 160ms ease, color 160ms ease;
+  }
+  .tp-sidebar-link__icon {
+    flex: none;
+    inline-size: 1.2rem;
+    block-size: 1.2rem;
+    color: color-mix(in srgb, var(--sidebar-foreground) 70%, transparent);
+    transition: color 160ms ease;
+  }
+  .tp-sidebar-link:hover {
+    background: var(--sidebar-accent);
+    color: var(--sidebar-accent-foreground);
+  }
+  .tp-sidebar-link:hover .tp-sidebar-link__icon { color: var(--sidebar-accent-foreground); }
+  .tp-sidebar-link:focus-visible { outline: 2px solid var(--sidebar-ring); outline-offset: 2px; }
+  .tp-sidebar-link[aria-current="page"] {
+    background: var(--background);
+    color: var(--foreground);
+    font-weight: 850;
+    box-shadow: 0 10px 24px -18px color-mix(in srgb, var(--tp-deep) 70%, transparent);
+  }
+  .tp-sidebar-link[aria-current="page"] .tp-sidebar-link__icon { color: var(--foreground); }
+
+  .tp-theme-switch {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    inline-size: 100%;
+    min-block-size: 3rem;
+    padding: 0.55rem 0.6rem;
+    border: 1px solid var(--sidebar-border);
+    border-radius: 1rem;
+    background: color-mix(in srgb, var(--sidebar-foreground) 5%, transparent);
+    color: var(--sidebar-foreground);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-align: start;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .tp-theme-switch:focus-visible { outline: 2px solid var(--sidebar-ring); outline-offset: 2px; }
+  .tp-theme-switch__icon { flex: none; inline-size: 1.1rem; block-size: 1.1rem; }
+  .tp-theme-switch__label { flex: 1; min-inline-size: 0; white-space: nowrap; }
+  .tp-theme-switch__track {
+    position: relative;
+    flex: none;
+    inline-size: 2.6rem;
+    block-size: 1.45rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--sidebar-foreground) 22%, transparent);
+    transition: background-color 160ms ease;
+  }
+  .tp-theme-switch__thumb {
+    position: absolute;
+    inset-block-start: 0.15rem;
+    inset-inline-start: 0.15rem;
+    inline-size: 1.15rem;
+    block-size: 1.15rem;
+    border-radius: 50%;
+    background: var(--tp-bg);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+    transition: inset-inline-start 160ms ease;
+  }
+  .tp-theme-switch[aria-checked="true"] .tp-theme-switch__track { background: var(--sig-success); }
+  .tp-theme-switch[aria-checked="true"] .tp-theme-switch__thumb { inset-inline-start: 1.3rem; }
+
+  /* Header: big page title with its trail under it, the page search as a
+     wide pill, and the signed-in user at the far end. */
+  .tp-app-header__title {
+    color: var(--foreground);
+    font-size: 1.125rem;
+    font-weight: 900;
+    letter-spacing: -0.01em;
+    line-height: 1.35;
+  }
+  .tp-app-header__crumbs {
+    color: var(--muted-foreground);
+    font-size: 0.8rem;
+    font-weight: 650;
+  }
+  .tp-app-header__search {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex: 0 1 30rem;
+    min-inline-size: 2.75rem;
+    min-block-size: 2.9rem;
+    margin-inline-end: auto;
+    padding-inline: 1.1rem 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--card) 70%, var(--muted));
+    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--tp-deep) 6%, transparent);
+    color: var(--muted-foreground);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: text;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+  .tp-app-header__search:hover { border-color: var(--input); }
+  .tp-app-header__search:focus-visible { outline: none; box-shadow: var(--shadow-ring); }
+  .tp-app-header__search-text { flex: 1; min-inline-size: 0; overflow: hidden; text-align: start; text-overflow: ellipsis; white-space: nowrap; }
+  .tp-app-header__search-kbd {
+    display: none;
+    padding: 0.1rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    background: var(--muted);
+    font-family: ui-monospace, monospace;
+    font-size: 0.65rem;
+  }
+  .tp-app-header__search-icon { flex: none; inline-size: 1.15rem; block-size: 1.15rem; }
+
+  .tp-user-menu { position: relative; flex: none; }
+  .tp-user-menu__trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-block-size: 2.9rem;
+    padding: 0.25rem 0.25rem 0.25rem 0.6rem;
+    border-radius: 999px;
+    color: var(--foreground);
+    text-align: start;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background-color 150ms ease;
+  }
+  .tp-user-menu__trigger:hover,
+  .tp-user-menu__trigger[aria-expanded="true"] { background: var(--accent); }
+  .tp-user-menu__trigger:focus-visible { outline: none; box-shadow: var(--shadow-ring); }
+  .tp-user-menu__avatar {
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex: none;
+    inline-size: 2.6rem;
+    block-size: 2.6rem;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--tp-ink) 10%, var(--background));
+    color: var(--tp-ink);
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+  .dark .tp-user-menu__avatar { background: var(--card); color: var(--foreground); }
+  .tp-user-menu__avatar svg { inline-size: 1.35rem; block-size: 1.35rem; }
+  .tp-user-menu__dot {
+    position: absolute;
+    inset-block-end: 0.05rem;
+    inset-inline-start: 0.05rem;
+    box-shadow: 0 0 0 2px var(--background);
+  }
+  .tp-user-menu__copy { display: none; min-inline-size: 0; flex-direction: column; line-height: 1.3; }
+  .tp-user-menu__name { overflow: hidden; max-inline-size: 11rem; font-size: 0.875rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+  .tp-user-menu__role { overflow: hidden; max-inline-size: 11rem; color: var(--muted-foreground); font-size: 0.72rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+  .tp-user-menu__chevron { display: none; flex: none; inline-size: 1rem; block-size: 1rem; color: var(--muted-foreground); }
+  .tp-user-menu__panel {
+    position: absolute;
+    inset-block-start: calc(100% + 0.45rem);
+    inset-inline-end: 0;
+    z-index: 40;
+    display: grid;
+    gap: 0.25rem;
+    min-inline-size: 12rem;
+    padding: 0.45rem;
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow: var(--shadow-soft);
+  }
+  .tp-user-menu__status { display: flex; align-items: center; gap: 0.45rem; margin: 0; padding: 0.4rem 0.55rem; color: var(--muted-foreground); font-size: 0.78rem; font-weight: 700; }
+  .tp-user-menu__item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-block-size: 2.6rem;
+    padding-inline: 0.6rem;
+    border-radius: 0.7rem;
+    color: var(--status-danger-fg);
+    font-size: 0.85rem;
+    font-weight: 800;
+    text-align: start;
+    cursor: pointer;
+  }
+  .tp-user-menu__item:hover,
+  .tp-user-menu__item:focus-visible { outline: none; background: var(--status-danger-bg); }
+
+  @media (min-width: 640px) {
+    .tp-user-menu__copy { display: flex; }
+    .tp-user-menu__chevron { display: block; }
+  }
+  @media (min-width: 768px) {
+    .tp-app-header__title { font-size: 1.6rem; }
+  }
+  @media (min-width: 1280px) {
+    .tp-app-header__search-kbd { display: inline; }
+  }
+  @media (max-width: 639px) {
+    .tp-app-header__search { flex: none; padding-inline: 0; justify-content: center; inline-size: 2.75rem; margin-inline-end: 0; }
+    .tp-app-header__search-text { display: none; }
+  }
+
+  @media (min-width: 1024px) {
+    /* The page is a sheet beside the rail; its top corner curves into it. */
+    .tp-app-main { border-start-start-radius: 2.25rem; }
+    /* No scrollbar between the open tab and the page: in RTL it sits on the
+       rail's page side. The rail still scrolls with the wheel and touch. */
+    .tp-sidebar-scroll { padding-block: 1.25rem; padding-inline-end: 0; scrollbar-width: none; scrollbar-gutter: auto; }
+    .tp-sidebar-scroll::-webkit-scrollbar { display: none; inline-size: 0; }
+    .tp-app-sidebar { border: 0; }
+    /* The tab reaches a hair into the page so no seam shows at any zoom. */
+    .tp-sidebar-link[aria-current="page"] { margin-inline-end: -1px; }
+    .tp-sidebar-link {
+      border-start-end-radius: 0;
+      border-end-end-radius: 0;
+    }
+    .tp-sidebar-link[aria-current="page"] { box-shadow: none; }
+    /* Inward curves where the open tab meets the page (the page is on the
+       left of an RTL rail). */
+    .tp-sidebar-link[aria-current="page"]::before,
+    .tp-sidebar-link[aria-current="page"]::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      inline-size: 1.1rem;
+      block-size: 1.1rem;
+      pointer-events: none;
+    }
+    .tp-sidebar-link[aria-current="page"]::before {
+      bottom: 100%;
+      background: radial-gradient(circle at 100% 0, transparent 1.1rem, var(--background) calc(1.1rem + 0.5px));
+    }
+    .tp-sidebar-link[aria-current="page"]::after {
+      top: 100%;
+      background: radial-gradient(circle at 100% 100%, transparent 1.1rem, var(--background) calc(1.1rem + 0.5px));
+    }
+  }
+}
+
 @layer components {
   .tp-dashboard {
     container: dashboard / inline-size;
@@ -2986,6 +3272,119 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
 .tp-dashboard__alert[data-alert-tone="warning"] { background: var(--sig-warning-ink); box-shadow: 0 0 0 2px var(--card), 0 6px 14px -6px var(--sig-warning); }
 .tp-dashboard__alert[data-alert-tone="info"] { background: var(--sig-info-fill); box-shadow: 0 0 0 2px var(--card), 0 6px 14px -6px var(--sig-info); }
 .dark .tp-dashboard__alert { color: var(--tp-deep); }
+
+/* ═══ Dashboard layout: stat cards, «إحصائيات الطلبة» beside the status ring,
+   then «الوصول السريع». Surfaces stay on the palette; the four signal colours
+   carry meaning only (green active, red dismissed, blue registrations). ═══ */
+/* «الوضع الليلي» stays on one line in the thin rail. */
+.tp-theme-switch .tp-theme-switch__label { overflow: hidden; font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+.tp-theme-switch { gap: 0.35rem; padding-inline: 0.5rem; }
+.tp-theme-switch .tp-theme-switch__icon { inline-size: 1rem; block-size: 1rem; }
+.tp-theme-switch .tp-theme-switch__track { inline-size: 2.2rem; block-size: 1.25rem; }
+.tp-theme-switch .tp-theme-switch__thumb { inline-size: 0.95rem; block-size: 0.95rem; }
+.tp-theme-switch[aria-checked="true"] .tp-theme-switch__thumb { inset-inline-start: 1.1rem; }
+
+.tp-dashboard { gap: 1.25rem; }
+.tp-dashboard__updated { font-size: 0.78rem; font-weight: 600; text-align: end; }
+
+.tp-dashboard__stat[data-tone] { border-radius: 1.25rem; }
+@container dashboard (min-width: 34rem) {
+  .tp-dashboard__stat[data-tone] { min-block-size: 6.25rem; padding: 1.1rem 1.35rem; gap: 1rem; }
+  .tp-dashboard__stat[data-tone] .tp-dashboard__stat-icon { inline-size: 3.4rem; block-size: 3.4rem; border-radius: 1rem; }
+  .tp-dashboard__stat[data-tone] .tp-dashboard__stat-icon svg { inline-size: 1.6rem; block-size: 1.6rem; }
+  .tp-dashboard__stat-label { color: var(--foreground); font-size: 0.95rem; font-weight: 750; }
+  .tp-dashboard__stat-value { font-size: 2.1rem; }
+}
+
+.tp-dashboard__insights { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; min-inline-size: 0; }
+@container dashboard (min-width: 52rem) {
+  .tp-dashboard__insights { grid-template-columns: minmax(0, 2.1fr) minmax(15rem, 1fr); }
+}
+.tp-dashboard__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-inline-size: 0;
+  padding: 1.1rem 1.15rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  border-radius: 1.25rem;
+  background: var(--card);
+  box-shadow: 0 18px 40px -34px color-mix(in srgb, var(--tp-deep) 45%, transparent);
+}
+@container dashboard (min-width: 40rem) {
+  .tp-dashboard__panel { padding: 1.35rem 1.5rem 1.15rem; }
+}
+.tp-dashboard__panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.tp-dashboard__panel-title { margin: 0; color: var(--foreground); font-size: 1.15rem; font-weight: 900; line-height: 1.4; }
+
+/* «إحصائيات الطلبة» */
+.tp-trend__range { inline-size: auto; min-inline-size: 9.5rem; border-radius: 999px; font-weight: 700; }
+.tp-trend__plot { position: relative; min-block-size: 280px; min-inline-size: 0; }
+.tp-trend__svg { display: block; touch-action: pan-y; transition: opacity 150ms ease; }
+.tp-trend__svg[data-loading] { opacity: 0.55; }
+.tp-trend__grid { stroke: color-mix(in srgb, var(--border) 90%, transparent); stroke-width: 1; }
+.tp-trend__grid--v { display: none; opacity: 0.7; }
+.tp-trend__grid--v[data-labelled] { display: inline; }
+.tp-trend__tick { fill: var(--muted-foreground); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tp-trend__tick--band { fill: var(--status-success-fg); opacity: 0.85; }
+.tp-trend__cursor line { stroke: var(--muted-foreground); stroke-width: 1; stroke-dasharray: 4 4; }
+.tp-trend__cursor circle { stroke: var(--card); stroke-width: 2.5; }
+.tp-trend__tooltip {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  gap: 0.2rem;
+  min-inline-size: 9.5rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: var(--shadow-soft);
+  font-size: 0.8rem;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+.tp-trend__tooltip p { display: flex; align-items: center; gap: 0.4rem; margin: 0; }
+.tp-trend__tooltip-date { color: var(--muted-foreground); font-weight: 700; }
+.tp-trend__tooltip-value { font-size: 0.95rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.tp-trend__dot { display: inline-block; flex: none; inline-size: 0.7rem; block-size: 0.7rem; border-radius: 50%; }
+.tp-trend__legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.6rem; margin: 0; padding: 0; list-style: none; color: var(--foreground); font-size: 0.875rem; font-weight: 700; }
+.tp-trend__legend li { display: inline-flex; align-items: center; gap: 0.45rem; }
+.tp-trend__legend-note { color: var(--muted-foreground); font-size: 0.72rem; font-weight: 600; }
+.tp-trend__message { display: grid; place-items: center; gap: 0.6rem; min-block-size: 280px; color: var(--muted-foreground); font-size: 0.9rem; font-weight: 650; text-align: center; }
+.tp-trend__retry { min-block-size: 2.5rem; padding-inline: 1rem; border: 1px solid var(--border); border-radius: 999px; color: var(--foreground); font-weight: 800; }
+
+/* «توزيع الطلبة حسب الحالة» */
+.tp-donut__body { display: grid; flex: 1; align-content: center; justify-items: center; gap: 1.25rem; }
+.tp-donut__ring { position: relative; inline-size: min(12.5rem, 100%); aspect-ratio: 1; }
+.tp-donut__ring svg { display: block; inline-size: 100%; block-size: 100%; }
+.tp-donut__track { fill: none; stroke: color-mix(in srgb, var(--muted) 80%, var(--border)); stroke-width: 16; }
+.tp-donut__center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.tp-donut__total { color: var(--foreground); font-size: 2rem; font-weight: 900; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.tp-donut__caption { color: var(--foreground); font-size: 0.85rem; font-weight: 750; }
+.tp-donut__legend { display: grid; gap: 0.7rem; inline-size: 100%; margin: 0; padding: 0; list-style: none; }
+.tp-donut__legend li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 0.6rem; font-size: 0.9rem; }
+.tp-donut__dot { inline-size: 0.8rem; block-size: 0.8rem; border-radius: 50%; }
+.tp-donut__label { color: var(--foreground); font-weight: 700; }
+.tp-donut__value { color: var(--foreground); font-weight: 900; font-variant-numeric: tabular-nums; }
+.tp-donut__percent { color: var(--muted-foreground); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* «الوصول السريع» */
+.tp-dashboard__heading { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0 0; color: var(--foreground); font-size: 1.2rem; font-weight: 900; }
+.tp-dashboard__heading svg { inline-size: 1.35rem; block-size: 1.35rem; }
+.tp-dashboard__navigation { gap: 0.9rem; }
+@container dashboard (min-width: 40rem) {
+  .tp-dashboard__shortcuts { grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: 0.9rem; }
+  .tp-dashboard__shortcut { min-block-size: 5rem; padding: 0.85rem 1.1rem; gap: 1rem; border-radius: 1.15rem; }
+  .tp-dashboard__shortcut-icon { inline-size: 3.1rem; block-size: 3.1rem; border-radius: 0.95rem; }
+  .tp-dashboard__shortcut-icon svg { inline-size: 1.45rem; block-size: 1.45rem; }
+  .tp-dashboard__shortcut-label { font-size: 1rem; font-weight: 800; }
+}
+.tp-dashboard__shortcut[data-tone] {
+  background: linear-gradient(to left, color-mix(in srgb, var(--tone) 9%, var(--card)), var(--card) 78%);
+  box-shadow: 0 14px 30px -28px var(--tone);
+}
 
 /* Dashboard shortcuts: tinted icon that fills with colour on hover. */
 .tp-dashboard__shortcut[data-tone] .tp-dashboard__shortcut-icon {
