@@ -49,9 +49,9 @@ import {
   KeyRound,
   Lock,
   Search,
-  Presentation,
   UserRound,
 } from "lucide-react";
+import { BrandMark, BrandName } from "./brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -453,9 +453,14 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
         <div className="tp-login-card__accent" />
         <div className="tp-login-card__content">
           <div className="tp-login-header">
-            <div>
-              <h1 className="tp-login-title text-gradient-brand">TeacherPro</h1>
-              <p className="tp-login-subtitle">تسجيل دخول مدير النظام</p>
+            <div className="tp-login-brand">
+              <BrandMark className="tp-login-brand__mark" />
+              <div className="min-w-0">
+                <h1 className="tp-login-title" dir="ltr">
+                  <BrandName teacherClassName="tp-login-title__teacher" />
+                </h1>
+                <p className="tp-login-subtitle">تسجيل دخول مدير النظام</p>
+              </div>
             </div>
             <Button
               variant="outline"
@@ -1313,10 +1318,10 @@ export function TeacherProLayout() {
         )}
       >
         <div className="tp-sidebar-brand relative">
-          <span className="tp-sidebar-brand__icon" aria-hidden="true">
-            <Presentation />
-          </span>
-          <h1 className="tp-sidebar-brand__name">TeacherPro</h1>
+          <BrandMark className="tp-sidebar-brand__mark" />
+          <h1 className="tp-sidebar-brand__name" dir="ltr">
+            <BrandName />
+          </h1>
           <Button
             variant="ghost"
             size="icon"
