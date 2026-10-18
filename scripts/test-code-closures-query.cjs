@@ -12,6 +12,10 @@ const historyModule = { exports: {} };
 new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/dismissed-history.ts", "utf8"), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText)(historyModule, historyModule.exports);
+const dismissalModule = { exports: {} };
+new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/code-closure-dismissal.ts", "utf8"), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText)(dismissalModule, dismissalModule.exports);
 
 (async () => {
   const pg = new PGlite();
@@ -100,6 +104,7 @@ new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/di
     const mocks = {
       "next/server": { NextRequest, NextResponse },
       "@/lib/dismissed-history": historyModule.exports,
+      "@/lib/code-closure-dismissal": dismissalModule.exports,
       "@/lib/server-auth": {
         requirePermission: async (req, permission) => {
           authCalls.push({ req, permission });
@@ -144,6 +149,15 @@ new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/di
           return rows.filter((row) => pairs.some((pair) => pair.studentId === row.studentId && pair.examId === row.examId));
         });
       } }, auditLog: { findMany: async (args) => {
+        if (args.where.action === dismissalModule.exports.BOT_NOTICE_SENT_ACTION) {
+          return [
+            // Sent in an earlier dismissal episode: the current one is unsent.
+            { time: new Date("2026-09-21T08:00:00.000Z"), details: JSON.stringify({ studentId: "student-0003", epoch: 2 }) },
+            { time: new Date("2026-09-24T07:00:00.000Z"), details: JSON.stringify({ studentId: "student-0007", epoch: 3 }) },
+            { time: new Date("2026-09-24T07:30:00.000Z"), details: JSON.stringify({ studentId: "student-0008" }) },
+            { time: new Date("2026-09-24T07:45:00.000Z"), details: "ليس JSON" },
+          ];
+        }
         assert.equal(args.where.action, "اغلاق كود الطالب المفصول", "only closing lines are read for the closing date");
         return [
           // Closed during an earlier dismissal: not this dismissal's closing.
@@ -211,6 +225,9 @@ new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/di
     assert.equal(checkedStudent.phone, "07705550679", "the stored phone is returned as is for the platform copy");
     assert.equal(checkedStudent.closurePlatformEpoch, 3);
     assert.equal(checkedStudent.closureTelegramEpoch, 2, "a mark from an older dismissal is returned, not rewritten");
+    assert.equal(checkedStudent.botNoticeSentAt, null, "a bot notice from an older dismissal does not count for this one");
+    assert.equal(data.students.find((student) => student.id === "student-0007").botNoticeSentAt, "2026-09-24T07:00:00.000Z", "this dismissal's bot notice is shown");
+    assert.equal(data.students.find((student) => student.id === "student-0008").botNoticeSentAt, null, "a line without an episode is not a send");
     const outcome = (id) => { const row = data.students.find((student) => student.id === id); return [row.dismissalExamName, row.dismissalOutcome]; };
     assert.deepEqual(outcome("student-0007"), ["يومي 3", "غياب"], "the dismissing exam's absence, not another exam's grade");
     assert.deepEqual(outcome("student-0008"), ["يومي 4", "4 من 20"], "the dismissal behind the recorded reason wins over a later one");

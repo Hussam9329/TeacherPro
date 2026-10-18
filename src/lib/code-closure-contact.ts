@@ -54,6 +54,18 @@ export function buildDismissalNotice(examName?: string | null, outcome?: string 
   ].join("\n");
 }
 
+/**
+ * The notice as the bot sends it: Telegram's HTML mode, so «**…**» shows bold
+ * just as it does when typed in the app. Everything else is escaped.
+ */
+export function dismissalNoticeHtml(notice: string): string {
+  return notice
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\*\*([^*\n]+?)\*\*/g, "<b>$1</b>");
+}
+
 /** Opens the chat in the Telegram app with the notice ready in the message box. */
 export function telegramNoticeHref(chatHref: string, notice: string): string {
   return chatHref ? `${chatHref}&text=${encodeURIComponent(notice)}` : "";

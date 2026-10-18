@@ -23,6 +23,8 @@ export type CodeClosureStudent = {
   codeClosedAt?: string | null;
   dismissalExamName: string | null;
   dismissalOutcome: string | null;
+  /** When the bot sent the dismissal notice in this dismissal; null when it has not. */
+  botNoticeSentAt?: string | null;
 };
 
 export type CodeClosuresResponse = {
@@ -60,5 +62,17 @@ export const codeClosuresApi = {
     });
     const data = await response.json().catch(() => null);
     if (!response.ok) throw new Error(data?.error || "تعذر حفظ علامة التواصل مع الطالب.");
+  },
+  /** The bot sends the dismissal notice; the error says why when it could not. */
+  async sendBotNotice(studentId: string, expectedEpoch: number): Promise<{ botNoticeSentAt: string }> {
+    const response = await fetch("/api/students/code-closures/bot-notice", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", ...ownerHeaders() },
+      body: JSON.stringify({ studentId, expectedEpoch }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || data?.sent !== true) throw new Error(data?.error || "تعذر إرسال التبليغ عبر البوت.");
+    return { botNoticeSentAt: String(data.botNoticeSentAt || new Date().toISOString()) };
   },
 };
