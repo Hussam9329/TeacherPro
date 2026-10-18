@@ -2135,12 +2135,6 @@
     inline-size: 100%;
   }
 
-  .tp-dashboard__updated {
-    font-size: 0.6875rem;
-    line-height: 1.5;
-    overflow-wrap: anywhere;
-  }
-
   .tp-dashboard__kpis,
   .tp-dashboard__shortcuts {
     display: grid;
@@ -3363,7 +3357,6 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
 .tp-theme-switch[aria-checked="true"] .tp-theme-switch__thumb { inset-inline-start: 1.1rem; }
 
 .tp-dashboard { gap: 1.25rem; }
-.tp-dashboard__updated { font-size: 0.78rem; font-weight: 600; text-align: end; }
 
 .tp-dashboard__stat[data-tone] { border-radius: 1.25rem; }
 @container dashboard (min-width: 34rem) {

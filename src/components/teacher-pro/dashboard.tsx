@@ -382,12 +382,6 @@ export function DashboardView({
         </div>
       )}
 
-      {!initialError && stats && (
-        <p className="tp-dashboard__updated text-muted-foreground" aria-live="polite">
-          {statsRefreshing ? "جارٍ تحديث الأرقام…" : `آخر تحديث: ${formatStatsTime(stats.generatedAt)}`}
-        </p>
-      )}
-
       <div className="tp-dashboard__kpis" role="group" aria-label="إحصائيات الطلاب">
         {kpiCards.map(({ label, value, icon: Icon, tone }) => (
           <div key={label} className="tp-dashboard__stat" data-count-scope="system" data-tone={tone}>
