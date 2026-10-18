@@ -1879,20 +1879,31 @@
     color: color-mix(in srgb, var(--sidebar-foreground) 78%, transparent);
     font-size: 0.875rem;
     font-weight: 650;
-    transition: background-color 160ms ease, color 160ms ease;
+    transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
   }
   .tp-sidebar-link__icon {
     flex: none;
     inline-size: 1.2rem;
     block-size: 1.2rem;
     color: color-mix(in srgb, var(--sidebar-foreground) 70%, transparent);
-    transition: color 160ms ease;
+    transition: color 180ms ease, transform 180ms ease;
   }
-  .tp-sidebar-link:hover {
-    background: var(--sidebar-accent);
-    color: var(--sidebar-accent-foreground);
+  /* Hover on a closed tab: a soft cream glass pill, brighter text, and the
+     icon nudged towards the label; the open tab stays as it is. */
+  .tp-sidebar-link:not([aria-current="page"]):hover {
+    background: color-mix(in srgb, var(--sidebar-foreground) 9%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sidebar-foreground) 12%, transparent);
+    color: var(--sidebar-foreground);
   }
-  .tp-sidebar-link:hover .tp-sidebar-link__icon { color: var(--sidebar-accent-foreground); }
+  .tp-sidebar-link:not([aria-current="page"]):hover .tp-sidebar-link__icon {
+    color: var(--sidebar-foreground);
+    transform: translateX(-2px);
+  }
+  .tp-sidebar-link:not([aria-current="page"]):active { background: color-mix(in srgb, var(--sidebar-foreground) 14%, transparent); }
+  @media (prefers-reduced-motion: reduce) {
+    .tp-sidebar-link, .tp-sidebar-link__icon { transition: none; }
+    .tp-sidebar-link:not([aria-current="page"]):hover .tp-sidebar-link__icon { transform: none; }
+  }
   .tp-sidebar-link:focus-visible { outline: 2px solid var(--sidebar-ring); outline-offset: 2px; }
   .tp-sidebar-link[aria-current="page"] {
     background: var(--background);
@@ -2082,7 +2093,7 @@
 
   @media (min-width: 1024px) {
     /* The page is a sheet beside the rail; its top corner curves into it. */
-    .tp-app-main { border-start-start-radius: 2.25rem; }
+    .tp-app-main { border-start-start-radius: 1.75rem; }
     /* No scrollbar between the open tab and the page: in RTL it sits on the
        rail's page side. The rail still scrolls with the wheel and touch. */
     .tp-sidebar-scroll { padding-block: 1.25rem; padding-inline-end: 0; scrollbar-width: none; scrollbar-gutter: auto; }
@@ -2090,7 +2101,10 @@
     .tp-app-sidebar { border: 0; }
     /* The tab reaches a hair into the page so no seam shows at any zoom. */
     .tp-sidebar-link[aria-current="page"] { margin-inline-end: -1px; }
-    .tp-sidebar-link {
+    /* Only the open tab runs into the page; the others (and their hover)
+       keep round corners and a little air from the page edge. */
+    .tp-sidebar-link:not([aria-current="page"]) { margin-inline-end: 0.6rem; }
+    .tp-sidebar-link[aria-current="page"] {
       border-start-end-radius: 0;
       border-end-end-radius: 0;
     }
@@ -3276,6 +3290,12 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
 /* ═══ Dashboard layout: stat cards, «إحصائيات الطلبة» beside the status ring,
    then «الوصول السريع». Surfaces stay on the palette; the four signal colours
    carry meaning only (green active, red dismissed, blue registrations). ═══ */
+/* On wide screens the page title keeps clear of the sheet's curved top
+   corner (unlayered: it must win over the header's px-* utilities). */
+@media (min-width: 1024px) {
+  .tp-app-header__inner { padding-inline-start: 2.75rem; }
+}
+
 /* «الوضع الليلي» stays on one line in the thin rail. */
 .tp-theme-switch .tp-theme-switch__label { overflow: hidden; font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
 .tp-theme-switch { gap: 0.35rem; padding-inline: 0.5rem; }
