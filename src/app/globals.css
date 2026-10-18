@@ -1858,17 +1858,6 @@
     min-block-size: 5.5rem;
     padding: 1rem 0.85rem 0.75rem;
   }
-  .tp-sidebar-brand__icon {
-    display: grid;
-    place-items: center;
-    flex: none;
-    inline-size: 2.35rem;
-    block-size: 2.35rem;
-    border: 1.5px solid color-mix(in srgb, var(--sidebar-foreground) 45%, transparent);
-    border-radius: 0.7rem;
-    color: var(--sidebar-foreground);
-  }
-  .tp-sidebar-brand__icon svg { inline-size: 1.25rem; block-size: 1.25rem; }
   .tp-sidebar-brand__name {
     min-inline-size: 0;
     flex: 1;
@@ -3311,9 +3300,43 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
   }
   .tp-app-sidebar { background: transparent; }
 }
-.tp-sidebar-brand { gap: 0.45rem; padding-inline: 0.65rem; }
-.tp-sidebar-brand__mark { flex: none; inline-size: 2.25rem; block-size: 2.25rem; filter: drop-shadow(0 6px 14px rgb(0 0 0 / 0.35)); }
-.tp-sidebar-brand .tp-sidebar-brand__name { overflow: visible; color: var(--tp-bg); font-size: 1rem; font-weight: 800; letter-spacing: -0.02em; text-align: start; text-overflow: clip; }
+/* The rail's head: the logo large on its own line, the name centred under
+   it, and a fine gold rule closing the block. */
+.tp-sidebar-brand {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  min-block-size: 0;
+  padding: 1.5rem 0.75rem 1.15rem;
+  text-align: center;
+}
+.tp-sidebar-brand::after {
+  content: "";
+  inline-size: 58%;
+  block-size: 1px;
+  margin-block-start: 0.35rem;
+  background: linear-gradient(90deg, transparent, var(--tp-gold) 50%, transparent);
+  opacity: 0.55;
+}
+.tp-sidebar-brand__mark {
+  flex: none;
+  inline-size: 4.4rem;
+  block-size: 4.4rem;
+  filter: drop-shadow(0 12px 22px rgb(0 0 0 / 0.45)) drop-shadow(0 0 16px rgb(217 173 92 / 0.18));
+}
+.tp-sidebar-brand .tp-sidebar-brand__name {
+  flex: none;
+  overflow: visible;
+  color: var(--tp-bg);
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  text-align: center;
+  text-overflow: clip;
+}
+.tp-sidebar-brand__close { position: absolute; inset-block-start: 0.5rem; inset-inline-end: 0.4rem; }
 .tp-brand-gold {
   background: var(--tp-gold-gradient);
   -webkit-background-clip: text;
@@ -3323,8 +3346,6 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
 .tp-sidebar-link[aria-current="page"] .tp-sidebar-link__icon { color: var(--tp-gold-ink); }
 .tp-theme-switch[aria-checked="true"] .tp-theme-switch__track { background: var(--tp-gold-gradient); }
 .tp-login-card__accent { background: var(--tp-gold-gradient); }
-.tp-login-brand { display: flex; align-items: center; gap: 0.85rem; min-inline-size: 0; }
-.tp-login-brand__mark { flex: none; inline-size: 3.4rem; block-size: 3.4rem; filter: drop-shadow(0 10px 20px rgb(10 26 23 / 0.35)); }
 .tp-login-title .tp-login-title__teacher { color: var(--foreground); }
 
 /* On wide screens the page title keeps clear of the sheet's curved top

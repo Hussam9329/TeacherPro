@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- TeacherPro: gold graduation cap over a folded gold «T» in a gold-rimmed green-black tile
-       (same drawing as src/components/teacher-pro/brand-mark.tsx). -->
+  <!-- TeacherPro: gold graduation cap over a folded gold «T» in a gold-rimmed
+       green-black tile. The site's logo, used only as the browser tab icon. -->
   <defs>
     <radialGradient id="tile" cx="50%" cy="28%" r="80%">
       <stop offset="0%" stop-color="#173a31"/>

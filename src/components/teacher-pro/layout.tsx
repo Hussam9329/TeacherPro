@@ -453,14 +453,11 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
         <div className="tp-login-card__accent" />
         <div className="tp-login-card__content">
           <div className="tp-login-header">
-            <div className="tp-login-brand">
-              <BrandMark className="tp-login-brand__mark" />
-              <div className="min-w-0">
-                <h1 className="tp-login-title" dir="ltr">
-                  <BrandName teacherClassName="tp-login-title__teacher" />
-                </h1>
-                <p className="tp-login-subtitle">تسجيل دخول مدير النظام</p>
-              </div>
+            <div className="min-w-0">
+              <h1 className="tp-login-title" dir="ltr">
+                <BrandName teacherClassName="tp-login-title__teacher" />
+              </h1>
+              <p className="tp-login-subtitle">تسجيل دخول مدير النظام</p>
             </div>
             <Button
               variant="outline"
@@ -1317,6 +1314,7 @@ export function TeacherProLayout() {
           sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
         )}
       >
+        {/* The logo large on its own line, the name centred under it. */}
         <div className="tp-sidebar-brand relative">
           <BrandMark className="tp-sidebar-brand__mark" />
           <h1 className="tp-sidebar-brand__name" dir="ltr">
@@ -1325,7 +1323,7 @@ export function TeacherProLayout() {
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden text-sidebar-foreground hover:bg-sidebar-accent"
+            className="tp-sidebar-brand__close lg:hidden text-sidebar-foreground hover:bg-sidebar-accent"
             onClick={() => setSidebarOpen(false)}
             aria-label="إغلاق القائمة الجانبية"
           >
