@@ -3430,19 +3430,50 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
 .tp-trend__retry { min-block-size: 2.5rem; padding-inline: 1rem; border: 1px solid var(--border); border-radius: 999px; color: var(--foreground); font-weight: 800; }
 
 /* «توزيع الطلبة حسب الحالة» */
-.tp-donut__body { display: grid; flex: 1; align-content: center; justify-items: center; gap: 1.25rem; }
-.tp-donut__ring { position: relative; inline-size: min(12.5rem, 100%); aspect-ratio: 1; }
-.tp-donut__ring svg { display: block; inline-size: 100%; block-size: 100%; }
-.tp-donut__track { fill: none; stroke: color-mix(in srgb, var(--muted) 80%, var(--border)); stroke-width: 16; }
-.tp-donut__center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
-.tp-donut__total { color: var(--foreground); font-size: 2rem; font-weight: 900; line-height: 1.15; font-variant-numeric: tabular-nums; }
-.tp-donut__caption { color: var(--foreground); font-size: 0.85rem; font-weight: 750; }
-.tp-donut__legend { display: grid; gap: 0.7rem; inline-size: 100%; margin: 0; padding: 0; list-style: none; }
-.tp-donut__legend li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 0.6rem; font-size: 0.9rem; }
-.tp-donut__dot { inline-size: 0.8rem; block-size: 0.8rem; border-radius: 50%; }
-.tp-donut__label { color: var(--foreground); font-weight: 700; }
-.tp-donut__value { color: var(--foreground); font-weight: 900; font-variant-numeric: tabular-nums; }
-.tp-donut__percent { color: var(--muted-foreground); font-weight: 600; font-variant-numeric: tabular-nums; }
+.tp-donut__body { display: grid; flex: 1; align-content: center; justify-items: center; gap: 1.4rem; }
+.tp-donut__ring { position: relative; inline-size: min(13.5rem, 100%); aspect-ratio: 1; }
+.tp-donut__ring svg { display: block; inline-size: 100%; block-size: 100%; overflow: visible; }
+.tp-donut__track { fill: none; stroke: color-mix(in srgb, var(--muted) 85%, var(--border)); }
+/* A soft inner disc lifts the numbers off the card. */
+.tp-donut__hub { fill: color-mix(in srgb, var(--muted) 45%, var(--card)); stroke: color-mix(in srgb, var(--border) 70%, transparent); stroke-width: 0.6; }
+.tp-donut__arc {
+  stroke: var(--card);
+  stroke-width: 0.8;
+  transform-box: view-box;
+  transform-origin: 90px 90px;
+  transition: opacity 180ms ease, transform 180ms ease, filter 180ms ease;
+  cursor: default;
+}
+.tp-donut__arc[data-dim] { opacity: 0.32; }
+.tp-donut__arc[data-on] { transform: scale(1.045); filter: drop-shadow(0 4px 8px color-mix(in srgb, var(--tp-deep) 22%, transparent)); }
+.tp-donut__center { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 0.1rem; text-align: center; pointer-events: none; }
+.tp-donut__total { color: var(--foreground); font-size: 2.1rem; font-weight: 900; line-height: 1.1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.tp-donut__caption { color: var(--muted-foreground); font-size: 0.82rem; font-weight: 750; }
+.tp-donut__share { margin-block-start: 0.15rem; padding: 0.05rem 0.5rem; border-radius: 999px; background: color-mix(in srgb, var(--muted) 70%, var(--card)); color: var(--foreground); font-size: 0.75rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tp-donut__legend { display: grid; gap: 0.35rem; inline-size: 100%; margin: 0; padding: 0; list-style: none; }
+.tp-donut__legend li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas: "dot label value percent" "bar bar bar bar";
+  align-items: center;
+  column-gap: 0.6rem;
+  row-gap: 0.4rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.85rem;
+  font-size: 0.9rem;
+  transition: background-color 160ms ease;
+}
+.tp-donut__legend li[data-on] { background: color-mix(in srgb, var(--muted) 60%, var(--card)); }
+.tp-donut__dot { grid-area: dot; inline-size: 0.7rem; block-size: 0.7rem; border-radius: 0.2rem; }
+.tp-donut__label { grid-area: label; color: var(--foreground); font-weight: 700; }
+.tp-donut__value { grid-area: value; color: var(--foreground); font-weight: 900; font-variant-numeric: tabular-nums; }
+.tp-donut__percent { grid-area: percent; min-inline-size: 3.4rem; color: var(--muted-foreground); font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; text-align: end; }
+.tp-donut__bar { grid-area: bar; display: block; block-size: 0.3rem; border-radius: 999px; background: color-mix(in srgb, var(--muted) 85%, var(--border)); overflow: hidden; }
+.tp-donut__bar > span { display: block; block-size: 100%; border-radius: inherit; }
+@media (prefers-reduced-motion: reduce) {
+  .tp-donut__arc, .tp-donut__legend li { transition: none; }
+  .tp-donut__arc[data-on] { transform: none; }
+}
 
 /* «الوصول السريع» */
 .tp-dashboard__heading { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0 0; color: var(--foreground); font-size: 1.2rem; font-weight: 900; }

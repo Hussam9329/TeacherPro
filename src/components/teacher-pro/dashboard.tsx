@@ -94,19 +94,35 @@ function StudentStatusDonut({ stats, loading }: { stats: DashboardStats | null; 
         },
       ].filter((part) => part.key !== "other" || part.value > 0)
     : [];
-  const radius = 70;
-  const circumference = 2 * Math.PI * radius;
-  // Rounded ends reach half the ring's width past each part, so the gap
-  // between parts is that width plus a little air; a tiny part stays a dot.
-  const gap = parts.filter((part) => part.value > 0).length > 1 ? 16 + 4 : 0;
-  let offset = 0;
-  const arcs = parts.map((part) => {
-    const length = total ? (part.value / total) * circumference : 0;
-    const arc = { ...part, dash: part.value > 0 ? Math.max(0.5, length - gap) : 0, offset };
-    offset += length;
-    return arc;
+  const [focused, setFocused] = useState<string | null>(null);
+  const share = (value: number) => (total ? (value / total) * 100 : 0);
+  const percent = (value: number) => `${share(value).toFixed(1)}%`;
+
+  // Each part is a true ring sector (its real share), with a thin even gap
+  // between parts; a very small part still keeps a visible sliver.
+  const OUTER = 86;
+  const INNER = 64;
+  const shown = parts.filter((part) => part.value > 0);
+  const pad = shown.length > 1 ? 1.6 : 0;
+  const point = (r: number, degrees: number) => {
+    const radians = (degrees * Math.PI) / 180;
+    return `${(90 + r * Math.sin(radians)).toFixed(3)} ${(90 - r * Math.cos(radians)).toFixed(3)}`;
+  };
+  const sector = (from: number, to: number) => {
+    const large = to - from > 180 ? 1 : 0;
+    return `M ${point(OUTER, from)} A ${OUTER} ${OUTER} 0 ${large} 1 ${point(OUTER, to)} L ${point(INNER, to)} A ${INNER} ${INNER} 0 ${large} 0 ${point(INNER, from)} Z`;
+  };
+  let start = 0;
+  const arcs = shown.map((part) => {
+    const sweep = total ? (part.value / total) * 360 : 0;
+    const from = start + pad / 2;
+    const to = Math.max(from + 1.4, start + sweep - pad / 2);
+    start += sweep;
+    // A single part fills the ring: two halves, since one arc cannot close.
+    const d = sweep >= 359.9 ? `${sector(0, 180)} ${sector(180, 359.999)}` : sector(from, to);
+    return { ...part, d };
   });
-  const percent = (value: number) => (total ? `${((value / total) * 100).toFixed(1)}%` : "0%");
+  const active = parts.find((part) => part.key === focused) || null;
 
   return (
     <section className="tp-dashboard__panel tp-donut" aria-labelledby="tp-donut-title">
@@ -114,38 +130,52 @@ function StudentStatusDonut({ stats, loading }: { stats: DashboardStats | null; 
         <h3 id="tp-donut-title" className="tp-dashboard__panel-title">توزيع الطلبة حسب الحالة</h3>
       </header>
       <div className="tp-donut__body">
-        <div className="tp-donut__ring">
+        <div className="tp-donut__ring" data-focused={focused || undefined} onMouseLeave={() => setFocused(null)}>
           <svg viewBox="0 0 180 180" role="img" aria-label={parts.map((part) => `${part.label} ${part.value} (${percent(part.value)})`).join("، ")}>
-            <circle cx="90" cy="90" r={radius} className="tp-donut__track" />
-            <g transform="rotate(-90 90 90)">
-              {arcs.map((arc) => arc.dash > 0 ? (
-                <circle
-                  key={arc.key}
-                  cx="90"
-                  cy="90"
-                  r={radius}
-                  fill="none"
-                  stroke={arc.color}
-                  strokeWidth="16"
-                  strokeLinecap={gap ? "round" : "butt"}
-                  strokeDasharray={`${arc.dash} ${circumference}`}
-                  strokeDashoffset={-arc.offset - gap / 2}
-                />
-              ) : null)}
-            </g>
+            <circle cx="90" cy="90" r={(OUTER + INNER) / 2} className="tp-donut__track" strokeWidth={OUTER - INNER} />
+            <circle cx="90" cy="90" r={INNER - 7} className="tp-donut__hub" />
+            {arcs.map((arc) => (
+              <path
+                key={arc.key}
+                d={arc.d}
+                fill={arc.color}
+                className="tp-donut__arc"
+                data-dim={focused && focused !== arc.key ? true : undefined}
+                data-on={focused === arc.key ? true : undefined}
+                onMouseEnter={() => setFocused(arc.key)}
+              />
+            ))}
           </svg>
-          <div className="tp-donut__center">
-            <span className="tp-donut__total">{loading && !stats ? "…" : total.toLocaleString("en-US")}</span>
-            <span className="tp-donut__caption">إجمالي الطلبة</span>
+          <div className="tp-donut__center" aria-hidden={active ? true : undefined}>
+            {active ? (
+              <>
+                <span className="tp-donut__total" style={{ color: active.color }}>{active.value.toLocaleString("en-US")}</span>
+                <span className="tp-donut__caption">{active.label}</span>
+                <span className="tp-donut__share">{percent(active.value)}</span>
+              </>
+            ) : (
+              <>
+                <span className="tp-donut__total">{loading && !stats ? "…" : total.toLocaleString("en-US")}</span>
+                <span className="tp-donut__caption">إجمالي الطلبة</span>
+              </>
+            )}
           </div>
         </div>
         <ul className="tp-donut__legend">
           {parts.map((part) => (
-            <li key={part.key}>
+            <li
+              key={part.key}
+              data-on={focused === part.key ? true : undefined}
+              onMouseEnter={() => setFocused(part.key)}
+              onMouseLeave={() => setFocused(null)}
+            >
               <span className="tp-donut__dot" style={{ background: part.color }} aria-hidden="true" />
               <span className="tp-donut__label">{part.label}</span>
               <span className="tp-donut__value">{part.value.toLocaleString("en-US")}</span>
-              <span className="tp-donut__percent">({percent(part.value)})</span>
+              <span className="tp-donut__percent">{percent(part.value)}</span>
+              <span className="tp-donut__bar" aria-hidden="true">
+                <span style={{ inlineSize: `${Math.max(share(part.value), part.value > 0 ? 1.5 : 0)}%`, background: part.color }} />
+              </span>
             </li>
           ))}
         </ul>
