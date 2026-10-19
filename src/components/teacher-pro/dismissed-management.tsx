@@ -314,26 +314,26 @@ function buildHtmlReport(history: StudentHistory) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>سجل الطالب - ${escapeDismissedHistoryHtml(s.name)}</title>
 <style>
-:root{font-family:Arial,Tahoma,sans-serif;color:#19293A;background:#F3F0E4}
+:root{font-family:Arial,Tahoma,sans-serif;color:#142B25;background:#F3F0E4}
 *{box-sizing:border-box}
 html,body{max-width:100%;overflow-x:hidden}
 body{margin:0;padding:24px}
 .page{max-width:1000px;margin:auto;background:#FBF9EB;border:1px solid #E6E3D9;border-radius:18px;padding:28px;overflow-wrap:anywhere;word-break:break-word}
-.header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;border-bottom:3px solid #19293A;padding-bottom:18px;margin-bottom:20px}
-.brand h1{font-size:24px;margin:0 0 6px}.brand p{margin:0;color:#5B6674}
+.header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;border-bottom:3px solid #142B25;padding-bottom:18px;margin-bottom:20px}
+.brand h1{font-size:24px;margin:0 0 6px}.brand p{margin:0;color:#586A64}
 .status{padding:8px 12px;border-radius:999px;background:#F7E8DB;color:#A34645;font-weight:700}
 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}
 .info-box{border:1px solid #E6E3D9;border-radius:12px;padding:10px;break-inside:avoid}
-.info-box b{display:block;font-size:11px;color:#5B6674;margin-bottom:4px}
+.info-box b{display:block;font-size:11px;color:#586A64;margin-bottom:4px}
 .summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin:18px 0}
 .metric{border:1px solid #E6E3D9;border-radius:12px;padding:10px;text-align:center}
-.metric strong{display:block;font-size:20px}.metric span{font-size:11px;color:#5B6674}
+.metric strong{display:block;font-size:20px}.metric span{font-size:11px;color:#586A64}
 .section-title{font-size:18px;margin:26px 0 12px}
 .event{display:flex;gap:12px;border:1px solid #E6E3D9;border-radius:12px;padding:12px;margin:0 0 10px;break-inside:avoid}
-.event-index{width:28px;height:28px;border-radius:50%;background:#19293A;color:#FBF9EB;display:grid;place-items:center;flex:0 0 28px;font-weight:700}
+.event-index{width:28px;height:28px;border-radius:50%;background:#142B25;color:#FBF9EB;display:grid;place-items:center;flex:0 0 28px;font-weight:700}
 .event-body{min-width:0;flex:1;overflow-wrap:anywhere;word-break:break-word}
 .event-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:6px}
-.event-head span{font-size:12px;color:#5B6674;white-space:nowrap}
+.event-head span{font-size:12px;color:#586A64;white-space:nowrap}
 .detail{font-size:13px;line-height:1.7}
 .danger{border-color:#DDA198;background:#F9F1E3}.warning{border-color:#D4ABA5;background:#F7F1E4}
 .success{border-color:#A8ABA9;background:#F0EFE2}.info{border-color:#B5B7B6;background:#F3F2E5}

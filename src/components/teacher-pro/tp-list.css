@@ -146,7 +146,7 @@
   border-radius: 0.9rem;
   background: var(--popover, var(--card));
   color: var(--popover-foreground, var(--foreground));
-  box-shadow: 0 18px 40px -20px color-mix(in srgb, #0e1f36 55%, transparent);
+  box-shadow: 0 18px 40px -20px color-mix(in srgb, #0a1a17 55%, transparent);
 }
 .tp-row-menu__item {
   display: flex;
@@ -182,7 +182,7 @@
   border: 1px solid var(--tp-border);
   border-radius: 1.25rem;
   background: var(--tp-surface);
-  box-shadow: 0 14px 34px -28px color-mix(in srgb, #0e1f36 55%, transparent);
+  box-shadow: 0 14px 34px -28px color-mix(in srgb, #0a1a17 55%, transparent);
 }
 .tp-rcard[data-tone="danger"] { border-color: var(--status-danger-border); }
 .tp-rcard[data-muted="true"] { border-style: dashed; background: var(--tp-panel); }

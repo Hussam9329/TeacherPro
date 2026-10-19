@@ -2,20 +2,12 @@
    tp-modal — one look for TeacherPro's management windows:
    «إدارة ملاحظات المكالمات» · «اغلاق الكودات» · «إدارة فترة السماح».
 
-   Every colour on these windows is one of the seven palette values below or a
-   mix of two of them (tints and shades of the same scale). Nothing else.
+   Every colour on these windows is one of the system palette values
+   (--tp-* in globals.css, the logo's green-black and gold) or a mix of two of
+   them. The windows take that palette as it is, so the whole system has one.
    ============================================================================ */
 
 .tp-modal[data-slot="dialog-content"] {
-  /* Palette */
-  --tp-bg: #fbf9eb;      /* Background   */
-  --tp-ink: #19293a;     /* Primary Dark */
-  --tp-muted: #5b6674;   /* Secondary    */
-  --tp-accent: #d15049;  /* Accent       */
-  --tp-soft: #cd938f;    /* Soft Accent  */
-  --tp-line: #e6e3d9;    /* Border       */
-  --tp-deep: #0e1f36;    /* Deep Dark    */
-
   /* Roles (light) */
   --tp-surface: var(--tp-bg);
   --tp-panel: color-mix(in srgb, var(--tp-line) 38%, var(--tp-bg));

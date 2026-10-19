@@ -198,7 +198,7 @@
   color-scheme: light;
   --radius: 1rem;
 
-  /* Daytime: cream surfaces, navy ink */
+  /* Daytime: cream surfaces, green-black ink */
   --background: var(--tp-bg);
   --foreground: var(--tp-ink);
   --card: var(--tp-bg);
@@ -277,7 +277,7 @@
 
 .dark {
   color-scheme: dark;
-  /* Night: deep navy surfaces, cream ink */
+  /* Night: deep green-black surfaces, cream ink */
   --background: var(--tp-deep);
   --foreground: var(--tp-bg);
   --card: var(--tp-ink);
@@ -1848,7 +1848,7 @@
   }
 }
 
-/* ═══ App shell: thin navy rail; the open page's tab is cut from the page itself ═══
+/* ═══ App shell: thin green-black rail; the open page's tab is cut from the page itself ═══
    On wide screens the shell is the rail's colour and the page is a cream sheet
    with a rounded top corner beside it. The open tab has the page's colour,
    a flat edge towards the page and two inward curves above and below, so it
