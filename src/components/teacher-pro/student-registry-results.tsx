@@ -3,13 +3,22 @@
 import React from "react";
 import {
   Archive,
+  BookOpen,
+  Building2,
+  CalendarDays,
   ChevronDown,
+  ChevronRight,
+  Clock,
   Eye,
+  FileText,
+  Folder,
+  GraduationCap,
   MessageCircle,
   Pencil,
   Phone,
   RotateCcw,
   Send,
+  User,
   UserX,
 } from "lucide-react";
 import type { Student } from "@/lib/teacher-store";
@@ -615,7 +624,6 @@ function StudentRegistryRow({
   const dismissed = student.status === "مفصول";
   const balance = Math.max(0, Number(student.opportunities ?? 0));
   const limit = Number(row.opportunityLimit ?? row.activeChapter?.opportunities ?? NaN);
-  const dots = Number.isFinite(limit) ? Math.min(Math.max(limit, balance), 6) : 0;
   const balanceTone = dismissed ? "danger" : balance <= 0 ? "warning" : Number.isFinite(limit) && balance < limit ? "warning" : "success";
   // Only filled facts, each under its own label; nothing shows «—».
   const location = formatRegistryLocation(student);
@@ -642,23 +650,28 @@ function StudentRegistryRow({
   // The card shows the essentials; facts and contact edits open on demand.
   const [open, setOpen] = React.useState(false);
   const moreId = `registry-student-more-${student.id}`;
+  // «الفصل الأول - الخلية» shows as the chapter and its topic.
+  const [chapterTitle = "", ...topicParts] = (row.activeChapter?.name || "").split(/\s+-\s+/);
+  const chapterTopic = topicParts.join(" - ");
+  const graceEndsToday = currentGrace ? currentGrace.endDate === baghdadTodayKey() : false;
+  const panelTone = dismissed ? "danger" : archived ? "muted" : currentGrace && graceEndsToday ? "warning" : "success";
+  const ringPct = Number.isFinite(limit) && limit > 0 ? Math.min(100, Math.round((balance / limit) * 100)) : balance > 0 ? 100 : 0;
   return (
     <article
       className="tp-scard"
       aria-labelledby={`registry-student-${student.id}`}
       data-status={dismissed ? "dismissed" : archived ? "archived" : "active"}
     >
+      {/* Who: the avatar tile, the name, status and code; «⋯» at the far end. */}
       <header className="tp-scard__head">
+        <span className="tp-scard__avatar" data-tone={tone} aria-hidden="true">
+          <User />
+        </span>
         <div className="tp-scard__who">
-          {/* One line each: a long name or course ends in «…» and shows in full on hover. */}
           <h3 id={`registry-student-${student.id}`} className="tp-scard__name" title={student.name}>{student.name}</h3>
           <p className="tp-scard__meta">
             <span className="tp-scard__status" data-tone={tone}>{student.status}</span>
             <bdi className="tp-scard__code">{student.code}</bdi>
-          </p>
-          <p className="tp-scard__course" title={`${courseName(student.courseId) || "بدون دورة"}${row.activeChapter?.name ? ` · ${row.activeChapter.name}` : ""}`}>
-            {courseName(student.courseId) || "بدون دورة"}
-            {row.activeChapter?.name ? ` · ${row.activeChapter.name}` : ""}
           </p>
         </div>
         {moreActions.length ? (
@@ -666,34 +679,74 @@ function StudentRegistryRow({
         ) : null}
       </header>
 
-      {/* The balance, then anything that needs attention, as quiet lines. */}
-      <div className="tp-scard__balance" data-tone={balanceTone}>
-        <span className="tp-scard__label">الفرص</span>
-        {dots > 0 ? (
-          <span className="tp-scard__meter" aria-hidden="true">
-            {Array.from({ length: dots }, (_, index) => (
-              <i key={index} data-off={index >= balance ? "true" : undefined} />
-            ))}
-          </span>
+      {/* Course, chapter and its topic, each with its icon. */}
+      <ul className="tp-scard__study">
+        <li title={courseName(student.courseId) || "بدون دورة"}>
+          <GraduationCap aria-hidden="true" />
+          <span>{courseName(student.courseId) || "بدون دورة"}</span>
+        </li>
+        {chapterTitle ? (
+          <li title={chapterTitle}>
+            <BookOpen aria-hidden="true" />
+            <span>{chapterTitle}</span>
+          </li>
         ) : null}
-        <span className="tp-scard__balance-value">{formatOpportunityBalance(student, { separator: " من " })}</span>
-      </div>
+        {chapterTopic ? (
+          <li title={chapterTopic}>
+            <Building2 aria-hidden="true" />
+            <span>{chapterTopic}</span>
+          </li>
+        ) : null}
+      </ul>
 
-      {dismissed || currentGrace || healthBadges.length || activeIssue || missingContacts.length ? (
-        <ul className="tp-scard__notes">
-          {dismissed ? (
-            <li data-tone="danger">
-              {displayReasonText(student.dismissalReason) || "سبب الفصل غير مدخل"}
-              {student.dismissalNotes ? ` · ملاحظات: ${student.dismissalNotes}` : ""}
-            </li>
-          ) : null}
+      {/* The panel: the student's state and its date beside the balance ring. */}
+      <section className="tp-scard__panel" data-tone={panelTone} aria-label="الفرص والحالة">
+        <div className="tp-scard__state">
           {currentGrace ? (
-            <li className="tp-scard__grace">
-              <GraceLightPill endDate={currentGrace.endDate}>
-                {`فترة سماح حتى ${formatGraceDate(currentGrace.endDate)}`}
-              </GraceLightPill>
-            </li>
+            <span className="tp-scard__chip" data-tone={graceEndsToday ? "warning" : "success"}>
+              <Clock aria-hidden="true" />
+              ضمن فترة السماح
+            </span>
           ) : null}
+          <div className="tp-scard__when">
+            <span className="tp-scard__when-icon" aria-hidden="true">
+              <CalendarDays />
+            </span>
+            <span className="tp-scard__when-text">
+              {currentGrace ? (
+                <>
+                  <small>فترة السماح حتى</small>
+                  <b>{formatGraceDate(currentGrace.endDate)}</b>
+                </>
+              ) : dismissed ? (
+                <>
+                  <small>سبب الفصل</small>
+                  <b>{displayReasonText(student.dismissalReason) || "سبب الفصل غير مدخل"}</b>
+                  {student.dismissalNotes ? <small>ملاحظات: {student.dismissalNotes}</small> : null}
+                </>
+              ) : (
+                <>
+                  <small>تاريخ التسجيل</small>
+                  <b>{student.createdAt ? formatAppDate(student.createdAt, "") : "غير مسجل"}</b>
+                </>
+              )}
+            </span>
+          </div>
+        </div>
+        <div
+          className="tp-scard__ring"
+          data-tone={balanceTone}
+          style={{ "--ring-pct": `${ringPct}%` } as React.CSSProperties}
+        >
+          <span className="tp-scard__ring-inner">
+            <b>{formatOpportunityBalance(student, { separator: " من " })}</b>
+            <small>الفرص</small>
+          </span>
+        </div>
+      </section>
+
+      {healthBadges.length || activeIssue || missingContacts.length ? (
+        <ul className="tp-scard__notes">
           {healthBadges.map((badge) => (
             <li key={badge.label} data-tone={badge.className.includes("danger") ? "danger" : "warning"}>{badge.label}</li>
           ))}
@@ -755,28 +808,34 @@ function StudentRegistryRow({
       ) : null}
 
       <footer className="tp-scard__foot">
-        {hasPhone ? (
-          <a className="tp-scard__icon" href={whatsappLink(student.phone)} target="_blank" rel="noopener noreferrer" aria-label={`رقم الطالب ${student.phone}`} title={student.phone}>
-            <Phone aria-hidden="true" />
-          </a>
-        ) : null}
-        {hasParentPhone ? (
-          <a className="tp-scard__icon" href={whatsappLink(student.parentPhone)} target="_blank" rel="noopener noreferrer" aria-label={`ولي الأمر ${student.parentPhone}`} title={`ولي الأمر ${student.parentPhone}`}>
-            <MessageCircle aria-hidden="true" />
-          </a>
-        ) : null}
-        {telegramHandle ? (
-          <a className="tp-scard__icon" href={telegramLink(telegramHandle)} target="_blank" rel="noopener noreferrer" aria-label={`تيليجرام ${telegramHandle}`} title={telegramHandle.startsWith("@") ? telegramHandle : `@${telegramHandle}`}>
-            <Send aria-hidden="true" />
-          </a>
-        ) : null}
-        <button type="button" className="tp-scard__toggle" aria-expanded={open} aria-controls={moreId} onClick={() => setOpen((value) => !value)}>
-          التفاصيل
-          <ChevronDown aria-hidden="true" />
+        <div className="tp-scard__reach">
+          {hasPhone ? (
+            <a className="tp-scard__round" href={whatsappLink(student.phone)} target="_blank" rel="noopener noreferrer" aria-label={`رقم الطالب ${student.phone}`} title={student.phone}>
+              <Phone aria-hidden="true" />
+            </a>
+          ) : null}
+          {hasParentPhone ? (
+            <a className="tp-scard__round" href={whatsappLink(student.parentPhone)} target="_blank" rel="noopener noreferrer" aria-label={`ولي الأمر ${student.parentPhone}`} title={`ولي الأمر ${student.parentPhone}`}>
+              <MessageCircle aria-hidden="true" />
+            </a>
+          ) : null}
+          {telegramHandle ? (
+            <a className="tp-scard__round" href={telegramLink(telegramHandle)} target="_blank" rel="noopener noreferrer" aria-label={`تيليجرام ${telegramHandle}`} title={telegramHandle.startsWith("@") ? telegramHandle : `@${telegramHandle}`}>
+              <Send aria-hidden="true" />
+            </a>
+          ) : null}
+        </div>
+        <span className="tp-scard__divider" aria-hidden="true" />
+        <button type="button" className="tp-scard__action" aria-expanded={open} aria-controls={moreId} onClick={() => setOpen((value) => !value)}>
+          <ChevronDown className="tp-scard__chev" aria-hidden="true" />
+          <span>التفاصيل</span>
+          <FileText aria-hidden="true" />
         </button>
-        <button type="button" className="tp-scard__file" onClick={() => actionProps.onFile(student)} title="الدرجات والفرص والمكالمات">
-          <Eye aria-hidden="true" />
-          ملف الطالب
+        <span className="tp-scard__divider" aria-hidden="true" />
+        <button type="button" className="tp-scard__action" onClick={() => actionProps.onFile(student)} title="الدرجات والفرص والمكالمات">
+          <ChevronRight aria-hidden="true" />
+          <span>ملف الطالب</span>
+          <Folder aria-hidden="true" />
         </button>
       </footer>
     </article>
