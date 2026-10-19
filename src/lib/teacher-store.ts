@@ -1374,7 +1374,10 @@ export const useTeacherStore = create<TeacherState>()(
           if (requestSequence !== loadAllRequestSequence) return false;
           if (!serverData) {
             if (requestSequence === loadAllRequestSequence) {
-              set({ dbLoading: false, dbConnected: false });
+              // A failed background refresh keeps the data on screen and the
+              // connection state: only the sync status reports it, so the bar
+              // does not flip to «غير متصل» and back on one slow request.
+              set(isInitialLoad ? { dbLoading: false, dbConnected: false } : { dbLoading: false });
               if (!isInitialLoad) {
                 announceTeacherProSyncError("تعذر تحديث البيانات في الخلفية");
               }
@@ -1612,7 +1615,7 @@ export const useTeacherStore = create<TeacherState>()(
         } catch (e) {
           console.warn("[Store] Failed to load from server:", e);
           if (requestSequence === loadAllRequestSequence) {
-            set({ dbLoading: false, dbConnected: false });
+            set(isInitialLoad ? { dbLoading: false, dbConnected: false } : { dbLoading: false });
             if (!isInitialLoad) {
               announceTeacherProSyncError("تعذر تحديث البيانات في الخلفية");
             }

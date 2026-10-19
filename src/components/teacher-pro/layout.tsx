@@ -278,6 +278,9 @@ const SYNC_VERSION_SCOPE_MAP: Record<string, string[]> = {
   users: ["accounts"],
   roles: ["accounts"],
   auditLogs: ["logs"],
+  // Smart grade notes change with grades; without this key every change to
+  // them counted as «all» and reloaded the whole system every poll.
+  gradeSmartNotes: ["grades", "students", "dashboard"],
 };
 
 function normalizeSyncVersionSnapshot(result: unknown): SyncVersionSnapshot | null {
