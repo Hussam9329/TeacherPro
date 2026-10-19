@@ -608,8 +608,12 @@ export function StudentRegistryView() {
       cancelled || requestId !== studentListRequestId.current;
 
     const silent = isBackgroundSync();
-    setServerStudentsLoading(true);
-    if (!silent) setServerStudentsError(null);
+    // A refresh from a change elsewhere keeps the list and its count on
+    // screen; the new rows replace them when they arrive.
+    if (!silent) {
+      setServerStudentsLoading(true);
+      setServerStudentsError(null);
+    }
 
     studentApi
       .list(
@@ -695,14 +699,18 @@ export function StudentRegistryView() {
     const requestId = ++studentStatsRequestId.current;
     const requestIsStale = () =>
       cancelled || requestId !== studentStatsRequestId.current;
-    setStudentStatsLoading(true);
-    setStudentStatsError(null);
-    setStudentsSystemTotal(null);
-    setActiveStudentsTotal(null);
-    setDismissedStudentsTotal(null);
-    setArchivedStudentsTotal(null);
-    setOtherStudentsTotal(null);
-    setNoActiveChapterStudentsTotal(null);
+    // Same for the numbers on the filter buttons: they stay until the new ones come.
+    const silent = isBackgroundSync();
+    if (!silent) {
+      setStudentStatsLoading(true);
+      setStudentStatsError(null);
+      setStudentsSystemTotal(null);
+      setActiveStudentsTotal(null);
+      setDismissedStudentsTotal(null);
+      setArchivedStudentsTotal(null);
+      setOtherStudentsTotal(null);
+      setNoActiveChapterStudentsTotal(null);
+    }
     studentStatsApi
       .get({
         q: debouncedSearch,
@@ -734,7 +742,7 @@ export function StudentRegistryView() {
         } : null);
       })
       .catch(() => {
-        if (requestIsStale()) return;
+        if (requestIsStale() || silent) return;
         setStudentsSystemTotal(null);
         setActiveStudentsTotal(null);
         setDismissedStudentsTotal(null);
@@ -765,6 +773,7 @@ export function StudentRegistryView() {
     studentStatsRefreshKey,
     serverRefreshKey,
     syncKey,
+    isBackgroundSync,
   ]);
 
   const studentMatchesCurrentRegistryFilters = useCallback(

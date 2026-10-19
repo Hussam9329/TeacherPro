@@ -638,6 +638,18 @@ export function TeacherProLayout() {
     status: "idle",
     at: 0,
   });
+  // A background refresh shows on the connection dot only when it takes
+  // longer than a second; the quick ones pass without any change on screen.
+  const syncBusy = syncStatus.status === "pending" || syncStatus.status === "refreshing";
+  const [slowSync, setSlowSync] = useState(false);
+  useEffect(() => {
+    if (!syncBusy) {
+      setSlowSync(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setSlowSync(true), 1000);
+    return () => window.clearTimeout(timer);
+  }, [syncBusy]);
   const [actionStatus, setActionStatus] = useState<TeacherProActionStatusDetail>({
     status: "idle",
     label: "",
@@ -1255,7 +1267,7 @@ export function TeacherProLayout() {
       ? "offline"
       : syncStatus.status === "error"
         ? "error"
-        : syncStatus.status === "pending" || syncStatus.status === "refreshing"
+        : slowSync
           ? "syncing"
           : "online";
   const connectionVisualLabel =

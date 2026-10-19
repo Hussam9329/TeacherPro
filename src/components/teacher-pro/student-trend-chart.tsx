@@ -82,10 +82,16 @@ export function StudentTrendChart({ syncKey }: { syncKey?: string | number }) {
   const beginRequest = useLatestRequest();
   const gradientId = useId().replace(/:/g, "");
 
+  // Loading shows only before the first chart; after that a new one replaces
+  // it in place, and a failed refresh keeps the chart that is there.
+  const loadedRef = useRef(false);
   const load = useCallback(async () => {
     const request = beginRequest();
-    setLoading(true);
-    setError("");
+    const quiet = loadedRef.current;
+    if (!quiet) {
+      setLoading(true);
+      setError("");
+    }
     try {
       const res = await fetch(`/api/stats/trend?range=${range}`, {
         credentials: "same-origin",
@@ -96,8 +102,10 @@ export function StudentTrendChart({ syncKey }: { syncKey?: string | number }) {
       if (!res.ok) throw new Error(data?.error || "تعذر تحميل إحصائيات الطلبة.");
       if (!request.isLatest()) return;
       setTrend(data as StudentTrend);
+      loadedRef.current = true;
+      setError("");
     } catch (cause) {
-      if (!request.isLatest()) return;
+      if (!request.isLatest() || quiet) return;
       setError(cause instanceof Error ? cause.message : "تعذر تحميل إحصائيات الطلبة.");
     } finally {
       if (request.isLatest()) setLoading(false);

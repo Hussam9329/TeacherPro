@@ -11,7 +11,7 @@ import {
 import { useTeacherStore, type Student } from "@/lib/teacher-store";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { formatBaghdadDateTime } from "@/lib/baghdad-time";
 import { studentApi, studentProfileLogApi } from "@/lib/api";
 import { toast } from "@/lib/user-toast";
@@ -395,6 +395,9 @@ function downloadOpportunityHtml(
 export function DismissedManagementView() {
   const { courses, courseName, mergeStudentsCache, currentUser } = useTeacherStore();
   const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "dismissed", "follow-up"]);
+  // A refresh caused by a change elsewhere swaps the data in quietly: no
+  // loading line, and a failed one keeps what is already on screen.
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const [search, setSearch] = useState(() => peekDismissedStudentFocus() ?? "");
   // Wait for a pause in typing so a name is one request, not one per letter.
   const debouncedSearch = useDebouncedValue(search, 350);
@@ -477,8 +480,11 @@ export function DismissedManagementView() {
     if (notesFilter !== "all") params.set("notesFilter", notesFilter);
     if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
 
-    setLoading(true);
-    setError("");
+    const silent = isBackgroundSync();
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
     fetch(`/api/dismissed-management/list?${params.toString()}`, {
       credentials: "same-origin",
       signal: controller.signal,
@@ -513,7 +519,7 @@ export function DismissedManagementView() {
         mergeStudentsCache(rows);
       })
       .catch((err) => {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && !silent) {
           setStudents([]);
           setTotalCount(0);
           setTotalPages(1);
@@ -527,7 +533,7 @@ export function DismissedManagementView() {
       });
 
     return () => controller.abort();
-  }, [courseId, debouncedSearch, historyScope, notesFilter, page, mergeStudentsCache, syncKey]);
+  }, [courseId, debouncedSearch, historyScope, notesFilter, page, mergeStudentsCache, syncKey, isBackgroundSync]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -537,8 +543,11 @@ export function DismissedManagementView() {
     if (notesFilter !== "all") params.set("notesFilter", notesFilter);
     if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
 
-    setStatsLoading(true);
-    setStatsError("");
+    const silent = isBackgroundSync();
+    if (!silent) {
+      setStatsLoading(true);
+      setStatsError("");
+    }
     fetch(`/api/dismissed-management/stats?${params.toString()}`, {
       credentials: "same-origin",
       signal: controller.signal,
@@ -557,7 +566,7 @@ export function DismissedManagementView() {
         setStats(payload?.filtered || payload?.stats || EMPTY_DISMISSED_STATS);
       })
       .catch((err) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || silent) return;
         setStats(EMPTY_DISMISSED_STATS);
         setStatsError(
           err instanceof Error ? err.message : "تعذر تحميل إحصائيات المفصولين.",
@@ -568,7 +577,7 @@ export function DismissedManagementView() {
       });
 
     return () => controller.abort();
-  }, [courseId, debouncedSearch, notesFilter, syncKey]);
+  }, [courseId, debouncedSearch, notesFilter, syncKey, isBackgroundSync]);
 
   useEffect(() => {
     const controllers = historyControllersRef.current;
@@ -579,7 +588,19 @@ export function DismissedManagementView() {
       controllers.forEach((controller) => controller.abort());
       controllers.clear();
     };
-  }, [courseId, debouncedSearch, historyScope, page, syncKey]);
+  }, [courseId, debouncedSearch, historyScope, page]);
+
+  // A change elsewhere leaves an open record open; the closed ones reload
+  // fresh the next time they open.
+  const expandedRef = useRef(expanded);
+  useEffect(() => {
+    expandedRef.current = expanded;
+  }, [expanded]);
+  useEffect(() => {
+    setHistories((current) =>
+      Object.fromEntries(Object.entries(current).filter(([id]) => expandedRef.current[id])),
+    );
+  }, [syncKey]);
 
   const loadHistory = useCallback(
     async (studentId: string) => {

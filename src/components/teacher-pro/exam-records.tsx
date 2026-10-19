@@ -1,5 +1,5 @@
 "use client";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type Exam } from "@/lib/teacher-store";
@@ -500,6 +500,7 @@ export function ExamRecordsView() {
     "students",
     "dashboard",
   ]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const {
     exams,
     grades,
@@ -648,7 +649,9 @@ export function ExamRecordsView() {
     }
 
     const controller = new AbortController();
-    setDatabaseExamStatsLoading(true);
+    // A refresh from a change elsewhere keeps the numbers until the new ones arrive.
+    const silent = isBackgroundSync();
+    if (!silent) setDatabaseExamStatsLoading(true);
     examStatsApi
       .get(examIds, { signal: controller.signal, quietAbort: true })
       .then((result) => {
@@ -657,14 +660,14 @@ export function ExamRecordsView() {
         }
       })
       .catch(() => {
-        if (!controller.signal.aborted) setDatabaseExamStats({});
+        if (!controller.signal.aborted && !silent) setDatabaseExamStats({});
       })
       .finally(() => {
         if (!controller.signal.aborted) setDatabaseExamStatsLoading(false);
       });
 
     return () => controller.abort();
-  }, [filteredExamIdsKey, syncKey]);
+  }, [filteredExamIdsKey, syncKey, isBackgroundSync]);
 
   const examStatValue = useCallback(
     (examId: string, key: keyof ExamRecordStat) => {

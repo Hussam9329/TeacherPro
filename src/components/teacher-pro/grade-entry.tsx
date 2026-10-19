@@ -645,8 +645,12 @@ export function GradeEntryView() {
     }
 
     const controller = new AbortController();
-    setGradeSmartNotesLoading(true);
-    setGradeSmartNotesError(null);
+    // A refresh from a change elsewhere keeps the list on screen.
+    const silent = isBackgroundSync();
+    if (!silent) {
+      setGradeSmartNotesLoading(true);
+      setGradeSmartNotesError(null);
+    }
     gradeSmartNotesApi
       .list(
         { examId: selectedExamId, page: 1, pageSize: 200 },
@@ -655,6 +659,7 @@ export function GradeEntryView() {
       .then((result) => {
         if (controller.signal.aborted) return;
         if (!result) {
+          if (silent) return;
           setGradeSmartNotesError(
             "تعذر تحميل الدرجات المعلّقة لهذا الامتحان.",
           );
@@ -666,7 +671,7 @@ export function GradeEntryView() {
         setGradeSmartNoteScoredStudents(result.scoredStudents || []);
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && !silent) {
           setGradeSmartNotesError(
             "تعذر تحميل الدرجات المعلّقة لهذا الامتحان.",
           );
@@ -677,7 +682,7 @@ export function GradeEntryView() {
       });
 
     return () => controller.abort();
-  }, [selectedExamId, syncKey, gradeSmartNotesRefreshKey]);
+  }, [selectedExamId, syncKey, gradeSmartNotesRefreshKey, isBackgroundSync]);
 
   const latestSmartNoteByStudentId = useMemo(() => {
     const byStudentId = new Map<string, GradeSmartNoteRecord>();
