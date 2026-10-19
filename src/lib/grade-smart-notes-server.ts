@@ -101,13 +101,15 @@ export async function upsertGradeSmartNote(
   // Network retries and stale entry sheets must never reopen a note that was
   // already processed, rejected, or marked as a conflict. Explicit reopening
   // remains possible only through the version-checked smart-note API.
-  if (input.status === "PENDING") {
-    const resolvedExisting = await client.gradeSmartNote.findUnique({
-      where: uniqueWhere,
-    });
-    if (resolvedExisting && resolvedExisting.status !== "PENDING") {
-      return resolvedExisting;
-    }
+  const existing = await client.gradeSmartNote.findUnique({
+    where: uniqueWhere,
+  });
+  if (
+    existing &&
+    input.status === "PENDING" &&
+    existing.status !== "PENDING"
+  ) {
+    return existing;
   }
   const attemptedAt = input.attemptedAt || new Date();
   const resolvedAt =
@@ -115,6 +117,28 @@ export async function upsertGradeSmartNote(
       ? null
       : input.resolvedAt || new Date();
   const resolutionActor = input.resolutionActor || input.actor || null;
+  const resolution =
+    input.status === "PENDING" ? null : input.resolution || null;
+
+  // Saving the same grade again must not rewrite an identical note: the
+  // rewrite only moved attemptedAt/updatedAt and made every open tab treat
+  // it as a change in the grades. Explicit times still write.
+  if (
+    existing &&
+    !input.attemptedAt &&
+    !input.resolvedAt &&
+    existing.status === input.status &&
+    (existing.score ?? null) === (input.score ?? null) &&
+    existing.reason === input.reason &&
+    (existing.resolution ?? null) === resolution &&
+    existing.examNameSnapshot === input.exam.name &&
+    (existing.examDateSnapshot?.getTime() ?? null) ===
+      (snapshotDate(input.exam.date)?.getTime() ?? null) &&
+    existing.studentNameSnapshot === input.student.name &&
+    existing.studentCodeSnapshot === input.student.code
+  ) {
+    return existing;
+  }
 
   return client.gradeSmartNote.upsert({
     where: uniqueWhere,

@@ -9,6 +9,7 @@ const layout = read("src/components/teacher-pro/layout.tsx");
 const store = read("src/lib/teacher-store.ts");
 const calls = read("src/components/teacher-pro/follow-up.tsx");
 const versionRoute = read("src/app/api/sync/version/route.ts");
+const smartNotesServer = read("src/lib/grade-smart-notes-server.ts");
 const syncMarkersMigration = read(
   "prisma/migrations/20261019120000_sync_change_markers/migration.sql",
 );
@@ -124,6 +125,12 @@ const checks = [
       syncMarkersMigration.includes("AFTER UPDATE") &&
       syncMarkersMigration.includes("AFTER DELETE") &&
       syncMarkersMigration.includes("AFTER TRUNCATE"),
+  ],
+  [
+    "إعادة كتابة صف بنفس القيم أو إعادة حفظ نفس الملاحظة الذكية لا تُعد تغييراً",
+    syncMarkersMigration.includes(`(to_jsonb(n) - 'updatedAt') IS DISTINCT FROM (to_jsonb(o) - 'updatedAt')`) &&
+      smartNotesServer.includes("existing.status === input.status &&") &&
+      smartNotesServer.includes("existing.reason === input.reason &&"),
   ],
   [
     "ترحيل مؤشرات التغيير إضافي فقط ولا يحذف أو يعدّل بيانات قائمة",

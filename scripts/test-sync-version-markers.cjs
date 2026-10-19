@@ -20,7 +20,7 @@ const WATCHED = {
 
 (async () => {
   const pg = new PGlite();
-  await pg.exec(Object.keys(WATCHED).map(t => `CREATE TABLE "${t}"(id text PRIMARY KEY, v int);`).join('\n'));
+  await pg.exec(Object.keys(WATCHED).map(t => `CREATE TABLE "${t}"(id text PRIMARY KEY, v int, "updatedAt" timestamp(3) DEFAULT CURRENT_TIMESTAMP);`).join('\n'));
   await pg.exec(fs.readFileSync(path.join(root, 'prisma/migrations/20261019120000_sync_change_markers/migration.sql'), 'utf8'));
 
   const executed = [];
@@ -57,7 +57,13 @@ const WATCHED = {
   await pg.exec(`UPDATE "Grade" SET v = 3 WHERE id = 'missing'`);
   await pg.exec(`DELETE FROM "Student" WHERE id = 'missing'`);
   let next = await poll();
-  assert.equal(next.version, previous.version, 'a statement that touched no row is no change');
+  assert.equal(next.version, previous.version, 'an update or delete that touched no row is no change');
+
+  await pg.exec(`UPDATE "Grade" SET v = 1 WHERE id = 'a'`);
+  await pg.exec(`UPDATE "GradeSmartNote" SET v = v, "updatedAt" = CURRENT_TIMESTAMP + interval '1 minute'`);
+  await pg.exec(`INSERT INTO "GradeSmartNote" VALUES ('a', 1) ON CONFLICT (id) DO UPDATE SET v = EXCLUDED.v, "updatedAt" = CURRENT_TIMESTAMP + interval '2 minutes'`);
+  next = await poll();
+  assert.equal(next.version, previous.version, 'rewriting the same values (only updatedAt moves) is no change');
 
   await pg.exec(`UPDATE "Grade" SET v = 3 WHERE id = 'a'`);
   next = await poll();

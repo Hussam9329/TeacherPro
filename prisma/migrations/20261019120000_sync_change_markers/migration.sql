@@ -32,12 +32,32 @@ INSERT INTO "SyncVersion" ("scope") VALUES
   ('studentNotes'), ('users'), ('roles'), ('auditLogs'), ('gradeSmartNotes')
 ON CONFLICT ("scope") DO NOTHING;
 
--- A statement that touched no row (an updateMany that matched nothing) is
--- not a change.
+-- An insert or delete that touched no row (a deleteMany that matched
+-- nothing) is not a change.
 CREATE OR REPLACE FUNCTION "teacherpro_sync_mark_rows"() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
   IF EXISTS (SELECT 1 FROM "sync_changed_rows") THEN
+    INSERT INTO "SyncChange" ("scope") VALUES (TG_ARGV[0]);
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+-- An update counts only when some row's content really changed: rewriting
+-- a row with the same values (an upsert that only refreshes "updatedAt") is
+-- not a change. A changed id shows as an unmatched row, so it counts.
+CREATE OR REPLACE FUNCTION "teacherpro_sync_mark_changed_rows"() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM "sync_new_rows" AS n
+    FULL JOIN "sync_old_rows" AS o ON o."id" = n."id"
+    WHERE o."id" IS NULL
+       OR n."id" IS NULL
+       OR (to_jsonb(n) - 'updatedAt') IS DISTINCT FROM (to_jsonb(o) - 'updatedAt')
+  ) THEN
     INSERT INTO "SyncChange" ("scope") VALUES (TG_ARGV[0]);
   END IF;
   RETURN NULL;
@@ -85,7 +105,7 @@ BEGIN
       'CREATE TRIGGER "sync_mark_insert" AFTER INSERT ON %I REFERENCING NEW TABLE AS "sync_changed_rows" FOR EACH STATEMENT EXECUTE FUNCTION "teacherpro_sync_mark_rows"(%L)',
       tbl, scope);
     EXECUTE format(
-      'CREATE TRIGGER "sync_mark_update" AFTER UPDATE ON %I REFERENCING NEW TABLE AS "sync_changed_rows" FOR EACH STATEMENT EXECUTE FUNCTION "teacherpro_sync_mark_rows"(%L)',
+      'CREATE TRIGGER "sync_mark_update" AFTER UPDATE ON %I REFERENCING OLD TABLE AS "sync_old_rows" NEW TABLE AS "sync_new_rows" FOR EACH STATEMENT EXECUTE FUNCTION "teacherpro_sync_mark_changed_rows"(%L)',
       tbl, scope);
     EXECUTE format(
       'CREATE TRIGGER "sync_mark_delete" AFTER DELETE ON %I REFERENCING OLD TABLE AS "sync_changed_rows" FOR EACH STATEMENT EXECUTE FUNCTION "teacherpro_sync_mark_rows"(%L)',
