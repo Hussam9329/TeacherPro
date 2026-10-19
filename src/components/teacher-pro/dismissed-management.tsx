@@ -66,11 +66,14 @@ import {
 } from "@/components/ui/select";
 import {
   Ban,
+  CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   Download,
+  FileText,
+  GraduationCap,
   Handshake,
   Pencil,
   MessageCircle,
@@ -80,6 +83,7 @@ import {
   Send,
   User,
 } from "lucide-react";
+import "./student-card.css";
 
 const PAGE_SIZE = 24;
 /** How long the Telegram notice shows before the chat opens. */
@@ -1021,7 +1025,7 @@ export function DismissedManagementView() {
 
       {loading ? <LoadingState title="جاري تحميل الطلاب المفصولين..." /> : null}
 
-      <ul className="tp-rcards" data-columns="2" aria-label="الطلاب المفصولون">
+      <ul className="tp-scards" aria-label="الطلاب المفصولون">
         {students.map((student) => {
           const history = histories[student.id];
           const isOpen = Boolean(expanded[student.id]);
@@ -1039,194 +1043,217 @@ export function DismissedManagementView() {
           const editingNote = canEditNote && Boolean(editingNoteIds[student.id]);
 
           return (
-            // Every card here is a dismissed student, so only the status box
-            // and pill carry the colour, as in the registry and opportunities.
-            <li key={student.id} className="tp-rcard">
-              <div className="tp-rcard__head">
-                <span className="tp-rcard__light" data-tone={tone} aria-hidden="true"><User /></span>
-                <h3 className="tp-rcard__name">{student.name}</h3>
-                <span className="tp-rcard__sep" aria-hidden="true" />
-                <span dir="ltr" className="tp-rcard__code">{student.code}</span>
-                <span className="tp-rcard__sub">{courseName(student.courseId)}</span>
-                <span className="tp-rcard__head-end">
-                  <span className="tp-rcard__pill" data-tone={tone} data-solid={current ? "true" : undefined}>
-                    {current ? "مفصول" : "مفصول سابقاً"}
-                  </span>
+            // The same card as «سجل الطلاب»: avatar, study line, a panel with the reason and the balance ring.
+            <li key={student.id} className="tp-scard" aria-labelledby={`dismissed-student-${student.id}`} data-status="dismissed">
+              <header className="tp-scard__head">
+                <span className="tp-scard__avatar" data-tone={tone} aria-hidden="true">
+                  <User />
                 </span>
-              </div>
+                <div className="tp-scard__who">
+                  <h3 id={`dismissed-student-${student.id}`} className="tp-scard__name" title={student.name}>{student.name}</h3>
+                  <p className="tp-scard__meta">
+                    <span className="tp-scard__status" data-tone={tone}>{current ? "مفصول" : "مفصول سابقاً"}</span>
+                    <bdi className="tp-scard__code">{student.code}</bdi>
+                  </p>
+                </div>
+                {/* The history and its HTML export are needed now and then, so they wait in «⋯». */}
+                <RowActionsMenu
+                  label={`إجراءات ${student.name}`}
+                  actions={[
+                    {
+                      key: "history",
+                      label: isOpen ? "إخفاء السجل الكامل" : "السجل الكامل",
+                      icon: isOpen ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />,
+                      disabled: historyLoading[student.id],
+                      onSelect: () => void toggleHistory(student.id),
+                    },
+                    {
+                      key: "export",
+                      label: "تصدير HTML",
+                      icon: <Download aria-hidden="true" />,
+                      disabled: historyLoading[student.id],
+                      onSelect: () => void exportHtml(student),
+                    },
+                  ]}
+                />
+              </header>
 
-              <div className="tp-rcard__body" data-tile={current && canReactivate ? "true" : undefined}>
-                <div className="tp-rcard__main">
-                  <div className="tp-rcard__panel" data-tone={tone}>
-                    <span className="tp-rcard__eyebrow">{current ? "سبب الفصل" : "سبب آخر فصل"}</span>
-                    <span className="tp-rcard__title">{reason}</span>
-                    <span className="tp-rcard__line">
+              <ul className="tp-scard__study">
+                <li title={courseName(student.courseId) || "بدون دورة"}>
+                  <GraduationCap aria-hidden="true" />
+                  <span>{courseName(student.courseId) || "بدون دورة"}</span>
+                </li>
+              </ul>
+
+              <section className="tp-scard__panel" data-tone={tone} aria-label="سبب الفصل والفرص">
+                <div className="tp-scard__state">
+                  <div className="tp-scard__when">
+                    <span className="tp-scard__when-icon" aria-hidden="true">
+                      <CalendarDays />
+                    </span>
+                    <span className="tp-scard__when-text">
+                      <small>{current ? "سبب الفصل" : "سبب آخر فصل"}</small>
+                      <b>{reason}</b>
                       {student.lastDismissalAt ? (
-                        <>
-                          {current ? "فُصل" : "آخر فصل"} {formatBaghdadDateTime(student.lastDismissalAt)} ·{" "}
-                        </>
+                        <small>
+                          {current ? "فُصل" : "آخر فصل"} {formatBaghdadDateTime(student.lastDismissalAt)}
+                        </small>
                       ) : null}
-                      الفرص{" "}
-                      <span className="tp-meter" data-tone="danger" aria-hidden="true">
-                        {Array.from({ length: Math.min(Math.max(base, balance), 6) }, (_, index) => (
-                          <i key={index} data-off={index >= balance ? "true" : undefined} />
-                        ))}
-                      </span>{" "}
-                      <b>{balance}</b> من <b>{base}</b>
                     </span>
                   </div>
+                </div>
+                <div
+                  className="tp-scard__ring"
+                  data-tone={tone}
+                  style={{ "--ring-pct": `${base > 0 ? Math.min(100, Math.round((balance / base) * 100)) : balance > 0 ? 100 : 0}%` } as React.CSSProperties}
+                >
+                  <span className="tp-scard__ring-inner">
+                    <b>{balance} من {base}</b>
+                    <small>الفرص</small>
+                  </span>
+                </div>
+              </section>
 
-                  {editingNote ? (
-                    <div className="grid gap-2">
-                      <Label htmlFor={`dismissal-note-${student.id}`}>ملاحظات الفصل</Label>
-                      <textarea
-                        id={`dismissal-note-${student.id}`}
-                        value={noteDrafts[student.id] ?? student.dismissalNotes ?? ""}
-                        onChange={(event) =>
-                          setNoteDrafts((draft) => ({
-                            ...draft,
-                            [student.id]: event.target.value,
-                          }))
-                        }
-                        className="min-h-20 w-full resize-y rounded-2xl border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
-                        placeholder="اكتب ملاحظات الفصل الخاصة بهذا الطالب..."
+              {missingContacts.length || historyLoading[student.id] ? (
+                <ul className="tp-scard__notes">
+                  {missingContacts.length ? <li data-tone="warning">ناقص {missingContacts.join(" و")}</li> : null}
+                  {historyLoading[student.id] ? <li role="status">جاري تحميل السجل...</li> : null}
+                </ul>
+              ) : null}
+
+                {editingNote ? (
+                  <div className="grid gap-2">
+                    <Label htmlFor={`dismissal-note-${student.id}`}>ملاحظات الفصل</Label>
+                    <textarea
+                      id={`dismissal-note-${student.id}`}
+                      value={noteDrafts[student.id] ?? student.dismissalNotes ?? ""}
+                      onChange={(event) =>
+                        setNoteDrafts((draft) => ({
+                          ...draft,
+                          [student.id]: event.target.value,
+                        }))
+                      }
+                      className="min-h-20 w-full resize-y rounded-2xl border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
+                      placeholder="اكتب ملاحظات الفصل الخاصة بهذا الطالب..."
+                      disabled={Boolean(savingNoteIds[student.id])}
+                    />
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
                         disabled={Boolean(savingNoteIds[student.id])}
-                      />
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          disabled={Boolean(savingNoteIds[student.id])}
-                          onClick={() => {
-                            setEditingNoteIds((open) => ({ ...open, [student.id]: false }));
-                            setNoteDrafts((draft) => {
-                              const next = { ...draft };
-                              delete next[student.id];
-                              return next;
-                            });
-                          }}
-                        >
-                          إلغاء
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={Boolean(savingNoteIds[student.id])}
-                          onClick={async () => {
-                            const saved = await handleSaveDismissalNote(student);
-                            if (saved) setEditingNoteIds((open) => ({ ...open, [student.id]: false }));
-                          }}
-                        >
-                          {savingNoteIds[student.id] ? "جاري حفظ الملاحظات..." : "حفظ الملاحظات"}
-                        </Button>
-                      </div>
+                        onClick={() => {
+                          setEditingNoteIds((open) => ({ ...open, [student.id]: false }));
+                          setNoteDrafts((draft) => {
+                            const next = { ...draft };
+                            delete next[student.id];
+                            return next;
+                          });
+                        }}
+                      >
+                        إلغاء
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={Boolean(savingNoteIds[student.id])}
+                        onClick={async () => {
+                          const saved = await handleSaveDismissalNote(student);
+                          if (saved) setEditingNoteIds((open) => ({ ...open, [student.id]: false }));
+                        }}
+                      >
+                        {savingNoteIds[student.id] ? "جاري حفظ الملاحظات..." : "حفظ الملاحظات"}
+                      </Button>
                     </div>
-                  ) : student.dismissalNotes || canEditNote ? (
-                    <div className="tp-rcard__foot">
-                      {student.dismissalNotes ? (
-                        <>
-                          <span className="tp-rcard__label">ملاحظة الفصل:</span>
-                          <span className="min-w-0 text-sm font-semibold [overflow-wrap:anywhere]">{student.dismissalNotes}</span>
-                        </>
-                      ) : null}
-                      {canEditNote ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setEditingNoteIds((open) => ({ ...open, [student.id]: true }))}
-                        >
-                          {student.dismissalNotes ? (
-                            <>
-                              <Pencil className="size-4" aria-hidden="true" />
-                              تعديل
-                            </>
-                          ) : (
-                            "+ إضافة ملاحظة"
-                          )}
-                        </Button>
-                      ) : null}
-                    </div>
+                  </div>
+                ) : student.dismissalNotes || canEditNote ? (
+                  <div className="tp-scard__memo">
+                    {student.dismissalNotes ? (
+                      <>
+                        <span className="tp-scard__memo-label">ملاحظة الفصل:</span>
+                        <span className="min-w-0 text-sm font-semibold [overflow-wrap:anywhere]">{student.dismissalNotes}</span>
+                      </>
+                    ) : null}
+                    {canEditNote ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEditingNoteIds((open) => ({ ...open, [student.id]: true }))}
+                      >
+                        {student.dismissalNotes ? (
+                          <>
+                            <Pencil className="size-4" aria-hidden="true" />
+                            تعديل
+                          </>
+                        ) : (
+                          "+ إضافة ملاحظة"
+                        )}
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+              <footer className="tp-scard__foot">
+                <div className="tp-scard__reach">
+                  {student.phone ? (
+                    <a className="tp-scard__round" href={whatsappLink(student.phone)} target="_blank" rel="noreferrer" aria-label={`رقم الطالب ${student.phone}`} title={student.phone}>
+                      <Phone aria-hidden="true" />
+                    </a>
+                  ) : null}
+                  {student.parentPhone ? (
+                    <a className="tp-scard__round" href={whatsappLink(student.parentPhone)} target="_blank" rel="noreferrer" aria-label={`ولي الأمر ${student.parentPhone}`} title={`ولي الأمر ${student.parentPhone}`}>
+                      <MessageCircle aria-hidden="true" />
+                    </a>
+                  ) : null}
+                  {studentTelegramHandle(student) ? (
+                    <button
+                      type="button"
+                      className="tp-scard__round"
+                      disabled={historyLoading[student.id] || telegramLoading[student.id]}
+                      onClick={() => void openTelegram(student)}
+                      aria-label={telegramLoading[student.id] ? "جاري تجهيز التقرير..." : `تيليجرام ${student.username || student.telegram}`}
+                      title={telegramLoading[student.id] ? "جاري تجهيز التقرير..." : student.username || student.telegram}
+                    >
+                      <Send aria-hidden="true" />
+                    </button>
                   ) : null}
                 </div>
-
                 {current && canReactivate ? (
-                  <button
-                    type="button"
-                    className="tp-rcard__tile"
-                    disabled={isReactivating}
-                    onClick={() => {
-                      setRestorationMode("pledge");
-                      setRestorationAmount("1");
-                      setRestorationReason("");
-                      setReactivateDialog({ student, open: true });
-                    }}
-                  >
-                    <span className="tp-rcard__tile-icon" aria-hidden="true">
-                      <RotateCcw />
-                    </span>
-                    <span className="tp-rcard__tile-text">إرجاع الطالب</span>
-                    <span className="tp-rcard__tile-hint">بتعهّد أو بفرص تختارها</span>
-                  </button>
+                  <>
+                    <span className="tp-scard__divider" aria-hidden="true" />
+                    <button
+                      type="button"
+                      className="tp-scard__action"
+                      disabled={isReactivating}
+                      title="بتعهّد أو بفرص تختارها"
+                      onClick={() => {
+                        setRestorationMode("pledge");
+                        setRestorationAmount("1");
+                        setRestorationReason("");
+                        setReactivateDialog({ student, open: true });
+                      }}
+                    >
+                      <ChevronRight aria-hidden="true" />
+                      <span>إرجاع الطالب</span>
+                      <RotateCcw aria-hidden="true" />
+                    </button>
+                  </>
                 ) : null}
-              </div>
-
-              <div className="tp-rcard__foot">
-                {student.phone ? (
-                  <a className="tp-rcard__contact" href={whatsappLink(student.phone)} target="_blank" rel="noreferrer">
-                    <Phone aria-hidden="true" />
-                    <span dir="ltr" className="tabular-nums">{student.phone}</span>
-                  </a>
-                ) : null}
-                {student.parentPhone ? (
-                  <a className="tp-rcard__contact" href={whatsappLink(student.parentPhone)} target="_blank" rel="noreferrer">
-                    <MessageCircle aria-hidden="true" />
-                    ولي الأمر <span dir="ltr" className="tabular-nums">{student.parentPhone}</span>
-                  </a>
-                ) : null}
-                {studentTelegramHandle(student) ? (
-                  <button
-                    type="button"
-                    className="tp-rcard__contact"
-                    disabled={historyLoading[student.id] || telegramLoading[student.id]}
-                    onClick={() => void openTelegram(student)}
-                  >
-                    <Send aria-hidden="true" />
-                    <span className="min-w-0 [overflow-wrap:anywhere]">
-                      {telegramLoading[student.id] ? "جاري تجهيز التقرير..." : student.username || student.telegram}
-                    </span>
-                  </button>
-                ) : null}
-                {missingContacts.length ? (
-                  <span className="tp-rcard__pill" data-tone="warning">ناقص {missingContacts.join(" و")}</span>
-                ) : null}
-                <span className="tp-rcard__foot-end">
-                  {historyLoading[student.id] ? (
-                    <span role="status" className="tp-rcard__label">جاري تحميل السجل...</span>
-                  ) : null}
-                  {/* The history and its HTML export are needed now and then, so they wait in «⋯». */}
-                  <RowActionsMenu
-                    label={`إجراءات ${student.name}`}
-                    actions={[
-                      {
-                        key: "history",
-                        label: isOpen ? "إخفاء السجل الكامل" : "السجل الكامل",
-                        icon: isOpen ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />,
-                        disabled: historyLoading[student.id],
-                        onSelect: () => void toggleHistory(student.id),
-                      },
-                      {
-                        key: "export",
-                        label: "تصدير HTML",
-                        icon: <Download aria-hidden="true" />,
-                        disabled: historyLoading[student.id],
-                        onSelect: () => void exportHtml(student),
-                      },
-                    ]}
-                  />
-                </span>
-              </div>
+                <span className="tp-scard__divider" aria-hidden="true" />
+                <button
+                  type="button"
+                  className="tp-scard__action"
+                  aria-expanded={isOpen}
+                  disabled={historyLoading[student.id]}
+                  onClick={() => void toggleHistory(student.id)}
+                >
+                  <ChevronDown className="tp-scard__chev" aria-hidden="true" />
+                  <span>السجل الكامل</span>
+                  <FileText aria-hidden="true" />
+                </button>
+              </footer>
 
                 {historyErrors[student.id] ? (
                   <div className="rounded-xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm text-danger">

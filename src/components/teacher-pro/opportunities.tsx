@@ -40,7 +40,8 @@ import { StudentProfileDialog } from "./student-profile-dialog";
 import { BonusTracePanel } from "./bonus-trace-panel";
 import { StaleRecordsDialog } from "./stale-records-dialog";
 import { STAFF_ROW_ICONS, staffRowNote } from "./opportunity-row-icons";
-import { ChevronLeft, CircleMinus, CirclePlus, RotateCcw, Target, User } from "lucide-react";
+import { BookOpen, Building2, CalendarDays, ChevronDown, ChevronRight, CircleMinus, CirclePlus, Clock, FileText, Folder, GraduationCap, MessageCircle, Phone, RotateCcw, Send, Target, User } from "lucide-react";
+import "./student-card.css";
 
 import { FormDialogHero } from "./form-dialog";
 import { EmptyState, LoadingState } from "./ui-kit";
@@ -891,7 +892,7 @@ export function OpportunitiesView() {
       ) : paged.length === 0 ? (
         <EmptyState title="لا يوجد طلاب مطابقون للفلاتر الحالية" />
       ) : (
-        <ul className="tp-rcards" data-columns="2" aria-label="فرص الطلاب">
+        <ul className="tp-scards" aria-label="فرص الطلاب">
           {paged.map((student) => {
             const activeChapter = getStudentActiveChapter(student);
             const hasChapter = hasSingleServerActiveChapter(student);
@@ -901,109 +902,174 @@ export function OpportunitiesView() {
             const balance = getOpportunityBalance(student);
             const limit = getOpportunityLimit(student);
             const tone = dismissed ? "danger" : balance <= 0 ? "warning" : limit !== null && balance < limit ? "warning" : "success";
-            const dots = Math.min(Math.max(limit ?? 0, balance, 0), 6);
+            // The same card as «سجل الطلاب»: avatar, study line, a panel with the balance ring.
+            const statusTone = student.status === "نشط" ? "success" : dismissed ? "danger" : "muted";
+            const ringPct = limit !== null && limit > 0 ? Math.min(100, Math.round((balance / limit) * 100)) : balance > 0 ? 100 : 0;
+            const [chapterTitle = "", ...topicParts] = (activeChapter?.name || "").split(/\s+-\s+/);
+            const chapterTopic = topicParts.join(" - ");
+            const bonusLabel = !dismissed ? bonusProgressLabel(student.bonusProgress, student.bonusWaitingExamName) : "";
+            const telegramHandle = student.username || (student.telegram && !/^\d+$/.test(student.telegram) ? student.telegram : "");
+            const headingId = `opportunity-student-${student.id}`;
             return (
-              <li key={student.id} className="tp-rcard" data-tone={dismissed ? "danger" : undefined} data-dismissed={dismissed || undefined}>
-                <div className="tp-rcard__head">
-                  <span className="tp-rcard__light" data-tone={tone} aria-hidden="true"><User /></span>
-                  <h3 className="tp-rcard__name">{student.name}</h3>
-                  <span className="tp-rcard__sep" aria-hidden="true" />
-                  <span dir="ltr" className="tp-rcard__code">{student.code}</span>
-                  <span className="tp-rcard__sub">
-                    {courseName(student.courseId)}
-                    {activeChapter ? ` · ${activeChapter.name}` : ""}
+              <li key={student.id} className="tp-scard" aria-labelledby={headingId} data-status={dismissed ? "dismissed" : student.status === "نشط" ? "active" : "archived"}>
+                <header className="tp-scard__head">
+                  <span className="tp-scard__avatar" data-tone={statusTone} aria-hidden="true">
+                    <User />
                   </span>
-                  <span className="tp-rcard__head-end">
-                    {dismissed ? <span className="tp-rcard__pill" data-tone="danger" data-solid="true">مفصول</span> : null}
-                    {student.isOpportunityOverLimit ? <span className="tp-rcard__pill" data-tone="danger">فوق السقف</span> : null}
-                    {hasChapterConflict ? <span className="tp-rcard__pill" data-tone="danger">تعارض فصول نشطة</span> : null}
-                  </span>
-                </div>
-                <div className="tp-rcard__body" data-tile="true">
-                  <div className="tp-rcard__main">
-                    <div className="tp-rcard__panel" data-tone={tone}>
-                      <span className="tp-rcard__eyebrow">الفرص{activeChapter ? ` · ${activeChapter.name}` : ""}</span>
-                      <span className="tp-rcard__title">
-                        <span className="tp-meter" data-tone={tone} aria-hidden="true">
-                          {Array.from({ length: dots }, (_, index) => (
-                            <i key={index} data-off={index >= balance ? "true" : undefined} />
-                          ))}
-                        </span>{" "}
-                        {formatOpportunityBalance(student, { separator: " من " })}
+                  <div className="tp-scard__who">
+                    <h3 id={headingId} className="tp-scard__name" title={student.name}>{student.name}</h3>
+                    <p className="tp-scard__meta">
+                      <span className="tp-scard__status" data-tone={statusTone}>{student.status}</span>
+                      <bdi className="tp-scard__code">{student.code}</bdi>
+                    </p>
+                  </div>
+                  <RowActionsMenu
+                    label={`تعديل فرص ${student.name}`}
+                    actions={[
+                      {
+                        key: "add",
+                        label: "إضافة فرص",
+                        disabled: !hasChapter,
+                        onSelect: () => {
+                          setReason(dismissed ? DEFAULT_MANUAL_RESTORATION_REASON : "");
+                          setAmount(1);
+                          setActionDialog({
+                            studentId: student.id,
+                            expectedStatus: student.status,
+                            type: "add",
+                            open: true,
+                          });
+                        },
+                      },
+                      {
+                        key: "deduct",
+                        label: "خصم فرص",
+                        danger: true,
+                        disabled: !hasChapter || dismissed,
+                        onSelect: () =>
+                          setActionDialog({
+                            studentId: student.id,
+                            type: "deduct",
+                            open: true,
+                          }),
+                      },
+                      {
+                        key: "reset",
+                        label: "إعادة تعيين",
+                        danger: true,
+                        disabled: !hasChapter || dismissed,
+                        onSelect: () =>
+                          setActionDialog({
+                            studentId: student.id,
+                            type: "reset",
+                            open: true,
+                          }),
+                      },
+                    ]}
+                  />
+                </header>
+
+                <ul className="tp-scard__study">
+                  <li title={courseName(student.courseId) || "بدون دورة"}>
+                    <GraduationCap aria-hidden="true" />
+                    <span>{courseName(student.courseId) || "بدون دورة"}</span>
+                  </li>
+                  {chapterTitle ? (
+                    <li title={chapterTitle}>
+                      <BookOpen aria-hidden="true" />
+                      <span>{chapterTitle}</span>
+                    </li>
+                  ) : null}
+                  {chapterTopic ? (
+                    <li title={chapterTopic}>
+                      <Building2 aria-hidden="true" />
+                      <span>{chapterTopic}</span>
+                    </li>
+                  ) : null}
+                </ul>
+
+                <section className="tp-scard__panel" data-tone={tone} aria-label="الفرص والحالة">
+                  <div className="tp-scard__state">
+                    {bonusLabel ? (
+                      <span className="tp-scard__chip" data-tone="info" data-bonus-progress={student.bonusProgress}>
+                        <Clock aria-hidden="true" />
+                        {bonusLabel}
                       </span>
-                      {dismissed && student.dismissalReason ? (
-                        <span className="tp-rcard__line">فُصل: {displayReasonText(student.dismissalReason)}</span>
-                      ) : null}
-                      {!dismissed && bonusProgressLabel(student.bonusProgress, student.bonusWaitingExamName) ? (
-                        <span className="tp-rcard__line" data-bonus-progress={student.bonusProgress}>
-                          {bonusProgressLabel(student.bonusProgress, student.bonusWaitingExamName)}
-                        </span>
-                      ) : null}
-                      {!hasChapter ? (
-                        <span className="tp-rcard__line">لم يتم اختيار الفصل لهم بعد؛ كل الإجراءات مقفلة.</span>
-                      ) : null}
+                    ) : null}
+                    <div className="tp-scard__when">
+                      <span className="tp-scard__when-icon" aria-hidden="true">
+                        <CalendarDays />
+                      </span>
+                      <span className="tp-scard__when-text">
+                        {dismissed ? (
+                          <>
+                            <small>سبب الفصل</small>
+                            <b>{displayReasonText(student.dismissalReason) || "سبب الفصل غير مدخل"}</b>
+                          </>
+                        ) : !hasChapter ? (
+                          <>
+                            <small>الفصل</small>
+                            <b>لم يتم اختيار الفصل لهم بعد؛ كل الإجراءات مقفلة.</b>
+                          </>
+                        ) : (
+                          <>
+                            <small>تاريخ التسجيل</small>
+                            <b>{student.createdAt ? formatAppDate(student.createdAt, "") : "غير مسجل"}</b>
+                          </>
+                        )}
+                      </span>
                     </div>
                   </div>
-                  <button type="button" className="tp-rcard__tile" onClick={() => setProfileStudentId(student.id)}>
-                    <span className="tp-rcard__tile-icon" aria-hidden="true">
-                      <ChevronLeft />
+                  <div
+                    className="tp-scard__ring"
+                    data-tone={tone}
+                    style={{ "--ring-pct": `${ringPct}%` } as React.CSSProperties}
+                  >
+                    <span className="tp-scard__ring-inner">
+                      <b>{formatOpportunityBalance(student, { separator: " من " })}</b>
+                      <small>الفرص</small>
                     </span>
-                    <span className="tp-rcard__tile-text">ملف الطالب</span>
-                    <span className="tp-rcard__tile-hint">الدرجات والحركات</span>
+                  </div>
+                </section>
+
+                {student.isOpportunityOverLimit || hasChapterConflict ? (
+                  <ul className="tp-scard__notes">
+                    {student.isOpportunityOverLimit ? <li data-tone="danger">فوق السقف</li> : null}
+                    {hasChapterConflict ? <li data-tone="danger">تعارض فصول نشطة</li> : null}
+                  </ul>
+                ) : null}
+
+                <footer className="tp-scard__foot">
+                  <div className="tp-scard__reach">
+                    {student.phone ? (
+                      <a className="tp-scard__round" href={whatsappLink(student.phone)} target="_blank" rel="noopener noreferrer" aria-label={`رقم الطالب ${student.phone}`} title={student.phone}>
+                        <Phone aria-hidden="true" />
+                      </a>
+                    ) : null}
+                    {student.parentPhone ? (
+                      <a className="tp-scard__round" href={whatsappLink(student.parentPhone)} target="_blank" rel="noopener noreferrer" aria-label={`ولي الأمر ${student.parentPhone}`} title={`ولي الأمر ${student.parentPhone}`}>
+                        <MessageCircle aria-hidden="true" />
+                      </a>
+                    ) : null}
+                    {telegramHandle ? (
+                      <a className="tp-scard__round" href={telegramLink(telegramHandle)} target="_blank" rel="noopener noreferrer" aria-label={`تيليجرام ${telegramHandle}`} title={telegramHandle.startsWith("@") ? telegramHandle : `@${telegramHandle}`}>
+                        <Send aria-hidden="true" />
+                      </a>
+                    ) : null}
+                  </div>
+                  <span className="tp-scard__divider" aria-hidden="true" />
+                  <button type="button" className="tp-scard__action" onClick={() => setDetailsStudentId(student.id)}>
+                    <ChevronDown className="tp-scard__chev" aria-hidden="true" />
+                    <span>التفاصيل</span>
+                    <FileText aria-hidden="true" />
                   </button>
-                </div>
-                <div className="tp-rcard__foot">
-                  <Button variant="ghost" size="sm" onClick={() => setDetailsStudentId(student.id)}>
-                    التفاصيل
-                  </Button>
-                  <span className="tp-rcard__foot-end">
-                    <RowActionsMenu
-                      label={`تعديل فرص ${student.name}`}
-                      triggerText="تعديل الفرص"
-                      actions={[
-                        {
-                          key: "add",
-                          label: "إضافة فرص",
-                          disabled: !hasChapter,
-                          onSelect: () => {
-                            setReason(dismissed ? DEFAULT_MANUAL_RESTORATION_REASON : "");
-                            setAmount(1);
-                            setActionDialog({
-                              studentId: student.id,
-                              expectedStatus: student.status,
-                              type: "add",
-                              open: true,
-                            });
-                          },
-                        },
-                        {
-                          key: "deduct",
-                          label: "خصم فرص",
-                          danger: true,
-                          disabled: !hasChapter || dismissed,
-                          onSelect: () =>
-                            setActionDialog({
-                              studentId: student.id,
-                              type: "deduct",
-                              open: true,
-                            }),
-                        },
-                        {
-                          key: "reset",
-                          label: "إعادة تعيين",
-                          danger: true,
-                          disabled: !hasChapter || dismissed,
-                          onSelect: () =>
-                            setActionDialog({
-                              studentId: student.id,
-                              type: "reset",
-                              open: true,
-                            }),
-                        },
-                      ]}
-                    />
-                  </span>
-                </div>
+                  <span className="tp-scard__divider" aria-hidden="true" />
+                  <button type="button" className="tp-scard__action" onClick={() => setProfileStudentId(student.id)} title="الدرجات والحركات">
+                    <ChevronRight aria-hidden="true" />
+                    <span>ملف الطالب</span>
+                    <Folder aria-hidden="true" />
+                  </button>
+                </footer>
               </li>
             );
           })}

@@ -1,0 +1,214 @@
+/* The student card: one look for every page that lists students
+   (السجل، الفرص، المفصولون). */
+/* ── Student cards: avatar tile, name, study line, a tinted panel with the
+   state and the balance ring, and a footer of round contacts and actions. ── */
+.tp-scards {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 23rem), 1fr));
+  gap: 1rem;
+}
+
+.tp-scard {
+  --scard-tint: var(--status-success-bg);
+  container: scard / inline-size;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  min-inline-size: 0;
+  padding: 1.125rem 1.125rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 1.375rem;
+  /* The soft leaf in the far corner, as a background so nothing is clipped (the «⋯» menu opens over the card's edge). */
+  background:
+    radial-gradient(ellipse 12rem 9rem at 0 0, color-mix(in srgb, var(--scard-tint) 55%, transparent) 0 60%, transparent 61%),
+    var(--card);
+  box-shadow: 0 10px 30px -18px color-mix(in srgb, var(--foreground) 28%, transparent);
+}
+.tp-scard[data-status="dismissed"] { --scard-tint: var(--status-danger-bg); }
+.tp-scard[data-status="archived"] { --scard-tint: var(--muted); }
+
+.tp-scard :where(h3, p, span, a, li, dd, b, small) { min-inline-size: 0; overflow-wrap: anywhere; }
+.tp-scard [data-tone="muted"] { --tone: var(--sig-archived, #9ca59f); --tone-ink: var(--muted-foreground); --tone-tint: var(--muted); --tone-line: var(--border); }
+
+/* Head */
+.tp-scard__head { display: flex; align-items: center; gap: 0.75rem; }
+.tp-scard__avatar {
+  display: grid; place-items: center; flex-shrink: 0;
+  inline-size: 3.5rem; block-size: 3.5rem; border-radius: 1rem;
+  background: var(--tone-tint, var(--muted));
+  color: var(--tone, var(--muted-foreground));
+}
+.tp-scard__avatar svg { inline-size: 1.9rem; block-size: 1.9rem; fill: currentColor; stroke: currentColor; }
+.tp-scard__who { flex: 1 1 auto; display: grid; gap: 0.3rem; min-inline-size: 0; }
+.tp-scard__name {
+  margin: 0; color: var(--foreground); font-size: 1.15rem; font-weight: 800; line-height: 1.35;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal;
+}
+.tp-scard__meta { display: flex; align-items: center; gap: 0.6rem; margin: 0; }
+.tp-scard__status {
+  display: inline-flex; align-items: center; gap: 0.35rem; flex-shrink: 0;
+  padding: 0.1rem 0.6rem; border-radius: 999px;
+  background: var(--tone-tint, var(--muted)); color: var(--tone-ink, var(--muted-foreground));
+  font-size: 0.75rem; font-weight: 700; white-space: nowrap;
+}
+.tp-scard__status::before { content: ""; inline-size: 0.45rem; block-size: 0.45rem; border-radius: 50%; background: var(--tone, var(--muted-foreground)); }
+.tp-scard__code { color: var(--muted-foreground); font-size: 0.9rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.tp-scard__head .tp-row-menu { align-self: flex-start; }
+.tp-scard__head .tp-row-menu > button {
+  inline-size: 2.5rem; block-size: 2.5rem; border-radius: 0.75rem;
+  border-color: transparent; background: var(--card); color: var(--foreground);
+  box-shadow: 0 4px 14px -6px color-mix(in srgb, var(--foreground) 30%, transparent);
+}
+.tp-scard__head .tp-row-menu > button:hover,
+.tp-scard__head .tp-row-menu > button[aria-expanded="true"] { background: var(--muted); }
+
+/* Study line */
+.tp-scard__study { display: flex; align-items: center; gap: 0.6rem; margin: 0; padding: 0; list-style: none; min-inline-size: 0; }
+.tp-scard__study > li {
+  display: flex; align-items: center; gap: 0.35rem; min-inline-size: 0;
+  color: var(--muted-foreground); font-size: 0.78rem; font-weight: 500;
+}
+.tp-scard__study > li:first-child { flex-shrink: 0; max-inline-size: 50%; }
+.tp-scard__study > li + li { padding-inline-start: 0.6rem; border-inline-start: 1px solid var(--border); }
+.tp-scard__study > li > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+.tp-scard__study svg { inline-size: 1.05rem; block-size: 1.05rem; flex-shrink: 0; color: var(--muted-foreground); }
+
+/* Panel */
+.tp-scard__panel {
+  display: flex; align-items: center; gap: 0.875rem;
+  padding: 0.875rem;
+  border: 1px solid color-mix(in srgb, var(--tone-line, var(--border)) 60%, transparent);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--tone-tint, var(--muted)) 45%, var(--card));
+}
+.tp-scard__state { flex: 1 1 auto; display: grid; gap: 0.625rem; min-inline-size: 0; }
+.tp-scard__chip {
+  display: inline-flex; align-items: center; justify-self: start; gap: 0.4rem;
+  padding: 0.3rem 0.75rem; border-radius: 999px;
+  background: var(--tone-tint); color: var(--tone-ink);
+  font-size: 0.78rem; font-weight: 700; white-space: nowrap;
+}
+.tp-scard__chip svg { inline-size: 1.05rem; block-size: 1.05rem; }
+.tp-scard__when { display: flex; align-items: center; gap: 0.6rem; min-inline-size: 0; }
+.tp-scard__when-icon {
+  display: grid; place-items: center; flex-shrink: 0;
+  inline-size: 2.4rem; block-size: 2.4rem; border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--tone-tint, var(--muted)) 80%, var(--card));
+  color: var(--muted-foreground);
+}
+.tp-scard__when-icon svg { inline-size: 1.2rem; block-size: 1.2rem; }
+.tp-scard__when-text { display: grid; gap: 0.05rem; min-inline-size: 0; }
+.tp-scard__when-text small { color: var(--muted-foreground); font-size: 0.72rem; }
+.tp-scard__when-text b { color: var(--tone-ink, var(--foreground)); font-size: 0.95rem; font-weight: 800; line-height: 1.4; }
+
+/* Balance ring, set off by a thin line. */
+.tp-scard__ring {
+  --ring-color: var(--tone, var(--status-success-vivid));
+  position: relative; flex-shrink: 0;
+  display: grid; place-items: center;
+  inline-size: 5.25rem; block-size: 5.25rem;
+  margin-inline-start: 0.875rem;
+}
+.tp-scard__ring::after {
+  content: ""; position: absolute; inset-block: 0.25rem; inset-inline-start: -0.875rem;
+  inline-size: 1px; background: color-mix(in srgb, var(--tone-line, var(--border)) 80%, transparent);
+}
+.tp-scard__ring::before {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(var(--ring-color) var(--ring-pct, 0%), color-mix(in srgb, var(--ring-color) 16%, transparent) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 0.45rem), #000 calc(100% - 0.45rem));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 0.45rem), #000 calc(100% - 0.45rem));
+}
+.tp-scard__ring-inner { position: relative; display: grid; justify-items: center; text-align: center; inline-size: 100%; padding-inline: 0.6rem; }
+.tp-scard__ring-inner b { color: var(--tone-ink, var(--foreground)); font-size: 0.95rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.3; }
+.tp-scard__ring-inner small { color: var(--muted-foreground); font-size: 0.68rem; }
+
+/* Notes needing attention */
+.tp-scard__notes { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.tp-scard__notes > li {
+  padding: 0.15rem 0.6rem; border-radius: 999px;
+  background: var(--tone-tint, var(--muted)); color: var(--tone-ink, var(--foreground));
+  font-size: 0.72rem; font-weight: 600;
+}
+
+/* Details (on demand) */
+.tp-scard__more { display: grid; gap: 0.875rem; }
+.tp-scard__facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem 1rem; margin: 0; }
+.tp-scard__facts > div { display: grid; gap: 0.05rem; min-inline-size: 0; }
+.tp-scard__facts dt { color: var(--muted-foreground); font-size: 0.7rem; }
+.tp-scard__facts dd { margin: 0; color: var(--foreground); font-size: 0.8rem; font-weight: 600; line-height: 1.5; }
+.tp-scard__contacts { display: grid; gap: 0.125rem; }
+.tp-scard__contact-row { display: flex; align-items: center; gap: 0.5rem; min-block-size: 2rem; font-size: 0.8rem; }
+.tp-scard__contact-label { color: var(--muted-foreground); font-size: 0.72rem; min-inline-size: 4.5rem; }
+.tp-scard__contact { color: var(--foreground); font-weight: 600; text-decoration: none; }
+.tp-scard__contact:hover { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+.tp-scard__contact-row .tp-tg-edit__open:not([data-labelled]) { inline-size: 1.75rem; block-size: 1.75rem; margin-inline-start: auto; border-color: transparent; background: transparent; }
+.tp-scard__contact-row .tp-tg-edit__open[data-labelled] { border: 0; padding: 0; background: none; color: var(--muted-foreground); font-weight: 500; font-size: 0.75rem; }
+
+/* Footer */
+.tp-scard__foot {
+  display: flex; align-items: center; gap: 0.5rem;
+  margin-block-start: auto; padding-block-start: 0.75rem;
+  border-block-start: 1px solid var(--border);
+}
+.tp-scard__reach { display: flex; align-items: center; gap: 0.4rem; }
+.tp-scard__reach:empty, .tp-scard__reach:empty + .tp-scard__divider { display: none; }
+.tp-scard__round {
+  display: grid; place-items: center; inline-size: 2.4rem; block-size: 2.4rem; border-radius: 50%;
+  background: var(--muted); color: var(--foreground); text-decoration: none;
+  transition: background-color 150ms, color 150ms;
+}
+.tp-scard__round svg { inline-size: 1.05rem; block-size: 1.05rem; }
+.tp-scard__round:hover { background: var(--status-success-bg); color: var(--status-success-fg); }
+.tp-scard__divider { align-self: stretch; inline-size: 1px; margin-block: 0.4rem; background: var(--border); flex-shrink: 0; }
+.tp-scard__action {
+  flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem;
+  min-inline-size: 0; min-block-size: 2.4rem; padding-inline: 0.5rem;
+  border: 0; border-radius: 0.75rem; background: transparent; color: var(--foreground);
+  font-size: 0.85rem; font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: background-color 150ms;
+}
+.tp-scard__action > svg { inline-size: 1rem; block-size: 1rem; flex-shrink: 0; color: var(--muted-foreground); }
+.tp-scard__action > svg:last-child { inline-size: 1.25rem; block-size: 1.25rem; color: var(--foreground); }
+.tp-scard__chev { transition: transform 180ms ease; }
+.tp-scard__action[aria-expanded="true"] .tp-scard__chev { transform: rotate(180deg); }
+.tp-scard__action:hover { background: var(--muted); }
+.tp-scard :is(.tp-scard__round, .tp-scard__action, .tp-scard__contact):focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/* Wide cards: the chip and the date side by side, as in the design. */
+@container scard (min-width: 28rem) {
+  .tp-scard__state { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+  .tp-scard__chip { flex-shrink: 0; }
+}
+
+@container scard (max-width: 27rem) {
+  .tp-scard__action > svg:last-child { display: none; }
+}
+
+@container scard (max-width: 24rem) {
+  .tp-scard__ring { inline-size: 4.75rem; block-size: 4.75rem; }
+  .tp-scard__ring-inner b { font-size: 0.85rem; }
+  .tp-scard__when-text b { font-size: 0.85rem; white-space: nowrap; }
+  .tp-scard__when-icon { display: none; }
+  /* The study line wraps rather than cutting words. */
+  .tp-scard__study { flex-wrap: wrap; row-gap: 0.35rem; }
+  .tp-scard__study > li:first-child { max-inline-size: none; }
+  .tp-scard__study > li > span { white-space: normal; }
+  /* Contacts take their own row; the two actions share the next. */
+  .tp-scard__foot { flex-wrap: wrap; row-gap: 0.5rem; }
+  .tp-scard__reach { flex: 1 1 100%; justify-content: flex-start; }
+  .tp-scard__reach + .tp-scard__divider { display: none; }
+}
+
+@media (pointer: coarse) {
+  .tp-scard__round { inline-size: 2.75rem; block-size: 2.75rem; }
+  .tp-scard__action, .tp-scard__contact-row { min-block-size: 2.75rem; }
+}
+
+/* A short note row (e.g. the dismissal note and its edit). */
+.tp-scard__memo { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; min-inline-size: 0; font-size: 0.82rem; }
+.tp-scard__memo-label { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 600; }

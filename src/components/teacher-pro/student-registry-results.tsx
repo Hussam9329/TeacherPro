@@ -37,6 +37,7 @@ import { displayReasonText } from "@/lib/reason-display";
 import { RowActionsMenu, type RowAction } from "./row-actions-menu";
 import { StudentContactEdit, type StudentContactField } from "./student-contact-edit";
 import "./student-registry-results.css";
+import "./student-card.css";
 
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
 
