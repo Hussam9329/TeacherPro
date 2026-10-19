@@ -41,10 +41,33 @@ const days = trend.buildStudentTrend({
   reactivations: [{ studentId: "f", day: "2026-10-18" }],
 });
 assert.deepEqual(days, [
-  { date: "2026-10-16", registrations: 0, dismissals: 1, active: 97 },
-  { date: "2026-10-17", registrations: 2, dismissals: 0, active: 99 },
-  { date: "2026-10-18", registrations: 1, dismissals: 1, active: 100 },
+  { date: "2026-10-16", registrations: 0, dismissals: 1, archivals: 0, active: 97 },
+  { date: "2026-10-17", registrations: 2, dismissals: 0, archivals: 0, active: 99 },
+  { date: "2026-10-18", registrations: 1, dismissals: 1, archivals: 0, active: 100 },
 ]);
+
+// Archivals: counted per day; only an active student's archive leaves the
+// active count, and a restore from the archive returns to it.
+const archived = trend.buildStudentTrend({
+  dayKeys: ["2026-10-17", "2026-10-18"],
+  activeNow: 50,
+  registrations: [],
+  dismissals: [],
+  reactivations: [],
+  archivals: [
+    { studentId: "a", day: "2026-10-18", wasActive: true },
+    { studentId: "b", day: "2026-10-18", wasActive: false },
+    { studentId: "b", day: "2026-10-18", wasActive: false },
+  ],
+  restorations: [{ studentId: "c", day: "2026-10-18" }],
+});
+assert.deepEqual(archived, [
+  { date: "2026-10-17", registrations: 0, dismissals: 0, archivals: 0, active: 50 },
+  { date: "2026-10-18", registrations: 0, dismissals: 0, archivals: 2, active: 50 },
+], "18th: +1 restored −1 archived while active = 0 change; two students archived");
+assert.equal(trend.archivedWhileActive("… الحالة السابقة: نشط. الفرص قبل الأرشفة: 3"), true);
+assert.equal(trend.archivedWhileActive("… الحالة السابقة: مفصول. الفرص قبل الأرشفة: 0"), false);
+assert.equal(trend.archivedWhileActive(null), false);
 // 18th: +1 registration +1 reactivation −1 dismissal = +1 → 99 at the end of the 17th;
 // 17th: +2 → 97 at the end of the 16th.
 assert.equal(trend.buildStudentTrend({ dayKeys: ["2026-10-18"], activeNow: 0, registrations: [], dismissals: [], reactivations: [] })[0].active, 0);
@@ -59,4 +82,12 @@ assert.match(route, /requirePermissionPrincipal\(req, "system\.dashboard"\)/);
 assert.doesNotMatch(route, /\.(create|update|upsert|delete)(Many)?\(/, "no writes");
 assert.match(route, /isDismissalOpportunityLog/);
 assert.match(route, /isDismissalActionNote/);
+assert.match(route, /"student-archive", "student-archive-restore"/, "archive and restore notes are read");
+assert.doesNotMatch(route, /status: \{ not: "مؤرشف" \}/, "registrations include students archived later");
+
+// The dashboard total counts every student, archived included.
+const statsRoute = fs.readFileSync(path.join(root, "src/app/api/stats/route.ts"), "utf8");
+assert.match(statsRoute, /status: "مؤرشف"/, "archived students are counted");
+assert.match(statsRoute, /tx\.student\.count\(\),/, "the total has no status filter");
+assert.match(statsRoute, /archivedStudents: archivedCount/);
 console.log("PASS: «إحصائيات الطلبة» days, ranges, once-per-student counts and the running active count; the route only reads");

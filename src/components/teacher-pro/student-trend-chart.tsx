@@ -62,6 +62,7 @@ function smoothPath(points: Array<[number, number]>): string {
 const SERIES = [
   { key: "active", label: "نشطون", color: "var(--chart-2)", axis: "band" },
   { key: "dismissals", label: "مفصولون", color: "var(--chart-4)", axis: "daily" },
+  { key: "archivals", label: "مؤرشفون", color: "var(--chart-archived)", axis: "daily" },
   { key: "registrations", label: "تسجيل جديد", color: "var(--chart-1)", axis: "daily" },
 ] as const;
 
@@ -115,13 +116,17 @@ export function StudentTrendChart({ syncKey }: { syncKey?: string | number }) {
     return () => observer.disconnect();
   }, []);
 
-  const days = useMemo<StudentTrendDay[]>(() => trend?.days || [], [trend]);
+  // Older responses had no archivals: read them as none.
+  const days = useMemo<StudentTrendDay[]>(
+    () => (trend?.days || []).map((day) => ({ ...day, archivals: day.archivals ?? 0 })),
+    [trend],
+  );
 
   const chart = useMemo(() => {
     if (!width || days.length === 0) return null;
     const innerWidth = Math.max(1, width - PAD.left - PAD.right);
     const innerHeight = HEIGHT - PAD.top - PAD.bottom;
-    const dailyTicks = niceAxis(Math.max(...days.map((day) => Math.max(day.registrations, day.dismissals))));
+    const dailyTicks = niceAxis(Math.max(...days.map((day) => Math.max(day.registrations, day.dismissals, day.archivals))));
     const activeValues = days.map((day) => day.active);
     const bandTicks = bandAxis(Math.min(...activeValues), Math.max(...activeValues));
     const x = (index: number) => PAD.left + (days.length === 1 ? innerWidth / 2 : (index / (days.length - 1)) * innerWidth);
@@ -159,12 +164,16 @@ export function StudentTrendChart({ syncKey }: { syncKey?: string | number }) {
   const hovered = hover !== null && days[hover] ? days[hover] : null;
   const latest = days[days.length - 1];
   const totals = days.reduce(
-    (sum, day) => ({ registrations: sum.registrations + day.registrations, dismissals: sum.dismissals + day.dismissals }),
-    { registrations: 0, dismissals: 0 },
+    (sum, day) => ({
+      registrations: sum.registrations + day.registrations,
+      dismissals: sum.dismissals + day.dismissals,
+      archivals: sum.archivals + day.archivals,
+    }),
+    { registrations: 0, dismissals: 0, archivals: 0 },
   );
   const rangeLabel = STUDENT_TREND_RANGES.find((item) => item.value === range)?.label || "";
   const summary = latest
-    ? `${rangeLabel}: ${totals.registrations} تسجيل جديد، ${totals.dismissals} مفصول، و${latest.active} طالب نشط اليوم.`
+    ? `${rangeLabel}: ${totals.registrations} تسجيل جديد، ${totals.dismissals} مفصول، ${totals.archivals} مؤرشف، و${latest.active} طالب نشط اليوم.`
     : "";
 
   return (
@@ -206,7 +215,7 @@ export function StudentTrendChart({ syncKey }: { syncKey?: string | number }) {
               <defs>
                 {SERIES.map((series) => (
                   <linearGradient key={series.key} id={`${gradientId}-${series.key}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={series.color} stopOpacity={series.key === "dismissals" ? 0.16 : 0.22} />
+                    <stop offset="0%" stopColor={series.color} stopOpacity={series.key === "dismissals" || series.key === "archivals" ? 0.14 : 0.22} />
                     <stop offset="100%" stopColor={series.color} stopOpacity="0" />
                   </linearGradient>
                 ))}
@@ -235,7 +244,7 @@ export function StudentTrendChart({ syncKey }: { syncKey?: string | number }) {
               {chart.lines.map((series) => (
                 <g key={series.key} data-series={series.key}>
                   <path d={series.area} fill={`url(#${gradientId}-${series.key})`} />
-                  <path d={series.line} fill="none" stroke={series.color} strokeWidth={series.key === "dismissals" ? 2.25 : 2.75} strokeLinecap="round" strokeLinejoin="round" />
+                  <path d={series.line} fill="none" stroke={series.color} strokeWidth={series.key === "dismissals" || series.key === "archivals" ? 2.25 : 2.75} strokeLinecap="round" strokeLinejoin="round" />
                 </g>
               ))}
 
@@ -290,7 +299,7 @@ export function StudentTrendChart({ syncKey }: { syncKey?: string | number }) {
         <ul className="sr-only" aria-label={`إحصائيات الطلبة يوماً بيوم، ${rangeLabel}`}>
           {days.map((day) => (
             <li key={day.date}>
-              {dayLabel(day.date, true)}: {day.registrations} تسجيل جديد، {day.dismissals} مفصول، {day.active} نشط
+              {dayLabel(day.date, true)}: {day.registrations} تسجيل جديد، {day.dismissals} مفصول، {day.archivals} مؤرشف، {day.active} نشط
             </li>
           ))}
         </ul>

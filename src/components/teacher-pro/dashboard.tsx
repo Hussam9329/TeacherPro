@@ -42,6 +42,8 @@ import "./tp-modal.css";
 type DashboardStats = {
   activeStudents: number;
   dismissedStudents: number;
+  /** Archived students; part of the total on the dashboard. */
+  archivedStudents?: number;
   totalStudents: number;
   source: "database";
   generatedAt: string;
@@ -83,10 +85,11 @@ function StudentStatusDonut({ stats, loading }: { stats: DashboardStats | null; 
     ? [
         { key: "active", label: "نشطون", value: stats.activeStudents, color: "var(--chart-2)" },
         { key: "dismissed", label: "مفصولون", value: stats.dismissedStudents, color: "var(--chart-4)" },
+        { key: "archived", label: "مؤرشفون", value: stats.archivedStudents ?? 0, color: "var(--chart-archived)" },
         {
           key: "other",
           label: "حالات أخرى",
-          value: Math.max(0, stats.totalStudents - stats.activeStudents - stats.dismissedStudents),
+          value: Math.max(0, stats.totalStudents - stats.activeStudents - stats.dismissedStudents - (stats.archivedStudents ?? 0)),
           color: "var(--tp-soft)",
         },
       ].filter((part) => part.key !== "other" || part.value > 0)

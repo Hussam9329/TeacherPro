@@ -1,9 +1,11 @@
 /**
  * «إحصائيات الطلبة» on the dashboard: one point per Baghdad day.
- *  - registrations: students registered that day (archived ones left out, as in the total)
+ *  - registrations: students registered that day (archived later or not)
  *  - dismissals: students dismissed that day (one per student per day)
+ *  - archivals: students archived that day (one per student per day)
  *  - active: students active at the end of that day, walked back from today's
- *    count with the registrations, dismissals and reactivations after it.
+ *    count with the registrations, reactivations, restorations from the
+ *    archive, dismissals and archivals of active students after it.
  * Pure: the route reads the rows, this turns them into the series.
  */
 
@@ -20,6 +22,7 @@ export type StudentTrendDay = {
   date: string; // YYYY-MM-DD (Baghdad)
   registrations: number;
   dismissals: number;
+  archivals: number;
   active: number;
 };
 
@@ -64,35 +67,55 @@ function countByDay(events: Array<{ studentId: string; day: string }>): Map<stri
   return counts;
 }
 
+type DayEvent = { studentId: string; day: string };
+
+/** «الحالة السابقة: نشط» in the archive note: the student left the active count. */
+export function archivedWhileActive(noteText: string | null | undefined): boolean {
+  return /الحالة السابقة:\s*نشط(?:[.\s،]|$)/u.test(String(noteText || ""));
+}
+
 export function buildStudentTrend({
   dayKeys,
   activeNow,
   registrations,
   dismissals,
   reactivations,
+  archivals = [],
+  restorations = [],
 }: {
   dayKeys: string[];
   activeNow: number;
-  registrations: Array<{ studentId: string; day: string }>;
-  dismissals: Array<{ studentId: string; day: string }>;
-  reactivations: Array<{ studentId: string; day: string }>;
+  registrations: DayEvent[];
+  dismissals: DayEvent[];
+  reactivations: DayEvent[];
+  /** wasActive: the student was active when archived. */
+  archivals?: Array<DayEvent & { wasActive: boolean }>;
+  /** Restored from the archive: back to active. */
+  restorations?: DayEvent[];
 }): StudentTrendDay[] {
   const registered = countByDay(registrations);
   const dismissed = countByDay(dismissals);
   const reactivated = countByDay(reactivations);
+  const archived = countByDay(archivals);
+  const archivedActive = countByDay(archivals.filter((event) => event.wasActive));
+  const restored = countByDay(restorations);
   const days: StudentTrendDay[] = dayKeys.map((date) => ({
     date,
     registrations: registered.get(date) || 0,
     dismissals: dismissed.get(date) || 0,
+    archivals: archived.get(date) || 0,
     active: 0,
   }));
-  // Walk back from today: the day after d added its registrations and
-  // reactivations and removed its dismissals.
+  // Walk back from today: the day after d added its registrations,
+  // reactivations and restorations, and removed its dismissals and the
+  // archivals of active students.
   let active = activeNow;
   for (let index = days.length - 1; index >= 0; index -= 1) {
     days[index].active = Math.max(0, active);
     const date = days[index].date;
-    active -= (registered.get(date) || 0) + (reactivated.get(date) || 0) - (dismissed.get(date) || 0);
+    active -=
+      (registered.get(date) || 0) + (reactivated.get(date) || 0) + (restored.get(date) || 0)
+      - (dismissed.get(date) || 0) - (archivedActive.get(date) || 0);
   }
   return days;
 }

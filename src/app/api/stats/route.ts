@@ -25,16 +25,19 @@ export async function GET(req: NextRequest) {
     const snapshot = await db.$transaction(
       async (tx) => {
         const now = new Date();
-        // Archived students are hidden: they are not part of the total.
-        const [activeCount, dismissedCount, totalCount] = await Promise.all([
+        // On the dashboard the total counts every student, archived included
+        // (the grey part of «توزيع الطلبة حسب الحالة»).
+        const [activeCount, dismissedCount, archivedCount, totalCount] = await Promise.all([
           tx.student.count({ where: { status: "نشط" } }),
           tx.student.count({ where: { status: "مفصول" } }),
-          tx.student.count({ where: { status: { not: "مؤرشف" } } }),
+          tx.student.count({ where: { status: "مؤرشف" } }),
+          tx.student.count(),
         ]);
 
         return {
           activeStudents: activeCount,
           dismissedStudents: dismissedCount,
+          archivedStudents: archivedCount,
           totalStudents: totalCount,
           source: "database" as const,
           generatedAt: now.toISOString(),

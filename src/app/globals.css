@@ -223,6 +223,8 @@
   --chart-3: var(--sig-warning);
   --chart-4: var(--sig-danger);
   --chart-5: var(--tp-soft);
+  /* Archived students: a quiet grey (ring part and chart line). */
+  --chart-archived: #9aa09d;
   --sidebar: var(--tp-deep);
   --sidebar-foreground: var(--tp-bg);
   --sidebar-primary: var(--tp-bg);
@@ -300,6 +302,7 @@
   --chart-3: var(--sig-warning);
   --chart-4: var(--sig-danger);
   --chart-5: var(--tp-soft);
+  --chart-archived: #8f9894;
   /* The rail is a step lighter than the night page, so the open tab (page
      colour) still stands out of it. */
   --sidebar: var(--tp-ink);

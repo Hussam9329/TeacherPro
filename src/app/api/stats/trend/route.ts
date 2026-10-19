@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { baghdadDateKey, baghdadTodayKey, parseBaghdadDateTime } from "@/lib/baghdad-time";
 import { isDismissalActionNote, isDismissalOpportunityLog } from "@/lib/dismissed-history";
 import {
+  archivedWhileActive,
   buildStudentTrend,
   parseStudentTrendRange,
   studentTrendDayKeys,
@@ -21,7 +22,7 @@ import {
 
 /**
  * GET /api/stats/trend?range=week|month|30d|90d
- * «إحصائيات الطلبة»: registrations, dismissals and active students per Baghdad
+ * «إحصائيات الطلبة»: registrations, dismissals, archivals and active students per Baghdad
  * day. Same permission as the dashboard numbers. Read-only.
  */
 export async function GET(req: NextRequest) {
@@ -34,10 +35,11 @@ export async function GET(req: NextRequest) {
     const dayKeys = studentTrendDayKeys(range, baghdadTodayKey(now));
     const since = parseBaghdadDateTime(`${dayKeys[0]}T00:00`) as Date;
 
-    const [activeNow, students, logs, notes] = await Promise.all([
+    const [activeNow, students, logs, notes, archiveNotes] = await Promise.all([
       db.student.count({ where: { status: "نشط" } }),
+      // Every registration counts; a later archive shows as its own event.
       db.student.findMany({
-        where: { createdAt: { gte: since }, status: { not: "مؤرشف" } },
+        where: { createdAt: { gte: since } },
         select: { id: true, createdAt: true },
       }),
       db.opportunityLog.findMany({
@@ -59,6 +61,11 @@ export async function GET(req: NextRequest) {
         },
         select: { studentId: true, kind: true, text: true, date: true, dismissalDate: true },
       }),
+      // Archiving and restoring from the archive leave one note each.
+      db.studentNote.findMany({
+        where: { sourceType: { in: ["student-archive", "student-archive-restore"] }, date: { gte: since } },
+        select: { studentId: true, sourceType: true, text: true, date: true },
+      }),
     ]);
 
     const trend: StudentTrend = {
@@ -75,6 +82,12 @@ export async function GET(req: NextRequest) {
         reactivations: logs
           .filter((log) => log.action === "إعادة تفعيل")
           .map((log) => ({ studentId: log.studentId, day: baghdadDateKey(log.date) })),
+        archivals: archiveNotes
+          .filter((note) => note.sourceType === "student-archive")
+          .map((note) => ({ studentId: note.studentId, day: baghdadDateKey(note.date), wasActive: archivedWhileActive(note.text) })),
+        restorations: archiveNotes
+          .filter((note) => note.sourceType === "student-archive-restore")
+          .map((note) => ({ studentId: note.studentId, day: baghdadDateKey(note.date) })),
       }),
     };
 
