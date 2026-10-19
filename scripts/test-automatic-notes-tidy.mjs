@@ -190,7 +190,7 @@ test("every place that shows a dismissal or opportunity reason cleans it", () =>
     "src/components/teacher-pro/code-closures-dialog.tsx",
     "src/components/teacher-pro/dismissed-management.tsx",
     "src/components/teacher-pro/student-registry-helpers.ts",
-    "src/components/teacher-pro/student-registry.tsx",
+    "src/components/teacher-pro/student-registry-edit-dialog.tsx",
     "src/app/api/dismissed-management/history/route.ts",
     "src/app/api/dismissed-management/list/route.ts",
   ]) {
@@ -206,7 +206,7 @@ test("every place that shows a dismissal or opportunity reason cleans it", () =>
   ]) {
     assert.match(read(file), /visibleGradeNote\(|shortGradeNoteText\(/, `${file} hides internal grade-note prefixes`);
   }
-  for (const file of ["src/components/teacher-pro/grade-entry.tsx", "src/components/teacher-pro/grade-records.tsx"]) {
+  for (const file of ["src/components/teacher-pro/grade-entry-sheet.tsx", "src/components/teacher-pro/grade-records.tsx"]) {
     const source = read(file);
     assert.ok(source.includes("editableGradeNote(") && source.includes("withInternalGradeNotePrefix("), `${file} keeps the prefix when editing`);
   }

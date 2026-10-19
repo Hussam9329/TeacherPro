@@ -46,7 +46,7 @@ const alertDialog = read("src/components/ui/alert-dialog.tsx");
 const layout = read("src/components/teacher-pro/layout.tsx");
 const courses = read("src/components/teacher-pro/courses.tsx");
 const profileDialog = read("src/components/teacher-pro/student-profile-dialog.tsx");
-const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
+const gradeEntry = ["grade-entry.tsx", "grade-entry-shared.tsx", "grade-entry-filters.tsx", "grade-entry-sheet.tsx", "grade-entry-dialogs.tsx"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n");
 const smartNotes = read("src/components/teacher-pro/grade-smart-notes-panel.tsx");
 const packageJson = JSON.parse(read("package.json"));
 
@@ -197,7 +197,7 @@ pass(!/\b(?:w|h)-screen\b/.test(teacherProSource), "TeacherPro pages: use dynami
 pass(!/(?:^|[^a-z])\d+(?:\.\d+)?(?:vh|vw)\b/i.test(teacherProSource), "TeacherPro pages: raw vh/vw units are prohibited; use dynamic viewport units");
 
 // Every live application table must isolate scrolling in a labelled, keyboard-reachable wrapper.
-for (const file of teacherProFiles.filter((file) => !file.endsWith("export-dialog.tsx"))) {
+for (const file of teacherProFiles.filter((file) => !file.endsWith("export-dialog.tsx") && !file.endsWith("export-details-modal.ts"))) {
   const source = read(file);
   const tableCount = (source.match(/<table\b/g) || []).length;
   if (tableCount === 0) continue;

@@ -16,7 +16,7 @@ const examRoute = read("src/app/api/exams/route.ts");
 const examUtils = read("src/lib/exam-utils.ts");
 const recalc = read("src/lib/academic-recalculate-server.ts");
 const gradeClassification = read("src/lib/grade-classification.ts");
-const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
+const gradeEntry = ["grade-entry.tsx", "grade-entry-shared.tsx", "grade-entry-filters.tsx", "grade-entry-sheet.tsx", "grade-entry-dialogs.tsx"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n");
 const gradeRecords = read("src/components/teacher-pro/grade-records.tsx");
 const examNew = read("src/components/teacher-pro/exam-new.tsx");
 const examRecords = read("src/components/teacher-pro/exam-records.tsx");

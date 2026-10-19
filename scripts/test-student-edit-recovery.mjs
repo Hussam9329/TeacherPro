@@ -48,7 +48,7 @@ assert.equal(resolve(unchangedServer, {}).createdAt, "2026-06-20");
 assert.equal(prepare(draft, { ...draft, school: " school " }, draft).matchesDraft, true);
 assert.equal("accountingGraceDays" in studentEditFieldLabels, false, "grace is managed only from «إدارة فترة السماح»");
 
-const view = fs.readFileSync("src/components/teacher-pro/student-registry.tsx", "utf8");
+const view = ["student-registry.tsx", "student-registry-edit-dialog.tsx", "student-registry-filters.tsx", "student-registry-status-dialogs.tsx"].map((file) => fs.readFileSync(`src/components/teacher-pro/${file}`, "utf8")).join("\n");
 const recoveryHandlers = view.slice(view.indexOf("const loadEditRecovery"), view.indexOf("const updateEditForm"));
 assert.match(recoveryHandlers, /student\.id !== requestedId/);
 assert.match(recoveryHandlers, /!student\.mutationToken/);

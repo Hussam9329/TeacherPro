@@ -18,7 +18,7 @@ const academicEngine = read("src/lib/academic-engine.ts");
 const academicServer = read("src/lib/academic-recalculate-server.ts");
 const academicRepair = read("src/app/api/students/academic-repair/route.ts");
 const opportunitiesView = read("src/components/teacher-pro/opportunities.tsx");
-const registry = read("src/components/teacher-pro/student-registry.tsx");
+const registry = ["student-registry.tsx", "student-registry-edit-dialog.tsx", "student-registry-filters.tsx", "student-registry-status-dialogs.tsx"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n");
 const dismissedListRoute = read(
   "src/app/api/dismissed-management/list/route.ts",
 );

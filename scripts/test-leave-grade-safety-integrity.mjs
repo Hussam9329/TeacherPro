@@ -4,7 +4,7 @@ import path from "node:path";
 const root = process.cwd();
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
+const gradeEntry = ["grade-entry.tsx", "grade-entry-shared.tsx", "grade-entry-filters.tsx", "grade-entry-sheet.tsx", "grade-entry-dialogs.tsx"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n");
 const gradeRecords = read("src/components/teacher-pro/grade-records.tsx");
 const gradeRoute = read("src/app/api/grades/route.ts");
 const writeback = read("src/lib/academic-grade-writeback-server.ts");

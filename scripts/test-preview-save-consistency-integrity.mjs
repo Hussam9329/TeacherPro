@@ -9,7 +9,7 @@ const check = (label, condition) => checks.push({ label, ok: Boolean(condition) 
 const studentsRoute = read("src/app/api/students/route.ts");
 const gracePlan = read("src/lib/grace-period-plan-server.ts");
 const studentImpactRoute = read("src/app/api/students/update-impact/route.ts");
-const studentRegistry = read("src/components/teacher-pro/student-registry.tsx");
+const studentRegistry = ["student-registry.tsx", "student-registry-edit-dialog.tsx", "student-registry-filters.tsx", "student-registry-status-dialogs.tsx"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n");
 const coursesRoute = read("src/app/api/courses/route.ts");
 const coursesView = read("src/components/teacher-pro/courses.tsx");
 const chaptersRoute = read("src/app/api/chapters/route.ts");
@@ -40,7 +40,7 @@ const academicGradeWriteback = read("src/lib/academic-grade-writeback-server.ts"
 const studentLeavesRoute = read("src/app/api/student-leaves/route.ts");
 const gradesRoute = read("src/app/api/grades/route.ts");
 const gradeRecords = read("src/components/teacher-pro/grade-records.tsx");
-const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
+const gradeEntry = ["grade-entry.tsx", "grade-entry-shared.tsx", "grade-entry-filters.tsx", "grade-entry-sheet.tsx", "grade-entry-dialogs.tsx"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n");
 const opportunityLogsRoute = read("src/app/api/opportunity-logs/route.ts");
 const teacherStore = read("src/lib/teacher-store.ts");
 const pkg = JSON.parse(read("package.json"));

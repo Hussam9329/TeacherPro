@@ -5,7 +5,7 @@ const checks = [];
 const check = (condition, message) => checks.push({ condition, message });
 
 const opportunitiesView = read('src/components/teacher-pro/opportunities.tsx');
-const exportDialog = read('src/components/teacher-pro/export-dialog.tsx');
+const exportDialog = ['export-dialog.tsx', 'export-details-modal.ts'].map((file) => read(`src/components/teacher-pro/${file}`)).join('\n');
 const apiLayer = read('src/lib/api.ts');
 const studentRoute = read('src/app/api/students/route.ts');
 const statsRoute = read('src/app/api/opportunities/stats/route.ts');
@@ -18,7 +18,7 @@ const opportunitySnapshotServer = read('src/lib/student-opportunity-snapshot-ser
 const opportunityBalance = read('src/lib/opportunity-balance.ts');
 const academicEngine = read('src/lib/academic-engine.ts');
 const teacherStore = read('src/lib/teacher-store.ts');
-const gradeEntry = read('src/components/teacher-pro/grade-entry.tsx');
+const gradeEntry = ['grade-entry.tsx', 'grade-entry-shared.tsx', 'grade-entry-filters.tsx', 'grade-entry-sheet.tsx', 'grade-entry-dialogs.tsx'].map((file) => read(`src/components/teacher-pro/${file}`)).join('\n');
 const gradeRecords = read('src/components/teacher-pro/grade-records.tsx');
 const gradeExportRoute = read('src/app/api/grades/export/route.ts');
 const packageJson = read('package.json');

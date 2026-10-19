@@ -18,7 +18,7 @@ function must(condition, okMessage, failMessage = okMessage) {
   else fail(failMessage);
 }
 
-const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
+const gradeEntry = ["grade-entry.tsx", "grade-entry-shared.tsx", "grade-entry-filters.tsx", "grade-entry-sheet.tsx", "grade-entry-dialogs.tsx"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n");
 const gradeEntryStats = read("src/lib/grade-entry-stats.ts");
 const gradeEntryOfflineOutbox = read("src/lib/grade-entry-offline-outbox.ts");
 const academicTypes = read("src/lib/academic-types.ts");

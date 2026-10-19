@@ -12,7 +12,7 @@ const check = (condition, message) => {
 };
 
 const management = read("src/components/teacher-pro/dismissed-management.tsx");
-const registry = read("src/components/teacher-pro/student-registry.tsx");
+const registry = ["student-registry.tsx", "student-registry-edit-dialog.tsx", "student-registry-filters.tsx", "student-registry-status-dialogs.tsx"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n");
 const registryResults = read("src/components/teacher-pro/student-registry-results.tsx");
 const opportunities = read("src/components/teacher-pro/opportunities.tsx");
 const followUp = read("src/components/teacher-pro/follow-up.tsx");

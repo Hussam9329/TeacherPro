@@ -64,7 +64,7 @@ check('مسار تحديث الطالب يعيد حساب telegramKey عند ت�
 check('مسار تحديث الطالب لا يعود يحظر مسح التليگرام أو يذكر زراً محذوفاً', !studentsRoute.includes('استخدم زر فك ارتباط تليگرام'));
 
 // 6) واجهة سجل الطلاب تحتفظ بحقل تعديل التليگرام للمدير فقط
-const registry = fs.readFileSync(path.join(root, 'src/components/teacher-pro/student-registry.tsx'), 'utf8');
+const registry = ["student-registry.tsx", "student-registry-edit-dialog.tsx", "student-registry-filters.tsx", "student-registry-status-dialogs.tsx"].map((file) => fs.readFileSync(path.join(root, 'src/components/teacher-pro', file), 'utf8')).join('\n');
 check('واجهة السجل تحتفظ بحقل تعديل التليگرام (يصلح لربط حساب جديد)', registry.includes('updateEditTelegram') && registry.includes('edit-telegram'));
 
 // 7) تسجيل اختبار الإزالة في package.json ضمن سلسلة الفحوصات

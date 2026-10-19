@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const root = process.cwd();
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
-const registry = read('src/components/teacher-pro/student-registry.tsx');
+const registry = ["student-registry.tsx", "student-registry-edit-dialog.tsx", "student-registry-filters.tsx", "student-registry-status-dialogs.tsx"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n");
 const registryResults = read('src/components/teacher-pro/student-registry-results.tsx');
 const registryHelpers = read('src/components/teacher-pro/student-registry-helpers.ts');
 const api = read('src/lib/api.ts');
@@ -16,7 +16,7 @@ const sharedStudentSearch = fs.readFileSync(path.join(root, 'src/lib/student-sea
 const studentListFilters = read('src/lib/student-list-filters.ts');
 const mutationReplayPolicy = read('src/lib/mutation-replay-policy.ts');
 const opportunitySnapshots = read('src/lib/student-opportunity-snapshot-server.ts');
-const exportDialog = read('src/components/teacher-pro/export-dialog.tsx');
+const exportDialog = ['export-dialog.tsx', 'export-details-modal.ts'].map((file) => read(`src/components/teacher-pro/${file}`)).join('\n');
 const deleteImpact = read('src/lib/student-delete-impact.ts');
 const statusRoutePath = path.join(root, 'src/app/api/students/status-action/route.ts');
 const statusRoute = fs.existsSync(statusRoutePath) ? fs.readFileSync(statusRoutePath, 'utf8') : '';

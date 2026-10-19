@@ -49,7 +49,7 @@ check(
 );
 
 // 3. Hidden: «الكل», the dashboard and the follow-up searches leave them out.
-check(!read("src/components/teacher-pro/student-registry.tsx").includes("includeArchived"), "سجل الطلاب «الكل» بدون المؤرشفين");
+check(!(["student-registry.tsx", "student-registry-edit-dialog.tsx", "student-registry-filters.tsx", "student-registry-status-dialogs.tsx"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n")).includes("includeArchived"), "سجل الطلاب «الكل» بدون المؤرشفين");
 // The dashboard shows archived students on their own (the grey part of
 // «توزيع الطلبة حسب الحالة») and counts them in the total, as the user asked.
 check(

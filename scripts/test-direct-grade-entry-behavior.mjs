@@ -18,7 +18,7 @@ function must(condition, okMessage, failMessage = okMessage) {
   else fail(failMessage);
 }
 
-const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
+const gradeEntry = ["grade-entry.tsx", "grade-entry-shared.tsx", "grade-entry-filters.tsx", "grade-entry-sheet.tsx", "grade-entry-dialogs.tsx"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n");
 const gradeWriteback = read("src/lib/academic-grade-writeback-server.ts");
 const gradesRoute = read("src/app/api/grades/route.ts");
 
@@ -42,7 +42,7 @@ must(
 //    مؤرشف/مفصول/قبل التسجيل — بدون شرط القفل القديم.
 must(
   gradeEntry.includes(
-    "const numericInputDisabled =\n                    !canEditPersistedGrade && !protectedNumericCapture;",
+    "const numericInputDisabled =\n                !canEditPersistedGrade && !protectedNumericCapture;",
   ) &&
     gradeEntry.includes(
       "const structuredControlsDisabled = !canEditPersistedGrade;",

@@ -12,7 +12,7 @@ const archiveHelper = read("src/lib/student-enrollment-archive-server.ts");
 const tokenHelper = read("src/lib/student-academic-impact-token.ts");
 const profileRoute = read("src/app/api/students/profile-log/route.ts");
 const profileHelper = read("src/lib/student-profile-server.ts");
-const registry = read("src/components/teacher-pro/student-registry.tsx");
+const registry = ["student-registry.tsx", "student-registry-edit-dialog.tsx", "student-registry-filters.tsx", "student-registry-status-dialogs.tsx"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n");
 const profile = read("src/components/teacher-pro/student-profile-dialog.tsx");
 const api = read("src/lib/api.ts");
 const pkg = JSON.parse(read("package.json"));
@@ -64,7 +64,7 @@ check(
     studentsRoute.includes("النقل إلى دورة مختلفة يبدأ ملفاً جديداً دائماً") &&
     registry.includes("نقل إلى دورة جديدة — سيبدأ الطالب بملف نظيف") &&
     registry.includes("تأكيد النقل كطالب جديد") &&
-    registry.includes('{!editCourseChanged && (\n                            <label') &&
+    registry.includes('{!editCourseChanged && (\n                          <label') &&
     registry.includes("(editCourseChanged && courseTransferPolicy === \"keep\")"),
 );
 check(

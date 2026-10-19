@@ -53,7 +53,7 @@ const { computeActiveChapterReportContext, parseArchiveEntryDates, opportunityLo
 const read = (path) => readFileSync(path, "utf8");
 const lib = read("src/lib/active-chapter-report.ts");
 const route = read("src/app/api/students/profile-log/route.ts");
-const exportDialog = read("src/components/teacher-pro/export-dialog.tsx");
+const exportDialog = ["export-dialog.tsx", "export-details-modal.ts"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n");
 const api = read("src/lib/api.ts");
 const pkg = JSON.parse(read("package.json"));
 
@@ -512,7 +512,7 @@ must(
     exportDialog.includes("font-size: 16px") &&
     !/(?:^|[^a-z])\d+(?:\.\d+)?vw\b/i.test(
       exportDialog.slice(
-        exportDialog.indexOf("DETAILS_MODAL_CSS"),
+        exportDialog.indexOf("const DETAILS_MODAL_CSS"),
         exportDialog.indexOf("const DETAILS_MODAL_HTML"),
       ),
     ) &&

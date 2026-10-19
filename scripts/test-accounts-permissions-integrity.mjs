@@ -187,7 +187,7 @@ must(
       const source = read(file);
       return source.includes(line) && !/\btelegram(Key)?: \{ (contains|startsWith)/.test(source);
     }) &&
-      ["src/components/teacher-pro/grade-entry.tsx", "src/app/api/student-calls/candidates/route.ts", "src/app/api/student-calls/stats/route.ts"]
+      ["src/components/teacher-pro/grade-entry.tsx", "src/components/teacher-pro/grade-entry-shared.tsx", "src/components/teacher-pro/grade-entry-filters.tsx", "src/components/teacher-pro/grade-entry-sheet.tsx", "src/components/teacher-pro/grade-entry-dialogs.tsx", "src/app/api/student-calls/candidates/route.ts", "src/app/api/student-calls/stats/route.ts"]
         .every((file) => !read(file).includes("student.telegram,")) &&
       !read("src/components/teacher-pro/call-notes-management-dialog.tsx").includes("${note.student.telegram") &&
       read("src/components/teacher-pro/code-closures-dialog.tsx").includes('${student.username || ""}') &&
@@ -249,7 +249,7 @@ must(
       utils.includes("ما انحفظ التعديل: رقم الهاتف مسجّل للطالب${owner}.") &&
       utils.includes("لا يمكن إضافة الطالب: رقم الهاتف مسجل مسبقاً لطالب آخر") &&
       /getStudentDuplicateMessage\(\s*duplicateSource,\s*mergedIdentity,\s*String\(id\),\s*"edit",\s*\)/.test(read("src/app/api/students/route.ts")) &&
-      /editDialog\.id,\s*"edit",\s*\)/.test(read("src/components/teacher-pro/student-registry.tsx")),
+      /editDialog\.id,\s*"edit",\s*\)/.test((["student-registry.tsx", "student-registry-edit-dialog.tsx", "student-registry-filters.tsx", "student-registry-status-dialogs.tsx"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n"))),
     "رسالة الرقم المكرر بالتعديل تقول ما انحفظ التعديل ولمن الرقم",
   );
 }

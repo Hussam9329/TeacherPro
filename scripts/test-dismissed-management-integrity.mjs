@@ -19,7 +19,7 @@ const route = read("src/app/api/dismissed-management/history/route.ts");
 const listRoute = read("src/app/api/dismissed-management/list/route.ts");
 const statsRoute = read("src/app/api/dismissed-management/stats/route.ts");
 const helper = read("src/lib/dismissed-history.ts");
-const exportDialog = read("src/components/teacher-pro/export-dialog.tsx");
+const exportDialog = ["export-dialog.tsx", "export-details-modal.ts"].map((file) => read(`src/components/teacher-pro/${file}`)).join("\n");
 const opportunitiesView = read("src/components/teacher-pro/opportunities.tsx");
 const profileServer = read("src/lib/student-profile-server.ts");
 const layout = read("src/components/teacher-pro/layout.tsx");
