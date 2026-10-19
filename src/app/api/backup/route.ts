@@ -1,5 +1,11 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// A restore is the heaviest request in the system: give it the longest time
+// the plan allows, and keep its transaction inside it (see RESTORE_TIMEOUT_MS).
+export const maxDuration = 300;
+// The transaction gives up before the function is cut off, so a restore that
+// runs too long rolls back cleanly instead of being killed holding its locks.
+const RESTORE_TIMEOUT_MS = 270_000;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
@@ -409,8 +415,8 @@ async function executeRestore(
       `;
     },
     {
-      maxWait: 60_000,
-      timeout: 600_000, // 10 minutes — large backups may take time
+      maxWait: 20_000,
+      timeout: RESTORE_TIMEOUT_MS,
       isolationLevel: 'Serializable',
     },
   );
@@ -426,6 +432,29 @@ async function restoreTable(
   mode: 'merge' | 'replace',
 ): Promise<{ inserted: number; updated: number; skipped: number }> {
   if (rows.length === 0) return { inserted: 0, updated: 0, skipped: 0 };
+
+  // Replace mode starts from empty tables, so rows are inserted a thousand at
+  // a time instead of upserted one by one. Accounts keep their own path
+  // (credentials and activation rules), and so do an exam's course links:
+  // restoring the exam already creates them, and only an upsert puts back
+  // their original ids.
+  const modelName = MODEL_NAMES[table as keyof typeof MODEL_NAMES];
+  const bulkDelegate = modelName ? (tx as unknown as Record<string, AnyDelegate>)[modelName] : undefined;
+  if (mode === 'replace' && table !== 'users' && table !== 'examCourses' && bulkDelegate?.createMany) {
+    let created = 0;
+    for (let i = 0; i < rows.length; i += 1000) {
+      const data = rows.slice(i, i + 1000).map((row) => {
+        const record = row as Record<string, unknown>;
+        if (!record || typeof record !== 'object' || typeof record.id !== 'string' || !record.id) {
+          throw new Error('سجل استعادة بلا معرّف صالح.');
+        }
+        return sanitizeRow(record);
+      });
+      const result = await bulkDelegate.createMany({ data });
+      created += typeof result?.count === 'number' ? result.count : data.length;
+    }
+    return { inserted: created, updated: 0, skipped: rows.length - created };
+  }
 
   let inserted = 0;
   let updated = 0;
