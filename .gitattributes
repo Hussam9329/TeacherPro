@@ -1,0 +1,3 @@
+# Every file keeps LF line endings on every system: the repository is LF,
+# and tests that read source files (and migration checksums) expect it.
+* text=auto eol=lf
