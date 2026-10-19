@@ -957,11 +957,6 @@ export function StudentBulkTextImportView() {
                 </li>
               ))}
             </ol>
-            <p className="tp-bulk-import__columns-note">
-              التسجيل الجماعي لا يعتمد على عمود الفرص المكتوب بالنص؛ فرص البداية
-              تُحسب من الفصل النشط للدورة، والدورة الموقوفة أو ذات تعارض الفصول
-              تُرفض قبل الإضافة.
-            </p>
           </section>
 
           <label className="sr-only" htmlFor="bulk-student-text">

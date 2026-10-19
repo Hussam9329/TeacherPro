@@ -141,9 +141,8 @@ assert(
 );
 assert(
   bulkView.includes("فرص البداية") &&
-    bulkView.includes("تُحسب من الفصل النشط للدورة") &&
-    bulkView.includes("التسجيل الجماعي لا يعتمد على عمود الفرص"),
-  "واجهة التسجيل الجماعي تعرض مصدر فرص البداية للمستخدم بوضوح",
+    !bulkView.includes("التسجيل الجماعي لا يعتمد على عمود الفرص"),
+  "واجهة التسجيل الجماعي تعرض فرص البداية لكل طالب بلا ملاحظة شرح عمود الفرص",
 );
 assert(
   packageJson.scripts?.["test:bulk-register-integrity"] ===
