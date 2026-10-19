@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { AlertCircle, BookOpen, CalendarDays, CheckCheck, ChevronDown, Loader2, LockKeyhole, LockKeyholeOpen, MessageCircle, Radiation, RefreshCw, Search, Send, SlidersHorizontal, X } from "lucide-react";
+import { AlertCircle, BookOpen, CalendarDays, CheckCheck, ChevronDown, Loader2, LockKeyhole, LockKeyholeOpen, MessageCircle, Radiation, RefreshCw, Search, Send, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -471,17 +471,20 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                   return (
                   <article key={student.id} className="tp-closure-card" data-checked={student.dismissedChecked}>
                     <header className="tp-closure-card__head">
-                      <b className="tp-closure-card__name">{student.name}</b>
-                      <span className="tp-closure-card__sep" aria-hidden="true" />
-                      <span className="tp-closure-card__id">
-                        <span className="tp-closure-card__code" dir="ltr">{student.code}</span>
+                      <span className="tp-closure-card__avatar" data-tone={student.dismissedChecked ? "success" : "warning"} aria-hidden="true">
+                        <UserRound />
+                      </span>
+                      <span className="tp-closure-card__who">
+                        <b className="tp-closure-card__name">{student.name}</b>
+                        <span className="tp-closure-card__id">
+                          <span className="tp-closure-card__pill" data-tone="danger">
+                            <span className="tp-closure-card__dot" aria-hidden="true" />{student.status}
+                          </span>
+                          <span className="tp-closure-card__code" dir="ltr">{student.code}</span>
+                        </span>
                         <span className="tp-closure-card__course"><BookOpen aria-hidden="true" />{student.course?.name || "—"}</span>
                       </span>
-                      <span className="tp-closure-card__sep" aria-hidden="true" />
-                      <span className="tp-closure-card__pill" data-tone="danger">
-                        <span className="tp-closure-card__dot" aria-hidden="true" />{student.status}
-                      </span>
-                      <span className="tp-closure-card__pill" data-tone={student.dismissedChecked ? "success" : "warning"}>
+                      <span className="tp-closure-card__pill tp-closure-card__state" data-tone={student.dismissedChecked ? "success" : "warning"}>
                         {student.dismissedChecked ? <CheckCheck aria-hidden="true" /> : <LockKeyhole aria-hidden="true" />}
                         {student.dismissedChecked ? "الكود مغلق" : "بانتظار الإغلاق"}
                       </span>

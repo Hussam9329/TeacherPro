@@ -522,60 +522,18 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                   return (
                     <li key={student.id} className="tp-notes__card" data-tone={tone}>
                       <div className="tp-notes__head">
-                        <span className="tp-modal__light" data-tone={tone} aria-hidden="true" />
-                        <span className="tp-notes__name">{student.name}</span>
-                        <span className="tp-notes__sep" aria-hidden="true" />
-                        <span dir="ltr" className="tp-modal__code">{student.code}</span>
-                        {student.course && <span className="tp-modal__chip">{student.course.name}</span>}
+                        <span className="tp-notes__avatar" data-tone={tone} aria-hidden="true"><UserRound /></span>
+                        <span className="tp-notes__who">
+                          <span className="tp-notes__name">{student.name}</span>
+                          <span className="tp-notes__meta">
+                            <span dir="ltr" className="tp-modal__code">{student.code}</span>
+                            {student.course && <span className="tp-modal__chip">{student.course.name}</span>}
+                          </span>
+                        </span>
                         {group.length > 1 && (
-                          <span className="tp-modal__chip" data-tone="outline">
+                          <span className="tp-modal__chip tp-notes__count" data-tone="outline">
                             {group.length === 2 ? "ملاحظتان" : `${group.length} ملاحظات`}
                           </span>
-                        )}
-                        {platform && (
-                          <button
-                            type="button"
-                            className="tp-closure-card__danger tp-notes__platform"
-                            data-done={platformOpened.has(student.id) || undefined}
-                            onClick={(event) => openPlatform(student, event.currentTarget)}
-                            aria-label={`فتح المنصة لإغلاق كود ${student.name} ونسخ رقم هاتفه${platformOpened.has(student.id) ? " — تم" : ""}`}
-                            title={platformOpened.has(student.id) ? "تم فتح المنصة ونسخ الرقم" : "فتح المنصة لإغلاق كود الطالب ونسخ رقم هاتفه"}
-                          >
-                            <Radiation aria-hidden="true" />
-                          </button>
-                        )}
-                        {platform && (
-                          <button
-                            type="button"
-                            className="tp-closure-card__restore tp-notes__restore"
-                            onClick={(event) => openPlatform(student, event.currentTarget, "open")}
-                            aria-label={`فتح المنصة لإعادة فتح كود ${student.name} ونسخ رقم هاتفه`}
-                            title="فتح المنصة لإعادة فتح كود الطالب ونسخ رقم هاتفه"
-                          >
-                            <LockKeyholeOpen aria-hidden="true" />
-                          </button>
-                        )}
-                        {telegram.href ? (
-                          <a
-                            href={telegramChatWithMessage(telegram.href)}
-                            dir="ltr"
-                            className="tp-modal__tg tp-notes__tg"
-                            onClick={(event) => copyGuardianMessage(student.name, event.currentTarget)}
-                            aria-label={`فتح محادثة ${student.name} في تيليجرام ورسالة رقم ولي الأمر مكتوبة بيها`}
-                            title="يفتح المحادثة ورسالة «رقم ولي الأمر ما يشتغل» مكتوبة بيها — اضغط إرسال"
-                          >
-                            <Send className="size-3.5" aria-hidden="true" />
-                            @{telegram.value}
-                          </a>
-                        ) : telegram.value ? (
-                          <span dir="ltr" className="tp-modal__tg tp-notes__tg" data-plain="true">{telegram.value}</span>
-                        ) : null}
-                        {contacts && (
-                          <StudentContactEdit
-                            student={student}
-                            field="username"
-                            onSaved={(value) => saveContact(student.id, "username", value)}
-                          />
                         )}
                       </div>
                       {contacts && (
@@ -665,6 +623,53 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                           );
                         })}
                       </ol>
+                      <div className="tp-notes__foot">
+                          {platform && (
+                            <button
+                              type="button"
+                              className="tp-closure-card__danger tp-notes__platform"
+                              data-done={platformOpened.has(student.id) || undefined}
+                              onClick={(event) => openPlatform(student, event.currentTarget)}
+                              aria-label={`فتح المنصة لإغلاق كود ${student.name} ونسخ رقم هاتفه${platformOpened.has(student.id) ? " — تم" : ""}`}
+                              title={platformOpened.has(student.id) ? "تم فتح المنصة ونسخ الرقم" : "فتح المنصة لإغلاق كود الطالب ونسخ رقم هاتفه"}
+                            >
+                              <Radiation aria-hidden="true" />
+                            </button>
+                          )}
+                          {platform && (
+                            <button
+                              type="button"
+                              className="tp-closure-card__restore tp-notes__restore"
+                              onClick={(event) => openPlatform(student, event.currentTarget, "open")}
+                              aria-label={`فتح المنصة لإعادة فتح كود ${student.name} ونسخ رقم هاتفه`}
+                              title="فتح المنصة لإعادة فتح كود الطالب ونسخ رقم هاتفه"
+                            >
+                              <LockKeyholeOpen aria-hidden="true" />
+                            </button>
+                          )}
+                          {telegram.href ? (
+                            <a
+                              href={telegramChatWithMessage(telegram.href)}
+                              dir="ltr"
+                              className="tp-modal__tg tp-notes__tg"
+                              onClick={(event) => copyGuardianMessage(student.name, event.currentTarget)}
+                              aria-label={`فتح محادثة ${student.name} في تيليجرام ورسالة رقم ولي الأمر مكتوبة بيها`}
+                              title="يفتح المحادثة ورسالة «رقم ولي الأمر ما يشتغل» مكتوبة بيها — اضغط إرسال"
+                            >
+                              <Send className="size-3.5" aria-hidden="true" />
+                              @{telegram.value}
+                            </a>
+                          ) : telegram.value ? (
+                            <span dir="ltr" className="tp-modal__tg tp-notes__tg" data-plain="true">{telegram.value}</span>
+                          ) : null}
+                          {contacts && (
+                            <StudentContactEdit
+                              student={student}
+                              field="username"
+                              onSaved={(value) => saveContact(student.id, "username", value)}
+                            />
+                          )}
+                      </div>
                     </li>
                   );
                 })}
