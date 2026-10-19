@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db';
 
 type ApiRateLimitOptions = {
   key: string;
@@ -71,6 +72,29 @@ async function redisCommand<T = unknown>(...args: (string | number)[]): Promise<
   }
 }
 
+/**
+ * One count shared by every server instance: the same table and atomic
+ * upsert the login limit uses. On Vercel each request may land on a fresh
+ * instance, so a count kept in memory limited almost nothing.
+ */
+async function databaseCount(bucketKey: string, windowSeconds: number): Promise<{ count: number; retry: number } | null> {
+  try {
+    const key = createHash('sha256').update(bucketKey).digest('hex');
+    const rows = await db.$queryRaw<Array<{ attempts: number; retry: number }>>`
+      INSERT INTO "LoginRateBucket" ("key", "attempts", "expiresAt")
+      VALUES (${key}, 1, CURRENT_TIMESTAMP + make_interval(secs => ${windowSeconds}::double precision))
+      ON CONFLICT ("key") DO UPDATE SET
+        "attempts" = CASE WHEN "LoginRateBucket"."expiresAt" <= CURRENT_TIMESTAMP THEN 1 ELSE "LoginRateBucket"."attempts" + 1 END,
+        "expiresAt" = CASE WHEN "LoginRateBucket"."expiresAt" <= CURRENT_TIMESTAMP THEN CURRENT_TIMESTAMP + make_interval(secs => ${windowSeconds}::double precision) ELSE "LoginRateBucket"."expiresAt" END
+      RETURNING "attempts", GREATEST(1, CEIL(EXTRACT(EPOCH FROM ("expiresAt" - CURRENT_TIMESTAMP))))::int AS retry
+    `;
+    return rows[0] ? { count: Number(rows[0].attempts), retry: Number(rows[0].retry) } : null;
+  } catch (error) {
+    console.warn('[api-rate-limit] database count failed:', error);
+    return null;
+  }
+}
+
 function cleanupMemoryBuckets(now: number) {
   if (memoryBuckets.size <= 2000) return;
   for (const [key, bucket] of memoryBuckets) {
@@ -107,6 +131,17 @@ export async function checkApiRateLimit(
     }
   }
 
+  const shared = await databaseCount(bucketKey, options.windowSeconds);
+  if (shared) {
+    return shared.count > options.limit ? rateLimitResponse(message, shared.retry || options.windowSeconds) : null;
+  }
+  // Backup export and restore never run unlimited: if the shared count is
+  // unavailable they wait instead of falling back to one instance's memory.
+  if (options.key.startsWith('backup')) {
+    return rateLimitResponse('تعذر التحقق من عدد الطلبات الآن. حاول مرة أخرى بعد قليل.', 60);
+  }
+
+  // Last resort when the database count fails: this instance's memory.
   const now = Date.now();
   const existing = memoryBuckets.get(bucketKey);
   if (!existing || existing.resetAt <= now) {

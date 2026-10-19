@@ -22,13 +22,6 @@ function decode(value: string): Buffer {
   return Buffer.from(value, 'base64url');
 }
 
-function timingSafeStringEqual(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  if (leftBuffer.length !== rightBuffer.length) return false;
-  return timingSafeEqual(leftBuffer, rightBuffer);
-}
-
 export function isPasswordHash(value: unknown): value is string {
   return typeof value === 'string' && value.startsWith(`${PASSWORD_HASH_PREFIX}$`);
 }
@@ -39,16 +32,21 @@ export async function hashPassword(password: string): Promise<string> {
   return `${PASSWORD_HASH_PREFIX}$${SCRYPT_OPTIONS.N}$${SCRYPT_OPTIONS.r}$${SCRYPT_OPTIONS.p}$${encode(salt)}$${encode(hash)}`;
 }
 
-export async function normalizePasswordForStorage(passwordOrHash: string): Promise<string> {
-  return isPasswordHash(passwordOrHash) ? passwordOrHash : hashPassword(passwordOrHash);
+/**
+ * What is stored for a code typed by a person: always a fresh hash. A value
+ * that already looks like a hash is hashed too, so nobody can plant a hash
+ * (and its parameters) of their own choosing.
+ */
+export async function normalizePasswordForStorage(password: string): Promise<string> {
+  return hashPassword(password);
 }
 
 export async function verifyPassword(password: string, storedPassword: string | null | undefined): Promise<boolean> {
   if (!storedPassword) return false;
 
-  if (!isPasswordHash(storedPassword)) {
-    return timingSafeStringEqual(password, storedPassword);
-  }
+  // Plain-text codes are converted to hashes before any login is checked
+  // (upgradePlaintextPasswords); one is never compared as text.
+  if (!isPasswordHash(storedPassword)) return false;
 
   const parts = storedPassword.split('$');
   if (parts.length !== 7 || `${parts[0]}$${parts[1]}` !== PASSWORD_HASH_PREFIX) return false;

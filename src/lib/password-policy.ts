@@ -61,14 +61,6 @@ export type PasswordPolicyResult =
  * validation (because the hash was already accepted at creation time).
  */
 export function validatePasswordPolicy(password: string): PasswordPolicyResult {
-  // Allow password hashes to pass through — they were validated when set.
-  // This handles the legacy case where body.passwordHash is sent instead
-  // of body.password (we don't want to re-validate a hash as if it were
-  // a plaintext password).
-  if (password.startsWith('scrypt$1$')) {
-    return { ok: true };
-  }
-
   if (typeof password !== 'string' || password.length === 0) {
     return {
       ok: false,

@@ -108,10 +108,10 @@ async function readAssignableRole(principal: AuthPrincipal, roleId: unknown) {
   return { role, error: null };
 }
 
+// Only a typed code is accepted; a ready-made hash (the old passwordHash
+// field) is not, so nobody can set a hash of their own choosing.
 function readPasswordInput(body: Record<string, unknown>): string {
-  const password = typeof body.password === 'string' ? body.password : '';
-  const legacyPasswordHash = typeof body.passwordHash === 'string' ? body.passwordHash : '';
-  return (password || legacyPasswordHash).trim();
+  return (typeof body.password === 'string' ? body.password : '').trim();
 }
 
 function validateUserPayload(body: Record<string, unknown>) {
@@ -255,7 +255,8 @@ export async function PUT(req: NextRequest) {
     }
     if (updateData.permissions !== undefined) updateData.permissions = normalizePermissions(updateData.permissions);
 
-    const passwordInput = typeof password === 'string' ? password.trim() : typeof passwordHash === 'string' ? passwordHash.trim() : '';
+    void passwordHash; // the old hash field is ignored
+    const passwordInput = typeof password === 'string' ? password.trim() : '';
     if (passwordInput) {
       // Q98 FIX: Enforce password strength policy on password change.
       const passwordCheck = validatePasswordPolicy(passwordInput);

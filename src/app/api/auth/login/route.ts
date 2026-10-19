@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { findUserByUsername, setAuthCookie, toAuthPrincipal } from '@/lib/server-auth';
 import { hashPassword, isPasswordHash, verifyPassword } from '@/lib/passwords';
+import { upgradePlaintextPasswords } from '@/lib/password-upgrade-server';
 import { isPasswordAcceptable } from '@/lib/password-policy';
 import {
   checkLoginRateLimit,
@@ -44,6 +45,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Old plain-text codes become hashes first, so they still log in.
+    await upgradePlaintextPasswords();
     const user = await findUserByUsername(username);
     if (!user || !user.active || !(await verifyPassword(password, user.passwordHash))) {
       await recordLoginFailure(identifier);
