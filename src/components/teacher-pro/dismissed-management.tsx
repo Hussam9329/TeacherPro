@@ -1,5 +1,6 @@
 "use client";
 
+import { telegramUsername, whatsappLink } from "@/lib/contact-links";
 import { useUrlNumberState, useUrlState } from "@/hooks/use-url-state";
 import { displayReasonText } from "@/lib/reason-display";
 import {
@@ -18,7 +19,6 @@ import { formatBaghdadDateTime } from "@/lib/baghdad-time";
 import { studentApi, studentProfileLogApi } from "@/lib/api";
 import { toast } from "@/lib/user-toast";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
-import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import {
   buildOpportunityTelegramAttachment,
   buildOpportunityTelegramHtml,
@@ -180,27 +180,8 @@ const EMPTY_DISMISSED_STATS: DismissedStats = {
   withNotes: 0,
 };
 
-function phoneForWhatsApp(phone?: string) {
-  const digits = String(phone || "").replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.startsWith("964")) return digits;
-  if (digits.startsWith("0")) return `964${digits.slice(1)}`;
-  return digits;
-}
 
-function whatsappLink(phone?: string) {
-  const digits = phoneForWhatsApp(phone);
-  return digits ? `https://wa.me/${digits}` : "#";
-}
 
-function telegramUsername(value?: string) {
-  return normalizeTelegramIdentifier(value)
-    .replace(/^https?:\/\/t\.me\//, "")
-    .replace(/^t\.me\//, "")
-    .split(/[/?#]/)[0]
-    .replace(/^@+/, "")
-    .trim();
-}
 
 /**
  * يوزر التليگرام الصالح للمراسلة: يفضّل اليوزر المستعاد (username)

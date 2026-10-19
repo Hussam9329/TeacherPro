@@ -1,4 +1,5 @@
 "use client";
+import { telegramLink, whatsappLink, whatsappPhone } from "@/lib/contact-links";
 import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -62,7 +63,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/lib/user-toast";
-import { formatAppDate, sanitizePhoneInput } from "@/lib/format";
+import { formatAppDate } from "@/lib/format";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { CallPhoneQr } from "./call-phone-qr";
@@ -325,26 +326,8 @@ function todayISO() {
   return baghdadTodayKey();
 }
 
-function phoneForWhatsApp(phone?: string) {
-  const digits = String(phone || "").replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.startsWith("964")) return digits;
-  if (digits.startsWith("0")) return `964${digits.slice(1)}`;
-  return digits;
-}
 
-function whatsappLink(phone: string): string {
-  const digits = phoneForWhatsApp(sanitizePhoneInput(phone));
-  return digits ? `https://wa.me/${digits}` : "#";
-}
 
-function telegramLink(telegram: string): string {
-  const username = normalizeTelegramIdentifier(telegram).replace(/^@+/, "");
-  // المعرفات الرقمية لا تصلح لروابط تليگرام.
-  if (!username || /^\d+$/.test(username)) return "#";
-  // فتح المحادثة داخل تطبيق تليگرام مباشرة بدل نسخة الويب.
-  return `tg://resolve?domain=${encodeURIComponent(username)}`;
-}
 
 function visibleCallGradeItems(
   items: CallGradeItem[],
@@ -1211,7 +1194,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   // ── Contact ─────────────────────────────────────────────────────────────
   // Window: the numbers themselves, WhatsApp links and Telegram.
   const renderPhoneLink = (label: string, phone?: string) => {
-    const digits = phoneForWhatsApp(phone);
+    const digits = whatsappPhone(phone);
     if (!digits) {
       return (
         <span className="rounded-xl border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
@@ -1284,7 +1267,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
         <span className="tp-call-card__contact-btn" data-kind="whatsapp" aria-disabled="true" title="خذه للاتصال حتى يبين الرقم">
           <WhatsAppIcon />{label}
         </span>
-      ) : phoneForWhatsApp(phone) ? (
+      ) : whatsappPhone(phone) ? (
         <a
           className="tp-call-card__contact-btn"
           data-kind="whatsapp"

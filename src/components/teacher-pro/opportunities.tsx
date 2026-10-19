@@ -1,4 +1,5 @@
 "use client";
+import { telegramLink, whatsappLink } from "@/lib/contact-links";
 import { useUrlNumberState, useUrlState } from "@/hooks/use-url-state";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
@@ -410,28 +411,6 @@ export function OpportunitiesView() {
     [students, serverStudents, profileStudentId],
   );
 
-  const phoneForWhatsApp = (phone?: string) => {
-    const digits = String(phone || "").replace(/\D/g, "");
-    if (!digits) return "";
-    if (digits.startsWith("964")) return digits;
-    if (digits.startsWith("0")) return `964${digits.slice(1)}`;
-    return digits;
-  };
-
-  const whatsappLink = (phone: string) => {
-    const digits = phoneForWhatsApp(phone);
-    return digits ? `https://wa.me/${digits}` : "#";
-  };
-
-  const telegramLink = (telegram: string) => {
-    const username = String(telegram || "")
-      .trim()
-      .replace(/^@+/, "");
-    // المعرفات الرقمية لا تصلح لروابط تليگرام.
-    if (!username || /^\d+$/.test(username)) return "#";
-    // فتح المحادثة داخل تطبيق تليگرام مباشرة بدل نسخة الويب.
-    return `tg://resolve?domain=${encodeURIComponent(username)}`;
-  };
 
   const selectedActionStudent = useMemo(
     () =>

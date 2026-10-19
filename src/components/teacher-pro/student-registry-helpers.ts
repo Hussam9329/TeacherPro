@@ -1,4 +1,6 @@
 import type { Student } from "@/lib/teacher-store";
+import { telegramLink } from "@/lib/contact-links";
+export { telegramLink, whatsappLink } from "@/lib/contact-links";
 import type { StudentDeleteImpactResponse } from "@/lib/api";
 import { baghdadDateKey, baghdadTodayKey } from "@/lib/baghdad-time";
 import {
@@ -192,23 +194,7 @@ export function getStudentEditForm(student: Student): StudentEditForm {
   };
 }
 
-export function whatsappLink(phone: string | null | undefined): string {
-  const sanitized = sanitizePhoneInput(phone ?? "");
-  if (!sanitized) return "";
-  const appPhone =
-    sanitized.startsWith("07") && sanitized.length === 11
-      ? `964${sanitized.slice(1)}`
-      : sanitized;
-  return `https://wa.me/${encodeURIComponent(appPhone)}`;
-}
 
-export function telegramLink(telegram: string): string {
-  const username = normalizeTelegramIdentifier(telegram).replace(/^@+/, "");
-  // المعرفات الرقمية لا تصلح لروابط تليگرام — تفتح فقط اليوزرات الحرفية.
-  if (!username || /^\d+$/.test(username)) return "";
-  // فتح المحادثة داخل تطبيق تليگرام مباشرة بدل نسخة الويب.
-  return `tg://resolve?domain=${encodeURIComponent(username)}`;
-}
 
 export type TelegramHandleInfo = {
   /** اسم الحقل المعروض: «يوزر تليگرام» أو «معرف تليگرام». */
