@@ -433,7 +433,7 @@ export function StudentRegistryResults({
 }: StudentRegistryResultsProps) {
   if (viewMode === "cards") {
     return (
-      <div className="tp-registry-results tp-rcards" data-columns="2">
+      <div className="tp-registry-results tp-scards">
         {students.map((student) => (
           <StudentRegistryRow
             key={student.id}
@@ -634,126 +634,136 @@ function StudentRegistryRow({
   const moreActions = studentMoreActions({ student, ...actionProps });
   // Both numbers and the Telegram username are fixed right on the card, as the full edit would.
   const quickEdit = actionProps.canEdit && student.status !== ARCHIVED_STUDENT_STATUS;
+  const archived = student.status === ARCHIVED_STUDENT_STATUS;
+  // Two letters of the name for the avatar.
+  const initials = student.name.trim().split(/\s+/).slice(0, 2).map((word) => word.charAt(0)).join(" ");
+  const hasPhone = Boolean(sanitizePhoneInput(student.phone || ""));
+  const hasParentPhone = Boolean(sanitizePhoneInput(student.parentPhone || ""));
   return (
     <article
-      className="tp-rcard"
+      className="tp-scard"
       aria-labelledby={`registry-student-${student.id}`}
-      data-tone={dismissed ? "danger" : undefined}
-      data-muted={student.status === ARCHIVED_STUDENT_STATUS ? "true" : undefined}
-      data-dismissed={dismissed || undefined}
+      data-status={dismissed ? "dismissed" : archived ? "archived" : "active"}
     >
-      <div className="tp-rcard__head">
-        <span className="tp-rcard__light" data-tone={tone} aria-hidden="true" />
-        <h3 id={`registry-student-${student.id}`} className="tp-rcard__name">{student.name}</h3>
-        <span className="tp-rcard__sep" aria-hidden="true" />
-        <bdi className="tp-rcard__code">{student.code}</bdi>
-        <span className="tp-rcard__sub">
-          {courseName(student.courseId) || "بدون دورة"}
-          {row.activeChapter?.name ? ` · ${row.activeChapter.name}` : ""}
-        </span>
-        <span className="tp-rcard__head-end">
-          <span className="tp-rcard__pill" data-tone={tone} data-solid={dismissed ? "true" : undefined}>
-            {student.status}
-          </span>
+      {/* Who: avatar, name, code and course; status and health at the end. */}
+      <header className="tp-scard__head">
+        <span className="tp-scard__avatar" data-tone={tone} aria-hidden="true">{initials}</span>
+        <div className="tp-scard__who">
+          <h3 id={`registry-student-${student.id}`} className="tp-scard__name">{student.name}</h3>
+          <p className="tp-scard__meta">
+            <bdi className="tp-scard__code">{student.code}</bdi>
+            <span className="tp-scard__course">
+              {courseName(student.courseId) || "بدون دورة"}
+              {row.activeChapter?.name ? ` · ${row.activeChapter.name}` : ""}
+            </span>
+          </p>
+        </div>
+        <div className="tp-scard__badges">
+          <span className="tp-scard__status" data-tone={tone}>{student.status}</span>
+          {moreActions.length ? (
+            <RowActionsMenu label={`إجراءات أخرى لـ${student.name}`} actions={moreActions} />
+          ) : null}
+        </div>
+      </header>
+
+      {healthBadges.length ? (
+        <div className="tp-scard__flags">
           {healthBadges.map((badge) => (
             <span
               key={badge.label}
-              className="tp-rcard__pill"
+              className="tp-scard__flag"
               data-tone={badge.className.includes("danger") ? "danger" : "warning"}
             >
               {badge.label}
             </span>
           ))}
-        </span>
-      </div>
+        </div>
+      ) : null}
 
-      <div className="tp-rcard__body" data-tile="true">
-        <div className="tp-rcard__main">
-          <div className="tp-rcard__panel" data-tone={balanceTone}>
-            <span className="tp-rcard__eyebrow">الفرص</span>
-            <span className="tp-rcard__title">
-              {dots > 0 ? (
-                <>
-                  <span className="tp-meter" data-tone={balanceTone} aria-hidden="true">
-                    {Array.from({ length: dots }, (_, index) => (
-                      <i key={index} data-off={index >= balance ? "true" : undefined} />
-                    ))}
-                  </span>{" "}
-                </>
-              ) : null}
-              {formatOpportunityBalance(student, { separator: " من " })}
-            </span>
-            {dismissed ? (
-              <span className="tp-rcard__line">
-                {displayReasonText(student.dismissalReason) || "سبب الفصل غير مدخل"}
-                {student.dismissalNotes ? ` · ملاحظات: ${student.dismissalNotes}` : ""}
-              </span>
-            ) : null}
-            {currentGrace ? (
-              <span className="tp-rcard__line">
-                <GraceLightPill endDate={currentGrace.endDate}>
-                  {`فترة سماح حتى ${formatGraceDate(currentGrace.endDate)}`}
-                </GraceLightPill>
-              </span>
-            ) : null}
+      {/* The balance: the number people check first. */}
+      <section className="tp-scard__balance" data-tone={balanceTone} aria-label="الفرص">
+        <div className="tp-scard__balance-top">
+          <span className="tp-scard__eyebrow">الفرص</span>
+          <span className="tp-scard__balance-value">{formatOpportunityBalance(student, { separator: " من " })}</span>
+        </div>
+        {dots > 0 ? (
+          <span className="tp-scard__meter" data-tone={balanceTone} aria-hidden="true">
+            {Array.from({ length: dots }, (_, index) => (
+              <i key={index} data-off={index >= balance ? "true" : undefined} />
+            ))}
+          </span>
+        ) : null}
+        {dismissed ? (
+          <p className="tp-scard__note" data-tone="danger">
+            {displayReasonText(student.dismissalReason) || "سبب الفصل غير مدخل"}
+            {student.dismissalNotes ? ` · ملاحظات: ${student.dismissalNotes}` : ""}
+          </p>
+        ) : null}
+        {currentGrace ? (
+          <div className="tp-scard__grace">
+            <GraceLightPill endDate={currentGrace.endDate}>
+              {`فترة سماح حتى ${formatGraceDate(currentGrace.endDate)}`}
+            </GraceLightPill>
           </div>
-          {facts.length ? <p className="tp-rcard__line">{facts.join(" · ")}</p> : null}
-          {activeIssue ? (
-            <p className="tp-rcard__line">سبب الظهور: {registryIssueFilterLabels[activeIssue]}</p>
+        ) : null}
+      </section>
+
+      {/* Facts as quiet tags: only the filled ones. */}
+      {facts.length || activeIssue ? (
+        <ul className="tp-scard__facts">
+          {facts.map((fact) => <li key={fact}>{fact}</li>)}
+          {activeIssue ? <li data-tone="warning">سبب الظهور: {registryIssueFilterLabels[activeIssue]}</li> : null}
+        </ul>
+      ) : null}
+
+      {/* Contacts, each with its quick edit; the file opens from the end. */}
+      <footer className="tp-scard__foot">
+        <div className="tp-scard__contacts">
+          {hasPhone || quickEdit ? (
+            <span className="tp-scard__contact-group">
+              {hasPhone ? (
+                <a className="tp-scard__contact" href={whatsappLink(student.phone)} target="_blank" rel="noopener noreferrer" title="رقم الطالب">
+                  <Phone aria-hidden="true" />
+                  <span dir="ltr" className="tabular-nums">{student.phone}</span>
+                </a>
+              ) : null}
+              {quickEdit ? <StudentContactEdit student={student} field="phone" emptyLabel="رقم الطالب" onSaved={(value) => actionProps.onContactSaved?.(student.id, "phone", value)} /> : null}
+            </span>
+          ) : null}
+          {hasParentPhone || quickEdit ? (
+            <span className="tp-scard__contact-group">
+              {hasParentPhone ? (
+                <a className="tp-scard__contact" href={whatsappLink(student.parentPhone)} target="_blank" rel="noopener noreferrer" title="رقم ولي الأمر">
+                  <MessageCircle aria-hidden="true" />
+                  ولي الأمر <span dir="ltr" className="tabular-nums">{student.parentPhone}</span>
+                </a>
+              ) : null}
+              {quickEdit ? <StudentContactEdit student={student} field="parentPhone" emptyLabel="رقم ولي الأمر" onSaved={(value) => actionProps.onContactSaved?.(student.id, "parentPhone", value)} /> : null}
+            </span>
+          ) : null}
+          {telegramHandle || quickEdit ? (
+            <span className="tp-scard__contact-group">
+              {telegramHandle ? (
+                <a className="tp-scard__contact" href={telegramLink(telegramHandle)} target="_blank" rel="noopener noreferrer" dir="ltr" title="تيليجرام">
+                  <Send aria-hidden="true" />
+                  {telegramHandle.startsWith("@") ? telegramHandle : `@${telegramHandle}`}
+                </a>
+              ) : null}
+              {quickEdit ? <StudentContactEdit student={student} field="username" emptyLabel="معرف تيليجرام" onSaved={(value) => actionProps.onContactSaved?.(student.id, "username", value)} /> : null}
+            </span>
+          ) : null}
+          {missingContacts.length ? (
+            <span className="tp-scard__flag" data-tone="warning">ناقص {missingContacts.join(" و")}</span>
           ) : null}
         </div>
-        <button type="button" className="tp-rcard__tile" onClick={() => actionProps.onFile(student)}>
-          <span className="tp-rcard__tile-icon" aria-hidden="true">
-            <Eye />
+        <button type="button" className="tp-scard__file" onClick={() => actionProps.onFile(student)} title="الدرجات والفرص والمكالمات">
+          <Eye aria-hidden="true" />
+          <span className="tp-scard__file-text">
+            <span>ملف الطالب</span>
+            <small>الدرجات والفرص والمكالمات</small>
           </span>
-          <span className="tp-rcard__tile-text">ملف الطالب</span>
-          <span className="tp-rcard__tile-hint">الدرجات والفرص والمكالمات</span>
         </button>
-      </div>
-
-      <div className="tp-rcard__foot">
-        {sanitizePhoneInput(student.phone || "") || quickEdit ? (
-          <span className="tp-rcard__contact-group">
-            {sanitizePhoneInput(student.phone || "") ? (
-              <a className="tp-rcard__contact" href={whatsappLink(student.phone)} target="_blank" rel="noopener noreferrer">
-                <Phone aria-hidden="true" />
-                <span dir="ltr" className="tabular-nums">{student.phone}</span>
-              </a>
-            ) : null}
-            {quickEdit ? <StudentContactEdit student={student} field="phone" emptyLabel="رقم الطالب" onSaved={(value) => actionProps.onContactSaved?.(student.id, "phone", value)} /> : null}
-          </span>
-        ) : null}
-        {sanitizePhoneInput(student.parentPhone || "") || quickEdit ? (
-          <span className="tp-rcard__contact-group">
-            {sanitizePhoneInput(student.parentPhone || "") ? (
-              <a className="tp-rcard__contact" href={whatsappLink(student.parentPhone)} target="_blank" rel="noopener noreferrer">
-                <MessageCircle aria-hidden="true" />
-                ولي الأمر <span dir="ltr" className="tabular-nums">{student.parentPhone}</span>
-              </a>
-            ) : null}
-            {quickEdit ? <StudentContactEdit student={student} field="parentPhone" emptyLabel="رقم ولي الأمر" onSaved={(value) => actionProps.onContactSaved?.(student.id, "parentPhone", value)} /> : null}
-          </span>
-        ) : null}
-        {telegramHandle || quickEdit ? (
-          <span className="tp-rcard__contact-group">
-            {telegramHandle ? (
-              <a className="tp-rcard__contact" href={telegramLink(telegramHandle)} target="_blank" rel="noopener noreferrer" dir="ltr">
-                <Send aria-hidden="true" />
-                {telegramHandle.startsWith("@") ? telegramHandle : `@${telegramHandle}`}
-              </a>
-            ) : null}
-            {quickEdit ? <StudentContactEdit student={student} field="username" emptyLabel="معرف تيليجرام" onSaved={(value) => actionProps.onContactSaved?.(student.id, "username", value)} /> : null}
-          </span>
-        ) : null}
-        {missingContacts.length ? (
-          <span className="tp-rcard__pill" data-tone="warning">ناقص {missingContacts.join(" و")}</span>
-        ) : null}
-        {moreActions.length ? (
-          <span className="tp-rcard__foot-end">
-            <RowActionsMenu label={`إجراءات أخرى لـ${student.name}`} actions={moreActions} />
-          </span>
-        ) : null}
-      </div>
+      </footer>
     </article>
   );
 }
