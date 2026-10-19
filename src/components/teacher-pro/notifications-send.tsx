@@ -331,7 +331,7 @@ export function NotificationsSendView() {
         ) : logs.length === 0 ? (
           <EmptyState title="لم يُرسل أي إشعار بعد" description="تظهر هنا الإشعارات اليدوية وإشعارات فتح نوافذ الامتحانات." icon={BellRing} compact />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="table-wrap" tabIndex={0} aria-label="سجل الإشعارات المرسلة">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-right text-xs text-muted-foreground">

@@ -155,6 +155,7 @@ const sidebarOrder: SectionId[] = [
   "opportunities",
   "dismissed-management",
   "follow-up-calls",
+  "notifications",
   "accounts",
   "logs",
 ];
