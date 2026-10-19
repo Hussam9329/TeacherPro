@@ -19,6 +19,19 @@ export function toLatinDigits(text: string | null | undefined): string {
   return (text ?? '').replace(AR_RE, (ch) => AR_DIGITS[ch] ?? ch);
 }
 
+/**
+ * A phone number as typed in a search box, in the stored form: Arabic digits
+ * become English, spaces and signs go, and a number pasted with the country
+ * code (+964 770…, 00964 770…) or without the leading 0 (770…) starts with 07.
+ */
+export function normalizePhoneQuery(value: string | null | undefined): string {
+  let digits = toLatinDigits(value).replace(/\D/g, '');
+  if (digits.startsWith('00964')) digits = `0${digits.slice(5)}`;
+  else if (digits.startsWith('964') && digits.length > 3) digits = `0${digits.slice(3)}`;
+  else if (digits.length === 10 && digits.startsWith('7')) digits = `0${digits}`;
+  return digits.slice(0, 11);
+}
+
 /** Keep phone input numeric only and limit it to 11 digits */
 export function sanitizePhoneInput(value: string | null | undefined): string {
   return toLatinDigits(value).replace(/\D/g, '').slice(0, 11);

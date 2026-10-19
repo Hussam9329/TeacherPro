@@ -1,6 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { normalizeArabicText } from "@/lib/route-helpers";
-import { normalizeTelegramIdentifier } from "@/lib/student-utils";
+import { studentIdentitySearchConditions } from "@/lib/student-search-server";
 
 export const DISMISSED_STUDENT_STATUS = "مفصول";
 
@@ -39,21 +38,13 @@ export function dismissedHistoryWhere(): Prisma.StudentWhereInput {
 function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
   const q = cleanText(rawQuery);
   if (!q) return null;
-  // Same as سجل الطلاب: the name is also matched through its normalized key,
-  // so ة/ه, أ/إ/آ/ا, ى/ي and tashkeel never decide whether a student is found.
-  const normalized = normalizeArabicText(q);
-  // Telegram is searched by the recovered username, not the numeric Telegram id.
-  const username = normalizeTelegramIdentifier(q);
+  // The shared student search (name, code, school, username, phones), plus
+  // what only this page has: the dismissal reason and its note.
   return {
     OR: [
-      { name: { contains: q, mode: "insensitive" } },
-      { code: { contains: q, mode: "insensitive" } },
-      { phone: { contains: q, mode: "insensitive" } },
-      { parentPhone: { contains: q, mode: "insensitive" } },
-      ...(username ? [{ username: { contains: username, mode: "insensitive" as const } }] : []),
+      ...(studentIdentitySearchConditions(q) || []),
       { dismissalReason: { contains: q, mode: "insensitive" } },
       { dismissalNotes: { contains: q, mode: "insensitive" } },
-      ...(normalized ? [{ nameKey: { contains: normalized, mode: "insensitive" as const } }] : []),
     ],
   };
 }

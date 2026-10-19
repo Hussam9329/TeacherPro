@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAnyPermission, requirePermissionPrincipal, type AuthPrincipal } from '@/lib/server-auth';
 import { db } from '@/lib/db';
+import { SENSITIVE_PERMISSION_IDS } from '@/lib/permission-catalog';
 import { normalizePasswordForStorage } from '@/lib/passwords';
 import { validatePasswordPolicy } from '@/lib/password-policy';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
@@ -13,20 +14,6 @@ import { ensureDefaultRoles } from '@/lib/default-roles-server';
 const ADMIN_USERNAME = 'admin';
 const ADMIN_ROLE_ID = 'role_admin';
 const ADMIN_ROLE_NAME = 'مدير عام';
-const SENSITIVE_PERMISSION_IDS = new Set([
-  'accounts.manage',
-  'accounts.users.add',
-  'accounts.users.edit',
-  'accounts.users.delete',
-  'accounts.roles.add',
-  'accounts.roles.edit',
-  'accounts.roles.delete',
-  'accounts.permissions.assign',
-  'logs.clear',
-  'logs.restore',
-  'backup.view',
-  'system.settings',
-]);
 
 function normalizePermissions(value: unknown): string {
   if (Array.isArray(value)) return JSON.stringify(value);

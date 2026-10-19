@@ -12,6 +12,7 @@ const studentsExportRoute = read('src/app/api/students/export/route.ts');
 const studentsStatsRoute = read('src/app/api/students/stats/route.ts');
 const registryIssueHelper = read('src/lib/student-registry-issue-server.ts');
 const registryFiltersHelper = read('src/lib/student-registry-filters-server.ts');
+const sharedStudentSearch = fs.readFileSync(path.join(root, 'src/lib/student-search-server.ts'), 'utf8');
 const studentListFilters = read('src/lib/student-list-filters.ts');
 const mutationReplayPolicy = read('src/lib/mutation-replay-policy.ts');
 const opportunitySnapshots = read('src/lib/student-opportunity-snapshot-server.ts');
@@ -78,8 +79,11 @@ check(
     studentsStatsRoute.includes('buildStudentRegistryLocationWhere') &&
     registryFiltersHelper.includes('buildStudentRegistrySearchWhere') &&
     registryFiltersHelper.includes('buildStudentRegistryLocationWhere') &&
-    registryFiltersHelper.includes('{ name: { contains: query') &&
-    registryFiltersHelper.includes('{ username: { contains: username, mode: "insensitive" } }') &&
+    // The student search itself is shared by every page (student-search-server.ts).
+    registryFiltersHelper.includes('studentIdentitySearchConditions(rawQuery)') &&
+    sharedStudentSearch.includes('{ name: { contains: query') &&
+    sharedStudentSearch.includes('{ username: { contains: username, mode: "insensitive" } }') &&
+    !sharedStudentSearch.includes('telegramKey: { startsWith') &&
     !registryFiltersHelper.includes('telegramKey: { startsWith'),
 );
 check(

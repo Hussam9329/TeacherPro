@@ -1,7 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { normalizeArabicText } from "@/lib/route-helpers";
-import { normalizeTelegramIdentifier } from "@/lib/student-utils";
+import { studentIdentitySearchConditions } from "@/lib/student-search-server";
 
 // Up to this many matching students the search is an id list; a broader
 // match (a single common letter) keeps the relation filter to stay within the
@@ -21,32 +20,8 @@ export async function buildGradeSearchWhere(
   const query = rawQuery.trim();
   if (!query) return null;
 
-  const normalizedQuery = normalizeArabicText(query);
-  const compactQuery = query.replace(/\s+/g, "");
-  // Telegram is searched by the recovered username, not the numeric Telegram id.
-  const username = normalizeTelegramIdentifier(query);
-
-  const studentSearch: Prisma.StudentWhereInput[] = [
-    { name: { contains: query, mode: "insensitive" } },
-    { code: { startsWith: query, mode: "insensitive" } },
-    { phone: { startsWith: compactQuery, mode: "insensitive" } },
-    { parentPhone: { startsWith: compactQuery, mode: "insensitive" } },
-  ];
-  if (username) {
-    studentSearch.push({ username: { contains: username, mode: "insensitive" } });
-  }
-
-  if (normalizedQuery) {
-    studentSearch.push({
-      nameKey: { contains: normalizedQuery, mode: "insensitive" },
-    });
-  }
-  if (compactQuery.length >= 7) {
-    studentSearch.push(
-      { phone: { contains: compactQuery, mode: "insensitive" } },
-      { parentPhone: { contains: compactQuery, mode: "insensitive" } },
-    );
-  }
+  // The shared student search, so a student found elsewhere is found here.
+  const studentSearch: Prisma.StudentWhereInput[] = studentIdentitySearchConditions(query) || [];
 
   const [students, exams] = await Promise.all([
     db.student.findMany({

@@ -4,26 +4,13 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAnyPermission, requirePermissionPrincipal, type AuthPrincipal } from '@/lib/server-auth';
 import { db } from '@/lib/db';
+import { SENSITIVE_PERMISSION_IDS } from '@/lib/permission-catalog';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { writeSecurityAudit } from '@/lib/security-audit';
 import { ensureDefaultRoles } from '@/lib/default-roles-server';
 
 const ADMIN_USERNAME = 'admin';
 const ADMIN_ROLE_ID = 'role_admin';
-const SENSITIVE_PERMISSION_IDS = new Set([
-  'accounts.manage',
-  'accounts.users.add',
-  'accounts.users.edit',
-  'accounts.users.delete',
-  'accounts.roles.add',
-  'accounts.roles.edit',
-  'accounts.roles.delete',
-  'accounts.permissions.assign',
-  'logs.clear',
-  'logs.restore',
-  'backup.view',
-  'system.settings',
-]);
 
 function normalizePermissions(value: unknown): string {
   if (Array.isArray(value)) return JSON.stringify(value);
@@ -50,7 +37,7 @@ function hasSensitivePermissions(value: unknown): boolean {
   return parsePermissionIds(value).some((permission) => SENSITIVE_PERMISSION_IDS.has(permission));
 }
 
-function validateRoleSecurity(principal: AuthPrincipal, payload: Record<string, unknown>, existingRole?: { id?: string | null }) {
+function validateRoleSecurity(principal: AuthPrincipal, payload: Record<string, unknown>, existingRole?: { id?: string | null; permissions?: unknown }) {
   const actorIsOwner = isOwner(principal);
   const targetIsAdminRole = String(existingRole?.id || payload.id || '') === ADMIN_ROLE_ID;
 
@@ -60,6 +47,18 @@ function validateRoleSecurity(principal: AuthPrincipal, payload: Record<string, 
 
   if (!actorIsOwner && payload.permissions !== undefined && hasSensitivePermissions(payload.permissions)) {
     return validationError('لا يمكن إنشاء أو تعديل دور يحتوي صلاحيات حساسة إلا من حساب admin الرئيسي.', 403);
+  }
+
+  // Only the main admin changes a role that already holds sensitive
+  // permissions, and nobody else edits the role they themselves hold:
+  // otherwise an accounts manager could widen their own access.
+  if (!actorIsOwner && existingRole) {
+    if (hasSensitivePermissions(existingRole.permissions)) {
+      return validationError('هذا الدور يحتوي صلاحيات حساسة، وتعديله أو حذفه من حساب admin الرئيسي فقط.', 403);
+    }
+    if (principal.roleId && String(existingRole.id || '') === principal.roleId) {
+      return validationError('لا يمكن تعديل أو حذف الدور الذي يحمله حسابك من نفس الجلسة.', 403);
+    }
   }
 
   return null;

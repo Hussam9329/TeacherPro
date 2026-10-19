@@ -5,26 +5,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAnyPermission } from '@/lib/server-auth';
 import { routeErrorResponse } from '@/lib/route-helpers';
+import { SENSITIVE_PERMISSION_IDS as SHARED_SENSITIVE_PERMISSION_IDS } from '@/lib/permission-catalog';
 
 const ADMIN_USERNAME = 'admin';
 const ADMIN_ROLE_ID = 'role_admin';
-const SENSITIVE_PERMISSION_IDS = new Set([
-  'accounts.manage',
-  'accounts.users.add',
-  'accounts.users.edit',
-  'accounts.users.delete',
-  'accounts.roles.add',
-  'accounts.roles.edit',
-  'accounts.roles.delete',
-  'accounts.permissions.assign',
-  'accounts.security.view',
-  'backup.view',
-  'system.settings',
-  'logs.view',
-  'logs.delete',
-  'logs.clear',
-  'logs.restore',
-]);
+// The shared list, plus reading the logs, which the security view also flags.
+const SENSITIVE_PERMISSION_IDS = new Set([...SHARED_SENSITIVE_PERMISSION_IDS, 'logs.view']);
 
 function readEnv(name: string): string {
   return ((globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[name] || '').trim();

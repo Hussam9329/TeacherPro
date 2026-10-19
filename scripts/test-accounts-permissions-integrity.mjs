@@ -99,10 +99,17 @@ must(
   "permissions API يجب أن يكون محمياً بصلاحية accounts.permissions.view أو accounts.view.",
 );
 
+// The sensitive list now lives once in permission-catalog.ts and every route imports it.
+const sharedSensitiveList = (() => {
+  const catalog = read("src/lib/permission-catalog.ts");
+  const start = catalog.indexOf("export const SENSITIVE_PERMISSION_IDS");
+  return start >= 0 ? catalog.slice(start, catalog.indexOf("]);", start)) : "";
+})();
 must(
-  securityRoute.includes("accounts.security.view") &&
-    securityRoute.includes("logs.clear") &&
-    securityRoute.includes("accounts.permissions.assign"),
+  securityRoute.includes("SENSITIVE_PERMISSION_IDS") &&
+    securityRoute.includes("@/lib/permission-catalog") &&
+    ["accounts.security.view", "logs.clear", "accounts.permissions.assign", "backup.restore", "system.oversight", "system.maintenance", "logs.delete"]
+      .every((id) => sharedSensitiveList.includes(`"${id}"`)),
   "لوحة أمان الحسابات تعرف الصلاحيات الحساسة الجديدة",
   "accounts/security يجب أن يشمل الصلاحيات الحساسة الجديدة في الفحص.",
 );
@@ -163,14 +170,19 @@ must(
 // Every student search finds Telegram by the recovered username, never by
 // the numeric Telegram id.
 {
+  // One shared student search; every page's search goes through it.
+  const sharedSearch = read("src/lib/student-search-server.ts");
   const searches = {
-    "src/lib/student-registry-filters-server.ts": 'or.push({ username: { contains: username, mode: "insensitive" } });',
-    "src/lib/opportunity-filters-server.ts": 'or.push({ username: { contains: username, mode: "insensitive" } });',
-    "src/lib/grade-search-server.ts": 'studentSearch.push({ username: { contains: username, mode: "insensitive" } });',
-    "src/lib/dismissed-student-filters-server.ts": '{ username: { contains: username, mode: "insensitive" as const } }',
-    "src/lib/student-leave-query-server.ts": 'studentSearch.push({ username: { contains: username, mode: "insensitive" } });',
+    "src/lib/student-registry-filters-server.ts": "studentIdentitySearchConditions(",
+    "src/lib/opportunity-filters-server.ts": "studentIdentitySearchConditions(",
+    "src/lib/grade-search-server.ts": "studentIdentitySearchConditions(",
+    "src/lib/dismissed-student-filters-server.ts": "studentIdentitySearchConditions(",
+    "src/lib/student-leave-query-server.ts": "studentIdentitySearchConditions(",
   };
+
   must(
+    sharedSearch.includes('or.push({ username: { contains: username, mode: "insensitive" } });') &&
+    !/telegram(Key)?: \{ (contains|startsWith)/.test(sharedSearch) &&
     Object.entries(searches).every(([file, line]) => {
       const source = read(file);
       return source.includes(line) && !/\btelegram(Key)?: \{ (contains|startsWith)/.test(source);

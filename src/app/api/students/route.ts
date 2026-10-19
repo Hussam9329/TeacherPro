@@ -4,8 +4,9 @@ export const dynamic = "force-dynamic";
 import { studentEditChanges, studentEditChangesSuffix } from "@/lib/student-edit-changes";
 import { NextRequest, NextResponse } from "next/server";
 import {
+  hasPermission,
   oversees,
-  requireAnyPermission,
+  requireAnyPermissionPrincipal,
   requirePermissionPrincipal,
 } from "@/lib/server-auth";
 import { db } from "@/lib/db";
@@ -226,15 +227,22 @@ function clampPageSize(value: number): number {
   return Math.min(500, Math.max(1, value));
 }
 
+// Contact details and private notes, kept from accounts that only work on
+// grades: they need the list of students, not how to reach them.
+const STUDENT_CONTACT_FIELDS = ["phone", "parentPhone", "phoneKey", "telegram", "username", "dismissalNotes"] as const;
+
 export async function GET(req: NextRequest) {
-  const authError = await requireAnyPermission(req, [
+  const principalOrError = await requireAnyPermissionPrincipal(req, [
     "students.view",
     "grades.add",
     "grades.view",
     "grades.edit",
     "opportunities.view",
   ]);
-  if (authError) return authError;
+  if (principalOrError instanceof NextResponse) return principalOrError;
+  const showContacts =
+    hasPermission(principalOrError, "students.view") ||
+    hasPermission(principalOrError, "opportunities.view");
 
   const searchParams = new URL(req.url).searchParams;
   // Always paginate list reads. The dedicated /api/backup route is the only
@@ -276,12 +284,18 @@ export async function GET(req: NextRequest) {
   );
 
   return NextResponse.json({
-    students: responseStudents.map((student) =>
-      withStudentMutationToken(
+    students: responseStudents.map((student) => {
+      const withToken = withStudentMutationToken(
         student,
         sourceStudentsById.get(String(student.id)) as unknown as Record<string, unknown>,
-      ),
-    ),
+      ) as Record<string, unknown>;
+      if (showContacts) return withToken;
+      const masked = { ...withToken };
+      for (const field of STUDENT_CONTACT_FIELDS) {
+        if (field in masked) masked[field] = field === "username" ? null : "";
+      }
+      return masked;
+    }),
     totalCount,
     page,
     pageSize,

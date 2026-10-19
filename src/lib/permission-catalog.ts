@@ -427,6 +427,31 @@ export const GRACE_MANAGE_PERMISSIONS = ["grace-periods.manage", "students.edit"
 /** Reading «إدارة الإجازات» (the leaves list, the student search, a leave's exams). */
 export const LEAVES_VIEW_PERMISSIONS = ["follow-up.leaves.view", "follow-up.view"];
 
+/**
+ * Permissions only the main admin account may grant: anything that manages
+ * accounts, restores or wipes data, or reaches the whole system. One list for
+ * users, roles and the security view, so the checks cannot drift apart.
+ */
+export const SENSITIVE_PERMISSION_IDS: ReadonlySet<string> = new Set([
+  "accounts.manage",
+  "accounts.users.add",
+  "accounts.users.edit",
+  "accounts.users.delete",
+  "accounts.roles.add",
+  "accounts.roles.edit",
+  "accounts.roles.delete",
+  "accounts.permissions.assign",
+  "accounts.security.view",
+  "backup.view",
+  "backup.restore",
+  "system.settings",
+  "system.oversight",
+  "system.maintenance",
+  "logs.delete",
+  "logs.clear",
+  "logs.restore",
+]);
+
 export const ADMIN_ROLE_ID = "role_admin";
 export const ADMIN_ROLE_NAME = "مدير عام";
 

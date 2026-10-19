@@ -140,6 +140,14 @@ export async function POST(req: NextRequest) {
   if (!principal) {
     return NextResponse.json({ error: 'يجب تسجيل الدخول أولاً.' }, { status: 401 });
   }
+  // A restore rewrites every table, accounts and roles included, so a crafted
+  // file could hand any account the admin role. Only the main admin restores.
+  if (principal.username.trim().toLowerCase() !== 'admin') {
+    return NextResponse.json(
+      { error: 'استعادة النسخة الاحتياطية متاحة لحساب admin الرئيسي فقط، لأنها تستبدل الحسابات والأدوار أيضاً.' },
+      { status: 403 },
+    );
+  }
   const restoredBy = principal.id;
   const restoredByName = principal.name || principal.username;
 

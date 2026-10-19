@@ -1,3 +1,4 @@
+import { toLatinDigits } from "./format";
 export const TEXT_ONLY_PATTERN = "^[\\p{L}\\p{M}][\\p{L}\\p{M}\\s'.،\\-]*$";
 
 const arabicMarks = /[\u064B-\u065F\u0670]/g;
@@ -13,7 +14,8 @@ const hamzaMap: Record<string, string> = {
 };
 
 export function normalizeForSearch(value: unknown): string {
-  return String(value ?? "")
+  // Arabic digits become English first, so «٤٥» and «45» search the same.
+  return toLatinDigits(String(value ?? ""))
     .toLocaleLowerCase("ar-IQ")
     .normalize("NFKD")
     .replace(arabicMarks, "")

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { toLatinDigits } from '@/lib/format';
 
 export function validationError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -33,7 +34,8 @@ export function requireText(value: unknown, label: string) {
 }
 
 export function normalizeArabicText(value: unknown): string {
-  return String(value ?? '')
+  // Arabic digits become English first, so «٤٥» and «45» search the same.
+  return toLatinDigits(String(value ?? ''))
     .toLocaleLowerCase('ar-IQ')
     .normalize('NFKD')
     .replace(/[\u064B-\u065F\u0670]/g, '')

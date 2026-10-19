@@ -8,14 +8,15 @@
 export function LatinDigitsScript() {
   const scriptContent = `
 (function(){
-  var MAP={1570:'0',1571:'1',1572:'2',1573:'3',1574:'4',1575:'5',1576:'6',1577:'7',1578:'8',1579:'9',1776:'0',1777:'1',1778:'2',1779:'3',1780:'4',1781:'5',1782:'6',1783:'7',1784:'8',1785:'9'};
+  var MAP={1632:'0',1633:'1',1634:'2',1635:'3',1636:'4',1637:'5',1638:'6',1639:'7',1640:'8',1641:'9',1776:'0',1777:'1',1778:'2',1779:'3',1780:'4',1781:'5',1782:'6',1783:'7',1784:'8',1785:'9'};
   var RE=/[\\u0660-\\u0669\\u06F0-\\u06F9]/g;
+  var HAS=/[\\u0660-\\u0669\\u06F0-\\u06F9]/;
   function fix(t){return t.replace(RE,function(c){return MAP[c.charCodeAt(0)]||c});}
   function walk(root){
     var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null,false);
     var n;
     while(n=w.nextNode()){
-      if(RE.test(n.textContent)){n.textContent=fix(n.textContent);}
+      if(HAS.test(n.textContent)){n.textContent=fix(n.textContent);}
     }
   }
   function init(){
@@ -24,7 +25,7 @@ export function LatinDigitsScript() {
       new MutationObserver(function(mutations){
         mutations.forEach(function(m){
           m.addedNodes.forEach(function(node){
-            if(node.nodeType===3){if(RE.test(node.textContent)){node.textContent=fix(node.textContent);}}
+            if(node.nodeType===3){if(HAS.test(node.textContent)){node.textContent=fix(node.textContent);}}
             else if(node.nodeType===1){walk(node);}
           });
         });
