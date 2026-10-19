@@ -2049,6 +2049,11 @@ export const callCandidatesApi = {
 // ─── OpportunityLog API ───────────────────────────────────────────────────────
 
 export const opportunityLogApi = {
+  /** The latest movements only (newest first), for «سجل حركات الفرص». */
+  recent: (limit = 20) =>
+    apiGet<Pick<ServerData, "opportunityLogs">>("opportunity-logs", {
+      params: { page: "1", pageSize: String(limit) },
+    }),
   list: (query?: { studentId?: string; pageSize?: number }) => {
     if (query?.studentId) {
       const qs = new URLSearchParams();

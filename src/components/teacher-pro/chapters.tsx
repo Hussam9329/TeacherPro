@@ -205,7 +205,7 @@ function renderBlockers(blockers: string[]) {
 }
 
 export function ChaptersView() {
-  const { loadSectionDataFromServer } = useTeacherStore();
+  const loadSectionDataFromServer = useTeacherStore((state) => state.loadSectionDataFromServer);
   const syncKey = useTeacherProSyncKey([
     "chapters",
     "courses",

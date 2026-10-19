@@ -20,6 +20,7 @@ import {
   Search,
   Send,
   UserPlus,
+  UserRound,
   X,
   XCircle,
 } from "lucide-react";
@@ -178,8 +179,11 @@ type GraceCardHeadProps = {
 function GraceCardHead({ name, light, lock, state = null, children }: GraceCardHeadProps) {
   return (
     <header className="tp-grace-card__head">
-      <span className="tp-grace-card__who">
+      <span className="tp-grace-card__avatar">
+        <UserRound aria-hidden="true" />
         <GraceLightDot light={light} />
+      </span>
+      <span className="tp-grace-card__who">
         <b className="tp-grace-card__name">{name}</b>
       </span>
       {lock && (
@@ -687,18 +691,16 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                               aria-label={lock ? `${student.name}: ${lock.hint}` : `فتح فترات السماح للطالب ${student.name}`}
                               title={lock?.hint}
                             />
-                            <GraceCardHead name={student.name} light={light} lock={lock} state={searchResultState(student, light)} />
-                            <div className="tp-grace-card__body">
-                              <div className="tp-grace-card__main">
-                                <StudentFacts
-                                  name={student.name}
-                                  telegram={student.telegram}
-                                  username={student.username}
-                                  createdAt={student.createdAt}
-                                />
-                              </div>
-                              <OpenTile lock={lock} canManage={canManage} />
+                            <div className="tp-grace-card__main">
+                              <GraceCardHead name={student.name} light={light} lock={lock} state={searchResultState(student, light)} />
                             </div>
+                            <StudentFacts
+                              name={student.name}
+                              telegram={student.telegram}
+                              username={student.username}
+                              createdAt={student.createdAt}
+                            />
+                            <OpenTile lock={lock} canManage={canManage} />
                           </li>
                         );
                       })}
@@ -764,23 +766,21 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                             aria-label={lock ? `${period.studentName}: ${lock.hint}` : `فتح فترات السماح للطالب ${period.studentName}`}
                             title={lock?.hint}
                           />
-                          <GraceCardHead name={period.studentName} light={light} lock={lock} state={periodState(light)} />
-                          <div className="tp-grace-card__body">
-                            <div className="tp-grace-card__main">
-                              {renderPeriodPanel(period, {
-                                eyebrow: "فترة السماح",
-                                tone: LIGHT_TONE[light],
-                                remaining: light === "green" ? describeGraceRemaining(period, list.today) : "",
-                              })}
-                              <StudentFacts
-                                name={period.studentName}
-                                telegram={period.studentTelegram}
-                                username={period.studentUsername}
-                                createdAt={period.studentCreatedAt}
-                              />
-                            </div>
-                            <OpenTile lock={lock} canManage={canManage} />
+                          <div className="tp-grace-card__main">
+                            <GraceCardHead name={period.studentName} light={light} lock={lock} state={periodState(light)} />
+                            {renderPeriodPanel(period, {
+                              eyebrow: "فترة السماح",
+                              tone: LIGHT_TONE[light],
+                              remaining: light === "green" ? describeGraceRemaining(period, list.today) : "",
+                            })}
                           </div>
+                          <StudentFacts
+                            name={period.studentName}
+                            telegram={period.studentTelegram}
+                            username={period.studentUsername}
+                            createdAt={period.studentCreatedAt}
+                          />
+                          <OpenTile lock={lock} canManage={canManage} />
                         </li>
                       );
                     })}

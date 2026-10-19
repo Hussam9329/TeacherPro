@@ -12,7 +12,7 @@ import {
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { courseApi, courseChapterApi, gradeApi, opportunityLogApi, studentLeaveApi, studentCallApi, studentNoteApi, logApi, authApi, loadAllFromServer, type ApiResult, type AuthApiUser } from "./api";
+import { courseApi, courseChapterApi, gradeApi, opportunityLogApi, logApi, authApi, loadAllFromServer, type ApiResult, type AuthApiUser } from "./api";
 import { type CourseLocationConfig, type StudyTypesByProgram, getAvailablePrograms, getAvailableStudyTypes, getStudyTypesByProgram, parseJsonArray, parseJsonRecord } from "./course-config";
 import { getExamEntryAvailability, isExamOnOrAfterStudentRegistration, isGradeEntered } from "./exam-utils";
 import { baghdadDateKey, baghdadTodayKey, toBaghdadDateTimeLocal } from "./baghdad-time";
@@ -1681,7 +1681,9 @@ export const useTeacherStore = create<TeacherState>()(
           }
 
           if (section === "opportunities") {
-            const data = await opportunityLogApi.list();
+            // The page shows the latest 20 movements; the whole history (every
+            // movement ever) was downloaded page after page before.
+            const data = await opportunityLogApi.recent(20);
             if (data?.opportunityLogs) {
               nextState.opportunityLogs = data.opportunityLogs.map(
                 (ol: Record<string, unknown>) => ({
@@ -1695,78 +1697,10 @@ export const useTeacherStore = create<TeacherState>()(
             }
           }
 
-          if (
-            [
-              "follow-up",
-              "follow-up-calls",
-              "follow-up-leaves",
-            ].includes(section)
-          ) {
-            const [leavesData, callsData, notesData] = await Promise.all([
-              studentLeaveApi.list(),
-              studentCallApi.list(),
-              studentNoteApi.list(),
-            ]);
-            if (leavesData?.studentLeaves) {
-              nextState.studentLeaves = leavesData.studentLeaves.map(
-                (leave: Record<string, unknown>) =>
-                  normalizeStudentLeave({
-                    ...leave,
-                    date: leave.date
-                      ? baghdadDateKey(leave.date as string | Date) || todayISO()
-                      : todayISO(),
-                    dateFrom: leave.dateFrom
-                      ? baghdadDateKey(leave.dateFrom as string | Date) || todayISO()
-                      : leave.date
-                        ? baghdadDateKey(leave.date as string | Date) || todayISO()
-                        : todayISO(),
-                    dateTo: leave.dateTo
-                      ? baghdadDateKey(leave.dateTo as string | Date) || todayISO()
-                      : leave.date
-                        ? baghdadDateKey(leave.date as string | Date) || todayISO()
-                        : todayISO(),
-                  }),
-              );
-            }
-            if (callsData?.studentCalls) {
-              nextState.studentCalls = callsData.studentCalls.map(
-                (call: Record<string, unknown>) => ({
-                  ...call,
-                  examId: String(call.examId || ""),
-                  status: String(
-                    call.status || (call.completed ? "تم الاتصال" : "لم يرد"),
-                  ),
-                  completed: Boolean(call.completed),
-                  completedAt: call.completedAt ? String(call.completedAt) : "",
-                  createdAt: call.createdAt
-                    ? baghdadDateKey(call.createdAt as string | Date) || todayISO()
-                    : todayISO(),
-                  notes: String(call.notes || ""),
-                  noteResolved: call.noteResolved === true,
-                  noteRevision: Number(call.noteRevision || 0),
-                }),
-              ) as StudentCall[];
-            }
-            if (notesData?.studentNotes) {
-              nextState.studentNotes = notesData.studentNotes.map(
-                (note: Record<string, unknown>) => ({
-                  ...note,
-                  kind: String(note.kind || ""),
-                  text: String(note.text || ""),
-                  sourceType: String(note.sourceType || ""),
-                  sourceId: String(note.sourceId || ""),
-                  dismissalKey: String(note.dismissalKey || ""),
-                    dismissalReason: String(note.dismissalReason || ""),
-                  dismissalDate: note.dismissalDate
-                    ? baghdadDateKey(note.dismissalDate as string | Date)
-                    : "",
-                  date: note.date
-                    ? baghdadDateKey(note.date as string | Date) || todayISO()
-                    : todayISO(),
-                }),
-              ) as StudentNote[];
-            }
-          }
+          // «المتابعة» pages load their own lists from the server (calls, the
+          // leaves window, the student file). Every call, note and leave in the
+          // system used to be downloaded here too, page after page, on entry and
+          // on every change elsewhere.
 
           if (section === "logs" || section === "admin-log-reset") {
             const data = await logApi.list();

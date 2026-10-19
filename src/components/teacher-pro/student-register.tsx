@@ -6,6 +6,7 @@ import {
   type Course,
   type Student,
 } from "@/lib/teacher-store";
+import { useShallow } from "zustand/react/shallow";
 import {
   studentApi,
   studentRegisterApi,
@@ -217,7 +218,9 @@ function SectionTitle({
 }
 
 export function StudentRegisterView() {
-  const { students, courses, mergeStudentsCache } = useTeacherStore();
+  const { students, courses, mergeStudentsCache } = useTeacherStore(
+    useShallow((state) => ({ students: state.students, courses: state.courses, mergeStudentsCache: state.mergeStudentsCache })),
+  );
   const [form, setForm] = useState<StudentRegisterForm>(() =>
     readStudentDraft(),
   );

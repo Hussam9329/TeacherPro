@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { staleRecordsApi } from "@/lib/api";
 import type { AcademicStaleRecord } from "@/lib/academic-types";
 import { useTeacherStore } from "@/lib/teacher-store";
+import { useShallow } from "zustand/react/shallow";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { FormDialogHero } from "./form-dialog";
 import { EmptyState } from "./ui-kit";
@@ -30,7 +31,9 @@ export function StaleRecordsDialog({ courseName, onFixed }: {
   courseName: (courseId: string) => string;
   onFixed?: () => void;
 }) {
-  const { currentUser } = useTeacherStore();
+  const { currentUser } = useTeacherStore(
+    useShallow((state) => ({ currentUser: state.currentUser, /* re-render when these change: */ users: state.users, currentUserId: state.currentUserId, isAuthenticated: state.isAuthenticated })),
+  );
   const actor = currentUser();
   const allowed = Boolean(actor && (actor.username?.trim().toLowerCase() === "admin" ||
     actor.roleId === "role_admin" || actor.permissions?.includes("system.maintenance")));

@@ -3,6 +3,7 @@ import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hoo
 
 import { Fragment, useEffect, useState, useMemo } from "react";
 import { useTeacherStore, type Student } from "@/lib/teacher-store";
+import { useShallow } from "zustand/react/shallow";
 import {
   opportunityStatsApi,
   studentApi,
@@ -106,7 +107,9 @@ export function OpportunitiesView() {
     courseName,
     activeChapterForCourse,
     mergeStudentsCache,
-  } = useTeacherStore();
+  } = useTeacherStore(
+    useShallow((state) => ({ students: state.students, courses: state.courses, exams: state.exams, grades: state.grades, opportunityLogs: state.opportunityLogs, studentLeaves: state.studentLeaves, studentCalls: state.studentCalls, studentNotes: state.studentNotes, logs: state.logs, courseName: state.courseName, activeChapterForCourse: state.activeChapterForCourse, mergeStudentsCache: state.mergeStudentsCache, /* re-render when these change: */ courseChapters: state.courseChapters, chapters: state.chapters })),
+  );
 
   // The chosen courses; empty is every course.
   const [filterCourseIds, setFilterCourseIds] = useState<string[]>([]);

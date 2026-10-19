@@ -29,6 +29,11 @@
   --tp-focus: color-mix(in srgb, var(--tp-ink) 28%, transparent);
   --tp-shadow: 0 30px 90px -30px color-mix(in srgb, var(--tp-deep) 45%, transparent);
   --tp-radius: 1.5rem;
+  /* Cards (closures, notes, grace periods): a cream shell, lighter inner panels. */
+  --tp-card: color-mix(in srgb, var(--tp-line) 26%, var(--tp-bg));
+  --tp-card-inner: color-mix(in srgb, #fff 50%, var(--tp-bg));
+  --tp-card-line: color-mix(in srgb, var(--tp-line) 85%, var(--tp-bg));
+  --tp-card-shadow: 0 14px 34px -24px color-mix(in srgb, var(--tp-deep) 35%, transparent);
 
   display: flex;
   flex-direction: column;
@@ -65,6 +70,10 @@
   --tp-hero-to: var(--tp-deep);
   --tp-focus: color-mix(in srgb, var(--tp-bg) 30%, transparent);
   --tp-shadow: 0 30px 90px -30px color-mix(in srgb, var(--tp-deep) 90%, transparent);
+  --tp-card: color-mix(in srgb, var(--tp-ink) 55%, var(--tp-deep));
+  --tp-card-inner: var(--tp-ink);
+  --tp-card-line: color-mix(in srgb, var(--tp-muted) 38%, var(--tp-ink));
+  --tp-card-shadow: 0 14px 34px -24px color-mix(in srgb, #000 70%, transparent);
 }
 
 /* ── Header ─────────────────────────────────────────────────────────────── */
@@ -531,122 +540,126 @@ a.tp-modal__tg:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-foc
    Window-specific pieces that share the same tokens.
    ============================================================================ */
 
-/* «إدارة ملاحظات المكالمات» — one card per student, in the registry's
-   student-card look: an avatar tile toned by the latest contact, the name
-   over code and course, the numbers in a soft panel, the notes newest first
-   (each with «إنجاز»), and the contact buttons in a footer below a hairline. */
+/* «إدارة ملاحظات المكالمات» — one card per student, in the same shell as
+   «اغلاق الكودات»: a cream card holding lighter panels — the head (round
+   avatar toned by the latest contact, name over code and course), the
+   numbers, the notes newest first (each with «إنجاز»), and the contact row. */
 
-.tp-notes__cards { display: grid; gap: 0.9rem; margin: 0; padding: 0; list-style: none; }
+.tp-notes__cards { display: grid; gap: 1rem; margin: 0; padding: 0; list-style: none; }
 .tp-notes__card {
-  --card-tint: var(--tp-muted-tint);
   container: notes-card / inline-size;
   display: grid;
-  gap: 0.85rem;
+  gap: 0.7rem;
   min-width: 0;
-  padding: 1.1rem 1.15rem 0.95rem;
-  border: 1px solid color-mix(in srgb, var(--tp-border) 75%, transparent);
-  border-radius: 1.375rem;
-  /* The soft leaf in the far corner, in the latest contact's tone. */
-  background:
-    radial-gradient(ellipse 13rem 9rem at 0 0, color-mix(in srgb, var(--card-tint) 70%, transparent) 0 60%, transparent 61%),
-    var(--tp-surface);
-  box-shadow: 0 10px 30px -18px color-mix(in srgb, var(--tp-deep) 32%, transparent);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  padding: 0.85rem;
+  border: 1px solid var(--tp-card-line);
+  border-radius: 1.5rem;
+  background: var(--tp-card);
+  box-shadow: var(--tp-card-shadow);
 }
-.tp-notes__card[data-tone="success"], .tp-notes__card[data-tone="warning"], .tp-notes__card[data-tone="danger"] { --card-tint: var(--tone-tint); }
-.tp-notes__card:hover { border-color: var(--tp-border-strong); box-shadow: 0 16px 34px -20px color-mix(in srgb, var(--tp-deep) 40%, transparent); }
 
-.tp-notes__head { display: flex; align-items: center; gap: 0.8rem; min-width: 0; }
+/* The inner panels */
+.tp-notes__head, .tp-notes__foot, .tp-notes__item {
+  min-width: 0;
+  border: 1px solid var(--tp-card-line);
+  border-radius: 1.15rem;
+  background: var(--tp-card-inner);
+}
+
+.tp-notes__head { display: flex; align-items: center; gap: 0.9rem; padding: 0.95rem 1.1rem; }
 .tp-notes__avatar {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 3.25rem;
-  height: 3.25rem;
-  border-radius: 1rem;
-  background: var(--tone-tint, var(--tp-muted-tint));
+  width: 3.5rem;
+  height: 3.5rem;
+  border: 2px solid color-mix(in srgb, var(--tone-line, var(--tp-card-line)) 55%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--tone-tint, var(--tp-panel)) 55%, var(--tp-card-inner));
   color: var(--tone, var(--tp-text-muted));
 }
-.tp-notes__avatar[data-tone="muted"] { --tone: var(--tp-text-muted); --tone-tint: var(--tp-muted-tint); }
-.tp-notes__avatar svg { width: 1.65rem; height: 1.65rem; }
-.tp-notes__who { flex: 1 1 auto; display: grid; gap: 0.3rem; min-width: 0; }
-.tp-notes__name { min-width: 0; color: var(--tp-text); font-size: 1.08rem; font-weight: 800; line-height: 1.4; overflow-wrap: anywhere; }
-.tp-notes__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; min-width: 0; }
-.tp-notes__meta .tp-modal__code { color: var(--tp-text-muted); font-size: 0.8rem; font-weight: 700; }
-.tp-notes__count { flex-shrink: 0; align-self: flex-start; }
+.tp-notes__avatar[data-tone="muted"] { --tone: var(--tp-text-muted); --tone-tint: var(--tp-panel); --tone-line: var(--tp-border-strong); }
+.tp-notes__avatar svg { width: 1.7rem; height: 1.7rem; }
+.tp-notes__who { flex: 1 1 auto; display: grid; gap: 0.35rem; min-width: 0; }
+.tp-notes__name { min-width: 0; color: var(--tp-text); font-size: 1.15rem; font-weight: 800; line-height: 1.4; overflow-wrap: anywhere; }
+.tp-notes__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.75rem; min-width: 0; }
+.tp-notes__meta .tp-modal__code { color: var(--tp-text-muted); font-family: inherit; font-size: 0.88rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.tp-notes__meta .tp-modal__chip { border-color: transparent; background: var(--tp-panel); }
+.tp-modal__chip.tp-notes__count { flex-shrink: 0; align-self: flex-start; padding: 0.35rem 0.9rem; border-color: transparent; background: var(--status-warning-bg); color: var(--status-warning-fg); font-size: 0.8rem; }
 
 /* Both numbers on the card, each with its quick edit (student editors only). */
 .tp-notes__contacts {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem 1.25rem;
+  gap: 0.4rem 1.5rem;
   min-width: 0;
-  padding: 0.55rem 0.85rem;
-  border-radius: 0.9rem;
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--tp-card-line);
+  border-radius: 1rem;
   background: var(--tp-panel);
 }
-.tp-notes__contact { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; min-width: 0; max-width: 100%; }
-.tp-notes__contact-label { color: var(--tp-text-muted); font-size: 0.74rem; font-weight: 600; }
-.tp-notes__contact-value { color: var(--tp-text); font-size: 0.86rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+.tp-notes__contact { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; min-width: 0; max-width: 100%; }
+.tp-notes__contact-label { color: var(--tp-text-muted); font-size: 0.76rem; font-weight: 600; }
+.tp-notes__contact-value { color: var(--tp-text); font-size: 0.9rem; font-weight: 750; font-variant-numeric: tabular-nums; }
 .tp-notes__contact-value[data-missing] { color: var(--status-warning-fg); font-weight: 700; }
 
-.tp-notes__items { display: grid; gap: 0.55rem; margin: 0; padding: 0; list-style: none; }
-.tp-notes__item {
-  position: relative;
-  display: grid;
-  gap: 0.35rem;
-  padding: 0.75rem 0.9rem;
-  border: 1px solid color-mix(in srgb, var(--tone-line, var(--tp-border)) 55%, transparent);
-  border-radius: 1rem;
-  background: color-mix(in srgb, var(--tone-tint, var(--tp-panel)) 40%, var(--tp-surface));
-}
+.tp-notes__items { display: grid; gap: 0.6rem; margin: 0; padding: 0; list-style: none; }
+.tp-notes__item { position: relative; display: grid; gap: 0.4rem; padding: 0.8rem 1rem; }
 /* A short tone bar on the leading edge marks the note's contact. */
 .tp-notes__item::before {
   content: "";
   position: absolute;
-  inset-block: 0.85rem;
+  inset-block: 0.9rem;
   inset-inline-start: -1px;
   width: 3px;
   border-radius: 999px;
   background: var(--tone, var(--tp-border-strong));
 }
-.tp-notes__item[data-tone="muted"] { --tone: var(--tp-border-strong); --tone-tint: var(--tp-panel); --tone-line: var(--tp-border); }
-.tp-notes__item-top { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; color: var(--tp-text-muted); font-size: 0.76rem; font-weight: 600; }
+.tp-notes__item[data-tone="muted"] { --tone: var(--tp-border-strong); --tone-tint: var(--tp-panel); --tone-ink: var(--tp-text-muted); --tone-line: var(--tp-border); }
+.tp-notes__item-top { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.65rem; color: var(--tp-text-muted); font-size: 0.78rem; font-weight: 600; }
+.tp-notes__item-top > .tp-modal__chip { border-color: transparent; }
 .tp-notes__scope { color: var(--tp-text); font-weight: 750; }
 .tp-notes__when time { font-variant-numeric: tabular-nums; }
-.tp-modal [data-slot="button"].tp-notes__done { margin-inline-start: auto; min-height: 2.25rem; gap: 0.3rem; border-color: transparent; border-radius: 999px; background: var(--status-success-bg); color: var(--status-success-fg); font-weight: 750; }
-.tp-modal [data-slot="button"].tp-notes__done:hover { background: var(--status-success-solid); color: var(--status-success-on); }
-.tp-notes__text { margin: 0; color: var(--tp-text); font-size: 0.92rem; font-weight: 550; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tp-modal [data-slot="button"].tp-notes__done { margin-inline-start: auto; min-height: 2.4rem; gap: 0.35rem; padding-inline: 0.95rem; border: 1.5px solid color-mix(in srgb, var(--status-success-border) 75%, transparent); border-radius: 0.95rem; background: var(--tp-card-inner); color: var(--status-success-fg); font-weight: 750; }
+.tp-modal [data-slot="button"].tp-notes__done:hover { border-color: transparent; background: var(--status-success-solid); color: var(--status-success-on); }
+.tp-notes__text { margin: 0; color: var(--tp-text); font-size: 0.94rem; font-weight: 550; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tp-notes__last { margin: 0; color: var(--tp-text-muted); font-size: 0.74rem; font-weight: 600; }
 /* «الأرشيف»: completed notes stay, with «إرجاع» back to «المعلّقة». */
 .tp-notes__views { margin-bottom: 0.15rem; }
-.tp-modal [data-slot="button"].tp-notes__done[data-note-return] { border-color: transparent; background: var(--status-info-bg); color: var(--status-info-fg); }
-.tp-modal [data-slot="button"].tp-notes__done[data-note-return]:hover { background: var(--status-info-solid); color: var(--status-info-on); }
+.tp-modal [data-slot="button"].tp-notes__done[data-note-return] { border-color: color-mix(in srgb, var(--status-info-border) 75%, transparent); background: var(--tp-card-inner); color: var(--status-info-fg); }
+.tp-modal [data-slot="button"].tp-notes__done[data-note-return]:hover { border-color: transparent; background: var(--status-info-solid); color: var(--status-info-on); }
 .tp-notes__resolved { display: flex; align-items: center; gap: 0.3rem; margin: 0; color: var(--status-success-fg); font-size: 0.74rem; font-weight: 700; }
 /* Who wrote the note: a small line under its text. */
 .tp-notes__author { display: flex; align-items: center; gap: 0.3rem; margin: 0; color: var(--tp-text-muted); font-size: 0.72rem; font-weight: 600; overflow-wrap: anywhere; }
 
-/* Footer: the platform buttons (as in «إغلاق الكودات») and the Telegram chat. */
-.tp-notes__foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.55rem;
-  min-width: 0;
-  padding-top: 0.8rem;
-  border-top: 1px solid var(--tp-border);
+/* Contact row: the platform buttons (as in «إغلاق الكودات») and the Telegram chat. */
+.tp-notes__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 0.9rem; padding: 0.7rem 1rem; }
+/* A thin line before each group after the first, as in «اغلاق الكودات». */
+.tp-notes__foot > :is(.tp-notes__restore, .tp-modal__tg) { position: relative; }
+.tp-notes__foot > :is(.tp-notes__restore, .tp-modal__tg)::before { content: ""; position: absolute; inset-block: 0.35rem; inset-inline-start: calc(-0.45rem - 1px); width: 1px; background: var(--tp-card-line); pointer-events: none; }
+.tp-notes__foot-label { margin-inline-end: 0.35rem; color: var(--tp-text); font-size: 0.92rem; font-weight: 800; }
+.tp-notes__foot .tp-modal__tg {
+  min-height: 2.75rem;
+  padding-inline: 1.05rem;
+  border-color: color-mix(in srgb, var(--status-success-border) 60%, transparent);
+  background: color-mix(in srgb, var(--status-success-bg) 75%, var(--tp-card-inner));
+  color: var(--status-success-fg);
+  font-size: 0.9rem;
 }
-.tp-notes__foot:empty { display: none; }
-.tp-notes__tg { min-height: 2.5rem; padding-inline: 0.9rem; font-size: 0.85rem; }
+.tp-notes__foot a.tp-modal__tg:hover { border-color: transparent; background: var(--status-success-solid); color: var(--status-success-on); }
+.tp-notes__foot .tp-modal__tg[data-plain="true"] { border-color: var(--tp-card-line); background: var(--tp-panel); color: var(--tp-text-muted); }
+.tp-notes__foot .tp-tg-edit__open:not([data-labelled]) { width: 2.75rem; height: 2.75rem; border: 1px solid var(--tp-card-line); border-radius: 0.85rem; background: var(--tp-card-inner); }
 
 @container notes-card (max-width: 30rem) {
-  .tp-notes__avatar { width: 2.75rem; height: 2.75rem; border-radius: 0.85rem; }
+  .tp-notes__head { flex-wrap: wrap; }
+  .tp-notes__avatar { width: 2.9rem; height: 2.9rem; }
   .tp-notes__avatar svg { width: 1.4rem; height: 1.4rem; }
   .tp-notes__contacts { gap: 0.35rem 0.9rem; }
 }
 @media (max-width: 480px) {
-  .tp-notes__card { padding: 0.95rem 0.95rem 0.85rem; border-radius: 1.2rem; }
+  .tp-notes__card { padding: 0.6rem; border-radius: 1.3rem; }
+  .tp-notes__head { padding: 0.85rem 0.9rem; }
 }
 
 /* «اغلاق الكودات» — dismissed student rows */

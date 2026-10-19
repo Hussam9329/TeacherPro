@@ -10,6 +10,7 @@ import {
   type CourseTransferPolicy,
   type Student,
 } from "@/lib/teacher-store";
+import { useShallow } from "zustand/react/shallow";
 import {
   studentApi,
   studentStatsApi,
@@ -154,7 +155,9 @@ export function StudentRegistryView() {
     activeChapterForCourse,
     mergeStudentsCache,
     currentUser,
-  } = useTeacherStore();
+  } = useTeacherStore(
+    useShallow((state) => ({ students: state.students, courses: state.courses, exams: state.exams, grades: state.grades, opportunityLogs: state.opportunityLogs, studentLeaves: state.studentLeaves, studentCalls: state.studentCalls, studentNotes: state.studentNotes, logs: state.logs, setSection: state.setSection, courseName: state.courseName, activeChapterForCourse: state.activeChapterForCourse, mergeStudentsCache: state.mergeStudentsCache, currentUser: state.currentUser, /* re-render when these change: */ users: state.users, currentUserId: state.currentUserId, isAuthenticated: state.isAuthenticated, courseChapters: state.courseChapters, chapters: state.chapters })),
+  );
 
   const registryUser = currentUser();
   const { isAdmin, canAddStudents, canEditStudents, canArchiveStudents } =

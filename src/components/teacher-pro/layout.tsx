@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
+import { useShallow } from "zustand/react/shallow";
 import { ScheduledExamWorker } from "./scheduled-exam-worker";
 import { syncVersionApi } from "@/lib/api";
 import { flushGradeEntryOfflineSaves } from "@/lib/grade-entry-offline-outbox";
@@ -630,7 +631,9 @@ export function TeacherProLayout() {
     loadFromServer,
     loadSectionDataFromServer,
     restoreSession,
-  } = useTeacherStore();
+  } = useTeacherStore(
+    useShallow((state) => ({ currentSection: state.currentSection, setSection: state.setSection, sidebarOpen: state.sidebarOpen, toggleSidebar: state.toggleSidebar, setSidebarOpen: state.setSidebarOpen, theme: state.theme, toggleTheme: state.toggleTheme, currentUser: state.currentUser, canAccess: state.canAccess, isAuthenticated: state.isAuthenticated, login: state.login, logout: state.logout, dbConnected: state.dbConnected, dbLoading: state.dbLoading, loadFromServer: state.loadFromServer, loadSectionDataFromServer: state.loadSectionDataFromServer, restoreSession: state.restoreSession, /* re-render when these change: */ users: state.users, currentUserId: state.currentUserId })),
+  );
   const shortcutAlerts = useShortcutAlerts(isAuthenticated);
 
   const lazyLoadedSectionsRef = useRef<Set<SectionId>>(new Set());

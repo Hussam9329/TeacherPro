@@ -5,6 +5,7 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { useTeacherStore } from "@/lib/teacher-store";
+import { useShallow } from "zustand/react/shallow";
 import { studentBonusTraceApi } from "@/lib/api";
 import { formatAppDate } from "@/lib/format";
 import { BONUS_START_DAY } from "@/lib/bonus-opportunity";
@@ -34,7 +35,9 @@ export function BonusTracePanel({ studentId, refreshKey, onRecalculated }: {
   /** The page reloads the student's card and sum after a saved recalculation. */
   onRecalculated?: () => void;
 }) {
-  const { currentUser } = useTeacherStore();
+  const { currentUser } = useTeacherStore(
+    useShallow((state) => ({ currentUser: state.currentUser, /* re-render when these change: */ users: state.users, currentUserId: state.currentUserId, isAuthenticated: state.isAuthenticated })),
+  );
   const actor = currentUser();
   // «إدارة الفرص» may save a recalculation when the record is stale.
   const canRecalculate = Boolean(actor && (actor.username?.trim().toLowerCase() === "admin" ||

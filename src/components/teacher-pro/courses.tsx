@@ -236,7 +236,7 @@ function CourseEditorDialog({
 
 export function CoursesView() {
   const courseDialogTrigger = useRef<HTMLButtonElement | null>(null);
-  const { loadSectionDataFromServer } = useTeacherStore();
+  const loadSectionDataFromServer = useTeacherStore((state) => state.loadSectionDataFromServer);
   const syncKey = useTeacherProSyncKey([
     "courses",
     "chapters",

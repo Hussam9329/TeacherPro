@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { useTeacherStore, type Student } from "@/lib/teacher-store";
+import { useShallow } from "zustand/react/shallow";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
@@ -393,7 +394,9 @@ function downloadOpportunityHtml(
 }
 
 export function DismissedManagementView() {
-  const { courses, courseName, mergeStudentsCache, currentUser } = useTeacherStore();
+  const { courses, courseName, mergeStudentsCache, currentUser } = useTeacherStore(
+    useShallow((state) => ({ courses: state.courses, courseName: state.courseName, mergeStudentsCache: state.mergeStudentsCache, currentUser: state.currentUser, /* re-render when these change: */ users: state.users, currentUserId: state.currentUserId, isAuthenticated: state.isAuthenticated })),
+  );
   const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "dismissed", "follow-up"]);
   // A refresh caused by a change elsewhere swaps the data in quietly: no
   // loading line, and a failed one keeps what is already on screen.

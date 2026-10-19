@@ -71,26 +71,47 @@ export async function POST(req: NextRequest) {
       const failures: Array<{ studentId: string; error: string }> = [];
       const createdStudentIds: string[] = [];
 
+      // Everything the loop needs is read once for the whole batch: the exam,
+      // the students, their existing grades and leaves. Reading them per
+      // student made a 2,000-student batch thousands of sequential queries.
+      const exam = await tx.exam.findUnique({
+        where: { id: examId },
+        select: { id: true, date: true },
+      });
+      const [existingGradeRows, studentRows, leaveRows] = await Promise.all([
+        tx.grade.findMany({
+          where: { examId, studentId: { in: studentIds } },
+          select: { studentId: true },
+        }),
+        tx.student.findMany({
+          where: { id: { in: studentIds } },
+          select: { id: true, createdAt: true },
+        }),
+        tx.studentLeave.findMany({
+          where: {
+            studentId: { in: studentIds },
+            OR: [{ examId }, { leaveType: "period" }],
+          },
+          select: { studentId: true, leaveType: true, dateFrom: true, dateTo: true, examId: true },
+        }),
+      ]);
+      const studentsWithGrade = new Set(existingGradeRows.map((row) => row.studentId));
+      const studentsById = new Map(studentRows.map((row) => [row.id, row]));
+      const leavesByStudent = new Map<string, typeof leaveRows>();
+      for (const leave of leaveRows) {
+        const list = leavesByStudent.get(leave.studentId) || [];
+        list.push(leave);
+        leavesByStudent.set(leave.studentId, list);
+      }
+
       for (const studentId of studentIds) {
         try {
-          const existingGrade = await tx.grade.findUnique({
-            where: { studentId_examId: { studentId, examId } },
-          });
-          if (existingGrade) {
+          if (studentsWithGrade.has(studentId)) {
             skippedStudentIds.push(studentId);
             continue;
           }
 
-          const [student, exam] = await Promise.all([
-            tx.student.findUnique({
-              where: { id: studentId },
-              select: { createdAt: true },
-            }),
-            tx.exam.findUnique({
-              where: { id: examId },
-              select: { id: true, date: true },
-            }),
-          ]);
+          const student = studentsById.get(studentId);
           if (!student) throw new AcademicGradeWritebackError("الطالب غير موجود.", 404);
           if (!exam) throw new AcademicGradeWritebackError("الامتحان غير موجود.", 404);
 
@@ -107,27 +128,17 @@ export async function POST(req: NextRequest) {
           // Now: we look up any active StudentLeave BEFORE writing any
           // grade, and skip the student entirely. The student's leave is
           // authoritative — they should not be marked absent.
-          const blockingLeave = await tx.studentLeave.findFirst({
-            where: {
-              studentId,
-              OR: [{ examId }, { leaveType: "period" }],
-            },
-            select: { id: true, leaveType: true, dateFrom: true, dateTo: true, examId: true },
-          });
-          if (blockingLeave) {
-            // Double-check period leaves actually cover the exam date.
-            let leaveCoversExam = false;
-            if (blockingLeave.leaveType === "exam") {
-              leaveCoversExam = blockingLeave.examId === examId;
-            } else if (blockingLeave.leaveType === "period" && blockingLeave.dateFrom && blockingLeave.dateTo) {
-              const examDate = exam.date instanceof Date ? exam.date : new Date(String(exam.date));
-              leaveCoversExam =
-                examDate >= blockingLeave.dateFrom && examDate <= blockingLeave.dateTo;
-            }
-            if (leaveCoversExam) {
-              skippedStudentIds.push(studentId);
-              continue;
-            }
+          const examDate = exam.date instanceof Date ? exam.date : new Date(String(exam.date));
+          const leaveCoversExam = (leavesByStudent.get(studentId) || []).some((leave) =>
+            leave.leaveType === "exam"
+              ? leave.examId === examId
+              : leave.leaveType === "period" && leave.dateFrom && leave.dateTo
+                ? examDate >= leave.dateFrom && examDate <= leave.dateTo
+                : false,
+          );
+          if (leaveCoversExam) {
+            skippedStudentIds.push(studentId);
+            continue;
           }
 
           // A missing student inside a grace period is still recorded as the

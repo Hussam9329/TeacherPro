@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTeacherStore, PERMISSION_CATALOG, type PermissionEntry } from '@/lib/teacher-store';
+import { useShallow } from "zustand/react/shallow";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -286,7 +287,9 @@ function PermissionChecklist({
 // ─── Roles Tab Component ─────────────────────────────────────────────────────
 
 function RolesTab() {
-  const { roles, addRole, updateRole, deleteRole, users } = useTeacherStore();
+  const { roles, addRole, updateRole, deleteRole, users } = useTeacherStore(
+    useShallow((state) => ({ roles: state.roles, addRole: state.addRole, updateRole: state.updateRole, deleteRole: state.deleteRole, users: state.users })),
+  );
 
   const [showAddRoleDialog, setShowAddRoleDialog] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
@@ -520,7 +523,9 @@ const USER_CHIPS: ListChip[] = [
 ];
 
 function UsersTab() {
-  const { users, roles, addUser, updateUser, toggleUser, updateUserPermissions, deleteUser, currentUserId } = useTeacherStore();
+  const { users, roles, addUser, updateUser, toggleUser, updateUserPermissions, deleteUser, currentUserId } = useTeacherStore(
+    useShallow((state) => ({ users: state.users, roles: state.roles, addUser: state.addUser, updateUser: state.updateUser, toggleUser: state.toggleUser, updateUserPermissions: state.updateUserPermissions, deleteUser: state.deleteUser, currentUserId: state.currentUserId })),
+  );
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   // A new account starts on the least powerful role the database has.

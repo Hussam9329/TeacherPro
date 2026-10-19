@@ -125,10 +125,13 @@ export async function GET(req: NextRequest) {
       });
       const savedTarget = new Map(saved.map((row) => [`${row.courseId}|${row.examId}`, row.recorded as number]));
 
-      const courseExams = new Map<string, CallCourseExam>();
-      for (const course of courses) {
+      // Courses are counted three at a time instead of one after another: each
+      // one loads its whole list twice, so the page waited for the sum of all.
+      const courseResults = new Array<CallCourseExam | null>(courses.length).fill(null);
+      let nextCourse = 0;
+      const countCourse = async (course: (typeof courses)[number]): Promise<CallCourseExam | null> => {
         const exam = shown.get(course.id);
-        if (!exam) continue;
+        if (!exam) return null;
         const key = `${course.id}|${exam.id}`;
         const [discounted, full] = await Promise.all([
           callListCount(req, course.id, exam.id, "discounted"),
@@ -166,8 +169,22 @@ export async function GET(req: NextRequest) {
         }
         // Students with no grade entered yet count as they are now.
         const target = stored === null ? null : stored + (discounted?.missing ?? 0);
-        courseExams.set(course.id, { examId: exam.id, examName: exam.name, target, discounted: discounted?.total ?? null, full: full?.total ?? null });
-      }
+        return { examId: exam.id, examName: exam.name, target, discounted: discounted?.total ?? null, full: full?.total ?? null };
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(3, courses.length) }, async () => {
+          while (nextCourse < courses.length) {
+            const index = nextCourse++;
+            courseResults[index] = await countCourse(courses[index]);
+          }
+        }),
+      );
+      // Same order as before: the courses' own order.
+      const courseExams = new Map<string, CallCourseExam>();
+      courses.forEach((course, index) => {
+        const result = courseResults[index];
+        if (result) courseExams.set(course.id, result);
+      });
 
       // The calls log up to the end of the day: the whole day (the employees),
       // and before it only each shown exam's own lines from its date on (the

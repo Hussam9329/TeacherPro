@@ -470,6 +470,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                   const busy = !canManage || pendingIds.has(student.id);
                   return (
                   <article key={student.id} className="tp-closure-card" data-checked={student.dismissedChecked}>
+                    <div className="tp-closure-card__main">
                     <header className="tp-closure-card__head">
                       <span className="tp-closure-card__avatar" data-tone={student.dismissedChecked ? "success" : "warning"} aria-hidden="true">
                         <UserRound />
@@ -490,9 +491,8 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                       </span>
                     </header>
 
-                    <div className="tp-closure-card__body">
-                      <div className="tp-closure-card__main">
                         <section className="tp-closure-card__dismissal" aria-label="الفصل">
+                          <span className="tp-closure-card__dismissed-on">
                           <span className="tp-closure-card__icon" aria-hidden="true"><CalendarDays /></span>
                           <span className="tp-closure-card__when">
                             <span className="tp-closure-card__eyebrow">تاريخ الفصل</span>
@@ -506,6 +506,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                                 أُغلق الكود <time dateTime={student.codeClosedAt}>{formatAppDate(baghdadDateKey(student.codeClosedAt), "")}</time>
                               </span>
                             ) : null}
+                          </span>
                           </span>
                           <Button
                             type="button"
@@ -529,6 +530,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                             <p id={reasonId} className="tp-closures__reason">{displayReasonText(student.dismissalReason) || "سبب الفصل غير مسجل"}</p>
                           )}
                         </section>
+                    </div>
 
                         <div className="tp-closure-card__row">
                           <span className="tp-closure-card__row-label"><MessageCircle aria-hidden="true" />التواصل</span>
@@ -599,7 +601,6 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                           )}
                           </span>
                         </div>
-                      </div>
 
                       <label className="tp-closure-card__toggle" data-checked={student.dismissedChecked} data-disabled={busy}>
                         <span className="tp-closure-card__toggle-icon" aria-hidden="true">
@@ -619,7 +620,6 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                           {pendingIds.has(student.id) ? "جاري الحفظ…" : student.dismissedChecked ? "ألغِ العلامة للتراجع" : "علّم بعد إغلاق الكود"}
                         </small>
                       </label>
-                    </div>
                   </article>
                   );
                 })}

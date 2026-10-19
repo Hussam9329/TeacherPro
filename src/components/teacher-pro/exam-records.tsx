@@ -3,6 +3,7 @@ import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hoo
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type Exam } from "@/lib/teacher-store";
+import { useShallow } from "zustand/react/shallow";
 import { ChevronDown, Download, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -513,7 +514,9 @@ export function ExamRecordsView() {
     loadFromServer,
     courseName,
     classification,
-  } = useTeacherStore();
+  } = useTeacherStore(
+    useShallow((state) => ({ exams: state.exams, grades: state.grades, students: state.students, courses: state.courses, courseChapters: state.courseChapters, opportunityLogs: state.opportunityLogs, studentLeaves: state.studentLeaves, studentCalls: state.studentCalls, loadFromServer: state.loadFromServer, courseName: state.courseName, classification: state.classification })),
+  );
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 180);

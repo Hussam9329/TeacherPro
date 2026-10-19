@@ -68,8 +68,9 @@ assert(
   "صفحة الدورات تلغي طلبات التحميل القديمة ولا تعتمد على طلبات متداخلة",
 );
 assert(
+  // The page takes only the section loader from the store (a direct selector).
   coursesView.includes(
-    "const { loadSectionDataFromServer } = useTeacherStore();",
+    "const loadSectionDataFromServer = useTeacherStore((state) => state.loadSectionDataFromServer);",
   ) &&
     !coursesView.includes(
       "const { courses, addCourse, updateCourse, toggleCourse, deleteCourse }",

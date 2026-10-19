@@ -3,6 +3,7 @@ import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hoo
 
 import { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Grade, type Student } from "@/lib/teacher-store";
+import { useShallow } from "zustand/react/shallow";
 import {
   gradeApi,
   gradeCoverageStatsApi,
@@ -290,7 +291,9 @@ export function GradeRecordsView() {
     mergeStudentsCache,
     mergeGradesCache,
     setSection,
-  } = useTeacherStore();
+  } = useTeacherStore(
+    useShallow((state) => ({ grades: state.grades, exams: state.exams, students: state.students, courses: state.courses, opportunityLogs: state.opportunityLogs, classification: state.classification, mergeStudentsCache: state.mergeStudentsCache, mergeGradesCache: state.mergeGradesCache, setSection: state.setSection })),
+  );
 
   const [search, setSearch] = useState("");
   // Wait for a pause in typing so a name is one request, not one per letter.

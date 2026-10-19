@@ -9,6 +9,7 @@ import {
   type Student,
   type StudentCall,
 } from "@/lib/teacher-store";
+import { useShallow } from "zustand/react/shallow";
 import {
   callCandidatesApi,
   callCourseExamsApi,
@@ -375,7 +376,9 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     courseName,
     activeChapterForCourse,
     currentUser,
-  } = useTeacherStore();
+  } = useTeacherStore(
+    useShallow((state) => ({ courses: state.courses, students: state.students, exams: state.exams, grades: state.grades, studentLeaves: state.studentLeaves, studentCalls: state.studentCalls, studentNotes: state.studentNotes, opportunityLogs: state.opportunityLogs, logs: state.logs, courseName: state.courseName, activeChapterForCourse: state.activeChapterForCourse, currentUser: state.currentUser, /* re-render when these change: */ users: state.users, currentUserId: state.currentUserId, isAuthenticated: state.isAuthenticated, courseChapters: state.courseChapters, chapters: state.chapters })),
+  );
 
   const callActor = currentUser();
   // The admin and the supervisors («إشراف كامل») oversee the calls: no

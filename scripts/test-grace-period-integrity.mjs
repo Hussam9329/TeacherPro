@@ -232,7 +232,8 @@ check(
     /inputMode="numeric"/.test(dialog) &&
     !/type="number"/.test(dialog) &&
     /const trimmedQuery = toLatinDigits\(query\)\.trim\(\)/.test(dialog) &&
-    /const latin = toLatinDigits\(query\)/.test(read("src/lib/student-registry-filters-server.ts")),
+    // The student search is shared by every page (student-search-server.ts).
+    /const latin = toLatinDigits\(query\)/.test(read("src/lib/student-search-server.ts")),
   "الأرقام تُقبل عربية أو إنكليزية: عدد الأيام والبحث بالكود",
 );
 check(

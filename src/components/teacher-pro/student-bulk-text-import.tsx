@@ -6,6 +6,7 @@ import {
   type Course,
   type Student,
 } from "@/lib/teacher-store";
+import { useShallow } from "zustand/react/shallow";
 import {
   studentApi,
   studentRegisterApi,
@@ -357,7 +358,9 @@ export function StudentBulkTextImportView() {
     "bulk-import",
   ]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
-  const { loadFromServer } = useTeacherStore();
+  const { loadFromServer } = useTeacherStore(
+    useShallow((state) => ({ loadFromServer: state.loadFromServer })),
+  );
   const [rawText, setRawText] = useState("");
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [previewDone, setPreviewDone] = useState(false);

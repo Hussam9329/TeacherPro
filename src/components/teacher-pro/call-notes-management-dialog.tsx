@@ -623,7 +623,9 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                           );
                         })}
                       </ol>
+                      {(platform || telegram.value || contacts) && (
                       <div className="tp-notes__foot">
+                          <span className="tp-notes__foot-label">التواصل</span>
                           {platform && (
                             <button
                               type="button"
@@ -670,6 +672,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                             />
                           )}
                       </div>
+                      )}
                     </li>
                   );
                 })}

@@ -23,6 +23,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
+import { useShallow } from "zustand/react/shallow";
 import {
   useTeacherProBackgroundSyncDetector,
   useTeacherProSyncKey,
@@ -189,7 +190,9 @@ export function DashboardView({
 }: {
   onSectionLinkClick?: (event: MouseEvent<HTMLAnchorElement>, section: SectionId) => void;
 } = {}) {
-  const { canAccess, currentUser } = useTeacherStore();
+  const { canAccess, currentUser } = useTeacherStore(
+    useShallow((state) => ({ canAccess: state.canAccess, currentUser: state.currentUser, /* re-render when these change: */ users: state.users, currentUserId: state.currentUserId, isAuthenticated: state.isAuthenticated })),
+  );
   const visibleShortcuts = dashboardShortcuts.filter((shortcut) => canAccess(shortcut.section));
   const canViewCallNotes = canAccess("follow-up-calls");
   const actor = currentUser();

@@ -140,8 +140,9 @@ assert(
   "صفحة الفصول تلغي طلبات التحميل القديمة ولا تعتمد على طلبات متداخلة",
 );
 assert(
+  // The page takes only the section loader from the store (a direct selector).
   chaptersView.includes(
-    "const { loadSectionDataFromServer } = useTeacherStore();",
+    "const loadSectionDataFromServer = useTeacherStore((state) => state.loadSectionDataFromServer);",
   ) &&
     !chaptersView.includes("addChapter,") &&
     !chaptersView.includes("toggleChapter,") &&

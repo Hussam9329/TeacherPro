@@ -16,6 +16,7 @@ import {
   type Student,
   type StudentLeave,
 } from "@/lib/teacher-store";
+import { useShallow } from "zustand/react/shallow";
 import {
   gradeApi,
   gradeEntrySheetApi,
@@ -258,7 +259,9 @@ export function GradeEntryView() {
     classification,
     mergeStudentsCache,
     mergeGradesCache,
-  } = useTeacherStore();
+  } = useTeacherStore(
+    useShallow((state) => ({ exams: state.exams, students: state.students, courses: state.courses, grades: state.grades, courseChapters: state.courseChapters, studentLeaves: state.studentLeaves, opportunityLogs: state.opportunityLogs, courseName: state.courseName, classification: state.classification, mergeStudentsCache: state.mergeStudentsCache, mergeGradesCache: state.mergeGradesCache })),
+  );
 
   const [selectedExamId, setSelectedExamId] = useState("");
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(

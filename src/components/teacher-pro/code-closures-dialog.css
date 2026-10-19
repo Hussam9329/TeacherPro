@@ -1,110 +1,134 @@
-/* «اغلاق الكودات» — one card per dismissed student, in the registry's
-   student-card look: an avatar tile, the name over the status and code, the
-   course line, a tinted dismissal panel, the contact row below a hairline,
-   and the close toggle as a tile beside them (below them on phones). */
+/* «اغلاق الكودات» — one card per dismissed student: a cream shell holding
+   an inner panel (avatar, name, status and code, the course; then the
+   dismissal date beside the reason), the contact row as a second panel
+   below it, and the close tile down the far side (below them on phones).
+   Colours are the system palette only (tp-modal.css card roles + status). */
 
 .tp-closure-card {
-  --card-tint: var(--status-warning-bg);
   container: closure-card / inline-size;
   display: grid;
-  gap: 0.95rem;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "main" "row" "toggle";
+  gap: 0.75rem;
   min-inline-size: 0;
-  padding: 1.1rem 1.15rem 1.15rem;
-  border: 1px solid color-mix(in srgb, var(--tp-border) 75%, transparent);
-  border-radius: 1.375rem;
-  /* The soft leaf in the far corner follows the state: amber while waiting, green once closed. */
-  background:
-    radial-gradient(ellipse 13rem 9rem at 0 0, color-mix(in srgb, var(--card-tint) 70%, transparent) 0 60%, transparent 61%),
-    var(--tp-surface);
-  box-shadow: 0 10px 30px -18px color-mix(in srgb, var(--tp-deep) 32%, transparent);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  padding: 0.85rem;
+  border: 1px solid var(--tp-card-line);
+  border-radius: 1.5rem;
+  background: var(--tp-card);
+  box-shadow: var(--tp-card-shadow);
 }
-.tp-closure-card[data-checked="true"] { --card-tint: var(--status-success-bg); }
-.tp-closure-card:hover { border-color: var(--tp-border-strong); box-shadow: 0 16px 34px -20px color-mix(in srgb, var(--tp-deep) 40%, transparent); }
+.tp-closure-card__main { grid-area: main; }
+.tp-closure-card__row { grid-area: row; }
+.tp-closure-card__toggle { grid-area: toggle; }
 
-/* Head: avatar, name over status and code, the course, and the state chip */
-.tp-closure-card__head { display: flex; align-items: flex-start; gap: 0.8rem; min-inline-size: 0; }
+/* The inner panels */
+.tp-closure-card__main,
+.tp-closure-card__row {
+  min-inline-size: 0;
+  border: 1px solid var(--tp-card-line);
+  border-radius: 1.15rem;
+  background: var(--tp-card-inner);
+}
+.tp-closure-card__main { display: grid; align-content: start; gap: 0.9rem; padding: 1rem 1.1rem 1.05rem; }
+
+/* Head: avatar, name over code and status, the course, and the state chip */
+.tp-closure-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-inline-size: 0;
+  padding-block-end: 0.9rem;
+  border-block-end: 1px solid var(--tp-card-line);
+}
 .tp-closure-card__avatar {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  inline-size: 3.25rem;
-  block-size: 3.25rem;
-  border-radius: 1rem;
-  background: var(--tone-tint);
+  inline-size: 4rem;
+  block-size: 4rem;
+  border: 2px solid color-mix(in srgb, var(--tone-line) 55%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--tone-tint) 55%, var(--tp-card-inner));
   color: var(--tone);
 }
-.tp-closure-card__avatar svg { inline-size: 1.65rem; block-size: 1.65rem; }
-.tp-closure-card__who { flex: 1 1 auto; display: grid; gap: 0.3rem; min-inline-size: 0; }
-.tp-closure-card__name { color: var(--tp-text); font-size: 1.08rem; font-weight: 800; line-height: 1.4; overflow-wrap: anywhere; }
-.tp-closure-card__id { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; min-inline-size: 0; }
-.tp-closure-card__code { color: var(--tp-text-muted); font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.02em; }
-.tp-closure-card__course { display: inline-flex; align-items: center; gap: 0.35rem; min-inline-size: 0; color: var(--tp-text-muted); font-size: 0.78rem; font-weight: 600; overflow-wrap: anywhere; }
-.tp-closure-card__course svg { flex-shrink: 0; inline-size: 0.95rem; block-size: 0.95rem; }
+.tp-closure-card__avatar svg { inline-size: 1.9rem; block-size: 1.9rem; }
+.tp-closure-card__who { flex: 1 1 auto; display: grid; gap: 0.35rem; min-inline-size: 0; }
+.tp-closure-card__name { color: var(--tp-text); font-size: 1.15rem; font-weight: 800; line-height: 1.4; overflow-wrap: anywhere; }
+.tp-closure-card__id { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.75rem; min-inline-size: 0; }
+.tp-closure-card__code { color: var(--tp-text-muted); font-size: 0.88rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.tp-closure-card__course { display: inline-flex; align-items: center; gap: 0.4rem; min-inline-size: 0; color: var(--tp-text-muted); font-size: 0.82rem; font-weight: 600; overflow-wrap: anywhere; }
+.tp-closure-card__course svg { flex-shrink: 0; inline-size: 1rem; block-size: 1rem; }
 .tp-closure-card__pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.1rem 0.6rem;
+  gap: 0.4rem;
+  padding: 0.15rem 0.7rem;
   border-radius: 999px;
   background: var(--tone-tint);
   color: var(--tone-ink);
-  font-size: 0.74rem;
+  font-size: 0.78rem;
   font-weight: 700;
   white-space: nowrap;
 }
-.tp-closure-card__pill svg { inline-size: 0.95rem; block-size: 0.95rem; }
+.tp-closure-card__pill svg { inline-size: 1rem; block-size: 1rem; }
 .tp-closure-card__dot { inline-size: 0.45rem; block-size: 0.45rem; border-radius: 50%; background: var(--tone); }
-/* The state chip sits in the far corner, a size up from the status. */
-.tp-closure-card__state { flex-shrink: 0; padding: 0.3rem 0.75rem; border: 1px solid color-mix(in srgb, var(--tone-line) 70%, transparent); font-size: 0.78rem; }
+/* The state chip, in the far corner of the head */
+.tp-closure-card__state { flex-shrink: 0; align-self: flex-start; gap: 0.5rem; padding: 0.45rem 1rem; font-size: 0.84rem; }
 
-.tp-closure-card__body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.85rem; }
-.tp-closure-card__main { display: grid; align-content: start; gap: 0.85rem; min-inline-size: 0; }
-
-/* Dismissal: a soft tinted panel with the date, and the reason on demand */
+/* Dismissal: the date panel beside the reason toggle, the reason below them */
 .tp-closure-card__dismissal {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  align-items: stretch;
+  gap: 0.75rem;
+}
+.tp-closure-card__dismissed-on {
+  display: flex;
   align-items: center;
-  gap: 0.6rem 0.8rem;
-  padding: 0.8rem 0.9rem;
-  border: 1px solid color-mix(in srgb, var(--status-danger-border) 60%, transparent);
+  gap: 0.75rem;
+  min-inline-size: 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--status-danger-border) 45%, transparent);
   border-radius: 1rem;
-  background: color-mix(in srgb, var(--status-danger-bg) 55%, var(--tp-surface));
+  background: color-mix(in srgb, var(--status-danger-bg) 75%, var(--tp-card-inner));
 }
 .tp-closure-card__icon {
   display: grid;
   place-items: center;
-  inline-size: 2.4rem;
-  block-size: 2.4rem;
-  border-radius: 0.75rem;
-  background: color-mix(in srgb, var(--status-danger-bg) 85%, var(--tp-surface));
+  flex-shrink: 0;
+  inline-size: 2.6rem;
+  block-size: 2.6rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--status-danger-vivid) 14%, var(--tp-card-inner));
   color: var(--status-danger-fg);
 }
 .tp-closure-card__icon svg { inline-size: 1.2rem; block-size: 1.2rem; }
-.tp-closure-card__when { display: grid; gap: 0.05rem; min-inline-size: 0; }
-.tp-closure-card__eyebrow { color: var(--tp-text-muted); font-size: 0.72rem; font-weight: 600; }
-.tp-closure-card__date { color: var(--status-danger-fg); font-size: 1.05rem; font-weight: 800; font-variant-numeric: tabular-nums; text-align: start; }
+.tp-closure-card__when { display: grid; gap: 0.1rem; min-inline-size: 0; }
+.tp-closure-card__eyebrow { color: var(--tp-text-muted); font-size: 0.74rem; font-weight: 600; }
+.tp-closure-card__date { color: var(--status-danger-fg); font-size: 1.1rem; font-weight: 800; font-variant-numeric: tabular-nums; text-align: start; }
 .tp-closure-card__date[data-missing="true"] { color: var(--tp-text-muted); font-size: 0.95rem; }
-.tp-modal .tp-closures__reason-toggle {
-  gap: 0.3rem;
-  min-block-size: 2.4rem;
-  padding-inline: 0.75rem;
-  border: 0;
-  border-radius: 0.75rem;
-  background: var(--tp-surface);
-  color: var(--status-danger-fg);
-  font-size: 0.78rem;
+.tp-closure-card__closed { display: block; color: var(--status-success-fg); font-size: 0.74rem; font-weight: 700; }
+.tp-modal [data-slot="button"].tp-closures__reason-toggle {
+  justify-content: flex-start;
+  gap: 0.6rem;
+  block-size: auto;
+  min-block-size: 3.25rem;
+  padding-inline: 1.1rem;
+  border: 1px solid var(--tp-card-line);
+  border-radius: 1rem;
+  background: var(--tp-panel);
+  color: var(--tp-text);
+  font-size: 0.92rem;
   font-weight: 700;
-  box-shadow: 0 4px 14px -8px color-mix(in srgb, var(--tp-deep) 35%, transparent);
 }
-.tp-modal .tp-closures__reason-toggle:hover { background: var(--tp-panel); }
+.tp-modal [data-slot="button"].tp-closures__reason-toggle:hover { border-color: var(--tp-border-strong); background: var(--tp-panel-strong); }
 .tp-closures__reason {
   grid-column: 1 / -1;
   margin: 0;
-  padding: 0.65rem 0.85rem;
-  border-radius: 0.75rem;
-  background: var(--tp-surface);
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--tp-card-line);
+  border-radius: 0.9rem;
+  background: var(--tp-panel);
   color: var(--tp-text);
   font-size: 0.85rem;
   line-height: 1.8;
@@ -112,40 +136,51 @@
   overflow-wrap: anywhere;
 }
 
-/* Contact row: the card's footer, below a hairline */
+/* Contact row: its own panel, the groups split by thin lines */
 .tp-closure-card__row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 0.85rem;
-  padding-block-start: 0.85rem;
-  border-block-start: 1px solid var(--tp-border);
+  gap: 0.6rem 1.1rem;
+  padding: 0.7rem 1rem;
 }
-.tp-closure-card__row > .tp-closure-card__actions { justify-self: start; }
-.tp-closure-card__actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.55rem; min-inline-size: 0; max-inline-size: 100%; }
-.tp-closure-card__row-label { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--tp-text-muted); font-size: 0.8rem; font-weight: 700; }
-.tp-closure-card__row-label svg { inline-size: 1rem; block-size: 1rem; }
+.tp-closure-card__actions { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.25rem; min-inline-size: 0; max-inline-size: 100%; }
+.tp-closure-card__row-label { display: inline-flex; align-items: center; gap: 0.45rem; color: var(--tp-text); font-size: 0.92rem; font-weight: 800; }
+.tp-closure-card__row-label svg { inline-size: 1.15rem; block-size: 1.15rem; color: var(--tp-text-muted); }
+/* A thin line before each group after the first (the edit stays with the bot). */
+.tp-closure-card__actions > :is(.tp-closure-card__restore, .tp-closure-card__telegram, .tp-closure-card__bot) { position: relative; }
+.tp-closure-card__actions > :is(.tp-closure-card__restore, .tp-closure-card__telegram, .tp-closure-card__bot)::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.35rem;
+  inset-inline-start: calc(-0.625rem - 1px);
+  inline-size: 1px;
+  background: var(--tp-card-line);
+  pointer-events: none;
+}
 .tp-closure-card__telegram {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.5rem;
   max-inline-size: 100%;
-  min-block-size: 2.6rem;
-  padding: 0.3rem 0.95rem;
-  border: 1px solid color-mix(in srgb, var(--status-info-border) 70%, transparent);
+  min-block-size: 2.75rem;
+  padding: 0.3rem 1.05rem;
+  border: 1px solid color-mix(in srgb, var(--status-success-border) 60%, transparent);
   border-radius: 999px;
-  background: var(--status-info-bg);
-  color: var(--status-info-fg);
-  font-size: 0.85rem;
-  font-weight: 700;
+  background: color-mix(in srgb, var(--status-success-bg) 75%, var(--tp-card-inner));
+  color: var(--status-success-fg);
+  font-size: 0.9rem;
+  font-weight: 750;
   text-decoration: none;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 .tp-closure-card__telegram > span { min-inline-size: 0; overflow-wrap: anywhere; }
-.tp-closure-card__telegram svg { flex-shrink: 0; inline-size: 1.05rem; block-size: 1.05rem; }
-a.tp-closure-card__telegram:hover { border-color: transparent; background: var(--status-info-solid); color: var(--status-info-on); }
+.tp-closure-card__telegram svg { flex-shrink: 0; inline-size: 1.1rem; block-size: 1.1rem; }
+a.tp-closure-card__telegram:hover { border-color: transparent; background: var(--status-success-solid); color: var(--status-success-on); }
 a.tp-closure-card__telegram:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
-.tp-closure-card__telegram[aria-disabled="true"] { border-color: transparent; background: var(--tp-panel); color: var(--tp-text-muted); }
+.tp-closure-card__telegram[aria-disabled="true"] { border-color: var(--tp-card-line); background: var(--tp-panel); color: var(--tp-text-muted); }
+/* The quick username edit: a rounded square like its neighbours */
+.tp-closure-card__actions .tp-tg-edit__open:not([data-labelled]) { inline-size: 2.75rem; block-size: 2.75rem; border: 1px solid var(--tp-card-line); border-radius: 0.85rem; background: var(--tp-card-inner); }
 
 /* Opens the platform and copies the phone: a red launch button behind hazard tape */
 .tp-closure-card__danger {
@@ -185,9 +220,9 @@ a.tp-closure-card__telegram:focus-visible { outline: none; box-shadow: 0 0 0 3px
   flex-shrink: 0;
   inline-size: 2.75rem;
   block-size: 2.75rem;
-  border: 2px solid var(--status-success-border);
-  border-radius: 50%;
-  background: var(--status-success-bg);
+  border: 1px solid color-mix(in srgb, var(--status-success-border) 60%, transparent);
+  border-radius: 0.95rem;
+  background: color-mix(in srgb, var(--status-success-bg) 75%, var(--tp-card-inner));
   color: var(--status-success-fg);
   cursor: pointer;
   transition: transform 120ms ease, background-color 120ms ease, color 120ms ease;
@@ -221,68 +256,78 @@ a.tp-closure-card__telegram[data-done]::after {
   box-shadow: 0 0 0 2px var(--tp-surface);
 }
 
-/* The close toggle: a soft tile, amber while waiting, green once closed */
+/* The close tile: a round icon, the action, a thin line, then the box and its hint.
+   Cream with gold while waiting, green once closed. */
 .tp-closure-card__toggle {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas: "icon text box" "hint hint hint";
-  align-items: center;
-  gap: 0.35rem 0.7rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--status-warning-border) 70%, transparent);
-  border-radius: 1.1rem;
-  background: color-mix(in srgb, var(--status-warning-bg) 70%, var(--tp-surface));
+  grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 1fr);
+  grid-template-areas:
+    ". icon icon ."
+    ". text text ."
+    "line line line line"
+    ". hint box .";
+  align-content: center;
+  justify-items: center;
+  gap: 0.7rem 0.6rem;
+  padding: 1.25rem 1rem;
+  border: 1px solid var(--tp-card-line);
+  border-radius: 1.15rem;
+  background:
+    radial-gradient(ellipse 120% 60% at 50% 115%, color-mix(in srgb, var(--status-warning-bg) 70%, transparent), transparent 70%),
+    var(--tp-card-inner);
   color: var(--status-warning-fg);
+  text-align: center;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.tp-closure-card__toggle:hover { border-color: var(--status-warning-vivid); }
+.tp-closure-card__toggle::after { content: ""; grid-area: line; justify-self: stretch; block-size: 1px; margin-inline: 0.75rem; background: var(--tp-card-line); }
+.tp-closure-card__toggle:hover { border-color: var(--status-warning-border); }
 .tp-closure-card__toggle:has(:focus-visible) { box-shadow: 0 0 0 3px var(--tp-focus); }
-.tp-closure-card__toggle[data-checked="true"] { border-color: color-mix(in srgb, var(--status-success-border) 70%, transparent); background: color-mix(in srgb, var(--status-success-bg) 70%, var(--tp-surface)); color: var(--status-success-fg); }
-.tp-closure-card__toggle[data-checked="true"]:hover { border-color: var(--status-success-vivid); }
+.tp-closure-card__toggle[data-checked="true"] {
+  background:
+    radial-gradient(ellipse 120% 60% at 50% 115%, color-mix(in srgb, var(--status-success-bg) 85%, transparent), transparent 70%),
+    var(--tp-card-inner);
+  color: var(--status-success-fg);
+}
+.tp-closure-card__toggle[data-checked="true"]:hover { border-color: var(--status-success-border); }
 .tp-closure-card__toggle[data-disabled="true"] { cursor: not-allowed; opacity: 0.65; }
 .tp-closure-card__toggle-icon {
   grid-area: icon;
   display: grid;
   place-items: center;
-  inline-size: 2.6rem;
-  block-size: 2.6rem;
-  border-radius: 0.85rem;
-  background: var(--tp-surface);
-  box-shadow: 0 4px 14px -8px color-mix(in srgb, var(--tp-deep) 40%, transparent);
+  inline-size: 4rem;
+  block-size: 4rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, currentColor 9%, var(--tp-card-inner));
 }
-.tp-closure-card__toggle-icon svg { inline-size: 1.25rem; block-size: 1.25rem; }
-.tp-closure-card__toggle-text { grid-area: text; font-size: 0.95rem; font-weight: 800; }
-.tp-closure-card__toggle [data-slot="checkbox"] { grid-area: box; border-color: currentColor; background: var(--tp-surface); }
+.tp-closure-card__toggle-icon svg { inline-size: 1.75rem; block-size: 1.75rem; }
+.tp-closure-card__toggle-text { grid-area: text; color: var(--tp-text); font-size: 1.15rem; font-weight: 800; }
+.tp-closure-card__toggle [data-slot="checkbox"] { grid-area: box; align-self: center; border-color: var(--tp-border-strong); background: var(--tp-card-inner); }
 .tp-closure-card__toggle [data-slot="checkbox"][data-state="checked"] { border-color: var(--status-success-solid); background: var(--status-success-solid); color: var(--status-success-on); }
-.tp-closure-card__toggle-hint { grid-area: hint; color: var(--tp-text-muted); font-size: 0.72rem; font-weight: 600; }
+.tp-closure-card__toggle-hint { grid-area: hint; align-self: center; color: var(--tp-text-muted); font-size: 0.82rem; font-weight: 600; }
 
-@container closure-card (min-width: 44rem) {
-  .tp-closure-card__body { grid-template-columns: minmax(0, 1fr) 13rem; }
-  .tp-closure-card__toggle {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "icon" "text" "box" "hint";
-    justify-items: center;
-    align-content: center;
-    text-align: center;
-  }
-  .tp-closure-card__toggle-icon { inline-size: 3.1rem; block-size: 3.1rem; border-radius: 1rem; }
-  .tp-closure-card__toggle-icon svg { inline-size: 1.5rem; block-size: 1.5rem; }
+/* Wide cards: the close tile runs down the far side of both panels
+   (measured on the list around the card, since a card cannot query itself). */
+@container (min-width: 46rem) {
+  .tp-closure-card { grid-template-columns: minmax(0, 1fr) 14rem; grid-template-areas: "main toggle" "row toggle"; }
 }
 
-@container closure-card (max-width: 30rem) {
-  .tp-closure-card__avatar { inline-size: 2.75rem; block-size: 2.75rem; border-radius: 0.85rem; }
-  .tp-closure-card__avatar svg { inline-size: 1.4rem; block-size: 1.4rem; }
+@container closure-card (max-width: 34rem) {
+  .tp-closure-card__dismissal { grid-template-columns: minmax(0, 1fr); }
   .tp-closure-card__head { flex-wrap: wrap; }
+  .tp-closure-card__avatar { inline-size: 3.25rem; block-size: 3.25rem; }
+  .tp-closure-card__avatar svg { inline-size: 1.55rem; block-size: 1.55rem; }
   /* The state chip takes its own line under the name rather than squeezing it. */
-  .tp-closure-card__state { order: 3; margin-inline-start: calc(2.75rem + 0.8rem); }
-  .tp-closure-card__dismissal { grid-template-columns: auto minmax(0, 1fr); }
-  .tp-modal .tp-closures__reason-toggle { grid-column: 1 / -1; justify-self: stretch; }
-  .tp-closure-card__row { grid-template-columns: minmax(0, 1fr); }
+  .tp-closure-card__state { order: 3; margin-inline-start: calc(3.25rem + 0.9rem); }
+  .tp-closure-card__actions { gap: 0.55rem 0.9rem; }
+  .tp-closure-card__actions > :is(.tp-closure-card__restore, .tp-closure-card__telegram, .tp-closure-card__bot)::before { display: none; }
+  .tp-closure-card__toggle { padding: 1rem; }
+  .tp-closure-card__toggle-icon { inline-size: 3.25rem; block-size: 3.25rem; }
 }
 
 @media (max-width: 480px) {
-  .tp-closure-card { padding: 0.95rem; border-radius: 1.2rem; }
+  .tp-closure-card { padding: 0.6rem; border-radius: 1.3rem; }
+  .tp-closure-card__main { padding: 0.9rem; }
 }
 
 /* Filter window: one column, row after row — the course, then the dates. */
@@ -306,7 +351,6 @@ a.tp-closure-card__telegram[data-done]::after {
   .tp-closures__seg { display: flex; width: 100%; }
   .tp-closures__seg-btn { flex: 1; padding: 0 0.5rem; }
 }
-.tp-closure-card__closed { display: block; color: var(--status-success-fg); font-size: 0.76rem; font-weight: 750; }
 /* On a phone «من» and «إلى» stack, so the whole date shows. */
 @media (max-width: 560px) {
   .tp-closures__range { grid-template-columns: 1fr; }
@@ -316,22 +360,23 @@ a.tp-closure-card__telegram[data-done]::after {
 .tp-closure-card__bot {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  min-block-size: 2.6rem;
-  padding: 0.3rem 0.95rem;
-  border: 1px solid color-mix(in srgb, var(--status-info-border) 70%, transparent);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--status-info-fg);
-  font-size: 0.84rem;
+  gap: 0.5rem;
+  min-block-size: 2.75rem;
+  padding: 0.3rem 1.1rem;
+  border: 1.5px solid color-mix(in srgb, var(--status-success-border) 75%, transparent);
+  border-radius: 0.95rem;
+  background: var(--tp-card-inner);
+  color: var(--status-success-fg);
+  font-size: 0.9rem;
   font-weight: 750;
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
-.tp-closure-card__bot svg { flex-shrink: 0; inline-size: 1.05rem; block-size: 1.05rem; }
-.tp-closure-card__bot:hover:not(:disabled) { border-color: transparent; background: var(--status-info-solid); color: var(--status-info-on); }
+.tp-closure-card__bot svg { flex-shrink: 0; inline-size: 1.1rem; block-size: 1.1rem; }
+.tp-closure-card__bot:hover:not(:disabled) { border-color: transparent; background: var(--status-success-solid); color: var(--status-success-on); }
 .tp-closure-card__bot:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
 .tp-closure-card__bot:disabled { cursor: default; opacity: 0.6; }
-.tp-closure-card__bot[data-sent] { border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success-fg); opacity: 1; }
+.tp-closure-card__bot[data-sent] { border-color: transparent; background: var(--status-success-bg); color: var(--status-success-fg); opacity: 1; }
 .tp-closures__bot-preview {
   margin: 0;
   padding: 0.85rem 1rem;
