@@ -9,38 +9,31 @@ import { routeErrorResponse } from "@/lib/route-helpers";
 import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 
 // ============================================================================
-// Performance optimization: previously this endpoint ran 19 separate Prisma
-// queries (15 count() + 4 aggregate _max) on every poll. With 10s polling
-// that was 114 DB round-trips/minute per connected client.
+// Every open tab polls this endpoint every 12 s. It used to COUNT(*) fourteen
+// whole tables (Grade, AuditLog, OpportunityLog…) plus three MAX() on each
+// poll, which loaded the database enough to slow or fail other requests.
 //
-// Now: a single $queryRaw consolidates all 15 counts + 4 max dates into ONE
-// database round-trip. The response JSON shape is IDENTICAL to before —
-// same keys, same types, same version fingerprint format — so the client's
-// cache matching logic is unaffected.
-//
-// Schema readiness is checked before this consolidated query. Missing tables
-// are deployment errors and must never be disguised as legitimate zero counts.
+// Now database triggers on those tables record each write statement as one
+// row in "SyncChange" (migration 20261019120000_sync_change_markers), and this
+// route reads, per scope, "SyncVersion"."folded" + the live SyncChange rows:
+// fourteen small rows, whatever the size of the data. The response keeps the
+// same keys (counts, maxDates, version) the client's inferChangedSyncScopes
+// compares, but counts[key] is now a change counter that only grows, not the
+// table's row count, and maxDates[key] is that scope's last change.
 // ============================================================================
 
 type SyncVersionRow = {
-  courses: bigint;
-  chapters: bigint;
-  coursechapters: bigint;
-  students: bigint;
-  exams: bigint;
-  grades: bigint;
-  opportunitylogs: bigint;
-  studentleaves: bigint;
-  studentcalls: bigint;
-  studentnotes: bigint;
-  users: bigint;
-  roles: bigint;
-  auditlogs: bigint;
-  gradesmartnotes: bigint;
-  gradesmax: Date | null;
-  auditlogsmax: Date | null;
-  gradesmartnotesmax: Date | null;
+  scope: string;
+  changes: bigint | number | string | null;
+  changedAt: Date | string | null;
 };
+
+// Change rows older than this are folded into "SyncVersion"."folded", so
+// "SyncChange" stays a few minutes of writes long.
+const FOLD_AFTER_MINUTES = 10;
+// At most one fold per server process per minute; polls in between only read.
+const FOLD_EVERY_MS = 60_000;
+let lastFoldAt = 0;
 
 function toNumber(value: unknown): number {
   if (typeof value === "number") return value;
@@ -61,26 +54,49 @@ function toIso(value: unknown): string {
   return "";
 }
 
-const SYNC_VERSION_SQL = `
-  SELECT
-    (SELECT COUNT(*) FROM "Course") AS courses,
-    (SELECT COUNT(*) FROM "Chapter") AS chapters,
-    (SELECT COUNT(*) FROM "CourseChapter") AS coursechapters,
-    (SELECT COUNT(*) FROM "Student") AS students,
-    (SELECT COUNT(*) FROM "Exam") AS exams,
-    (SELECT COUNT(*) FROM "Grade") AS grades,
-    (SELECT COUNT(*) FROM "OpportunityLog") AS opportunitylogs,
-    (SELECT COUNT(*) FROM "StudentLeave") AS studentleaves,
-    (SELECT COUNT(*) FROM "StudentCall") AS studentcalls,
-    (SELECT COUNT(*) FROM "StudentNote") AS studentnotes,
-    (SELECT COUNT(*) FROM "AppUser") AS users,
-    (SELECT COUNT(*) FROM "Role") AS roles,
-    (SELECT COUNT(*) FROM "AuditLog") AS auditlogs,
-    (SELECT COUNT(*) FROM "GradeSmartNote") AS gradesmartnotes,
-    (SELECT MAX("updatedAt") FROM "Grade") AS gradesmax,
-    (SELECT MAX("time") FROM "AuditLog") AS auditlogsmax,
-    (SELECT MAX("updatedAt") FROM "GradeSmartNote") AS gradesmartnotesmax
+// One statement, so a poll sees either the rows before the fold or the
+// folded total, never both or neither: the counter does not move.
+const FOLD_SQL = Prisma.sql`
+  WITH "old" AS (
+    DELETE FROM "SyncChange"
+    WHERE "at" < CURRENT_TIMESTAMP - make_interval(mins => ${FOLD_AFTER_MINUTES})
+    RETURNING "scope", "at"
+  ),
+  "agg" AS (
+    SELECT "scope", COUNT(*) AS "n", MAX("at") AS "lastAt"
+    FROM "old"
+    GROUP BY "scope"
+  )
+  UPDATE "SyncVersion" AS v
+  SET "folded" = v."folded" + "agg"."n",
+      "changedAt" = GREATEST(v."changedAt", "agg"."lastAt")
+  FROM "agg"
+  WHERE v."scope" = "agg"."scope"
 `;
+
+const SYNC_VERSION_SQL = Prisma.sql`
+  SELECT
+    v."scope" AS "scope",
+    v."folded" + COALESCE(c."n", 0) AS "changes",
+    GREATEST(v."changedAt", c."lastAt") AS "changedAt"
+  FROM "SyncVersion" AS v
+  LEFT JOIN (
+    SELECT "scope", COUNT(*) AS "n", MAX("at") AS "lastAt"
+    FROM "SyncChange"
+    GROUP BY "scope"
+  ) AS c ON c."scope" = v."scope"
+`;
+
+async function foldOldChangesIfDue() {
+  const now = Date.now();
+  if (now - lastFoldAt < FOLD_EVERY_MS) return;
+  lastFoldAt = now;
+  try {
+    await db.$executeRaw(FOLD_SQL);
+  } catch {
+    // Folding only keeps the change log short; the poll must not fail on it.
+  }
+}
 
 export async function GET(req: NextRequest) {
   const authError = await requireAuth(req);
@@ -88,38 +104,15 @@ export async function GET(req: NextRequest) {
 
   try {
     await assertDatabaseSchemaReady();
-    const rows = await db.$queryRaw<SyncVersionRow[]>(Prisma.raw(SYNC_VERSION_SQL));
-    const row = rows[0] ?? null;
+    await foldOldChangesIfDue();
+    const rows = await db.$queryRaw<SyncVersionRow[]>(SYNC_VERSION_SQL);
 
-    if (!row) {
-      return NextResponse.json(
-        { ok: true, version: "0:", latestAt: null, counts: {}, maxDates: {}, source: "database", generatedAt: new Date().toISOString() },
-      );
+    const counts: Record<string, number> = {};
+    const maxDates: Record<string, string> = {};
+    for (const row of rows) {
+      counts[row.scope] = toNumber(row.changes);
+      maxDates[row.scope] = toIso(row.changedAt);
     }
-
-    // Build the response with the EXACT same shape as before.
-    const counts: Record<string, number> = {
-      courses: toNumber(row.courses),
-      chapters: toNumber(row.chapters),
-      courseChapters: toNumber(row.coursechapters),
-      students: toNumber(row.students),
-      exams: toNumber(row.exams),
-      grades: toNumber(row.grades),
-      opportunityLogs: toNumber(row.opportunitylogs),
-      studentLeaves: toNumber(row.studentleaves),
-      studentCalls: toNumber(row.studentcalls),
-      studentNotes: toNumber(row.studentnotes),
-      users: toNumber(row.users),
-      roles: toNumber(row.roles),
-      auditLogs: toNumber(row.auditlogs),
-      gradeSmartNotes: toNumber(row.gradesmartnotes),
-    };
-
-    const maxDates: Record<string, string> = {
-      grades: toIso(row.gradesmax),
-      auditLogs: toIso(row.auditlogsmax),
-      gradeSmartNotes: toIso(row.gradesmartnotesmax),
-    };
 
     const latestMs = Math.max(
       0,
@@ -130,9 +123,6 @@ export async function GET(req: NextRequest) {
       }),
     );
 
-    // IMPORTANT: the version fingerprint format must match the previous
-    // implementation EXACTLY so the client's cache-matching logic continues
-    // to work without change.
     const countFingerprint = Object.entries(counts)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, value]) => `${key}:${value}`)

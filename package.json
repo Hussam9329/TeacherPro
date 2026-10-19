@@ -54,7 +54,7 @@
     "test:logs-integrity": "node scripts/test-logs-integrity.mjs",
     "test:dashboard-behavior": "node --test scripts/test-dashboard-behavior.mjs && node scripts/test-shortcut-alerts.cjs && node scripts/test-student-trend.cjs",
     "test:admin-log-reset-integrity": "node scripts/test-admin-log-reset-integrity.mjs",
-    "test:smart-sync-integrity": "node scripts/test-smart-sync-integrity.mjs",
+    "test:smart-sync-integrity": "node scripts/test-smart-sync-integrity.mjs && node scripts/test-sync-version-markers.cjs",
     "test:language-ux-integrity": "node scripts/test-language-ux-integrity.mjs",
     "test:opportunity-source-integrity": "node scripts/test-opportunity-source-integrity.mjs",
     "test:student-transfer-lifecycle-integrity": "node scripts/test-student-transfer-lifecycle-integrity.mjs",

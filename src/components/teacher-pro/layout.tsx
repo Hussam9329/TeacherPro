@@ -1062,10 +1062,9 @@ export function TeacherProLayout() {
 
     serverVersionCheckRef.current = checkServerVersion;
     void checkServerVersion({ force: true });
-    // Performance: 12s interval (was 10s). The sync/version endpoint now
-    // uses a single SQL query instead of 19, so each poll is ~5x cheaper.
-    // 12s gives a small additional reduction in DB load while keeping
-    // near-real-time change detection (only 2s slower than before).
+    // 12s interval. The sync/version endpoint reads one small change-marker
+    // row per scope (kept by database triggers), not whole-table counts, so
+    // a poll costs the same whatever the size of the data.
     const interval = window.setInterval(
       () => void checkServerVersion(),
       12_000,

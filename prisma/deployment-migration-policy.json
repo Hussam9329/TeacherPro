@@ -334,5 +334,9 @@
   "20261015210000_call_exam_target_recorded": {
     "kind": "expand",
     "checksum": "13662a4ab09227d44bea5404367a3c8026db6e886491d2f93689fe42b438795f"
+  },
+  "20261019120000_sync_change_markers": {
+    "kind": "expand",
+    "checksum": "20652f2935104cfc4e824b9cf862ff8ec139b9ea75e95d9685ed05e6161fad3c"
   }
 }

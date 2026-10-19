@@ -8,6 +8,15 @@ const syncHook = read("src/hooks/use-teacherpro-sync.ts");
 const layout = read("src/components/teacher-pro/layout.tsx");
 const store = read("src/lib/teacher-store.ts");
 const calls = read("src/components/teacher-pro/follow-up.tsx");
+const versionRoute = read("src/app/api/sync/version/route.ts");
+const syncMarkersMigration = read(
+  "prisma/migrations/20261019120000_sync_change_markers/migration.sql",
+);
+const versionScopeKeys = [
+  "courses", "chapters", "courseChapters", "students", "exams", "grades",
+  "opportunityLogs", "studentLeaves", "studentCalls", "studentNotes",
+  "users", "roles", "auditLogs", "gradeSmartNotes",
+];
 const silentRepairEndpoints = [
   "/api/students/academic-repair",
   "/api/students/fix-zero-opportunities",
@@ -96,6 +105,31 @@ const checks = [
     "حالة المزامنة موحدة داخل واجهة النظام",
     layout.includes("TEACHERPRO_SYNC_STATUS_EVENT") &&
       layout.includes("setSyncStatus(detail)"),
+  ],
+  [
+    "فحص نسخة الخادم لا يعدّ جداول كاملة بل يقرأ مؤشرات التغيير",
+    !/COUNT\(\*\)\s+FROM\s+"(?!SyncChange|old)/i.test(versionRoute) &&
+      !/MAX\("(?:updatedAt|time)"\)/.test(versionRoute) &&
+      versionRoute.includes('FROM "SyncVersion"') &&
+      versionRoute.includes('FROM "SyncChange"'),
+  ],
+  [
+    "كل نطاق في خريطة المزامنة يملك مؤشر تغيير تكتبه Triggers قاعدة البيانات",
+    versionScopeKeys.every(
+      (key) =>
+        layout.includes(`${key}: [`) &&
+        syncMarkersMigration.includes(`'${key}'`),
+    ) &&
+      syncMarkersMigration.includes("AFTER INSERT") &&
+      syncMarkersMigration.includes("AFTER UPDATE") &&
+      syncMarkersMigration.includes("AFTER DELETE") &&
+      syncMarkersMigration.includes("AFTER TRUNCATE"),
+  ],
+  [
+    "ترحيل مؤشرات التغيير إضافي فقط ولا يحذف أو يعدّل بيانات قائمة",
+    !/\b(?:DROP\s+(?:TABLE|COLUMN)|ALTER\s+TABLE|DELETE\s+FROM|UPDATE\s+")/i.test(
+      syncMarkersMigration,
+    ),
   ],
 ];
 
