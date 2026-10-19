@@ -206,293 +206,138 @@
   }
 }
 
-/* ── Student cards: who, the balance, quiet facts, contacts and the file. ── */
+/* ── Student cards: a plain data card. Hairline border, no tinted blocks;
+   colour only where it means something (status, balance, notes). ── */
 .tp-scards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr));
-  gap: 0.875rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  gap: 1rem;
 }
 
 .tp-scard {
-  --scard-accent: var(--status-success-vivid);
   container: scard / inline-size;
-  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1rem;
   min-inline-size: 0;
-  padding: 1rem 1.125rem 0.875rem;
+  padding: 1.125rem 1.25rem 0;
   border: 1px solid var(--border);
-  border-radius: 1.125rem;
+  border-radius: 0.875rem;
   background: var(--card);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--tp-ink, #142b25) 6%, transparent);
-  overflow: hidden;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 5%, transparent);
+  transition: box-shadow 180ms ease;
 }
+.tp-scard:hover { box-shadow: 0 8px 24px -14px color-mix(in srgb, var(--foreground) 22%, transparent); }
+.tp-scard[data-status="archived"] { background: color-mix(in srgb, var(--muted) 40%, var(--card)); }
+.tp-scard[data-status="archived"] :is(.tp-scard__name, .tp-scard__facts dd) { color: var(--muted-foreground); }
 
-/* A thin status line on the start edge says the state before any word does. */
-.tp-scard::before {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 0;
-  inline-size: 3px;
-  background: var(--scard-accent);
-}
-
-.tp-scard[data-status="dismissed"] { --scard-accent: var(--status-danger-vivid); }
-.tp-scard[data-status="archived"] {
-  --scard-accent: var(--sig-archived, #9ca59f);
-  background: color-mix(in srgb, var(--muted) 45%, var(--card));
-}
-
-.tp-scard :where(h3, p, span, a, li) { min-inline-size: 0; overflow-wrap: anywhere; }
-.tp-scard [data-tone="muted"] {
-  --tone-ink: var(--muted-foreground);
-  --tone-tint: var(--muted);
-  --tone-line: var(--border);
-}
+.tp-scard :where(h3, p, span, a, li, dd) { min-inline-size: 0; overflow-wrap: anywhere; }
+.tp-scard [data-tone="muted"] { --tone: var(--sig-archived, #9ca59f); --tone-ink: var(--muted-foreground); }
 
 /* Head */
-.tp-scard__head {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.tp-scard__avatar {
-  display: grid;
-  place-items: center;
-  inline-size: 2.75rem;
-  block-size: 2.75rem;
-  border-radius: 0.875rem;
-  background: var(--tone-tint, var(--muted));
-  color: var(--tone-ink, var(--foreground));
-  box-shadow: inset 0 0 0 1px var(--tone-line, var(--border));
-  font-size: 0.9rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
-}
-
-.tp-scard__who { display: grid; gap: 0.15rem; }
-
-.tp-scard__name {
-  margin: 0;
-  color: var(--foreground);
-  font-size: 1rem;
-  font-weight: 800;
-  line-height: 1.5;
-}
-
+.tp-scard__head { display: flex; align-items: flex-start; gap: 0.5rem; }
+.tp-scard__who { flex: 1 1 auto; display: grid; gap: 0.2rem; min-inline-size: 0; }
+.tp-scard__name { margin: 0; color: var(--foreground); font-size: 1rem; font-weight: 700; line-height: 1.45; }
 .tp-scard__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.5rem;
-  margin: 0;
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
-  line-height: 1.6;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem 0.4rem;
+  margin: 0; color: var(--muted-foreground); font-size: 0.78rem; line-height: 1.6;
 }
-
-.tp-scard__code {
-  padding: 0.05rem 0.45rem;
-  border-radius: 0.375rem;
-  background: var(--muted);
-  color: var(--foreground);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.tp-scard__badges {
-  display: flex;
-  align-items: center;
-  align-self: start;
-  gap: 0.25rem;
-}
+.tp-scard__code { color: var(--foreground); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
 
 .tp-scard__status {
-  padding: 0.2rem 0.65rem;
-  border-radius: 999px;
-  background: var(--tone-tint, var(--muted));
+  display: inline-flex; align-items: center; gap: 0.4rem; flex-shrink: 0;
+  margin-block-start: 0.2rem;
   color: var(--tone-ink, var(--muted-foreground));
-  font-size: 0.72rem;
-  font-weight: 700;
-  white-space: nowrap;
+  font-size: 0.75rem; font-weight: 600; white-space: nowrap;
 }
-
-/* Health flags and the missing-contact note */
-.tp-scard__flags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-
-.tp-scard__flag {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.15rem 0.6rem;
-  border: 1px solid var(--tone-line, var(--border));
-  border-radius: 999px;
-  background: var(--tone-tint, var(--muted));
-  color: var(--tone-ink, var(--muted-foreground));
-  font-size: 0.7rem;
-  font-weight: 600;
-  line-height: 1.6;
+.tp-scard__status::before {
+  content: ""; inline-size: 0.45rem; block-size: 0.45rem; border-radius: 50%;
+  background: var(--tone, var(--muted-foreground));
 }
-
-/* Balance */
-.tp-scard__balance {
-  display: grid;
-  gap: 0.5rem;
-  padding: 0.75rem 0.875rem;
-  border-radius: 0.875rem;
-  background: color-mix(in srgb, var(--tone-tint, var(--muted)) 60%, var(--card));
-}
-
-.tp-scard__balance-top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.25rem 0.75rem;
-}
-
-.tp-scard__eyebrow {
+.tp-scard__head .tp-row-menu { margin-inline-start: 0.125rem; margin-block-start: -0.25rem; }
+.tp-scard__head .tp-row-menu > button {
+  inline-size: 2rem; block-size: 2rem; border-color: transparent; background: transparent; box-shadow: none;
   color: var(--muted-foreground);
-  font-size: 0.72rem;
-  font-weight: 600;
 }
+.tp-scard__head .tp-row-menu > button:hover,
+.tp-scard__head .tp-row-menu > button[aria-expanded="true"] { background: var(--muted); color: var(--foreground); }
 
+/* Balance: label, a slim segmented bar, the number. */
+.tp-scard__balance { display: flex; align-items: center; gap: 0.75rem; }
+.tp-scard__label { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 500; flex-shrink: 0; }
+.tp-scard__meter { display: flex; flex: 1 1 auto; gap: 3px; min-inline-size: 3rem; }
+.tp-scard__meter > i { flex: 1 1 0; block-size: 4px; border-radius: 2px; background: var(--tone, var(--status-success-vivid)); }
+.tp-scard__meter > i[data-off="true"] { background: color-mix(in srgb, var(--muted-foreground) 16%, transparent); }
 .tp-scard__balance-value {
-  color: var(--tone-ink, var(--foreground));
-  font-size: 0.95rem;
-  font-weight: 800;
+  margin-inline-start: auto; flex-shrink: 0;
+  color: var(--tone-ink, var(--foreground)); font-size: 0.85rem; font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-.tp-scard__meter { display: flex; gap: 0.25rem; }
-.tp-scard__meter > i {
-  flex: 1 1 0;
-  block-size: 0.375rem;
-  border-radius: 999px;
-  background: var(--tone, var(--status-success-vivid));
+/* Notes: one quiet line each, a dot carries the colour. */
+.tp-scard__notes { display: grid; gap: 0.35rem; margin: -0.25rem 0 0; padding: 0; list-style: none; }
+.tp-scard__notes > li {
+  display: flex; align-items: baseline; gap: 0.5rem;
+  color: var(--tone-ink, var(--foreground)); font-size: 0.78rem; line-height: 1.6;
 }
-.tp-scard__meter > i[data-off="true"] {
-  background: color-mix(in srgb, var(--muted-foreground) 18%, transparent);
+.tp-scard__notes > li[data-tone]::before {
+  content: ""; flex-shrink: 0; inline-size: 0.4rem; block-size: 0.4rem; border-radius: 50%;
+  background: var(--tone); transform: translateY(-0.1rem);
 }
+/* The shared grace pill, flattened into a line like the others. */
+.tp-scard__grace > span { padding: 0; border: 0; background: none; font-size: 0.78rem; font-weight: 500; gap: 0.5rem; }
 
-.tp-scard__note {
-  margin: 0;
-  color: var(--tone-ink, var(--foreground));
-  font-size: 0.75rem;
-  line-height: 1.7;
-}
-
-.tp-scard__grace { display: flex; }
-.tp-scard__grace > * { font-size: 0.75rem; }
-
-/* Facts */
+/* Facts: label over value, in two columns. */
 .tp-scard__facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem 1rem;
+  margin: 0; padding-block-start: 1rem; border-block-start: 1px solid var(--border);
 }
+.tp-scard__facts > div { display: grid; gap: 0.1rem; min-inline-size: 0; }
+.tp-scard__facts dt { color: var(--muted-foreground); font-size: 0.7rem; font-weight: 500; }
+.tp-scard__facts dd { margin: 0; color: var(--foreground); font-size: 0.82rem; font-weight: 500; line-height: 1.5; }
 
-.tp-scard__facts > li {
-  padding: 0.15rem 0.6rem;
-  border-radius: 0.5rem;
-  background: var(--muted);
-  color: var(--muted-foreground);
-  font-size: 0.72rem;
-  line-height: 1.7;
+/* Contacts: plain rows, the pencil stays quiet until needed. */
+.tp-scard__contacts { display: grid; gap: 0.25rem; padding-block-start: 1rem; border-block-start: 1px solid var(--border); }
+.tp-scard__contact-row {
+  display: flex; align-items: center; gap: 0.5rem; min-block-size: 2rem;
+  font-size: 0.82rem;
 }
-
-.tp-scard__facts > li[data-tone] {
-  background: var(--tone-tint);
-  color: var(--tone-ink);
+.tp-scard__contact-row > svg { inline-size: 0.95rem; block-size: 0.95rem; flex-shrink: 0; color: var(--muted-foreground); }
+.tp-scard__contact-label { color: var(--muted-foreground); font-size: 0.75rem; min-inline-size: 4.25rem; }
+.tp-scard__contact { color: var(--foreground); font-weight: 600; text-decoration: none; }
+.tp-scard__contact:hover { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+.tp-scard__contact:focus-visible, .tp-scard__file:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 0.25rem; }
+.tp-scard__contact-row .tp-tg-edit__open:not([data-labelled]) {
+  inline-size: 1.75rem; block-size: 1.75rem; margin-inline-start: auto;
+  border-color: transparent; background: transparent; opacity: 0.55;
 }
-
-/* Foot */
-.tp-scard__foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.625rem;
-  margin-block-start: auto;
-  margin-inline: -1.125rem;
-  margin-block-end: -0.875rem;
-  padding: 0.75rem 1.125rem;
-  border-block-start: 1px solid var(--border);
-  background: color-mix(in srgb, var(--muted) 35%, transparent);
+.tp-scard__contact-row .tp-tg-edit__open[data-labelled] {
+  border: 0; padding: 0; background: none; color: var(--muted-foreground); font-weight: 500; font-size: 0.78rem;
 }
+.tp-scard__contact-row .tp-tg-edit__open[data-labelled]:hover { color: var(--primary); }
+.tp-scard:hover .tp-tg-edit__open, .tp-scard .tp-tg-edit__open:focus-visible { opacity: 1; }
+.tp-scard__missing { margin: 0.25rem 0 0; color: var(--status-warning-fg); font-size: 0.75rem; }
 
-.tp-scard__contacts {
-  display: flex;
-  flex: 1 1 100%;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-.tp-scard__contact-group { display: inline-flex; align-items: center; gap: 0.125rem; }
-
-.tp-scard__contact {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-block-size: 2rem;
-  padding: 0.2rem 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--card);
-  color: var(--foreground);
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-decoration: none;
+/* The file: a full-width quiet footer link. */
+.tp-scard__file {
+  display: flex; align-items: center; gap: 0.5rem;
+  margin: auto -1.25rem 0; padding: 0.8rem 1.25rem;
+  max-inline-size: none;
+  border: 0; border-block-start: 1px solid var(--border); border-radius: 0 0 0.875rem 0.875rem;
+  background: transparent; color: var(--foreground);
+  font-size: 0.82rem; font-weight: 600; text-align: start; cursor: pointer;
   transition: background-color 150ms, color 150ms;
 }
+.tp-scard__file > svg { inline-size: 1rem; block-size: 1rem; color: var(--primary); flex-shrink: 0; }
+.tp-scard__file > small { margin-inline-start: auto; color: var(--muted-foreground); font-size: 0.72rem; font-weight: 400; }
+.tp-scard__file:hover { background: color-mix(in srgb, var(--muted) 60%, transparent); color: var(--primary); }
 
-.tp-scard__contact svg { inline-size: 0.875rem; block-size: 0.875rem; color: var(--muted-foreground); flex-shrink: 0; }
-.tp-scard__contact:hover { background: var(--muted); }
-.tp-scard__contact:focus-visible,
-.tp-scard__file:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-
-.tp-scard__file {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  min-block-size: 2.5rem;
-  padding: 0.35rem 0.9rem;
-  border: 0;
-  border-radius: 0.75rem;
-  background: var(--primary);
-  color: var(--primary-foreground);
-  margin-inline-start: auto;
-  text-align: start;
-  cursor: pointer;
-  transition: filter 150ms;
-}
-
-.tp-scard__file:hover { filter: brightness(1.12); }
-/* At night a quiet tinted button, not a bright cream block. */
-.dark .tp-scard__file {
-  background: color-mix(in srgb, var(--primary) 14%, var(--card));
-  color: var(--foreground);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent);
-}
-.tp-scard__file > svg { inline-size: 1.05rem; block-size: 1.05rem; flex-shrink: 0; }
-.tp-scard__file-text { display: grid; line-height: 1.35; }
-.tp-scard__file-text > span { font-size: 0.8rem; font-weight: 700; }
-.tp-scard__file-text > small { font-size: 0.66rem; opacity: 0.75; }
-
-@container scard (max-width: 23rem) {
-  .tp-scard__file { flex: 1 1 100%; justify-content: center; }
-  .tp-scard__avatar { inline-size: 2.4rem; block-size: 2.4rem; }
+@container scard (max-width: 20rem) {
+  .tp-scard__file > small { display: none; }
 }
 
 @media (pointer: coarse) {
-  .tp-scard__contact { min-block-size: 2.75rem; }
+  .tp-scard .tp-tg-edit__open { opacity: 1; }
+  .tp-scard__contact-row { min-block-size: 2.75rem; }
   .tp-scard__file { min-block-size: 2.75rem; }
 }
