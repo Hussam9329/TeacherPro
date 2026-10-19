@@ -43,6 +43,26 @@ const FAILED_OUTBOX_KEY = 'teacherpro-mutation-outbox-failed-v1';
 const MAX_OUTBOX = 1000;
 const MAX_FAILED_OUTBOX = 100;
 const MAX_ATTEMPTS = 5;
+// A failed edit waits longer before each new try (10s, 20s, 40s, … up to 5
+// minutes), so a few tab switches while offline don't use up its attempts.
+const RETRY_BASE_MS = 10_000;
+const RETRY_MAX_MS = 5 * 60_000;
+// A request that hangs is given up after this long and tried again later.
+const REPLAY_TIMEOUT_MS = 20_000;
+
+function retryDelayMs(attempts: number): number {
+  return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.max(0, attempts - 1));
+}
+
+async function fetchWithTimeout(input: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REPLAY_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export type FailedQueuedMutation = QueuedMutation & {
   failedAt: number;
@@ -266,6 +286,10 @@ async function flushOwnedOutbox(): Promise<number> {
         );
         continue;
       }
+      // Not due yet: it failed a moment ago.
+      if (item.attempts > 0 && item.lastAttemptAt && Date.now() - item.lastAttemptAt < retryDelayMs(item.attempts)) {
+        continue;
+      }
       if (item.attempts >= MAX_ATTEMPTS) {
         const message = 'تعذر تنفيذ تعديل مؤجل بعد عدة محاولات. راجع الاتصال وأعد العملية.';
         recordFailedMutation(item, message);
@@ -274,7 +298,7 @@ async function flushOwnedOutbox(): Promise<number> {
         continue;
       }
       try {
-        const res = await fetch(item.endpoint, {
+        const res = await fetchWithTimeout(item.endpoint, {
           method: item.method,
           headers: { ...ownerHeaders(item.ownerUserId), ...(item.payload !== undefined ? { 'Content-Type': 'application/json' } : {}) },
           credentials: 'same-origin',
@@ -309,19 +333,30 @@ async function flushOwnedOutbox(): Promise<number> {
           lastAttemptAt: Date.now(),
         });
       } catch {
-        // Network error: keep with incremented attempts.
+        // Network error: keep with incremented attempts, and stop here — the
+        // rest would fail the same way and spend their attempts for nothing.
         saveItem({
           ...item,
           attempts: item.attempts + 1,
           lastAttemptAt: Date.now(),
         });
+        break;
       }
     }
     if (flushed > 0) {
+      const scopes = Array.from(touchedScopes);
       emitTeacherProDataChanged({
         source: 'local-mutation',
         reason: `تمت مزامنة ${flushed} تعديل مؤجل`,
-        scopes: Array.from(touchedScopes),
+        scopes,
+      });
+      // The screen still shows what it had before the edit was saved: refresh
+      // it here (a local-mutation event is ignored by this tab's listeners).
+      emitTeacherProDataChanged({
+        source: 'manual',
+        reason: `تحديث بعد مزامنة ${flushed} تعديل مؤجل`,
+        scopes,
+        broadcast: false,
       });
     }
   } finally {

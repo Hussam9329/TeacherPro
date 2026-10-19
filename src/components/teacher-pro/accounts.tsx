@@ -537,6 +537,10 @@ function UsersTab() {
   const [editPerms, setEditPerms] = useState<string[]>([]);
 
   const [editUserDialog, setEditUserDialog] = useState({ open: false, id: '', name: '', password: '', roleId: '' });
+  // A new or changed login code is shown once, in a window that stays until
+  // «تم», never in a toast that disappears in seconds.
+  const [credentialNotice, setCredentialNotice] = useState<{ title: string; name: string; username: string; password: string } | null>(null);
+  const [credentialCopied, setCredentialCopied] = useState(false);
   const [deleteUserDialog, setDeleteUserDialog] = useState({ open: false, id: '', userName: '' });
   const [detailsUserId, setDetailsUserId] = useState('');
   const [userSearch, setUserSearch] = useState('');
@@ -579,7 +583,8 @@ function UsersTab() {
     }
     setShowAddDialog(false);
     setNewUser({ username: '', name: '', password: '', roleId: defaultNewUserRoleId, permissions: [] });
-    toast.success(`تمت إضافة الحساب. رمز الدخول: ${newUser.password.trim()}`);
+    setCredentialCopied(false);
+    setCredentialNotice({ title: 'تمت إضافة الحساب', name, username, password: newUser.password.trim() });
   });
 
   const openEditUserDialog = (userId: string) => {
@@ -615,7 +620,12 @@ function UsersTab() {
       return;
     }
     setEditUserDialog({ open: false, id: '', name: '', password: '', roleId: '' });
-    toast.success(password ? `تم حفظ التعديل. رمز الدخول الجديد: ${password}` : 'تم حفظ التعديل');
+    if (password) {
+      setCredentialCopied(false);
+      setCredentialNotice({ title: 'تم تغيير رمز الدخول', name: editUserDialog.name.trim() || user.name, username: user.username, password });
+    } else {
+      toast.success('تم حفظ التعديل');
+    }
   });
 
   const handleToggleUser = async (userId: string) => {
@@ -880,6 +890,44 @@ function UsersTab() {
                 تعديل صلاحيات هذا الحساب
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* The login code, once, until «تم» */}
+      <Dialog open={Boolean(credentialNotice)} onOpenChange={(open) => { if (!open) setCredentialNotice(null); }}>
+        <DialogContent dir="rtl" className="tp-form-dialog max-w-md">
+          <FormDialogHero icon={KeyRound} title={credentialNotice?.title || ''} description="انسخ الرمز وسلّمه لصاحب الحساب؛ لن يظهر مرة أخرى بعد إغلاق هذه النافذة." />
+          <div className={ACCOUNT_DIALOG_BODY_CLASS}>
+            <dl className="grid gap-3 text-sm">
+              <div className="grid gap-1">
+                <dt className="text-muted-foreground">الحساب</dt>
+                <dd className="font-semibold">{credentialNotice?.name} · <bdi dir="ltr">{credentialNotice?.username}</bdi></dd>
+              </div>
+              <div className="grid gap-1">
+                <dt className="text-muted-foreground">رمز الدخول</dt>
+                <dd><bdi dir="ltr" className="inline-block rounded-lg bg-muted px-3 py-1.5 font-mono text-base font-bold tracking-wider select-all">{credentialNotice?.password}</bdi></dd>
+              </div>
+            </dl>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                if (!credentialNotice) return;
+                try {
+                  await navigator.clipboard.writeText(`${credentialNotice.username}
+${credentialNotice.password}`);
+                  setCredentialCopied(true);
+                } catch {
+                  toast.error('تعذر النسخ تلقائياً؛ حدّد الرمز وانسخه يدوياً.');
+                }
+              }}
+            >
+              {credentialCopied ? 'تم النسخ' : 'نسخ اسم المستخدم والرمز'}
+            </Button>
+            <Button type="button" onClick={() => setCredentialNotice(null)}>تم</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

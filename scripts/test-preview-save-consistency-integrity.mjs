@@ -225,8 +225,9 @@ check(
   ) &&
     replayPolicy.includes("if (isMaintenanceRepairEndpoint(endpoint)) return false") &&
     outbox.includes("purgeMaintenanceRepairMutations(readOutbox())") &&
+    // The replay send (plain fetch, or fetchWithTimeout) comes after the purge.
     outbox.indexOf("purgeMaintenanceRepairMutations(readOutbox())") <
-      outbox.indexOf("await fetch(item.endpoint"),
+      outbox.search(/await fetch(WithTimeout)?\(item\.endpoint/),
 );
 check(
   "الحزم القديمة لا تستطيع تشغيل إصلاح شامل أو ضبط فرص بلا نطاق ومعاينة",
