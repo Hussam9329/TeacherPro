@@ -1,3 +1,6 @@
+// Times are stored without a zone and read as UTC, as on the production
+// servers; pin the zone so the test gives the same answer on any machine.
+process.env.TZ = "UTC";
 // «دفعات» in إدارة المكالمات, on a real Postgres (PGlite) built from every
 // migration: windows never share a student, a closed or silent window gives
 // its batch back, and moving to another exam lets go of the old one.

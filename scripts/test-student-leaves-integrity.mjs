@@ -111,7 +111,7 @@ must(
     leaves.includes('role="menuitem"') &&
     leaves.includes("onEscapeKeyDown") &&
     leaves.includes("تأكيد الحذف") &&
-    leaves.includes("لا توجد إجازات") &&
+    leaves.includes("ماكو إجازات") &&
     leaves.includes("إضافة إجازة") &&
     leaves.includes("backToList") &&
     leaves.includes("// Back to the student's leaves.\n      setForm(null);"),

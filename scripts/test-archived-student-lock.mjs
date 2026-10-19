@@ -50,7 +50,13 @@ check(
 
 // 3. Hidden: «الكل», the dashboard and the follow-up searches leave them out.
 check(!read("src/components/teacher-pro/student-registry.tsx").includes("includeArchived"), "سجل الطلاب «الكل» بدون المؤرشفين");
-check(read("src/app/api/stats/route.ts").includes('tx.student.count({ where: { status: { not: "مؤرشف" } } })'), "عدد الطلاب في الرئيسية بدون المؤرشفين");
+// The dashboard shows archived students on their own (the grey part of
+// «توزيع الطلبة حسب الحالة») and counts them in the total, as the user asked.
+check(
+  read("src/app/api/stats/route.ts").includes('tx.student.count({ where: { status: "مؤرشف" } })') &&
+    read("src/app/api/stats/route.ts").includes("archivedStudents: archivedCount"),
+  "الرئيسية تعرض المؤرشفين كجزء مستقل من التوزيع",
+);
 check(read("src/app/api/students/stats/route.ts").includes("- archived;"), "مجموع «الكل» في السجل بدون المؤرشفين");
 check((read("src/app/api/student-leaves/students/route.ts").match(/status: \{ not: "مؤرشف" \}/g) || []).length >= 3, "بحث الإجازات وقائمتها بدون المؤرشفين");
 check(read("src/app/api/grace-periods/list/route.ts").includes('{ status: { not: "مؤرشف" } }'), "قائمة فترات السماح بدون المؤرشفين");

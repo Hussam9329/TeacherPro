@@ -28,12 +28,15 @@ const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migr
  await assert.rejects(apply(),/student status changed/);
  assert.deepEqual(await snapshot('Grade'),existing,'status conflicts must roll back the entire restoration');
  await db.exec(`UPDATE "Student" SET status='مفصول' WHERE id='student-2'`);
+ // Re-dismissing student-2 above bumps its dismissedCheckEpoch by design (a new
+ // dismissal needs its code closed again), so the students are compared from here.
+ const studentsBeforeRestore=await snapshot('Student');
  await apply();
  const restored=await snapshot('Grade');
  assert.equal(restored.length,23);
  assert.deepEqual(restored.filter(g=>g.id==='new-grade'),existing,'a newer numeric grade must never be overwritten');
  assert.deepEqual(restored.filter(g=>g.id!=='new-grade'),original.filter(g=>g.studentId!=='student-1'));
- assert.deepEqual(await snapshot('Student'),students,'all student fields including balances and status stay identical');
+ assert.deepEqual(await snapshot('Student'),studentsBeforeRestore,'all student fields including balances and status stay identical');
  assert.deepEqual(await snapshot('OpportunityLog'),logs);
  const audit=JSON.parse((await db.query('SELECT details FROM "AuditLog" WHERE id=\'restore_dismissed_exam8_20260910_v1\'')).rows[0].details);
  assert.equal(audit.restoredCount,22);assert.equal(audit.preservedExistingCount,1);

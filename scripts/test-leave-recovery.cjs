@@ -1,3 +1,6 @@
+// Times are stored without a zone and read as UTC, as on the production
+// servers; pin the zone so the test gives the same answer on any machine.
+process.env.TZ = "UTC";
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module');
 const {randomUUID}=require('node:crypto'),{PGlite}=require('@electric-sql/pglite'),{Prisma}=require('@prisma/client'),ts=require('typescript');
 const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
