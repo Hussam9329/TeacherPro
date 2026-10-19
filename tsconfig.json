@@ -29,7 +29,8 @@
       ]
     },
     "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "noUnusedParameters": true,
+    "allowImportingTsExtensions": true
   },
   "include": [
     "next-env.d.ts",

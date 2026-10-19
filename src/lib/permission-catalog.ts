@@ -404,6 +404,14 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
     level: "read",
     description: "عرض سجلات العمليات والتدقيق",
   },
+  // الإشعارات
+  {
+    id: "notifications.send",
+    label: "إرسال إشعار للتطبيق",
+    category: "الإشعارات",
+    level: "write",
+    description: "إرسال إشعار إلى طلاب تطبيق الهاتف (دورة، دورة وفصل، أو الكل) وعرض سجل الإشعارات المرسلة",
+  },
 ];
 
 export const ALL_PERMISSION_IDS = Array.from(

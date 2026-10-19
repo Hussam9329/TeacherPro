@@ -104,6 +104,7 @@ model Student {
   gradeSmartNotes GradeSmartNote[]
   gracePeriods    GracePeriod[]
   callReservations CallReservation[]
+  devices         StudentDevice[]
 
   @@index([courseId])
   @@index([status])
@@ -436,6 +437,48 @@ model StudentCallHistoryBackup {
   @@index([migrationRunId])
   @@index([studentId, examId])
   @@index([sourceCallId])
+}
+
+/// A signed-in installation of the student mobile app. The raw token is
+/// returned once to the device; only its sha256 is stored. Revocation keeps
+/// the row for the admin audit list.
+model StudentDevice {
+  id         String    @id @default(cuid())
+  studentId  String
+  tokenHash  String    @unique
+  deviceName String    @default("")
+  platform   String    @default("")
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+  /** Native push token the app reported (APNs on iOS, FCM on Android). */
+  pushToken  String?
+  student    Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+}
+
+/// Sent notifications of the student app (manual sends and the exam-window
+/// push). No relations: the log keeps its names after deletions.
+model StudentPushLog {
+  id          String   @id @default(cuid())
+  kind        String
+  target      String
+  courseId    String?
+  courseName  String   @default("")
+  chapterId   String?
+  chapterName String   @default("")
+  examId      String?  @unique
+  title       String
+  body        String
+  recipients  Int      @default(0)
+  devices     Int      @default(0)
+  sent        Int      @default(0)
+  failed      Int      @default(0)
+  userName    String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 model StudentNote {

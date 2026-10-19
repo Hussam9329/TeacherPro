@@ -334,5 +334,13 @@
   "20261015210000_call_exam_target_recorded": {
     "kind": "expand",
     "checksum": "13662a4ab09227d44bea5404367a3c8026db6e886491d2f93689fe42b438795f"
+  },
+  "20261017190000_student_app_devices": {
+    "kind": "expand",
+    "checksum": "613c52913f053dc4538af8a34f0336dbb2e57c2902351e068adfc53a55262ab1"
+  },
+  "20261017230000_student_app_push": {
+    "kind": "expand",
+    "checksum": "aa4146e79391172023ed5f278b9a943441b9f2b84f6f7211cb646017e23f92c9"
   }
 }

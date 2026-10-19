@@ -64,6 +64,7 @@ const ADMIN_FULL_PERMISSIONS = [
   'follow-up.view', 'follow-up.manage',
   'accounts.view', 'accounts.manage',
   'logs.view',
+  'notifications.send',
 ];
 
 function permissionsJson(): string {

@@ -283,6 +283,8 @@ const SERVER_PERMISSION_EQUIVALENTS: Record<string, string[]> = {
   // It must be granted explicitly — it does NOT alias to students.edit.
   "system.maintenance": [],
   "system.settings": [],
+  // Student-app notifications: granted explicitly, no alias.
+  "notifications.send": [],
 };
 
 export function hasPermission(principal: AuthPrincipal, permission: string): boolean {
