@@ -7,6 +7,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
+  // The same files eslint-config-next registers its plugins for (react-hooks
+  // included); without this the rules below also reached scripts/*.cjs, where
+  // the plugin is unknown, and «npm run lint» stopped before checking anything.
+  files: ["**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
   rules: {
     // TypeScript rules
     "@typescript-eslint/no-explicit-any": "off",
@@ -45,6 +49,22 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-undef": "off",
     "no-unreachable": "error",
     "no-useless-escape": "off",
+  },
+}, {
+  // CommonJS scripts and tests load modules with require().
+  files: ["**/*.cjs"],
+  rules: {
+    "@typescript-eslint/no-require-imports": "off",
+    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "@typescript-eslint/no-explicit-any": "off",
+  },
+}, {
+  // Test scripts load the app's modules into a sandbox: they set `module` and
+  // keep `this` on purpose.
+  files: ["scripts/**"],
+  rules: {
+    "@next/next/no-assign-module-variable": "off",
+    "@typescript-eslint/no-this-alias": "off",
   },
 }, {
   ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts"]

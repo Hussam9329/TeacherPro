@@ -1385,6 +1385,9 @@ export function StudentRegistryView() {
     return null;
   };
 
+  // runLocked only wraps the handler; the refs are read when it runs on save,
+  // never during render, which the refs rule cannot see through.
+  // eslint-disable-next-line react-hooks/refs
   const handleEditSave = runSaveEditLocked(async () => {
     if (editRecoveryReason) {
       editRecoveryPanel.current?.focus();

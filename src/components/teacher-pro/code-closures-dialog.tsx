@@ -78,7 +78,10 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
   const activeRequestRef = useRef<AbortController | null>(null);
   const requestSequenceRef = useRef(0);
   const mutationVersionRef = useRef(0);
-  openRef.current = open;
+  // Kept current after each render (not during it) for the polling callback.
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
 
   const refresh = useCallback(async () => {
     if (!openRef.current || pendingRef.current.size > 0) return;
