@@ -45,8 +45,13 @@
 .tp-scard__avatar svg { inline-size: 1.9rem; block-size: 1.9rem; fill: currentColor; stroke: currentColor; }
 .tp-scard__who { flex: 1 1 auto; display: grid; gap: 0.3rem; min-inline-size: 0; }
 .tp-scard__name {
-  margin: 0; color: var(--foreground); font-size: 1.15rem; font-weight: 800; line-height: 1.35;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal;
+  /* The size follows the name's length and the card's width, so the whole
+     name fits on one line: the room beside the avatar and «⋯», shared by its
+     letters (about 0.66em each in this font). A name too long even at the
+     smallest size wraps rather than losing letters. */
+  margin: 0; color: var(--foreground); font-weight: 800; line-height: 1.35;
+  font-size: clamp(0.7rem, calc((100cqi - 9.75rem) / (var(--name-len, 16) * 0.66)), 1.15rem);
+  overflow-wrap: normal;
 }
 .tp-scard__meta { display: flex; align-items: center; gap: 0.6rem; margin: 0; }
 .tp-scard__status {

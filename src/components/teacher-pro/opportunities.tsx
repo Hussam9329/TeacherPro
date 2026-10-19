@@ -917,7 +917,7 @@ export function OpportunitiesView() {
                     <User />
                   </span>
                   <div className="tp-scard__who">
-                    <h3 id={headingId} className="tp-scard__name" title={student.name}>{student.name}</h3>
+                    <h3 id={headingId} className="tp-scard__name" title={student.name} style={{ "--name-len": student.name.trim().length } as React.CSSProperties}>{student.name}</h3>
                     <p className="tp-scard__meta">
                       <span className="tp-scard__status" data-tone={statusTone}>{student.status}</span>
                       <bdi className="tp-scard__code">{student.code}</bdi>
