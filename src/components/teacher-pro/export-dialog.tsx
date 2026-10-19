@@ -1120,7 +1120,7 @@ const DETAILS_MODAL_CSS = `
   .tp-suggestion:hover, .tp-suggestion.active, .tp-suggestion[aria-selected="true"] { background: #E4E4D9; box-shadow: inset -3px 0 #142B25; }
   .tp-suggestion-name { font-weight: 700; line-height: 1.8; }
   .tp-suggestion-meta { font-size: 13px; color: #586A64; margin-top: 4px; line-height: 1.7; }
-  .tp-dismissed-badge { display: inline-block; margin-inline-start: 6px; border: 1px solid #ECBEB2; border-radius: 999px; padding: 2px 10px; color: #A34645; background: #F7E8DB; font-size: 12px; line-height: 1.8; vertical-align: middle; }
+  .tp-dismissed-badge { display: inline-block; margin-inline-start: 6px; border: 1px solid #E7C3B4; border-radius: 999px; padding: 2px 10px; color: #A1543A; background: #F6E6DF; font-size: 12px; line-height: 1.8; vertical-align: middle; }
   .tp-empty-search { padding: 16px; color: #586A64; }
   .tp-student-card { display: none; max-width: 700px; margin: auto; }
   .tp-student-card.visible { display: block; }
@@ -1158,59 +1158,59 @@ const DETAILS_MODAL_CSS = `
   .tp-mobile-field-label { display: none; }
   .tp-mobile-field-value { min-width: 0; }
   .tp-grades-table tbody tr[class*="tp-grade-row-"] { background: #FFFFFF; }
-  .tp-grades-table tbody tr.tp-grade-row-excused { background: #F0FDF4; }
-  .tp-grades-table tbody tr.tp-grade-row-deducted { background: #FFF1F2; }
-  .tp-grades-table tbody tr.tp-grade-row-dismissed { background: #FEE2E2; }
-  .tp-grades-table tbody tr.tp-grade-row-dismissed > td:first-child { border-inline-start: 4px solid #991B1B; padding-inline-start: 14px; }
-  .tp-grade-deduction .tp-mobile-field-value { color: #9F1239; font-weight: 700; }
-  .tp-grade-dismissal .tp-mobile-field-value { color: #7F1D1D; font-weight: 800; }
-  .tp-grade-no-deduction .tp-mobile-field-value { color: #166534; font-weight: 700; }
+  .tp-grades-table tbody tr.tp-grade-row-excused { background: #EEF6F1; }
+  .tp-grades-table tbody tr.tp-grade-row-deducted { background: #F6E6DF; }
+  .tp-grades-table tbody tr.tp-grade-row-dismissed { background: #F2DCD2; }
+  .tp-grades-table tbody tr.tp-grade-row-dismissed > td:first-child { border-inline-start: 4px solid #A1543A; padding-inline-start: 14px; }
+  .tp-grade-deduction .tp-mobile-field-value { color: #A1543A; font-weight: 700; }
+  .tp-grade-dismissal .tp-mobile-field-value { color: #8A4430; font-weight: 800; }
+  .tp-grade-no-deduction .tp-mobile-field-value { color: #1D6A4B; font-weight: 700; }
   /* One colour per result: passed green, failed amber, deducted red,
      dismissed deep red, excused blue, not counted grey. */
-  .tp-grades-table tbody tr.tp-result-passed { background: #F0FDF4; }
-  .tp-grades-table tbody tr.tp-result-failed { background: #FFFBEB; }
-  .tp-grades-table tbody tr.tp-result-deducted { background: #FFF1F2; }
-  .tp-grades-table tbody tr.tp-result-dismissed { background: #FEE2E2; }
-  .tp-grades-table tbody tr.tp-result-excused { background: #EFF6FF; }
+  .tp-grades-table tbody tr.tp-result-passed { background: #EEF6F1; }
+  .tp-grades-table tbody tr.tp-result-failed { background: #F9F2E1; }
+  .tp-grades-table tbody tr.tp-result-deducted { background: #F6E6DF; }
+  .tp-grades-table tbody tr.tp-result-dismissed { background: #F2DCD2; }
+  .tp-grades-table tbody tr.tp-result-excused { background: #E8F3F1; }
   .tp-grades-table tbody tr.tp-result-neutral { background: #FFFFFF; }
-  .tp-grades-table tbody tr[class*="tp-result-"] > td:first-child { border-inline-start: 4px solid #CBD5E1; padding-inline-start: 14px; }
-  .tp-grades-table tbody tr.tp-result-passed > td:first-child { border-inline-start-color: #16A34A; }
-  .tp-grades-table tbody tr.tp-result-failed > td:first-child { border-inline-start-color: #D97706; }
-  .tp-grades-table tbody tr.tp-result-deducted > td:first-child { border-inline-start-color: #E11D48; }
-  .tp-grades-table tbody tr.tp-result-dismissed > td:first-child { border-inline-start-color: #991B1B; }
-  .tp-grades-table tbody tr.tp-result-excused > td:first-child { border-inline-start-color: #2563EB; }
-  .tp-result-passed .tp-result-effect .tp-mobile-field-value { color: #166534; font-weight: 700; }
-  .tp-result-failed .tp-result-effect .tp-mobile-field-value { color: #92400E; font-weight: 700; }
-  .tp-result-deducted .tp-result-effect .tp-mobile-field-value { color: #9F1239; font-weight: 700; }
-  .tp-result-dismissed .tp-result-effect .tp-mobile-field-value { color: #7F1D1D; font-weight: 800; }
-  .tp-result-excused .tp-result-effect .tp-mobile-field-value { color: #1E40AF; font-weight: 700; }
-  .tp-result-neutral .tp-result-effect .tp-mobile-field-value { color: #475569; font-weight: 600; }
+  .tp-grades-table tbody tr[class*="tp-result-"] > td:first-child { border-inline-start: 4px solid #CDD6D2; padding-inline-start: 14px; }
+  .tp-grades-table tbody tr.tp-result-passed > td:first-child { border-inline-start-color: #2E9A6E; }
+  .tp-grades-table tbody tr.tp-result-failed > td:first-child { border-inline-start-color: #B98A35; }
+  .tp-grades-table tbody tr.tp-result-deducted > td:first-child { border-inline-start-color: #BD6548; }
+  .tp-grades-table tbody tr.tp-result-dismissed > td:first-child { border-inline-start-color: #A1543A; }
+  .tp-grades-table tbody tr.tp-result-excused > td:first-child { border-inline-start-color: #2A7473; }
+  .tp-result-passed .tp-result-effect .tp-mobile-field-value { color: #1D6A4B; font-weight: 700; }
+  .tp-result-failed .tp-result-effect .tp-mobile-field-value { color: #8A5F22; font-weight: 700; }
+  .tp-result-deducted .tp-result-effect .tp-mobile-field-value { color: #A1543A; font-weight: 700; }
+  .tp-result-dismissed .tp-result-effect .tp-mobile-field-value { color: #8A4430; font-weight: 800; }
+  .tp-result-excused .tp-result-effect .tp-mobile-field-value { color: #1F6766; font-weight: 700; }
+  .tp-result-neutral .tp-result-effect .tp-mobile-field-value { color: #586A64; font-weight: 600; }
   .tp-result-pill { display: inline-block; margin-inline-start: 6px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1.9; white-space: nowrap; }
-  .tp-result-pill-passed { background: #DCFCE7; color: #166534; }
-  .tp-result-pill-failed { background: #FEF3C7; color: #92400E; }
-  .tp-result-pill-excused { background: #DBEAFE; color: #1E40AF; }
-  .tp-result-pill-neutral { background: #E2E8F0; color: #475569; }
+  .tp-result-pill-passed { background: #E4F2EA; color: #1D6A4B; }
+  .tp-result-pill-failed { background: #F3E4C3; color: #8A5F22; }
+  .tp-result-pill-excused { background: #DCECEA; color: #1F6766; }
+  .tp-result-pill-neutral { background: #E2E8E5; color: #586A64; }
   .tp-report-generated { margin: 6px 0 0; color: #586A64; font-size: 13px; }
   .tp-grades-table tbody tr.tp-timeline-event { background: #EAF4EF; }
-  .tp-grades-table tbody tr.tp-timeline-event-reset { background: #EDF2F8; }
-  .tp-grades-table tbody tr.tp-timeline-event-deduct { background: #FFF1F2; }
-  .tp-timeline-event > td { border-inline-start: 4px solid #287451; padding: 16px; }
-  .tp-timeline-event-reset > td { border-inline-start-color: #49627E; }
-  .tp-timeline-event-deduct > td { border-inline-start-color: #9F1239; }
+  .tp-grades-table tbody tr.tp-timeline-event-reset { background: #E8F2F0; }
+  .tp-grades-table tbody tr.tp-timeline-event-deduct { background: #F6E6DF; }
+  .tp-timeline-event > td { border-inline-start: 4px solid #23805A; padding: 16px; }
+  .tp-timeline-event-reset > td { border-inline-start-color: #4A6B63; }
+  .tp-timeline-event-deduct > td { border-inline-start-color: #A1543A; }
   .tp-timeline-notice { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 18px; }
   .tp-timeline-notice strong { color: #12372A; font-size: 14px; line-height: 1.9; }
-  .tp-timeline-event-deduct strong { color: #9F1239; }
+  .tp-timeline-event-deduct strong { color: #A1543A; }
   .tp-timeline-notice time { color: #586A64; font-size: 12px; line-height: 1.8; }
   /* Each kind of row has its own colour and icon (as in the staff window):
      bonus violet, admin addition green, admin deduction amber, correction grey,
      exam deduction red, dismissal dark red, chapter start / return blue. */
-  .tp-cat-bonus { --cat: #7C3AED; --cat-ink: #5B21B6; --cat-tint: #F3EEFF; }
-  .tp-cat-admin-add { --cat: #1F8A5B; --cat-ink: #14603F; --cat-tint: #EAF6EF; }
-  .tp-cat-admin-deduct { --cat: #D97706; --cat-ink: #92400E; --cat-tint: #FFF6E5; }
-  .tp-cat-undo { --cat: #64748B; --cat-ink: #475569; --cat-tint: #F1F5F9; }
-  .tp-cat-exam-deduct { --cat: #E11D48; --cat-ink: #9F1239; --cat-tint: #FFF1F2; }
-  .tp-cat-exam-dismissal, .tp-cat-admin-dismissal { --cat: #991B1B; --cat-ink: #7F1D1D; --cat-tint: #FEE2E2; }
-  .tp-cat-chapter-start, .tp-cat-return, .tp-cat-set { --cat: #2563EB; --cat-ink: #1E40AF; --cat-tint: #EDF2FB; }
+  .tp-cat-bonus { --cat: #6F5F8E; --cat-ink: #63557E; --cat-tint: #EFEBF5; }
+  .tp-cat-admin-add { --cat: #2E9A6E; --cat-ink: #1D6A4B; --cat-tint: #EAF6EF; }
+  .tp-cat-admin-deduct { --cat: #B98A35; --cat-ink: #8A5F22; --cat-tint: #F9F0DC; }
+  .tp-cat-undo { --cat: #6F7F79; --cat-ink: #586A64; --cat-tint: #EEF3F1; }
+  .tp-cat-exam-deduct { --cat: #BD6548; --cat-ink: #A1543A; --cat-tint: #F6E6DF; }
+  .tp-cat-exam-dismissal, .tp-cat-admin-dismissal { --cat: #A1543A; --cat-ink: #8A4430; --cat-tint: #F2DCD2; }
+  .tp-cat-chapter-start, .tp-cat-return, .tp-cat-set { --cat: #2A7473; --cat-ink: #1F6766; --cat-tint: #E8F2F0; }
   .tp-grades-table tbody tr[class*="tp-cat-"]:not(.tp-cat-exam) { background: var(--cat-tint); }
   .tp-grades-table tbody tr[class*="tp-cat-"]:not(.tp-cat-exam) > td:first-child { border-inline-start-color: var(--cat); }
   .tp-timeline-event[class*="tp-cat-"] > td { border-inline-start-color: var(--cat); }
@@ -1231,7 +1231,7 @@ const DETAILS_MODAL_CSS = `
   .tp-event-title { display: block; font-weight: 700; color: #142B25; margin-bottom: 4px; }
   .tp-event-exam { display: block; font-size: 12px; color: #586A64; margin-top: 5px; }
   .tp-empty-row td { padding: 20px; color: #586A64; text-align: center; }
-  .tp-error-row td { color: #A34645; }
+  .tp-error-row td { color: #A1543A; }
   @media (forced-colors: active) {
     .tp-search-input:focus, .tp-suggestion.active { outline: 2px solid CanvasText; outline-offset: 2px; }
     .tp-grades-table tbody tr.tp-grade-row-dismissed { outline: 2px solid CanvasText; outline-offset: -2px; }
@@ -1250,23 +1250,23 @@ const DETAILS_MODAL_CSS = `
     .tp-details-table { border: 0; background: transparent; }
     .tp-details-table thead { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .tp-details-table tr { border: 1px solid #E6E3D9; border-radius: 12px; margin-bottom: 12px; padding: 6px 12px; background: #FBF9EB; }
-    .tp-grades-table tbody tr.tp-grade-row-dismissed { border-color: #991B1B; border-inline-start-width: 4px; }
+    .tp-grades-table tbody tr.tp-grade-row-dismissed { border-color: #A1543A; border-inline-start-width: 4px; }
     .tp-grades-table tbody tr.tp-grade-row-dismissed > td:first-child { border-inline-start: 0; padding-inline-start: 0; }
     .tp-grades-table tbody tr[class*="tp-result-"] { border-inline-start-width: 4px; }
-    .tp-grades-table tbody tr.tp-result-passed { border-inline-start-color: #16A34A; }
-    .tp-grades-table tbody tr.tp-result-failed { border-inline-start-color: #D97706; }
-    .tp-grades-table tbody tr.tp-result-deducted { border-inline-start-color: #E11D48; }
-    .tp-grades-table tbody tr.tp-result-dismissed { border-color: #991B1B; }
-    .tp-grades-table tbody tr.tp-result-excused { border-inline-start-color: #2563EB; }
+    .tp-grades-table tbody tr.tp-result-passed { border-inline-start-color: #2E9A6E; }
+    .tp-grades-table tbody tr.tp-result-failed { border-inline-start-color: #B98A35; }
+    .tp-grades-table tbody tr.tp-result-deducted { border-inline-start-color: #BD6548; }
+    .tp-grades-table tbody tr.tp-result-dismissed { border-color: #A1543A; }
+    .tp-grades-table tbody tr.tp-result-excused { border-inline-start-color: #2A7473; }
     .tp-grades-table tbody tr[class*="tp-result-"] > td:first-child { border-inline-start: 0; padding-inline-start: 0; }
     .tp-details-table tr:not(.tp-empty-row) td { display: grid; grid-template-columns: minmax(96px, 38%) minmax(0, 1fr); gap: 10px; width: 100%; min-width: 0; min-height: 44px; padding: 10px 0; border: 0; border-bottom: 1px solid #E6E3D9; }
     .tp-mobile-field-label { display: block; color: #586A64; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
     .tp-mobile-field-value { display: block; overflow-wrap: anywhere; }
     .tp-details-table tr:last-child td { border-bottom: 1px solid #E6E3D9; }
     .tp-details-table tr td:last-child { border-bottom: 0; }
-    .tp-details-table tr.tp-timeline-event { padding: 12px 14px; border-inline-start: 4px solid #287451; }
-    .tp-details-table tr.tp-timeline-event-reset { border-inline-start-color: #49627E; }
-    .tp-details-table tr.tp-timeline-event-deduct { border-inline-start-color: #9F1239; }
+    .tp-details-table tr.tp-timeline-event { padding: 12px 14px; border-inline-start: 4px solid #23805A; }
+    .tp-details-table tr.tp-timeline-event-reset { border-inline-start-color: #4A6B63; }
+    .tp-details-table tr.tp-timeline-event-deduct { border-inline-start-color: #A1543A; }
     .tp-details-table tr.tp-timeline-event > td { display: block; min-height: 0; padding: 0; border: 0; }
     .tp-timeline-notice { display: grid; gap: 5px; }
   }

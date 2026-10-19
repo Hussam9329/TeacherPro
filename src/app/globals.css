@@ -123,10 +123,10 @@
 /* Tailwind's shadow scale, cast in Deep Dark (#0A1A17) instead of black. */
 @theme {
   /* Night signal colours for surfaces that stay dark in both themes (sidebar). */
-  --color-night-success: #3dd28f;
-  --color-night-warning: #f7be55;
-  --color-night-danger: #f2675e;
-  --color-night-info: #5fa8f0;
+  --color-night-success: #5cc796;
+  --color-night-warning: #e2bb6a;
+  --color-night-danger: #e5967b;
+  --color-night-info: #6dbcb7;
   --shadow-2xs: 0 1px rgb(10 26 23 / 0.05);
   --shadow-xs: 0 1px 2px 0 rgb(10 26 23 / 0.06);
   --shadow-sm: 0 1px 3px 0 rgb(10 26 23 / 0.1), 0 1px 2px -1px rgb(10 26 23 / 0.1);
@@ -157,7 +157,7 @@
   --tp-bg: #fbf9eb;      /* Background   */
   --tp-ink: #142b25;     /* Primary Dark (green-black) */
   --tp-muted: #586a64;   /* Secondary    */
-  --tp-accent: #d15049;  /* Accent       */
+  --tp-accent: #bd6548;  /* Accent (terracotta) */
   --tp-soft: #d4a95a;    /* Soft Accent (gold) */
   --tp-line: #e6e3d9;    /* Border       */
   --tp-deep: #0a1a17;    /* Deep Dark    */
@@ -174,12 +174,16 @@
 
   /* Signal colours: statuses only (lights, badges, banners, progress).
      Surfaces, text and brand stay on the seven palette colours above.
-     vivid = dots, bars, strips · ink = readable text · fill = solid chip with text */
-  --sig-success: #1fa971;      --sig-success-ink: #136b47;  --sig-success-fill: #157a51;
-  --sig-warning: #f2a93b;      --sig-warning-ink: #8f570c;  --sig-warning-fill: #f2a93b;
-  --sig-danger: #d15049;       --sig-danger-ink: #b3362f;   --sig-danger-fill: #c23b34;
-  --sig-info: #2e86de;         --sig-info-ink: #1f66ad;     --sig-info-fill: #1f6fbf;
-  --sig-grace: #8b5cf6;        --sig-grace-ink: #6d28d9;    --sig-grace-fill: #7c3aed;
+     vivid = dots, bars, strips · ink = readable text · fill = solid chip with text
+     Calm tones drawn to the green-black: emerald (good), the logo's gold
+     (warning), terracotta (danger), teal (info), dusty violet (grace). */
+  --sig-success: #2e9a6e;      --sig-success-ink: #1d6a4b;  --sig-success-fill: #23805a;
+  --sig-warning: #d2a64e;      --sig-warning-ink: #8a5f22;  --sig-warning-fill: #d2a64e;
+  --sig-danger: #cf7a5c;       --sig-danger-ink: #a1543a;   --sig-danger-fill: #b05a3e;
+  --sig-info: #3a8c8a;         --sig-info-ink: #1f6766;     --sig-info-fill: #2a7473;
+  --sig-grace: #8d7bab;        --sig-grace-ink: #63557e;    --sig-grace-fill: #6f5f8e;
+  /* Archived: sage grey. */
+  --sig-archived: #9ca59f;
 }
 .dark {
   /* At night the rail sits a step above the green-black page. */
@@ -187,11 +191,13 @@
   --tp-rail-top: #183c33;
   --tp-rail-bottom: #12302a;
   --tp-gold-ink: #e2b965;
-  --sig-success: #3dd28f;      --sig-success-ink: #3dd28f;  --sig-success-fill: #3dd28f;
-  --sig-warning: #f7be55;      --sig-warning-ink: #f7be55;  --sig-warning-fill: #f7be55;
-  --sig-danger: #f2675e;       --sig-danger-ink: #f2675e;   --sig-danger-fill: #f2675e;
-  --sig-info: #5fa8f0;         --sig-info-ink: #5fa8f0;     --sig-info-fill: #5fa8f0;
-  --sig-grace: #a78bfa;        --sig-grace-ink: #a78bfa;    --sig-grace-fill: #a78bfa;
+  --tp-accent: #e5967b;
+  --sig-success: #5cc796;      --sig-success-ink: #82d6ae;  --sig-success-fill: #5cc796;
+  --sig-warning: #e2bb6a;      --sig-warning-ink: #e9c87f;  --sig-warning-fill: #e2bb6a;
+  --sig-danger: #e5967b;       --sig-danger-ink: #efab93;   --sig-danger-fill: #e5967b;
+  --sig-info: #6dbcb7;         --sig-info-ink: #8fd0cb;     --sig-info-fill: #6dbcb7;
+  --sig-grace: #b3a3cf;        --sig-grace-ink: #c4b7dc;    --sig-grace-fill: #b3a3cf;
+  --sig-archived: #8f9894;
 }
 
 :root {
@@ -224,7 +230,7 @@
   --chart-4: var(--sig-danger);
   --chart-5: var(--tp-soft);
   /* Archived students: a quiet grey (ring part and chart line). */
-  --chart-archived: #9aa09d;
+  --chart-archived: var(--sig-archived);
   --sidebar: var(--tp-deep);
   --sidebar-foreground: var(--tp-bg);
   --sidebar-primary: var(--tp-bg);
@@ -302,7 +308,7 @@
   --chart-3: var(--sig-warning);
   --chart-4: var(--sig-danger);
   --chart-5: var(--tp-soft);
-  --chart-archived: #8f9894;
+  --chart-archived: var(--sig-archived);
   /* The rail is a step lighter than the night page, so the open tab (page
      colour) still stands out of it. */
   --sidebar: var(--tp-ink);
@@ -3234,50 +3240,6 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
 [data-tone="danger"] { --tone: var(--status-danger-vivid); --tone-ink: var(--status-danger-fg); --tone-tint: var(--status-danger-bg); --tone-line: var(--status-danger-border); --tone-solid: var(--status-danger-solid); --tone-on: var(--status-danger-on); }
 [data-tone="info"] { --tone: var(--status-info-vivid); --tone-ink: var(--status-info-fg); --tone-tint: var(--status-info-bg); --tone-line: var(--status-info-border); --tone-solid: var(--status-info-solid); --tone-on: var(--status-info-on); }
 
-/* ═══ «لوحة النظام»: a calm palette that sits with the green-black ═══
-   The same meanings, in quieter colours drawn to the brand: emerald for
-   active, terracotta for dismissed, teal for registrations and the total,
-   the logo's gold for warnings, sage grey for archived. Dashboard only. */
-.tp-dashboard {
-  --dash-green: #2e9a6e;   --dash-green-ink: #1d6a4b;   --dash-green-solid: #23805a;
-  --dash-coral: #cf7a5c;   --dash-coral-ink: #a1543a;   --dash-coral-solid: #bd6548;
-  --dash-teal: #3a8c8a;    --dash-teal-ink: #1f6766;    --dash-teal-solid: #2a7473;
-  --dash-gold: #d2a64e;    --dash-gold-ink: #8a5f22;    --dash-gold-solid: #b98a35;
-  --dash-sage: #9ca59f;
-  --dash-on: var(--tp-bg);
-  --dash-tint-mix: 13%;
-  --dash-line-mix: 38%;
-  /* The chart and the ring read the same colours. */
-  --chart-1: var(--dash-teal);
-  --chart-2: var(--dash-green);
-  --chart-4: var(--dash-coral);
-  --chart-archived: var(--dash-sage);
-}
-.dark .tp-dashboard {
-  --dash-green: #5cc796;   --dash-green-ink: #82d6ae;   --dash-green-solid: #5cc796;
-  --dash-coral: #e5967b;   --dash-coral-ink: #efab93;   --dash-coral-solid: #e5967b;
-  --dash-teal: #6dbcb7;    --dash-teal-ink: #8fd0cb;    --dash-teal-solid: #6dbcb7;
-  --dash-gold: #e2bb6a;    --dash-gold-ink: #e9c87f;    --dash-gold-solid: #e2bb6a;
-  --dash-sage: #8f9894;
-  --dash-on: var(--tp-deep);
-  --dash-tint-mix: 16%;
-  --dash-line-mix: 42%;
-}
-.tp-dashboard [data-tone="success"] { --tone: var(--dash-green); --tone-ink: var(--dash-green-ink); --tone-solid: var(--dash-green-solid); }
-.tp-dashboard [data-tone="danger"] { --tone: var(--dash-coral); --tone-ink: var(--dash-coral-ink); --tone-solid: var(--dash-coral-solid); }
-.tp-dashboard [data-tone="info"] { --tone: var(--dash-teal); --tone-ink: var(--dash-teal-ink); --tone-solid: var(--dash-teal-solid); }
-.tp-dashboard [data-tone="warning"] { --tone: var(--dash-gold); --tone-ink: var(--dash-gold-ink); --tone-solid: var(--dash-gold-solid); }
-.tp-dashboard [data-tone] {
-  --tone-tint: color-mix(in srgb, var(--tone) var(--dash-tint-mix), var(--card));
-  --tone-line: color-mix(in srgb, var(--tone) var(--dash-line-mix), var(--card));
-  --tone-on: var(--dash-on);
-}
-/* Waiting counts on the shortcuts: terracotta, not alarm red. */
-.tp-dashboard .tp-dashboard__alert { background: var(--dash-coral-solid); color: var(--dash-on); box-shadow: 0 0 0 2px var(--card), 0 6px 14px -6px var(--dash-coral); }
-.tp-dashboard .tp-dashboard__alert[data-alert-tone="warning"] { background: var(--dash-gold-solid); box-shadow: 0 0 0 2px var(--card), 0 6px 14px -6px var(--dash-gold); }
-.tp-dashboard .tp-dashboard__alert[data-alert-tone="info"] { background: var(--dash-teal-solid); box-shadow: 0 0 0 2px var(--card), 0 6px 14px -6px var(--dash-teal); }
-/* The active-count axis follows its line. */
-.tp-dashboard .tp-trend__tick--band { fill: var(--dash-green-ink); }
 
 /* Dashboard statistics: solid glowing icon, coloured number, a wash of colour. */
 .tp-dashboard__stat[data-tone] {
