@@ -204,14 +204,14 @@ export function whatsappLink(phone: string | null | undefined): string {
 
 export function telegramLink(telegram: string): string {
   const username = normalizeTelegramIdentifier(telegram).replace(/^@+/, "");
-  // المعرفات الرقمية لا تصلح لروابط تيليجرام — تفتح فقط اليوزرات الحرفية.
+  // المعرفات الرقمية لا تصلح لروابط تليگرام — تفتح فقط اليوزرات الحرفية.
   if (!username || /^\d+$/.test(username)) return "";
-  // فتح المحادثة داخل تطبيق تيليجرام مباشرة بدل نسخة الويب.
+  // فتح المحادثة داخل تطبيق تليگرام مباشرة بدل نسخة الويب.
   return `tg://resolve?domain=${encodeURIComponent(username)}`;
 }
 
 export type TelegramHandleInfo = {
-  /** اسم الحقل المعروض: «يوزر تيليجرام» أو «معرف تيليجرام». */
+  /** اسم الحقل المعروض: «يوزر تليگرام» أو «معرف تليگرام». */
   label: string;
   /** القيمة المعروضة بدون @. */
   value: string;
@@ -235,17 +235,17 @@ export function describeTelegramHandle(student: {
     .replace(/^@+/, "");
   if (username) {
     return {
-      label: "يوزر تيليجرام",
+      label: "يوزر تليگرام",
       value: username,
       href: telegramLink(username),
     };
   }
   if (telegram) {
     if (/^\d+$/.test(telegram)) {
-      return { label: "معرف تيليجرام", value: telegram, href: "" };
+      return { label: "معرف تليگرام", value: telegram, href: "" };
     }
     return {
-      label: "يوزر تيليجرام",
+      label: "يوزر تليگرام",
       value: telegram,
       href: telegramLink(telegram),
     };

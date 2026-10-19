@@ -355,7 +355,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
     window.open(mzCodeActionUrl(action, phone, student.name), "_blank", "noopener,noreferrer");
     if (action === "close") setPlatformOpened((current) => new Set(current).add(student.id));
     if (!phone) {
-      toast.error(`لا يوجد رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه بالاسم في المنصة.`);
+      toast.error(`ماكو رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه بالاسم في المنصة.`);
       return;
     }
     void copying.then((copied) => {
@@ -399,7 +399,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 aria-label="بحث في ملاحظات المكالمات"
-                placeholder="ابحث بالاسم أو الكود أو التيليجرام أو نص الملاحظة"
+                placeholder="ابحث بالاسم أو الكود أو التليگرام أو نص الملاحظة"
               />
             </div>
             <Button
@@ -510,8 +510,8 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                 title={pendingIds.size > 0
                   ? "جاري الحفظ..."
                   : hasFilters
-                    ? "لا توجد ملاحظات تطابق البحث والفلاتر"
-                    : view === "archive" ? "الأرشيف فارغ: ما أكو ملاحظات منجزة" : "لا توجد ملاحظات معلّقة"}
+                    ? "ماكو ملاحظات تطابق البحث والفلاتر"
+                    : view === "archive" ? "الأرشيف فارغ: ما أكو ملاحظات منجزة" : "ماكو ملاحظات معلّقة"}
               />
             ) : (
               <ul className="tp-notes__cards">
@@ -655,7 +655,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                               dir="ltr"
                               className="tp-modal__tg tp-notes__tg"
                               onClick={(event) => copyGuardianMessage(student.name, event.currentTarget)}
-                              aria-label={`فتح محادثة ${student.name} في تيليجرام ورسالة رقم ولي الأمر مكتوبة بيها`}
+                              aria-label={`فتح محادثة ${student.name} في تليگرام ورسالة رقم ولي الأمر مكتوبة بيها`}
                               title="يفتح المحادثة ورسالة «رقم ولي الأمر ما يشتغل» مكتوبة بيها — اضغط إرسال"
                             >
                               <Send className="size-3.5" aria-hidden="true" />

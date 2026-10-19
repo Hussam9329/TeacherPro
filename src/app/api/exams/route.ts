@@ -282,7 +282,7 @@ export async function POST(req: NextRequest) {
     const telegramOpenAt = parseBaghdadDateTime(String(body.telegramOpenAt));
     const telegramCloseAt = parseBaghdadDateTime(String(body.telegramCloseAt));
     if (!telegramOpenAt || !telegramCloseAt) {
-      return validationError('نافذة تسليم تيليجرام غير صحيحة');
+      return validationError('نافذة تسليم تليگرام غير صحيحة');
     }
     const requestedActive = body.active === undefined ? true : parseBoolean(body.active);
     const effectiveStoredActive = Boolean(scheduledActivateAt && scheduledActivateAt > new Date()) ? false : requestedActive;

@@ -23,7 +23,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "@/lib/user-toast";
-import { formatAppDate, toLatinDigits } from "@/lib/format";
+import { formatAppDate, toLatinDigits, arabicCount, studentCount } from "@/lib/format";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { DEFAULT_MANUAL_RESTORATION_REASON, manualRestorationAmount } from "@/lib/manual-restoration";
@@ -45,7 +45,7 @@ import { BookOpen, Building2, CalendarDays, ChevronDown, ChevronRight, CircleMin
 import "./student-card.css";
 
 import { FormDialogHero } from "./form-dialog";
-import { EmptyState, LoadingState } from "./ui-kit";
+import { EmptyState, ErrorState, LoadingState, ListPagination } from "./ui-kit";
 import { ListToolbar } from "./list-toolbar";
 import { CourseCheckboxFilter, courseFilterLabel, courseFilterParam, courseFilterSummary } from "./course-checkbox-filter";
 import { RowActionsMenu } from "./row-actions-menu";
@@ -79,8 +79,8 @@ const opportunityExportColumns: ExportColumn<any>[] = [
     defaultSelected: false,
   },
   { key: "phone", label: "الهاتف", value: (s) => s.phone || "", defaultSelected: false },
-  { key: "telegram", label: "التيليجرام", value: (s) => s.telegram || "", defaultSelected: false },
-  { key: "username", label: "يوزر تيليجرام", value: (s) => s.username || "", defaultSelected: false },
+  { key: "telegram", label: "التليگرام", value: (s) => s.telegram || "", defaultSelected: false },
+  { key: "username", label: "يوزر تليگرام", value: (s) => s.username || "", defaultSelected: false },
 ];
 
 type OpportunityStudent = Student & {
@@ -124,6 +124,8 @@ export function OpportunitiesView() {
   const [serverStudents, setServerStudents] = useState<OpportunityStudent[]>([]);
   const [serverTotalPages, setServerTotalPages] = useState(1);
   const [studentsLoading, setStudentsLoading] = useState(false);
+  // A failed load is shown as such, not as «لا يوجد طلاب مطابقون».
+  const [studentsError, setStudentsError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const syncKey = useTeacherProSyncKey([
     "opportunities",
@@ -195,7 +197,10 @@ export function OpportunitiesView() {
   useEffect(() => {
     let cancelled = false;
     const silent = isBackgroundSync();
-    if (!silent) setStudentsLoading(true);
+    if (!silent) {
+      setStudentsLoading(true);
+      setStudentsError("");
+    }
     studentApi
       .list({
         page,
@@ -218,7 +223,7 @@ export function OpportunitiesView() {
         if (!cancelled && !silent) {
           setServerStudents([]);
           setServerTotalPages(1);
-          toast.error("تعذر تحميل طلاب الفرص.");
+          setStudentsError("تعذر تحميل طلاب الفرص.");
         }
       })
       .finally(() => {
@@ -443,9 +448,9 @@ export function OpportunitiesView() {
     const username = String(telegram || "")
       .trim()
       .replace(/^@+/, "");
-    // المعرفات الرقمية لا تصلح لروابط تيليجرام.
+    // المعرفات الرقمية لا تصلح لروابط تليگرام.
     if (!username || /^\d+$/.test(username)) return "#";
-    // فتح المحادثة داخل تطبيق تيليجرام مباشرة بدل نسخة الويب.
+    // فتح المحادثة داخل تطبيق تليگرام مباشرة بدل نسخة الويب.
     return `tg://resolve?domain=${encodeURIComponent(username)}`;
   };
 
@@ -571,7 +576,7 @@ export function OpportunitiesView() {
 
   const handleBulkAction = runActionLocked(async () => {
     if (!bulkTargetCount) {
-      toast.error("لا يوجد طلاب مؤهلون بعد تطبيق الفلاتر والاستثناءات الحالية");
+      toast.error("ماكو طلاب مؤهلون بعد تطبيق الفلاتر والاستثناءات الحالية");
       return;
     }
     if (!bulkReason.trim()) {
@@ -630,7 +635,7 @@ export function OpportunitiesView() {
     }
 
     toast.success(
-      `${bulkActionDialog.type === "deduct" ? "تم خصم" : "تمت إضافة"} ${normalizedAmount} فرصة لـ ${affected} طالب من جميع المطابقين للفلاتر${returned ? `، منهم ${returned} مفصول رجع نشطاً` : ""}${bulkSkippedCount ? `، وتم استثناء ${bulkSkippedCount}` : ""}`,
+      `${bulkActionDialog.type === "deduct" ? "تم خصم" : "تمت إضافة"} ${arabicCount(normalizedAmount, "فرصة وحدة", "فرصتين", "فرص", "فرصة")} لـ ${studentCount(affected)} من جميع المطابقين للفلاتر${returned ? `، منهم ${returned} مفصول رجع نشطاً` : ""}${bulkSkippedCount ? `، وتم استثناء ${bulkSkippedCount}` : ""}`,
     );
     setBulkActionDialog({ type: "add", open: false });
     setBulkReason("");
@@ -666,7 +671,7 @@ export function OpportunitiesView() {
    * أو سجل تدقيق — لتبقى أحجام ملفات HTML صغيرة وقابلة للفتح أوفلاين.
    *
    * التحويل نفسه (buildStudentDetailsFromProfileLog) يُستخدم أيضاً من زر
-   * تيليجرام في إدارة المفصولين حتى يبقى مصدر الرسالة ومصدر ملف HTML
+   * تليگرام في إدارة المفصولين حتى يبقى مصدر الرسالة ومصدر ملف HTML
    * واحداً حرفياً؛ أي تعديل مستقبلي على التحويل يطبّق على المسارين معاً.
    *
    * يُستدعى فقط عند تصدير HTML لربط زر "عرض التفاصيل" في كل صف.
@@ -767,7 +772,7 @@ export function OpportunitiesView() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            placeholder="ابحث بالاسم أو الكود أو الهاتف أو يوزر التيليجرام أو المدرسة"
+            placeholder="ابحث بالاسم أو الكود أو الهاتف أو يوزر التليگرام أو المدرسة"
           />
         }
         actions={
@@ -892,8 +897,10 @@ export function OpportunitiesView() {
 
       {studentsLoading ? (
         <LoadingState title="جاري تحميل الطلاب..." />
+      ) : studentsError ? (
+        <ErrorState message={studentsError} onRetry={() => setRefreshKey((key) => key + 1)} />
       ) : paged.length === 0 ? (
-        <EmptyState title="لا يوجد طلاب مطابقون للفلاتر الحالية" />
+        <EmptyState title="ماكو طلاب مطابقون للفلاتر الحالية" />
       ) : (
         <ul className="tp-scards" aria-label="فرص الطلاب">
           {paged.map((student) => {
@@ -1055,7 +1062,7 @@ export function OpportunitiesView() {
                       </a>
                     ) : null}
                     {telegramHandle ? (
-                      <a className="tp-scard__round" href={telegramLink(telegramHandle)} target="_blank" rel="noopener noreferrer" aria-label={`تيليجرام ${telegramHandle}`} title={telegramHandle.startsWith("@") ? telegramHandle : `@${telegramHandle}`}>
+                      <a className="tp-scard__round" href={telegramLink(telegramHandle)} target="_blank" rel="noopener noreferrer" aria-label={`تليگرام ${telegramHandle}`} title={telegramHandle.startsWith("@") ? telegramHandle : `@${telegramHandle}`}>
                         <Send aria-hidden="true" />
                       </a>
                     ) : null}
@@ -1079,30 +1086,14 @@ export function OpportunitiesView() {
         </ul>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            السابق
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            صفحة {page} من {totalPages} · المعروض في الصفحة: {paged.length}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            التالي
-          </Button>
-        </div>
-      )}
+      <ListPagination
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        disabled={studentsLoading}
+        label="صفحات فرص الطلاب"
+        summary={<>صفحة <b>{page}</b> من <b>{totalPages}</b> · المعروض في الصفحة: <b>{paged.length}</b></>}
+      />
 
       {/* Recent Opportunity Logs */}
       <Card>
@@ -1112,7 +1103,7 @@ export function OpportunitiesView() {
         <CardContent>
           <div className="space-y-2 max-h-80 overflow-y-auto">
             {opportunityLogs.length === 0 ? (
-              <EmptyState compact icon={Target} title="لا توجد حركات" />
+              <EmptyState compact icon={Target} title="ماكو حركات" />
             ) : (
               opportunityLogs.slice(0, 20).map((log) => {
                 const student = students.find((s) => s.id === log.studentId);
@@ -1230,7 +1221,7 @@ export function OpportunitiesView() {
               {detailsLoading && !detailsData ? (
                 <LoadingState title="جاري تحميل سجل الطالب..." />
               ) : !detailsView || detailsView.rows.length === 0 ? (
-                <EmptyState compact icon={Target} title="لا توجد امتحانات أو حركات لعرضها" />
+                <EmptyState compact icon={Target} title="ماكو امتحانات أو حركات لعرضها" />
               ) : (
                 <>
                   <h3 className="tp-opp-report__title">

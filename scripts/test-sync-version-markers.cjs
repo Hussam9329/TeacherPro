@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), Module = require('node:module');
 const ts = require('typescript');
 const { PGlite } = require('@electric-sql/pglite');
+const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
 const root = process.cwd(), resolve = Module._resolveFilename, load = Module._load, mocks = new Map();
 Module._resolveFilename = function(r,p,...a) { return resolve.call(this,r.startsWith('@/') ? path.join(root,'src',r.slice(2)) : r,p,...a); };
 Module._load = function(r,p,...a) { return mocks.has(r) ? mocks.get(r) : load.call(this,r,p,...a); };
@@ -27,7 +28,7 @@ const WATCHED = {
   const policies = JSON.parse(fs.readFileSync(path.join(root, 'prisma/deployment-migration-policy.json'), 'utf8'));
   validatePendingMigration(migrationName, committedSql, policies[migrationName], true);
 
-  const pg = new PGlite();
+  const pg = new PGlite({ extensions: { pg_trgm } });
   await pg.exec(Object.keys(WATCHED).map(t => `CREATE TABLE "${t}"(id text PRIMARY KEY, v int, "updatedAt" timestamp(3) DEFAULT CURRENT_TIMESTAMP);`).join('\n'));
   await pg.exec(fs.readFileSync(path.join(root, 'prisma/migrations/20261019120000_sync_change_markers/migration.sql'), 'utf8'));
 

@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
 const { PGlite } = require('@electric-sql/pglite');
+const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
 const { Prisma } = require('@prisma/client');
 
 require.extensions['.ts'] = (module, filename) => module._compile(
@@ -15,7 +16,7 @@ require.extensions['.ts'] = (module, filename) => module._compile(
 const { persistAcademicStudentResults } = require('../src/lib/academic-student-writeback-server.ts');
 
 (async () => {
-  const pg = new PGlite();
+  const pg = new PGlite({ extensions: { pg_trgm } });
   try {
     for (const directory of fs.readdirSync('prisma/migrations').sort()) {
       const filename = path.join('prisma/migrations', directory, 'migration.sql');

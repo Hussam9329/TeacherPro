@@ -76,7 +76,7 @@ import {
 } from "@/components/ui/select";
 import { editableGradeNote, isAutomaticGradeNote, withInternalGradeNotePrefix } from "@/lib/grade-note-banners";
 import { toast } from "@/lib/user-toast";
-import { formatAppDate, toLatinDigits } from "@/lib/format";
+import { formatAppDate, toLatinDigits, studentCount } from "@/lib/format";
 import { normalizeForSearch } from "@/lib/validation";
 import { baghdadTodayKey, formatBaghdadDateTime } from "@/lib/baghdad-time";
 import { GradeSmartNotesPanel } from "@/components/teacher-pro/grade-smart-notes-panel";
@@ -197,7 +197,7 @@ const GradeEntrySearchInput = React.memo(function GradeEntrySearchInput({
           if (focused) event.preventDefault();
         }
       }}
-      placeholder="اسم / كود / تيليجرام / محافظة"
+      placeholder="اسم / كود / تليگرام / محافظة"
       autoComplete="off"
       className="h-10"
     />
@@ -1938,13 +1938,13 @@ export function GradeEntryView() {
   const handleClearAbsentGrades = runClearAbsentGradesLocked(async () => {
     if (!selectedExam) return;
     if (absentGradesForSelectedExam.length === 0) {
-      toast.info("لا توجد حالات غياب قابلة للإلغاء للطلاب النشطين");
+      toast.info("ماكو حالات غياب قابلة للإلغاء للطلاب النشطين");
       return;
     }
 
     setPendingConfirm({
       title: "إلغاء حالات الغياب",
-      description: `سيتم إلغاء حالة غائب من ${absentGradesForSelectedExam.length} طالب نشط في امتحان ${selectedExam.name} وإرجاعهم كأن الدرجة لم تُسجل لهم. تبقى سجلات المفصولين والمؤرشفين والسجلات المحمية محفوظة. هل تريد المتابعة؟`,
+      description: `سيتم إلغاء حالة غائب من ${studentCount(absentGradesForSelectedExam.length, { one: "نشط", two: "نشطين", few: "نشطين" })} في امتحان ${selectedExam.name} وإرجاعهم كأن الدرجة لم تُسجل لهم. تبقى سجلات المفصولين والمؤرشفين والسجلات المحمية محفوظة. هل تريد المتابعة؟`,
       confirmLabel: "إلغاء الغياب",
       destructive: true,
       onConfirm: () => {
@@ -2020,16 +2020,16 @@ export function GradeEntryView() {
         return next;
       });
       emitGradeEntryServerSync("grade-entry-clear-absent");
-      toast.success(`تم إلغاء حالة غائب من ${removedCount} طالب`);
+      toast.success(`تم إلغاء حالة غائب من ${studentCount(removedCount)}`);
     } else {
-      toast.info("لا توجد حالات غياب قابلة للإلغاء للطلاب النشطين");
+      toast.info("ماكو حالات غياب قابلة للإلغاء للطلاب النشطين");
     }
   };
 
   const handleMarkAllMissingAsAbsent = () => {
     if (!selectedExam) return;
     if (missingExamStudentsBeforeProtection.length === 0) {
-      toast.info("لا يوجد طلاب بدون حالة مسجلة لهذا الامتحان");
+      toast.info("ماكو طلاب بدون حالة مسجلة لهذا الامتحان");
       return;
     }
     setPendingConfirm({
@@ -2056,7 +2056,7 @@ export function GradeEntryView() {
     }
 
     setMarkingAllMissingAbsent(true);
-    toast.info(`جارٍ تسجيل حالة ${targetStudents.length} طالب تلقائياً...`);
+    toast.info(`جارٍ تسجيل حالة ${studentCount(targetStudents.length)} تلقائياً...`);
 
     setSavingRows((prev) => {
       const next = { ...prev };
@@ -2564,7 +2564,7 @@ export function GradeEntryView() {
                 </span>
               ) : (
                 <span className="tp-exam-bar__fact">
-                  درجة الفصل <strong>{selectedExam.dismissalGrade ?? "لا يوجد"}</strong>
+                  درجة الفصل <strong>{selectedExam.dismissalGrade ?? "ماكو"}</strong>
                 </span>
               )}
               <span
@@ -2826,7 +2826,7 @@ export function GradeEntryView() {
       )}
 
       {selectedExam && (
-        <section className="tp-grade-sheet" aria-label={`ورقة إدخال الدرجة - ${examStudents.length} طالب`}>
+        <section className="tp-grade-sheet" aria-label={`ورقة إدخال الدرجة - ${studentCount(examStudents.length)}`}>
             {entrySheetLoading && (
               <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary">
                 جاري تحميل ورقة إدخال الدرجات...
@@ -2859,7 +2859,7 @@ export function GradeEntryView() {
                     icon={entrySheetError ? AlertCircle : SearchX}
                     title={entrySheetError
                       ? "تعذر تحميل طلاب هذا الامتحان."
-                      : "لا يوجد طلاب مطابقون للفلاتر أو للدورات المربوطة بفصل نشط."}
+                      : "ماكو طلاب مطابقون للفلاتر أو للدورات المربوطة بفصل نشط."}
                   />
                 )
               ) : (

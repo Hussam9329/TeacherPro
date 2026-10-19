@@ -661,7 +661,7 @@ check("البحث بلا نتائج يغلق listbox ويعلن النتيجة �
   assert.equal(dom.elements.tpSuggestions.innerHTML, "");
   assert.equal(
     dom.elements.tpSearchHint.textContent,
-    "لا يوجد طلاب مطابقون لهذا البحث.",
+    "ماكو طلاب مطابقون لهذا البحث.",
   );
 });
 

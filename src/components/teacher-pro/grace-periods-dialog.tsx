@@ -212,12 +212,12 @@ function StudentFacts({ name, telegram, username, createdAt }: StudentFactsProps
       <div className="tp-grace-card__fact">
         <span className="tp-grace-card__fact-label"><MessageCircle aria-hidden="true" />التواصل</span>
         {handle.href ? (
-          <a className="tp-grace-card__tg" href={handle.href} dir="ltr" aria-label={`فتح محادثة تيليجرام مع ${name}`}>
+          <a className="tp-grace-card__tg" href={handle.href} dir="ltr" aria-label={`فتح محادثة تليگرام مع ${name}`}>
             <Send aria-hidden="true" />@{handle.value}
           </a>
         ) : (
           <span className="tp-grace-card__tg" data-plain="true" dir={handle.value ? "ltr" : undefined}>
-            <Send aria-hidden="true" />{handle.value || "بدون تيليجرام"}
+            <Send aria-hidden="true" />{handle.value || "بدون تليگرام"}
           </span>
         )}
       </div>
@@ -671,7 +671,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                 {searchError && <p role="alert" className="tp-modal__error"><AlertCircle aria-hidden="true" />{searchError}</p>}
                 {loadError && <p role="alert" className="tp-modal__error"><AlertCircle aria-hidden="true" />{loadError}</p>}
                 {trimmedQuery.length >= 2 && !searching && results.length === 0 && !searchError && (
-                  <p className="tp-modal__muted">لا يوجد طالب يطابق البحث.</p>
+                  <p className="tp-modal__muted">ماكو طالب يطابق البحث.</p>
                 )}
                 {results.length > 0 && (
                   <div className="tp-modal__section">
@@ -744,10 +744,10 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                   <EmptyState
                     icon={CalendarClock}
                     title={listFilter === "current"
-                      ? "لا توجد فترات سماح مستمرة."
+                      ? "ماكو فترات سماح مستمرة."
                       : listFilter === "past"
-                        ? "لا توجد فترات سماح منتهية."
-                        : "لا توجد فترات سماح."}
+                        ? "ماكو فترات سماح منتهية."
+                        : "ماكو فترات سماح."}
                   />
                 )}
                 {list && list.periods.length > 0 && (
@@ -844,7 +844,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                   <EmptyState
                     compact
                     icon={CalendarClock}
-                    title="لا توجد فترة سماح حالية"
+                    title="ماكو فترة سماح حالية"
                     action={canManage && !editor ? (
                       <Button type="button" onClick={startCreate} disabled={busy || Boolean(lock)} title={lock?.hint}>
                         <CalendarPlus className="size-4" aria-hidden="true" />إضافة فترة سماح
@@ -1048,7 +1048,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
               <section className="tp-modal__section" aria-labelledby="tp-grace-history">
                 <h3 id="tp-grace-history" className="tp-modal__title">الفترات السابقة</h3>
                 {historyPeriods.length === 0 ? (
-                  <EmptyState compact icon={CalendarClock} title="لا توجد فترات سابقة." />
+                  <EmptyState compact icon={CalendarClock} title="ماكو فترات سابقة." />
                 ) : (
                   <ul className="tp-grace__history">
                     {historyPeriods.map((period) => {

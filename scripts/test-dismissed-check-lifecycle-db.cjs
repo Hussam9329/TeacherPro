@@ -1,10 +1,11 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { PGlite } = require('@electric-sql/pglite');
+const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
 const migrationName = '20260921190000_dismissed_check_lifecycle';
 
 (async () => {
-  const db = new PGlite();
+  const db = new PGlite({ extensions: { pg_trgm } });
   try {
     // Replay the real historical schema; the new trigger must coexist with the
     // opportunity, grade, and academic-history guards already in production.

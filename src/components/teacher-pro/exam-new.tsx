@@ -340,7 +340,7 @@ function selectedCourseBlockers(
 /** Short, calm wording for the server's course blockers (full text stays in validation). */
 function shortCourseBlocker(blocker: string): string {
   if (blocker.includes("موقوفة")) return "موقوفة";
-  if (blocker.includes("لا يوجد فصل نشط")) return "بلا فصل نشط";
+  if (blocker.includes("ماكو فصل نشط")) return "بلا فصل نشط";
   if (blocker.includes("فصول نشطة")) return "أكثر من فصل نشط";
   return blocker;
 }
@@ -371,7 +371,7 @@ function summarizeUnavailableCourses(rows: ExamCreateContextRow[]) {
   const countLabel = unavailableCoursesCountLabel(rows.length);
   return {
     title: sharedReason ? `${countLabel}: ${sharedReason}` : countLabel,
-    noneAvailable: `لا توجد دورة متاحة للامتحان حالياً؛ ${
+    noneAvailable: `ماكو دورة متاحة للامتحان حالياً؛ ${
       allReasons.length === 1 ? "السبب" : "الأسباب"
     }: ${allReasons.join("، ")}.`,
   };
@@ -576,7 +576,7 @@ export function ExamNewView() {
             {contextError}
           </div>
         ) : contextRows.length === 0 ? (
-          <EmptyState compact icon={BookOpen} title="لا توجد دورات متاحة." />
+          <EmptyState compact icon={BookOpen} title="ماكو دورات متاحة." />
         ) : (
           <>
             {selectableCourses.length > 0 ? (
@@ -950,7 +950,7 @@ export function ExamNewView() {
                   </div>
                   {matchedStudentsCount === 0 && (
                     <p role="status" className="tp-exam-new__validation">
-                      لا يوجد طلاب نشطون في الدورات والمواقع المختارة؛ سيُنشأ
+                      ماكو طلاب نشطون في الدورات والمواقع المختارة؛ سيُنشأ
                       الامتحان دون طلاب مطابقين.
                     </p>
                   )}
@@ -1178,7 +1178,7 @@ export function ExamNewView() {
               </div>
               <div className="tp-exam-new__telegram">
                 <h3 className="tp-exam-new__group-title">
-                  نافذة تسليم الإجابات عبر تيليجرام
+                  نافذة تسليم الإجابات عبر تليگرام
                 </h3>
                 <div className="tp-exam-new__fields">
                   <div
@@ -1186,7 +1186,7 @@ export function ExamNewView() {
                     className="tp-exam-new__field"
                   >
                     <Label htmlFor={`${prefix}-telegram-open-at`}>
-                      فتح التسليم عبر تيليجرام
+                      فتح التسليم عبر تليگرام
                     </Label>
                     <DateTimeInput
                       id={`${prefix}-telegram-open-at`}
@@ -1215,7 +1215,7 @@ export function ExamNewView() {
                     className="tp-exam-new__field"
                   >
                     <Label htmlFor={`${prefix}-telegram-close-at`}>
-                      إغلاق التسليم عبر تيليجرام
+                      إغلاق التسليم عبر تليگرام
                     </Label>
                     <DateTimeInput
                       id={`${prefix}-telegram-close-at`}

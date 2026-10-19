@@ -288,7 +288,7 @@ export function StudentTrendChart({ syncKey }: { syncKey?: string | number }) {
             ) : null}
           </>
         ) : (
-          <div className="tp-trend__message" dir="rtl">{loading ? "جاري تحميل الإحصائيات…" : "لا توجد بيانات لهذه الفترة."}</div>
+          <div className="tp-trend__message" dir="rtl">{loading ? "جاري تحميل الإحصائيات…" : "ماكو بيانات لهذه الفترة."}</div>
         )}
       </div>
 

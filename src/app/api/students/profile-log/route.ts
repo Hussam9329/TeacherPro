@@ -233,7 +233,7 @@ export async function GET(req: NextRequest) {
           : [];
         // سياق الفصل النشط الحالي: يحدد امتحانات الدورة التي انصنعت بعد بداية
         // الفصل النشط (آخر انتقال للدورة)، ليعرض تقرير HTML درجات الفصل النشط
-        // وحدها — نفس المصدر الذي تبنى عليه رسالة تيليجرام في إدارة المفصولين.
+        // وحدها — نفس المصدر الذي تبنى عليه رسالة تليگرام في إدارة المفصولين.
         const currentChapter = student.courseId
           ? await loadActiveChapterReportContext(tx, student.courseId)
           : null;

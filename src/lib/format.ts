@@ -125,3 +125,28 @@ export function parseAppDateInput(value: string, fallback = ''): string {
   if (!parts || !isValidDateParts(parts.year, parts.month, parts.day)) return fallback;
   return `${parts.year}-${padDatePart(parts.month)}-${padDatePart(parts.day)}`;
 }
+
+/**
+ * A number with its noun as people say it: «طالب واحد», «طالبين»,
+ * «5 طلاب», «11 طالب». `few` is for 3 to 10, `many` for everything else.
+ */
+export function arabicCount(count: number, one: string, two: string, few: string, many: string): string {
+  const n = Math.trunc(Number(count) || 0);
+  if (n === 1) return one;
+  if (n === 2) return two;
+  if (n >= 3 && n <= 10) return `${n} ${few}`;
+  return `${n} ${many}`;
+}
+
+/** «طالب واحد / طالبين / 5 طلاب / 11 طالب», with an optional adjective that agrees. */
+export function studentCount(count: number, adjective?: { one: string; two: string; few: string }): string {
+  const a = adjective;
+  return arabicCount(
+    count,
+    a ? `طالب ${a.one} واحد` : "طالب واحد",
+    a ? `طالبين ${a.two}` : "طالبين",
+    a ? `طلاب ${a.few}` : "طلاب",
+    a ? `طالب ${a.one}` : "طالب",
+  );
+}
+

@@ -143,7 +143,7 @@ function leaveExamCountText(count: number): string {
 }
 
 function leaveCountText(count: number): string {
-  if (count === 0) return "لا توجد إجازات";
+  if (count === 0) return "ماكو إجازات";
   if (count === 1) return "إجازة واحدة";
   if (count === 2) return "إجازتان";
   if (count <= 10) return `${count} إجازات`;
@@ -245,12 +245,12 @@ function LeaveCardHead({ student, children }: { student: LeaveStudentRow; childr
 function TelegramButton({ student }: { student: LeaveStudentRow }) {
   const handle = describeTelegramHandle({ telegram: student.telegram, username: student.username });
   return handle.href ? (
-    <a className="tp-leave-card__tg" href={handle.href} dir="ltr" aria-label={`فتح محادثة تيليجرام مع ${student.name}`}>
+    <a className="tp-leave-card__tg" href={handle.href} dir="ltr" aria-label={`فتح محادثة تليگرام مع ${student.name}`}>
       <Send aria-hidden="true" />@{handle.value}
     </a>
   ) : (
     <span className="tp-leave-card__tg" data-plain="true" dir={handle.value ? "ltr" : undefined}>
-      <Send aria-hidden="true" />{handle.value || "بدون تيليجرام"}
+      <Send aria-hidden="true" />{handle.value || "بدون تليگرام"}
     </span>
   );
 }
@@ -924,12 +924,12 @@ export function LeavesDialog({ open, onOpenChange, canManage }: Props) {
             <EmptyState
               icon={listQuery ? Search : CalendarCheck}
               title={listQuery
-                ? "لا يوجد طالب يطابق البحث."
+                ? "ماكو طالب يطابق البحث."
                 : filter === "current"
-                  ? "لا توجد إجازات سارية أو قادمة."
+                  ? "ماكو إجازات سارية أو قادمة."
                   : filter === "past"
-                    ? "لا توجد إجازات منتهية."
-                    : "لا توجد إجازات. ابحث عن الطالب لإضافة أول إجازة."}
+                    ? "ماكو إجازات منتهية."
+                    : "ماكو إجازات. ابحث عن الطالب لإضافة أول إجازة."}
             />
           )}
           {list && list.students.length > 0 && (
@@ -1048,7 +1048,7 @@ export function LeavesDialog({ open, onOpenChange, canManage }: Props) {
           <EmptyState
             compact
             icon={CalendarCheck}
-            title="لا توجد إجازات"
+            title="ماكو إجازات"
             action={canManage ? (
               <Button type="button" onClick={startAdd} disabled={busy || Boolean(selectedLeaveStudentBlockedReason)} title={selectedLeaveStudentBlockedReason || undefined}>
                 <CalendarPlus className="size-4" aria-hidden="true" />إضافة إجازة
@@ -1197,7 +1197,7 @@ export function LeavesDialog({ open, onOpenChange, canManage }: Props) {
           <p role="alert" className="tp-modal__error"><AlertCircle aria-hidden="true" />{selectedLeaveStudentBlockedReason}</p>
         )}
         {noCourseExams && (
-          <p role="alert" className="tp-leaves__warning">لا توجد امتحانات تابعة لدورة هذا الطالب حالياً، لذلك لا يمكن تسجيل إجازة امتحان له.</p>
+          <p role="alert" className="tp-leaves__warning">ماكو امتحانات تابعة لدورة هذا الطالب حالياً، لذلك لا يمكن تسجيل إجازة امتحان له.</p>
         )}
         {periodDatesReversed && (
           <p role="alert" className="tp-leaves__warning">تاريخ البداية بعد تاريخ النهاية. سيعتمد النظام الفترة {leaveDateRangeText}.</p>

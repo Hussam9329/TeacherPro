@@ -82,7 +82,7 @@ export function getStudentDuplicateMessage(
     // Changing a student: say the change was not saved, and whose it is.
     const owner = duplicate.name ? ` «${duplicate.name}»` : " ثاني";
     if (candidateTelegram && normalizeTelegramIdentifier(duplicate.telegram) === candidateTelegram) {
-      return `ما انحفظ التعديل: معرف التيليجرام مسجّل للطالب${owner}.`;
+      return `ما انحفظ التعديل: معرف التليگرام مسجّل للطالب${owner}.`;
     }
     if (candidatePhone && normalizePhoneForDuplicate(duplicate.phone) === candidatePhone) {
       return `ما انحفظ التعديل: رقم الهاتف مسجّل للطالب${owner}.`;
@@ -93,7 +93,7 @@ export function getStudentDuplicateMessage(
     return "ما انحفظ التعديل: بياناته مكررة ويه طالب ثاني.";
   }
   if (candidateTelegram && normalizeTelegramIdentifier(duplicate.telegram) === candidateTelegram) {
-    return 'لا يمكن إضافة الطالب: معرف التيليجرام مسجل مسبقاً لطالب آخر';
+    return 'لا يمكن إضافة الطالب: معرف التليگرام مسجل مسبقاً لطالب آخر';
   }
   if (candidatePhone && normalizePhoneForDuplicate(duplicate.phone) === candidatePhone) {
     return 'لا يمكن إضافة الطالب: رقم الهاتف مسجل مسبقاً لطالب آخر';

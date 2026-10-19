@@ -526,7 +526,7 @@ export function StudentRegisterView() {
       [
         Boolean(form.courseId),
         filteredCourses.length === 0
-          ? "لا توجد دورات مسجلة"
+          ? "ماكو دورات مسجلة"
           : "يرجى اختيار اسم الدورة",
       ],
     ];
@@ -842,7 +842,7 @@ export function StudentRegisterView() {
                         <SelectValue
                           placeholder={
                             filteredCourses.length === 0
-                              ? "لا توجد دورات مسجلة"
+                              ? "ماكو دورات مسجلة"
                               : "اختر اسم الدورة..."
                           }
                         />
@@ -850,7 +850,7 @@ export function StudentRegisterView() {
                       <SelectContent>
                         {filteredCourses.length === 0 ? (
                           <div className="px-3 py-2 text-sm text-muted-foreground">
-                            لا توجد دورات مسجلة
+                            ماكو دورات مسجلة
                           </div>
                         ) : (
                           filteredCourseRows.map((row) => {
@@ -1201,7 +1201,7 @@ export function StudentRegisterView() {
                     htmlFor="reg-telegram"
                     className="text-xs font-bold text-foreground"
                   >
-                    معرف التيليجرام
+                    معرف التليگرام
                   </Label>
                   <div className="relative">
                     <FieldIcon icon={Send} />
@@ -1223,7 +1223,7 @@ export function StudentRegisterView() {
                   </div>
                   {duplicateTelegramStudent && (
                     <p className="tp-field-feedback tp-field-feedback-warning">
-                      قد يكون معرف التيليجرام مرتبطاً بالطالب{" "}
+                      قد يكون معرف التليگرام مرتبطاً بالطالب{" "}
                       {duplicateTelegramStudent.name}. راجع المعرف قبل الحفظ.
                     </p>
                   )}
@@ -1234,7 +1234,7 @@ export function StudentRegisterView() {
                     htmlFor="reg-username"
                     className="text-xs font-bold text-foreground"
                   >
-                    يوزر التيليجرام (المستعاد)
+                    يوزر التليگرام (المستعاد)
                   </Label>
                   <div className="relative">
                     <FieldIcon icon={Send} />
@@ -1255,7 +1255,7 @@ export function StudentRegisterView() {
                     />
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    إن تُرك فارغاً يُعتمد نفس معرف التيليجرام تلقائياً.
+                    إن تُرك فارغاً يُعتمد نفس معرف التليگرام تلقائياً.
                   </p>
                 </div>
 

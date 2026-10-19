@@ -21,7 +21,7 @@ class ContactEditError extends Error {
 }
 class ArchivedStudent extends Error {}
 
-const FIELDS = { username: "يوزر تيليجرام", phone: "رقم الطالب", parentPhone: "رقم ولي الأمر" } as const;
+const FIELDS = { username: "يوزر تليگرام", phone: "رقم الطالب", parentPhone: "رقم ولي الأمر" } as const;
 type ContactField = keyof typeof FIELDS;
 
 /**

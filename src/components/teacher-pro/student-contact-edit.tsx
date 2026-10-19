@@ -9,7 +9,7 @@ import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 export type StudentContactField = "username" | "phone" | "parentPhone";
 
 const FIELDS: Record<StudentContactField, { label: string; placeholder: string; prefix: string; inputMode: "text" | "tel" }> = {
-  username: { label: "معرف تيليجرام", placeholder: "username", prefix: "@", inputMode: "text" },
+  username: { label: "معرف تليگرام", placeholder: "username", prefix: "@", inputMode: "text" },
   phone: { label: "رقم الطالب", placeholder: "07XXXXXXXXX", prefix: "", inputMode: "tel" },
   parentPhone: { label: "رقم ولي الأمر", placeholder: "07XXXXXXXXX", prefix: "", inputMode: "tel" },
 };

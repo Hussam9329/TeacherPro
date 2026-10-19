@@ -399,6 +399,7 @@ import { LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog";
 import { AccountsView } from "./accounts";
 import { LogsView } from "./logs";
 import { EmptyState, LoadingState } from "./ui-kit";
+import { arabicCount } from "@/lib/format";
 
 const sectionComponents: Record<SectionId, React.ComponentType> = {
   dashboard: DashboardView,
@@ -1260,7 +1261,7 @@ export function TeacherProLayout() {
   // Grade entry deliberately has none.
   const sectionAlerts: Partial<Record<SectionId, { count: number; label: string }>> = {
     ...(shortcutAlerts?.callNotesPending
-      ? { "follow-up-calls": { count: shortcutAlerts.callNotesPending, label: `${shortcutAlerts.callNotesPending} ملاحظة مكالمة بانتظار الإنجاز` } }
+      ? { "follow-up-calls": { count: shortcutAlerts.callNotesPending, label: `${arabicCount(shortcutAlerts.callNotesPending, "ملاحظة مكالمة وحدة", "ملاحظتين مكالمة", "ملاحظات مكالمة", "ملاحظة مكالمة")} بانتظار الإنجاز` } }
       : {}),
   };
   const connectionVisualStatus = dbLoading
@@ -1566,7 +1567,7 @@ export function TeacherProLayout() {
                 <CurrentComponent />
               )
             ) : (
-              <EmptyState icon={Lock} title="لا توجد صلاحية لفتح هذا القسم." />
+              <EmptyState icon={Lock} title="ماكو صلاحية لفتح هذا القسم." />
             )}
           </div>
         </div>

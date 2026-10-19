@@ -3,12 +3,13 @@ const fs = require('node:fs'), path = require('node:path'), Module = require('no
 // Keep the SQL-backed adapter aligned with Prisma DateTime's UTC-instant contract.
 process.env.TZ = 'UTC';
 const { PGlite } = require('@electric-sql/pglite');
+const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
 const { Prisma } = require('@prisma/client');
 const resolve=Module._resolveFilename;
 Module._resolveFilename=function(r,p,...args){return resolve.call(this,r.startsWith('@/')?path.join(process.cwd(),'src',r.slice(2)):r,p,...args)};
 require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
 (async()=>{
- const pg=new PGlite();let count=0;
+ const pg=new PGlite({ extensions: { pg_trgm } });let count=0;
  for(const dir of fs.readdirSync('prisma/migrations').sort()){
   const file=`prisma/migrations/${dir}/migration.sql`;if(!fs.existsSync(file))continue;
   try {await pg.exec(fs.readFileSync(file,'utf8'));count++;}catch(e){throw new Error(`${dir}: ${e.message}`)}

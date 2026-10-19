@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, ScrollText } from "lucide-react";
-import { EmptyState, LoadingState } from "./ui-kit";
+import { EmptyState, ErrorState, LoadingState, ListPagination } from "./ui-kit";
 import { logApi } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { Button } from "@/components/ui/button";
@@ -361,11 +361,7 @@ export function LogsView() {
         }
       />
 
-      {error ? (
-        <div role="alert" className="rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 text-sm text-danger">
-          {error}
-        </div>
-      ) : null}
+      {error ? <ErrorState message={error} onRetry={() => setRefreshKey((key) => key + 1)} /> : null}
 
       <div className="tp-logs-days" aria-busy={loading}>
         {logDays.map((day) => (
@@ -424,25 +420,21 @@ export function LogsView() {
             </ol>
           </section>
         ))}
-        {!loading && logs.length === 0 ? (
-          <EmptyState icon={ScrollText} title="لا توجد سجلات حسب الفلترة الحالية." />
+        {!loading && !error && logs.length === 0 ? (
+          <EmptyState icon={ScrollText} title="ماكو سجلات حسب الفلترة الحالية." />
         ) : null}
         {loading && logs.length === 0 ? (
           <LoadingState title="جاري تحميل السجلات..." />
         ) : null}
       </div>
 
-      {totalPages > 1 ? (
-        <div className="flex items-center justify-between gap-2">
-          <Button variant="outline" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            السابق
-          </Button>
-          <span className="text-sm text-muted-foreground">صفحة {page} من {totalPages}</span>
-          <Button variant="outline" disabled={page >= totalPages || loading} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
-            التالي
-          </Button>
-        </div>
-      ) : null}
+      <ListPagination
+        page={page}
+        totalPages={totalPages}
+        onPageChange={(next) => setPage(Math.min(totalPages, Math.max(1, next)))}
+        disabled={loading}
+        label="صفحات السجلات"
+      />
     </div>
   );
 }

@@ -352,3 +352,22 @@ a.tp-rcard__contact:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--t
   .tp-rcard__head:has(> .tp-rcard__light > svg) > .tp-rcard__head-end { justify-content: flex-start; }
   .tp-rcard__tile-hint { display: none; }
 }
+
+/* ── The one page bar (ListPagination) ── */
+.tp-list-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 0.75rem;
+  padding-block: 0.5rem;
+}
+.tp-list-pagination__summary {
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.tp-list-pagination__summary b { color: var(--foreground); }
+@media (pointer: coarse) {
+  .tp-list-pagination button { min-block-size: 2.75rem; }
+}

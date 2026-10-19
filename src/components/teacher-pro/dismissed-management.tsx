@@ -50,7 +50,7 @@ import {
 import { ListToolbar } from "./list-toolbar";
 import { RowActionsMenu } from "./row-actions-menu";
 import { FormDialogHero } from "./form-dialog";
-import { EmptyState, LoadingState } from "./ui-kit";
+import { EmptyState, ErrorState, LoadingState, ListPagination } from "./ui-kit";
 import { toLatinDigits } from "@/lib/format";
 import {
   getOpportunityBalance,
@@ -69,7 +69,6 @@ import {
   Ban,
   CalendarDays,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   ChevronUp,
   Download,
@@ -203,8 +202,8 @@ function telegramUsername(value?: string) {
 }
 
 /**
- * يوزر التليجرام الصالح للمراسلة: يفضّل اليوزر المستعاد (username)
- * ويرفض المعرف الرقمي لأنه لا يفتح محادثة تيليجرام.
+ * يوزر التليگرام الصالح للمراسلة: يفضّل اليوزر المستعاد (username)
+ * ويرفض المعرف الرقمي لأنه لا يفتح محادثة تليگرام.
  */
 function studentTelegramHandle(student: {
   telegram?: string | null;
@@ -301,8 +300,8 @@ function buildHtmlReport(history: StudentHistory) {
     ["المدرسة", s.school || "—"],
     ["رقم الطالب", s.phone || "—"],
     ["رقم ولي الأمر", s.parentPhone || "—"],
-    ["يوزر تيليجرام", s.username || "—"],
-    ["معرف تيليجرام", s.telegram || "—"],
+    ["يوزر تليگرام", s.username || "—"],
+    ["معرف تليگرام", s.telegram || "—"],
     ["نظام الاشتراك", s.courseProgram || "—"],
     ["الكورس المطلوب", s.courseTerm || "—"],
     ["نظام الدراسة", s.studyType || "—"],
@@ -423,6 +422,8 @@ export function DismissedManagementView() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // «إعادة المحاولة» after a failed load.
+  const [reloadKey, setReloadKey] = useState(0);
   const [stats, setStats] = useState<DismissedStats>(EMPTY_DISMISSED_STATS);
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState("");
@@ -536,7 +537,7 @@ export function DismissedManagementView() {
       });
 
     return () => controller.abort();
-  }, [courseId, debouncedSearch, historyScope, notesFilter, page, mergeStudentsCache, syncKey, isBackgroundSync]);
+  }, [courseId, debouncedSearch, historyScope, notesFilter, page, mergeStudentsCache, syncKey, isBackgroundSync, reloadKey]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -767,7 +768,7 @@ export function DismissedManagementView() {
       } else {
         downloadOpportunityHtml(telegramStudent, details);
         await announceThenWait(() =>
-          toast.warning("التقرير أطول من حد رسالة تيليجرام، فتم تنزيله كملف HTML. ستفتح المحادثة الآن لإرفاقه.", {
+          toast.warning("التقرير أطول من حد رسالة تليگرام، فتم تنزيله كملف HTML. ستفتح المحادثة الآن لإرفاقه.", {
             duration: 9000,
           }),
         );
@@ -958,7 +959,7 @@ export function DismissedManagementView() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              placeholder="ابحث بالاسم أو الكود أو التيليجرام أو الهاتف أو سبب الفصل"
+              placeholder="ابحث بالاسم أو الكود أو التليگرام أو الهاتف أو سبب الفصل"
             />
           </div>
         }
@@ -1041,11 +1042,7 @@ export function DismissedManagementView() {
         </div>
       ) : null}
 
-      {error ? (
-        <div className="rounded-2xl border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-4 text-sm text-danger">
-          {error}
-        </div>
-      ) : null}
+      {error ? <ErrorState message={error} onRetry={() => setReloadKey((key) => key + 1)} /> : null}
 
       {loading ? <LoadingState title="جاري تحميل الطلاب المفصولين..." /> : null}
 
@@ -1056,7 +1053,7 @@ export function DismissedManagementView() {
           const current = student.status === "مفصول";
           const tone = current ? "danger" : "warning";
           const reason =
-            displayReasonText(student.dismissalReason || student.lastDismissalReason) || "لا يوجد سبب مسجل";
+            displayReasonText(student.dismissalReason || student.lastDismissalReason) || "ماكو سبب مسجل";
           const balance = Math.max(0, Number(student.opportunities ?? 0));
           const base = Math.max(0, Number(student.baseOpportunities ?? 0));
           const missingContacts = [
@@ -1237,7 +1234,7 @@ export function DismissedManagementView() {
                       className="tp-scard__round"
                       disabled={historyLoading[student.id] || telegramLoading[student.id]}
                       onClick={() => void openTelegram(student)}
-                      aria-label={telegramLoading[student.id] ? "جاري تجهيز التقرير..." : `تيليجرام ${student.username || student.telegram}`}
+                      aria-label={telegramLoading[student.id] ? "جاري تجهيز التقرير..." : `تليگرام ${student.username || student.telegram}`}
                       title={telegramLoading[student.id] ? "جاري تجهيز التقرير..." : student.username || student.telegram}
                     >
                       <Send aria-hidden="true" />
@@ -1349,34 +1346,17 @@ export function DismissedManagementView() {
       </ul>
 
       {!loading && students.length === 0 && !error ? (
-        <EmptyState icon={Ban} title="لا يوجد طلاب ضمن سجل الفصل حسب البحث والفلترة الحالية." />
+        <EmptyState icon={Ban} title="ماكو طلاب ضمن سجل الفصل حسب البحث والفلترة الحالية." />
       ) : null}
 
-      {totalPages > 1 ? (
-        <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border bg-card p-3">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1 || loading}
-            onClick={() => setPage((v) => Math.max(1, v - 1))}
-          >
-            <ChevronRight className="size-4" />
-            السابق
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            صفحة {page} من {totalPages} · {students.length} من {totalCount}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages || loading}
-            onClick={() => setPage((v) => Math.min(totalPages, v + 1))}
-          >
-            التالي
-            <ChevronLeft className="size-4" />
-          </Button>
-        </div>
-      ) : null}
+      <ListPagination
+        page={page}
+        totalPages={totalPages}
+        onPageChange={(next) => setPage(Math.min(totalPages, Math.max(1, next)))}
+        disabled={loading}
+        label="صفحات الطلاب المفصولين"
+        summary={<>صفحة <b>{page}</b> من <b>{totalPages}</b> · {students.length} من {totalCount}</>}
+      />
 
       <AlertDialog
         open={reactivateDialog.open}

@@ -104,10 +104,10 @@ export async function POST(req: NextRequest) {
 
     // Q83 FIX: Reject archived and dismissed students
     if (student.status === "مؤرشف") {
-      return validationError("لا يمكن ربط طالب مؤرشف بحساب تيليجرام.", 403);
+      return validationError("لا يمكن ربط طالب مؤرشف بحساب تليگرام.", 403);
     }
     if (student.status === "مفصول") {
-      return validationError("لا يمكن ربط طالب مفصول بحساب تيليجرام. أعد تفعيله أولاً.", 403);
+      return validationError("لا يمكن ربط طالب مفصول بحساب تليگرام. أعد تفعيله أولاً.", 403);
     }
 
     return await performLink(student, telegramUserId, telegramUsername);
@@ -152,7 +152,7 @@ async function performLink(
   if (conflict) {
     return NextResponse.json(
       {
-        error: "حساب التيليجرام مرتبط بطالب آخر ولا يمكن ربطه مرتين.",
+        error: "حساب التليگرام مرتبط بطالب آخر ولا يمكن ربطه مرتين.",
         conflictStudent: { id: conflict.id, name: conflict.name, phone: conflict.phone },
       },
       { status: 409 },
@@ -169,8 +169,8 @@ async function performLink(
   });
 
   await writeSystemAuditLog(
-    "بوت التيليجرام",
-    "ربط طالب بحساب تيليجرام",
+    "بوت التليگرام",
+    "ربط طالب بحساب تليگرام",
     {
       studentId: updated.id,
       studentName: updated.name,

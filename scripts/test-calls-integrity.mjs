@@ -567,7 +567,7 @@ assert(
   );
   assert(
     followUp.includes('<h3 id="tp-call-student" className="tp-modal__title">معلومات الطالب</h3>') &&
-      followUp.includes('["هاتف ولي الأمر", student.parentPhone || "لا يوجد"],'),
+      followUp.includes('["هاتف ولي الأمر", student.parentPhone || "ماكو"],'),
     'نافذة التفاصيل في المكالمات تعرض معلومات الطالب كاملة',
   );
 }

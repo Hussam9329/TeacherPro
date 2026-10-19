@@ -36,7 +36,7 @@ const pkg = JSON.parse(read("package.json"));
 
 const canonicalTerms = [
   "البطاقات",
-  "تيليجرام",
+  "تليگرام",
   "درجات مسجلة",
   "نظام الدراسة",
   "مفصول",
@@ -55,6 +55,9 @@ const legacyTerms = [
   "تليكرام",
   "تلغرام",
   "تلكرام",
+  // The approved spelling is «تليگرام».
+  "تيليجرام",
+  "تليجرام",
   "نوع الدراسة",
   "كارت",
   "كروت",

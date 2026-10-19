@@ -1,6 +1,6 @@
 // اختبار سلامة «تقرير امتحانات الفصل النشط الحالي» في تصدير HTML لإدارة الفرص:
 // 1) الحدود الحتمية لقرار الفصل النشط (computeActiveChapterReportContext).
-// 2) الفلترة داخل دالة التحويل المشتركة (تصدير HTML + رسالة تيليجرام).
+// 2) الفلترة داخل دالة التحويل المشتركة (تصدير HTML + رسالة تليگرام).
 // 3) توسيط خانة البحث ومرنيتها داخل ملف HTML المتولد.
 import assert from "node:assert/strict";
 import fs, { readFileSync } from "node:fs";
@@ -500,7 +500,7 @@ must(
 must(
   exportDialog.includes("tpGradesSectionTitle") &&
     exportDialog.includes("درجاتك — ") &&
-    exportDialog.includes("لا توجد امتحانات لعرضها في هذه النسخة."),
+    exportDialog.includes("ماكو امتحانات لعرضها في هذه النسخة."),
   "ملف HTML يحتفظ بعنوان الفصل النشط ويصف فراغ النسخة بعد اختيار الامتحانات بدقة",
 );
 

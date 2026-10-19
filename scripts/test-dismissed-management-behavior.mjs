@@ -117,7 +117,7 @@ test("Telegram drafts are bounded and preserve the safety notice", () => {
   });
   assert.ok(message.length <= DISMISSED_TELEGRAM_DRAFT_MAX_LENGTH);
   assert.match(message, /^رأس الرسالة/);
-  assert.match(message, /تم اختصار الرسالة بسبب حد تيليجرام/);
+  assert.match(message, /تم اختصار الرسالة بسبب حد تليگرام/);
   assert.match(message, /توقيع الإدارة$/);
 });
 

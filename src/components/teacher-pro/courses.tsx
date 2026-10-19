@@ -90,7 +90,7 @@ const courseStatusFilterLabels: Record<CourseStatusFilter, string> = {
 };
 
 /** Said once at the top of the page, not on every card. */
-const NO_ACTIVE_CHAPTER_WARNING = "لا يوجد فصل نشط مرتبط بهذه الدورة حالياً.";
+const NO_ACTIVE_CHAPTER_WARNING = "ماكو فصل نشط مرتبط بهذه الدورة حالياً.";
 
 const courseDeleteFilterLabels: Record<CourseDeleteFilter, string> = {
   all: "كل حالات الحذف",
@@ -644,7 +644,7 @@ export function CoursesView() {
             <dl className="tp-course-card__chapter">
               <dt>الفصل النشط:</dt>
               <dd>
-                <span>{row.activeChapter?.name || "لا يوجد"}</span>
+                <span>{row.activeChapter?.name || "ماكو"}</span>
                 {row.activeChapter && (
                   <span> · {row.activeChapter.opportunities} فرص</span>
                 )}
@@ -810,7 +810,7 @@ export function CoursesView() {
           <p>
             {row.deleteSafety.blockers.length
               ? row.deleteSafety.blockers.join("، ")
-              : "لا توجد روابط مانعة للحذف."}
+              : "ماكو روابط مانعة للحذف."}
           </p>
           <p className="text-muted-foreground">
             إيقاف التسجيل لا يغيّر بيانات الطلاب الحاليين.
@@ -942,7 +942,7 @@ export function CoursesView() {
           <EmptyState
             icon={BookOpen}
             title={
-              hasActiveFilters ? "لا توجد دورات مطابقة" : "لا توجد دورات"
+              hasActiveFilters ? "ماكو دورات مطابقة" : "ماكو دورات"
             }
           />
         ) : (
@@ -1034,7 +1034,7 @@ export function CoursesView() {
               </div>
               <div>
                 <dt>الفصل النشط</dt>
-                <dd>{editDialog.row.activeChapter?.name || "لا يوجد"}</dd>
+                <dd>{editDialog.row.activeChapter?.name || "ماكو"}</dd>
               </div>
             </dl>
             <p className="text-sm text-muted-foreground">
@@ -1196,7 +1196,7 @@ export function CoursesView() {
                     <p className="text-sm">
                       {deleteDialog.row.deleteSafety.blockers.length
                         ? deleteDialog.row.deleteSafety.blockers.join("، ")
-                        : "لا توجد روابط تمنع الحذف."}
+                        : "ماكو روابط تمنع الحذف."}
                     </p>
                     <p className="text-sm">
                       {deleteDialog.row.deleteSafety.recommendedAction}

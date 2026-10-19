@@ -2,13 +2,14 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), Module = require('node:module');
 const ts = require('typescript');
 const { PGlite } = require('@electric-sql/pglite');
+const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
 const root = process.cwd(), resolve = Module._resolveFilename, load = Module._load, mocks = new Map();
 Module._resolveFilename = function(r,p,...a) { return resolve.call(this,r.startsWith('@/') ? path.join(root,'src',r.slice(2)) : r,p,...a); };
 Module._load = function(r,p,...a) { return mocks.has(r) ? mocks.get(r) : load.call(this,r,p,...a); };
 require.extensions['.ts'] = (m,f) => m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
 
 (async () => {
-  const pg = new PGlite();
+  const pg = new PGlite({ extensions: { pg_trgm } });
   await pg.exec(`CREATE TABLE "Student"(id text PRIMARY KEY,status text,opportunities int);
     CREATE TABLE "Grade"(id text PRIMARY KEY,"studentId" text,"examId" text,status text,score int,"academicEffectExcluded" boolean);
     INSERT INTO "Student" VALUES ('active','نشط',2),('dismissed','مفصول',0),('archived','مؤرشف',1),('protected','نشط',2);

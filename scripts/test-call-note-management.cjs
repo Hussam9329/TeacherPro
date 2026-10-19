@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
 const { PGlite } = require('@electric-sql/pglite');
+const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
 
 const loaded = new Map();
 function load(relative) {
@@ -54,7 +55,7 @@ function adapter(sql) {
 }
 
 (async () => {
-  const pg = new PGlite();
+  const pg = new PGlite({ extensions: { pg_trgm } });
   await pg.exec(`
     CREATE TABLE "Student" (id text PRIMARY KEY,status text,opportunities integer,"courseId" text);
     CREATE TABLE "Exam" (id text PRIMARY KEY);

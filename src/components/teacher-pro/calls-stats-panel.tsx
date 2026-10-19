@@ -220,7 +220,7 @@ export function CallsStatsPanel() {
               </div>
             </header>
             {data.courses.length === 0 ? (
-              <EmptyState compact title="لا توجد دورات فعّالة" />
+              <EmptyState compact title="ماكو دورات فعّالة" />
             ) : (
               <div className="tp-cstats__table" style={{ "--tp-cstats-cols": columns } as CSSProperties}>
                 <div className="tp-cstats__trow" data-head="true" aria-hidden="true">

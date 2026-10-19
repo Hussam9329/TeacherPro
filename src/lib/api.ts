@@ -875,7 +875,7 @@ export interface StudentEnrollmentArchiveRecord {
 /**
  * سياق الفصل النشط الحالي كما يعيده /api/students/profile-log: يحدد امتحانات
  * الدورة التي انصنعت بعد بداية الفصل النشط (آخر انتقال للدورة) ليعرض تقرير
- * HTML ورسالة تيليجرام درجات الفصل النشط وحدها.
+ * HTML ورسالة تليگرام درجات الفصل النشط وحدها.
  */
 export interface StudentActiveChapterContext {
   id: string;

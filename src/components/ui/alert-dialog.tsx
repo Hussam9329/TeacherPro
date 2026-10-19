@@ -9,10 +9,60 @@ import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
 import "@/components/teacher-pro/tp-modal.css"
 
+/**
+ * While a confirmation's action is still running (its onClick returned a
+ * promise), the window stays open, its buttons wait, and it cannot be closed:
+ * the page closes it itself on success, and on failure the user still sees
+ * the question and the error instead of a window that vanished.
+ */
+const AlertDialogPendingContext = React.createContext<{
+  pending: boolean
+  run: (work: PromiseLike<unknown>) => void
+} | null>(null)
+
 function AlertDialog({
+  open,
+  defaultOpen,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
-  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
+  const [pending, setPending] = React.useState(false)
+  const pendingRef = React.useRef(false)
+  const [innerOpen, setInnerOpen] = React.useState(Boolean(defaultOpen))
+  const controlled = open !== undefined
+  const handleOpenChange = React.useCallback(
+    (next: boolean) => {
+      if (!next && pendingRef.current) return
+      if (!controlled) setInnerOpen(next)
+      onOpenChange?.(next)
+    },
+    [controlled, onOpenChange],
+  )
+  const context = React.useMemo(
+    () => ({
+      pending,
+      run: (work: PromiseLike<unknown>) => {
+        pendingRef.current = true
+        setPending(true)
+        const done = () => {
+          pendingRef.current = false
+          setPending(false)
+        }
+        Promise.resolve(work).then(done, done)
+      },
+    }),
+    [pending],
+  )
+  return (
+    <AlertDialogPendingContext.Provider value={context}>
+      <AlertDialogPrimitive.Root
+        data-slot="alert-dialog"
+        open={controlled ? open : innerOpen}
+        onOpenChange={handleOpenChange}
+        {...props}
+      />
+    </AlertDialogPendingContext.Provider>
+  )
 }
 
 function AlertDialogTrigger({
@@ -182,12 +232,25 @@ function AlertDialogDescription({
 
 function AlertDialogAction({
   className,
+  onClick,
+  disabled,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
+  const pendingContext = React.useContext(AlertDialogPendingContext)
   return (
     <AlertDialogPrimitive.Action
       data-slot="alert-dialog-action"
       className={cn(buttonVariants(), className)}
+      disabled={disabled || pendingContext?.pending}
+      aria-busy={pendingContext?.pending || undefined}
+      onClick={(event) => {
+        const result = (onClick as ((event: React.MouseEvent<HTMLButtonElement>) => unknown) | undefined)?.(event)
+        // An async action keeps the window open until it settles.
+        if (result && typeof (result as PromiseLike<unknown>).then === "function") {
+          event.preventDefault()
+          pendingContext?.run(result as PromiseLike<unknown>)
+        }
+      }}
       {...props}
     />
   )
@@ -195,12 +258,15 @@ function AlertDialogAction({
 
 function AlertDialogCancel({
   className,
+  disabled,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) {
+  const pendingContext = React.useContext(AlertDialogPendingContext)
   return (
     <AlertDialogPrimitive.Cancel
       data-slot="alert-dialog-cancel"
       className={cn(buttonVariants({ variant: "outline" }), className)}
+      disabled={disabled || pendingContext?.pending}
       {...props}
     />
   )

@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { PGlite } = require('@electric-sql/pglite');
+const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
 
 const runId = 'retained_dismissal_20260917_v1';
 const contract = fs.readFileSync('scripts/contracts/repair-retained-dismissals.sql', 'utf8');
@@ -8,7 +9,7 @@ const childTables = ['Grade', 'OpportunityLog', 'StudentLeave', 'StudentNote', '
 const metadataTables = ['Exam', 'ExamCourse', 'CourseChapter', 'Chapter'];
 
 (async () => {
-  const db = new PGlite();
+  const db = new PGlite({ extensions: { pg_trgm } });
   for (const directory of fs.readdirSync('prisma/migrations').sort()) {
     const file = `prisma/migrations/${directory}/migration.sql`;
     if (fs.existsSync(file) && directory !== '20260917180000_guard_automatic_log_chapter') await db.exec(fs.readFileSync(file, 'utf8'));

@@ -5,9 +5,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 process.env.TZ = 'UTC';
 const { PGlite } = require('@electric-sql/pglite');
+const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
 
 (async () => {
-  const pg = new PGlite();
+  const pg = new PGlite({ extensions: { pg_trgm } });
   for (const dir of fs.readdirSync('prisma/migrations').sort()) {
     const file = `prisma/migrations/${dir}/migration.sql`;
     if (!fs.existsSync(file)) continue;

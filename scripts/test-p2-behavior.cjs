@@ -1,5 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
 const {PGlite}=require('@electric-sql/pglite');
+const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
 const resolve=Module._resolveFilename,load=Module._load,mocks=new Map();
 Module._resolveFilename=function(r,p,...a){return resolve.call(this,r.startsWith('@/')?path.join(process.cwd(),'src',r.slice(2)):r,p,...a)};
 Module._load=function(r,p,...a){return mocks.has(r)?mocks.get(r):load.call(this,r,p,...a)};
@@ -40,7 +41,7 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  assert.equal(classify.gradeMatchesStatusFilterUnified('discounted',rows[0],{id:'e',fullMark:100,discountMark:20}),false);
  console.log('PASS: server listing/export annotations preserve scores and exclude settled deductions');
 
- const pg=new PGlite();for(const dir of fs.readdirSync('prisma/migrations').sort()){const f=`prisma/migrations/${dir}/migration.sql`;if(fs.existsSync(f))await pg.exec(fs.readFileSync(f,'utf8'))}
+ const pg=new PGlite({ extensions: { pg_trgm } });for(const dir of fs.readdirSync('prisma/migrations').sort()){const f=`prisma/migrations/${dir}/migration.sql`;if(fs.existsSync(f))await pg.exec(fs.readFileSync(f,'utf8'))}
  await pg.exec(`INSERT INTO "AppUser" (id,username,name,role,"passwordHash") VALUES ('u','u','u','staff','old'); UPDATE "AppUser" SET "passwordHash"='new' WHERE id='u'`);
  assert.equal((await pg.query('SELECT "sessionVersion" FROM "AppUser" WHERE id=\'u\'')).rows[0].sessionVersion,1);
  await pg.exec(`UPDATE "AppUser" SET "sessionVersion"=0 WHERE id='u'`);assert.equal((await pg.query('SELECT "sessionVersion" FROM "AppUser" WHERE id=\'u\'')).rows[0].sessionVersion,1);

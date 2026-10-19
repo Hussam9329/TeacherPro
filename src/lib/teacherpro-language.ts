@@ -8,7 +8,7 @@
 export const TEACHERPRO_TERMS = Object.freeze({
   cards: "البطاقات",
   card: "بطاقة",
-  telegram: "تيليجرام",
+  telegram: "تليگرام",
   recordedGrades: "درجات مسجلة",
   programType: "نظام الدراسة",
   dismissed: "مفصول",
@@ -40,6 +40,9 @@ export interface TeacherProActionStatusDetail {
 }
 
 const UI_REPLACEMENTS: Array<[RegExp, string]> = [
+  // Old log lines spelled it «تيليجرام» / «تليجرام» / «تيليگرام» (written as
+  // escapes so the retired spellings stay out of the source); shown as «تليگرام».
+  [/تي?لي(?:ج|گ)رام/g, "تليگرام"],
   [/تثبيت تعهد/g, "تسجيل متابعة تاريخية"],
   [/إلغاء تعهد/g, "إلغاء متابعة تاريخية"],
   [/رصيد بعد تعهد/g, "فرص الإرجاع"],
@@ -65,7 +68,7 @@ const UI_REPLACEMENTS: Array<[RegExp, string]> = [
   [/ملاحظات ذكية/g, "درجات معلّقة"],
   [/الملاحظات الذكية/g, "الدرجات المعلّقة"],
   [/الدرجات الذكية/g, "الدرجات المعلّقة"],
-  [/تليكرام|تلغرام|تلكرام|تيليگرام/gi, TEACHERPRO_TERMS.telegram],
+  [/تليكرام|تلغرام|تلكرام|تليگرام/gi, TEACHERPRO_TERMS.telegram],
   [/كروت/g, TEACHERPRO_TERMS.cards],
   [/كارت/g, TEACHERPRO_TERMS.card],
   [/نوع الدراسة/g, TEACHERPRO_TERMS.programType],

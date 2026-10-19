@@ -145,7 +145,7 @@ export function buildBoundedTelegramDraft({
   if (fullMessage.length <= maxLength) return fullMessage;
 
   const notice =
-    "تم اختصار الرسالة بسبب حد تيليجرام. السجل الكامل متاح عبر تصدير HTML.";
+    "تم اختصار الرسالة بسبب حد تليگرام. السجل الكامل متاح عبر تصدير HTML.";
   const prefix = `${header}\n\n`;
   const suffix = `\n\n${notice}\n\n${footer}`;
   const availableTimelineLength = Math.max(
@@ -488,7 +488,7 @@ export function safeDismissedHistoryFileName(value: string): string {
     .slice(0, 120);
 }
 
-/* ========== تقرير تيليجرام من مصدر تصدير HTML (profile-log) ========== */
+/* ========== تقرير تليگرام من مصدر تصدير HTML (profile-log) ========== */
 
 export type OpportunityTelegramStudent = {
   name: string;
@@ -678,7 +678,7 @@ function opportunityLogLines(logs: OpportunityTelegramLog[]): string | null {
 }
 
 /**
- * يبني رسالة تيليجرام من نفس لقطة تفاصيل الطالب التي تُحقن في ملف تصدير
+ * يبني رسالة تليگرام من نفس لقطة تفاصيل الطالب التي تُحقن في ملف تصدير
  * HTML (profile-log بعد المرور بـ sanitizeStudentDetailsForHtml): نفس
  * الدرجات، نفس سجل الفرص، ونفس الترتيب (الأحدث أولاً).
  *
@@ -712,7 +712,7 @@ export function buildOpportunityTelegramReport(
 }
 
 /**
- * رسالة الإرفاق القصيرة عندما يتجاوز التقرير حد رسالة تيليجرام فيُنزّل
+ * رسالة الإرفاق القصيرة عندما يتجاوز التقرير حد رسالة تليگرام فيُنزّل
  * كملف HTML كامل من نفس المصدر — الملخص يُحصي من نفس بيانات الملف.
  */
 export function buildOpportunityTelegramAttachment(
@@ -729,7 +729,7 @@ export function buildOpportunityTelegramAttachment(
 
 ${opportunityIdentityLines(student).join("\n")}
 
-تم تنزيل سجل الطالب الكامل بصيغة HTML على جهاز الإدارة لأن حجمه يتجاوز الحد الآمن لرابط تيليجرام. يرجى إرفاق الملف بهذه المحادثة.
+تم تنزيل سجل الطالب الكامل بصيغة HTML على جهاز الإدارة لأن حجمه يتجاوز الحد الآمن لرابط تليگرام. يرجى إرفاق الملف بهذه المحادثة.
 
 ملخص الملف`;
 

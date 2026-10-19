@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// اختبار سلامة إزالة ميزة "فك ارتباط تيليجرام" بالكامل من المشروع.
+// اختبار سلامة إزالة ميزة "فك ارتباط تليگرام" بالكامل من المشروع.
 // المبدأ: لا يبقى أي جذر للميزة — لا مسار API، لا زر، لا نافذة تأكيد،
 // لا دالة في طبقة الطلبات، ولا إدخال في سياسة إعادة تشغيل الطفرات.
-// وفك الارتباط أصبح يسيراً عبر مسح حقل التيليجرام من نافذة تعديل الطالب
+// وفك الارتباط أصبح يسيراً عبر مسح حقل التليگرام من نافذة تعديل الطالب
 // (للمدير فقط) مع إعادة حساب telegramKey تلقائياً إلى null على الخادم.
 
 import fs from 'node:fs';
@@ -39,13 +39,13 @@ const offending = codeFiles.filter((f) => {
     text.includes('unlink-telegram') ||
     text.includes('unlinkTelegram') ||
     text.includes('TelegramUnlink') ||
-    text.includes('فك ارتباط تيليجرام') ||
+    text.includes('فك ارتباط تليگرام') ||
     text.includes('فك الارتباط') ||
     text.includes('تأكيد فك')
   );
 });
 check(
-  'لا يوجد أي ذكر لفك ارتباط تيليجرام في شيفرة src بالكامل' + (offending.length ? ` (المخالف: ${offending.map((f) => path.relative(root, f)).join(', ')})` : ''),
+  'لا يوجد أي ذكر لفك ارتباط تليگرام في شيفرة src بالكامل' + (offending.length ? ` (المخالف: ${offending.map((f) => path.relative(root, f)).join(', ')})` : ''),
   offending.length === 0,
 );
 
@@ -57,15 +57,15 @@ check('طبقة الطلبات api.ts خالية من unlinkTelegram', !apiText.
 const replayText = fs.readFileSync(path.join(root, 'src/lib/mutation-replay-policy.ts'), 'utf8');
 check('سياسة إعادة تشغيل الطفرات خالية من مسار unlink-telegram', !replayText.includes('unlink-telegram'));
 
-// 5) مسار تحديث الطالب: مسح التيليجرام مسموح للمدير ويعيد حساب telegramKey
+// 5) مسار تحديث الطالب: مسح التليگرام مسموح للمدير ويعيد حساب telegramKey
 const studentsRoute = fs.readFileSync(path.join(root, 'src/app/api/students/route.ts'), 'utf8');
-check('مسار تحديث الطالب يبقي تعديل التيليجرام لمدير النظام والمشرفين فقط', studentsRoute.includes('data.telegram !== currentTelegram && !oversees(principal)') && studentsRoute.includes('تعديل ارتباط تيليجرام متاح لمدير النظام والمشرفين فقط'));
-check('مسار تحديث الطالب يعيد حساب telegramKey عند تغيير التيليجرام (يفك الارتباط عند المسح)', studentsRoute.includes('if (data.telegram !== undefined)') && studentsRoute.includes('data.telegramKey = identityKeys.telegramKey'));
-check('مسار تحديث الطالب لا يعود يحظر مسح التيليجرام أو يذكر زراً محذوفاً', !studentsRoute.includes('استخدم زر فك ارتباط تيليجرام'));
+check('مسار تحديث الطالب يبقي تعديل التليگرام لمدير النظام والمشرفين فقط', studentsRoute.includes('data.telegram !== currentTelegram && !oversees(principal)') && studentsRoute.includes('تعديل ارتباط تليگرام متاح لمدير النظام والمشرفين فقط'));
+check('مسار تحديث الطالب يعيد حساب telegramKey عند تغيير التليگرام (يفك الارتباط عند المسح)', studentsRoute.includes('if (data.telegram !== undefined)') && studentsRoute.includes('data.telegramKey = identityKeys.telegramKey'));
+check('مسار تحديث الطالب لا يعود يحظر مسح التليگرام أو يذكر زراً محذوفاً', !studentsRoute.includes('استخدم زر فك ارتباط تليگرام'));
 
-// 6) واجهة سجل الطلاب تحتفظ بحقل تعديل التيليجرام للمدير فقط
+// 6) واجهة سجل الطلاب تحتفظ بحقل تعديل التليگرام للمدير فقط
 const registry = fs.readFileSync(path.join(root, 'src/components/teacher-pro/student-registry.tsx'), 'utf8');
-check('واجهة السجل تحتفظ بحقل تعديل التيليجرام (يصلح لربط حساب جديد)', registry.includes('updateEditTelegram') && registry.includes('edit-telegram'));
+check('واجهة السجل تحتفظ بحقل تعديل التليگرام (يصلح لربط حساب جديد)', registry.includes('updateEditTelegram') && registry.includes('edit-telegram'));
 
 // 7) تسجيل اختبار الإزالة في package.json ضمن سلسلة الفحوصات
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));

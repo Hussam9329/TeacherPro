@@ -786,14 +786,14 @@ export function ExamEditDialog({
 
                 <div className="tp-exam-new__telegram">
                   <div>
-                    <h3 className="tp-exam-new__group-title">نافذة تسليم الإجابات عبر تيليجرام</h3>
+                    <h3 className="tp-exam-new__group-title">نافذة تسليم الإجابات عبر تليگرام</h3>
                     <p id="edit-exam-telegram-window-help" className="mt-1 text-xs leading-5 text-muted-foreground">
-                      املأ الوقتين معاً، أو امسحهما معاً لتعطيل التسليم عبر تيليجرام.
+                      املأ الوقتين معاً، أو امسحهما معاً لتعطيل التسليم عبر تليگرام.
                     </p>
                   </div>
                   <div className="tp-exam-new__fields">
                     <div data-exam-field="telegramOpenAt" className="tp-exam-new__field">
-                      <Label htmlFor="edit-exam-telegram-open-at">فتح التسليم عبر تيليجرام</Label>
+                      <Label htmlFor="edit-exam-telegram-open-at">فتح التسليم عبر تليگرام</Label>
                       <DateTimeInput
                         id="edit-exam-telegram-open-at"
                         className={lightInputClass}
@@ -813,7 +813,7 @@ export function ExamEditDialog({
                       />
                     </div>
                     <div data-exam-field="telegramCloseAt" className="tp-exam-new__field">
-                      <Label htmlFor="edit-exam-telegram-close-at">إغلاق التسليم عبر تيليجرام</Label>
+                      <Label htmlFor="edit-exam-telegram-close-at">إغلاق التسليم عبر تليگرام</Label>
                       <DateTimeInput
                         id="edit-exam-telegram-close-at"
                         min={editDialog.telegramOpenAt || undefined}

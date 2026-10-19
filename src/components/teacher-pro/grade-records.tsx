@@ -55,8 +55,6 @@ import { useActionLock } from "@/hooks/use-action-lock";
 import { applyOpportunityPenalty } from "@/lib/opportunity-balance";
 import {
   AlertCircle,
-  ChevronLeft,
-  ChevronRight,
   ClipboardList,
   Loader2,
   PenLine,
@@ -71,7 +69,7 @@ import { editableGradeNote, resolveGradeNoteBanner, visibleGradeNote, withIntern
 import { ListChips, ListToolbar } from "./list-toolbar";
 import { RowActionsMenu } from "./row-actions-menu";
 import { FormDialogHero } from "./form-dialog";
-import { EmptyState, LoadingState } from "./ui-kit";
+import { EmptyState, LoadingState, ListPagination } from "./ui-kit";
 import {
   examMatchesAcademicFilters,
   getAcademicCourseProgramFilterOptions,
@@ -168,12 +166,12 @@ const gradeExportColumns: ExportColumn<GradeExportRow>[] = [
   { key: "code", label: "الكود", value: ({ student }) => student?.code || "" },
   {
     key: "telegram",
-    label: "التيليجرام",
+    label: "التليگرام",
     value: ({ student }) => student?.telegram || "",
   },
   {
     key: "username",
-    label: "يوزر تيليجرام",
+    label: "يوزر تليگرام",
     value: ({ student }) => student?.username || "",
   },
   { key: "exam", label: "الامتحان", value: ({ exam }) => exam?.name || "" },
@@ -1026,7 +1024,7 @@ export function GradeRecordsView() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            placeholder="ابحث بالاسم أو الكود أو التيليجرام أو الامتحان"
+            placeholder="ابحث بالاسم أو الكود أو التليگرام أو الامتحان"
           />
         }
         actions={
@@ -1285,8 +1283,8 @@ export function GradeRecordsView() {
           <EmptyState
             icon={hasActiveFilters ? SearchX : ClipboardList}
             title={hasActiveFilters
-              ? "لا يوجد طلاب بدرجات تطابق الفلاتر الحالية."
-              : "لا توجد درجات مسجلة بعد."}
+              ? "ماكو طلاب بدرجات تطابق الفلاتر الحالية."
+              : "ماكو درجات مسجلة بعد."}
           />
         )}
         {summaries.length > 0 && (
@@ -1302,31 +1300,7 @@ export function GradeRecordsView() {
           </ul>
         )}
 
-        {totalPages > 1 && (
-          <nav className="tp-grade-records__pagination" aria-label="صفحات سجل الدرجات">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => setPage((prev) => prev - 1)}
-            >
-              <ChevronRight className="size-4" aria-hidden="true" />
-              السابق
-            </Button>
-            <span className="text-sm text-muted-foreground tabular-nums">
-              صفحة {page} من {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages}
-              onClick={() => setPage((prev) => prev + 1)}
-            >
-              التالي
-              <ChevronLeft className="size-4" aria-hidden="true" />
-            </Button>
-          </nav>
-        )}
+        <ListPagination page={page} totalPages={totalPages} onPageChange={setPage} label="صفحات سجل الدرجات" />
       </section>
 
       <Dialog
@@ -1380,10 +1354,10 @@ export function GradeRecordsView() {
                   compact
                   icon={ClipboardList}
                   title={studentGradesTab === "numeric"
-                    ? "لا توجد درجات رقمية لهذا الطالب."
+                    ? "ماكو درجات رقمية لهذا الطالب."
                     : studentGradesTab === "absent"
-                      ? "لا يوجد غياب لهذا الطالب."
-                      : "لا توجد درجات لهذا الطالب."}
+                      ? "ماكو غياب لهذا الطالب."
+                      : "ماكو درجات لهذا الطالب."}
                 />
               )}
               {visibleStudentGrades.length > 0 && openStudent && (

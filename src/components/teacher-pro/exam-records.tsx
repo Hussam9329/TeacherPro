@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 import { toast } from "@/lib/user-toast";
-import { formatAppDate, toLatinDigits } from "@/lib/format";
+import { formatAppDate, toLatinDigits, arabicCount } from "@/lib/format";
 import {
   formatBaghdadDateTime,
 } from "@/lib/baghdad-time";
@@ -80,12 +80,12 @@ const examGradeExportColumns: ExportColumn<any>[] = [
   { key: "phone", label: "الهاتف", value: (row) => row.student?.phone || "" },
   {
     key: "telegram",
-    label: "التيليجرام",
+    label: "التليگرام",
     value: (row) => row.student?.telegram || "",
   },
   {
     key: "username",
-    label: "يوزر تيليجرام",
+    label: "يوزر تليگرام",
     value: (row) => row.student?.username || "",
   },
   { key: "notes", label: "ملاحظات", value: (row) => visibleGradeNote(row.grade.notes) },
@@ -928,13 +928,13 @@ export function ExamRecordsView() {
     }
     if (deleteDialog.gradeCount > 0) {
       toast.error(
-        `لا يمكن حذف هذا الامتحان لأن عليه ${deleteDialog.gradeCount} سجل درجات. عطّل الامتحان بدلاً من حذفه.`,
+        `لا يمكن حذف هذا الامتحان لأن عليه ${arabicCount(deleteDialog.gradeCount, "سجل درجات واحد", "سجلين درجات", "سجلات درجات", "سجل درجات")}. عطّل الامتحان بدلاً من حذفه.`,
       );
       return;
     }
     if (deleteDialog.dependentCount > 0) {
       toast.error(
-        `لا يمكن حذف الامتحان لأنه مرتبط بـ ${deleteDialog.dependentCount} سجل تابع. عطّله بدلاً من حذفه حتى لا يضيع التاريخ.`,
+        `لا يمكن حذف الامتحان لأنه مرتبط بـ ${arabicCount(deleteDialog.dependentCount, "سجل تابع واحد", "سجلين تابعين", "سجلات تابعة", "سجل تابع")}. عطّله بدلاً من حذفه حتى لا يضيع التاريخ.`,
       );
       return;
     }
@@ -1032,7 +1032,7 @@ export function ExamRecordsView() {
         );
       })}
       {filteredExams.length === 0 && (
-        <EmptyState className="xl:col-span-2" title="لا توجد امتحانات مطابقة للفلاتر." />
+        <EmptyState className="xl:col-span-2" title="ماكو امتحانات مطابقة للفلاتر." />
       )}
     </div>
   );
@@ -1083,7 +1083,7 @@ export function ExamRecordsView() {
           {filteredExams.length === 0 && (
             <tr>
               <td colSpan={9} className="p-8 text-center text-muted-foreground">
-                لا توجد امتحانات مطابقة للفلاتر.
+                ماكو امتحانات مطابقة للفلاتر.
               </td>
             </tr>
           )}

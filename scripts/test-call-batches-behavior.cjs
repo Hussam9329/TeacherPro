@@ -7,6 +7,7 @@ const path = require("node:path");
 const Module = require("node:module");
 const ts = require("typescript");
 const { PGlite } = require("@electric-sql/pglite");
+const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
 
 const root = process.cwd();
 const resolve = Module._resolveFilename;
@@ -23,7 +24,7 @@ const server = require("../src/lib/call-reservations-server.ts");
 const { CALL_BATCH_SIZE } = require("../src/lib/call-batch.ts");
 
 (async () => {
-  const db = new PGlite();
+  const db = new PGlite({ extensions: { pg_trgm } });
   for (const directory of fs.readdirSync("prisma/migrations").sort()) {
     const file = `prisma/migrations/${directory}/migration.sql`;
     if (fs.existsSync(file)) await db.exec(fs.readFileSync(file, "utf8"));

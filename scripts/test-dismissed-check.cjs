@@ -4,6 +4,7 @@ const os = require("node:os");
 const path = require("node:path");
 const ts = require("typescript");
 const { PGlite } = require("@electric-sql/pglite");
+const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
 
 const source = fs.readFileSync("src/lib/dismissed-check-server.ts", "utf8");
 const compiled = ts.transpileModule(source, {
@@ -55,7 +56,7 @@ function adapter(sql, options = {}) {
 
 (async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "teacherpro-shared-check-test-"));
-  let db = new PGlite(directory);
+  let db = new PGlite(directory, { extensions: { pg_trgm } });
   try {
     await db.exec(`CREATE TABLE "Student" (id text PRIMARY KEY, name text NOT NULL, code text NOT NULL,
       status text NOT NULL, opportunities integer NOT NULL, "dismissedChecked" boolean NOT NULL DEFAULT false);
@@ -79,7 +80,7 @@ function adapter(sql, options = {}) {
     await assert.rejects(mutate({ studentId: "s", checked: false, expectedChecked: false, expectedEpoch: 0 }), (error) => error.status === 409);
     assert.equal((await read()).dismissedChecked, true, "stale request cannot undo another user's choice");
     await db.close();
-    db = new PGlite(directory);
+    db = new PGlite(directory, { extensions: { pg_trgm } });
     assert.equal((await read()).dismissedChecked, true, "checked survives closing and reopening the database");
 
     await assert.rejects(mutate({ studentId: "s", checked: false, expectedChecked: true, expectedEpoch: 0 }, { failAudit: true }), /audit failure/);
@@ -93,7 +94,7 @@ function adapter(sql, options = {}) {
 
     await mutate({ studentId: "s", checked: false, expectedChecked: true, expectedEpoch: 0 });
     await db.close();
-    db = new PGlite(directory);
+    db = new PGlite(directory, { extensions: { pg_trgm } });
     assert.deepEqual(await read(), beforeStudent, "explicit unchecked survives reload without changing academic fields");
     assert.deepEqual((await db.query('SELECT * FROM "Grade"')).rows, beforeGrades, "grades remain untouched");
     const audits = (await db.query('SELECT * FROM "AuditLog" ORDER BY id')).rows;

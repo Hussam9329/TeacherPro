@@ -75,8 +75,6 @@ import {
   Archive,
   AlertTriangle,
   BookOpen,
-  ChevronLeft,
-  ChevronRight,
   Eye,
   PhoneCall,
   RotateCcw,
@@ -88,7 +86,7 @@ import {
   UserX,
   X,
 } from "lucide-react";
-import { EmptyState } from "./ui-kit";
+import { EmptyState, ListPagination } from "./ui-kit";
 import { FormDialogHero } from "./form-dialog";
 import { ListToolbar } from "./list-toolbar";
 import { StudentProfileDialog } from "./student-profile-dialog";
@@ -855,15 +853,6 @@ export function StudentRegistryView() {
     ],
   );
 
-  const changeRegistryPage = useCallback((nextPage: number) => {
-    setPage(nextPage);
-    window.requestAnimationFrame(() => {
-      registryResultsRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    });
-  }, []);
 
   const editFilteredCourses = useMemo(
     () =>
@@ -1312,7 +1301,7 @@ export function StudentRegistryView() {
       [
         Boolean(form.courseId),
         editFilteredCourses.length === 0
-          ? "لا توجد دورات مسجلة"
+          ? "ماكو دورات مسجلة"
           : "يرجى اختيار اسم الدورة",
       ],
       [Boolean(form.createdAt), "تاريخ إضافة الطالب مطلوب"],
@@ -1891,7 +1880,7 @@ export function StudentRegistryView() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            placeholder="ابحث بالاسم أو الكود أو التيليجرام أو الهاتف"
+            placeholder="ابحث بالاسم أو الكود أو التليگرام أو الهاتف"
           />
         }
         actions={
@@ -2309,7 +2298,7 @@ export function StudentRegistryView() {
                   description={
                     canAddStudents
                       ? "ابدأ بإضافة أول طالب، وبعدها ستظهر البطاقات والفلاتر والإحصائيات هنا تلقائياً."
-                      : "لا توجد سجلات طلاب متاحة للعرض حالياً."
+                      : "ماكو سجلات طلاب متاحة للعرض حالياً."
                   }
                   action={
                     canAddStudents ? (
@@ -2326,7 +2315,7 @@ export function StudentRegistryView() {
               ) : filteredTotalCount === 0 ? (
                 <EmptyState
                   icon={SearchX}
-                  title="لا توجد نتائج مطابقة"
+                  title="ماكو نتائج مطابقة"
                   description="الفلاتر تعمل معاً؛ غيّر شروط البحث أو امسح الفلاتر لعرض كل الطلاب."
                   action={
                     <Button
@@ -2369,34 +2358,14 @@ export function StudentRegistryView() {
                 />
               )}
 
-              {totalPages > 1 && (
-                <div className="tp-student-registry__pagination">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="tp-student-registry__pagination-button tp-student-registry__pagination-button--previous"
-                    disabled={page <= 1}
-                    onClick={() => changeRegistryPage(page - 1)}
-                  >
-                    <ChevronRight aria-hidden="true" className="size-4" />
-                    السابق
-                  </Button>
-                  <span className="tp-student-registry__pagination-summary text-sm text-muted-foreground">
-                    صفحة {page} من {totalPages} · المعروض في الصفحة:{" "}
-                    {paged.length}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="tp-student-registry__pagination-button tp-student-registry__pagination-button--next"
-                    disabled={page >= totalPages}
-                    onClick={() => changeRegistryPage(page + 1)}
-                  >
-                    التالي
-                    <ChevronLeft aria-hidden="true" className="size-4" />
-                  </Button>
-                </div>
-              )}
+              <ListPagination
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                scrollTarget={registryResultsRef}
+                label="صفحات سجل الطلاب"
+                summary={<>صفحة <b>{page}</b> من <b>{totalPages}</b> · المعروض في الصفحة: <b>{paged.length}</b></>}
+              />
       </div>
 
       <Dialog
@@ -2477,7 +2446,7 @@ export function StudentRegistryView() {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs leading-6">لا يوجد تعارض بين الحقول. سنحتفظ بتعديلاتك ونحدّث الحقول التي لم تعدّلها، ثم تراجع الأثر من جديد.</p>
+                      <p className="text-xs leading-6">ماكو تعارض بين الحقول. سنحتفظ بتعديلاتك ونحدّث الحقول التي لم تعدّلها، ثم تراجع الأثر من جديد.</p>
                     )}
                   </div>
                 )}
@@ -2754,7 +2723,7 @@ export function StudentRegistryView() {
                           <SelectValue
                             placeholder={
                               editFilteredCourses.length === 0
-                                ? "لا توجد دورات مسجلة"
+                                ? "ماكو دورات مسجلة"
                                 : "اختر اسم الدورة"
                             }
                           />
@@ -2762,7 +2731,7 @@ export function StudentRegistryView() {
                         <SelectContent>
                           {editFilteredCourses.length === 0 ? (
                             <div className="px-3 py-2 text-sm text-muted-foreground">
-                              لا توجد دورات مسجلة
+                              ماكو دورات مسجلة
                             </div>
                           ) : (
                             editFilteredCourses.map((c) => (
@@ -2823,7 +2792,7 @@ export function StudentRegistryView() {
                                   ? "تعذر التحقق من الفصل النشط. أعد المحاولة."
                                   : editTargetActiveChapterConflict
                                     ? "للدورة أكثر من فصل نشط؛ حلّ التعارض أولاً."
-                                    : "لا يوجد فصل نشط لهذه الدورة؛ فعّل فصلاً أولاً."}
+                                    : "ماكو فصل نشط لهذه الدورة؛ فعّل فصلاً أولاً."}
                             </p>
                           )}
                       </div>
@@ -3052,7 +3021,7 @@ export function StudentRegistryView() {
                   </div>
                   <div className="tp-registry-editor__fields">
                     <div className="space-y-2">
-                      <Label htmlFor="edit-telegram">معرف التيليجرام</Label>
+                      <Label htmlFor="edit-telegram">معرف التليگرام</Label>
                       <Input
                         id="edit-telegram"
                         name="telegram"
@@ -3066,7 +3035,7 @@ export function StudentRegistryView() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="edit-username">
-                        يوزر التيليجرام (المستعاد)
+                        يوزر التليگرام (المستعاد)
                       </Label>
                       <Input
                         id="edit-username"
@@ -3189,7 +3158,7 @@ export function StudentRegistryView() {
                     </ul>
                   ) : deleteImpact ? (
                     <div className="text-muted-foreground">
-                      لا توجد علاقات مسجلة، ومع ذلك سيتم استخدام الأرشفة كسلوك
+                      ماكو علاقات مسجلة، ومع ذلك سيتم استخدام الأرشفة كسلوك
                       آمن.
                     </div>
                   ) : (

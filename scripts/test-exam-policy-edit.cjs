@@ -4,13 +4,14 @@
 process.env.TZ='UTC';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module');
 const {randomUUID}=require('node:crypto'),{PGlite}=require('@electric-sql/pglite'),{Prisma}=require('@prisma/client'),ts=require('typescript');
+const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
 const root=process.cwd(),resolve=Module._resolveFilename,load=Module._load,mocks=new Map();
 Module._resolveFilename=function(r,p,...a){return resolve.call(this,r.startsWith('@/')?path.join(root,'src',r.slice(2)):r,p,...a)};
 Module._load=function(r,p,...a){return mocks.has(r)?mocks.get(r):load.call(this,r,p,...a)};
 require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
 
 (async()=>{
- const pg=new PGlite();
+ const pg=new PGlite({ extensions: { pg_trgm } });
  for(const dir of fs.readdirSync('prisma/migrations').sort()){
   const f=`prisma/migrations/${dir}/migration.sql`;if(fs.existsSync(f))await pg.exec(fs.readFileSync(f,'utf8'));
  }

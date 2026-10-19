@@ -118,7 +118,7 @@ function getPrismaStudentErrorResponse(error: unknown) {
       : String(targetValue ?? "");
     if (target.includes("telegramKey")) {
       return NextResponse.json(
-        { error: "معرف التيليجرام مسجل مسبقاً لطالب آخر" },
+        { error: "معرف التليگرام مسجل مسبقاً لطالب آخر" },
         { status: 409 },
       );
     }
@@ -243,7 +243,7 @@ export async function POST(req: NextRequest) {
     const gender = asText(row.gender);
     const phone = normalizeBulkPhone(row.phone);
     const parentPhone = normalizeBulkPhone(row.parentPhone);
-    // الإضافة الجماعية تخزّن معرف التيليجرام في «المستعاد» (username) وليس في
+    // الإضافة الجماعية تخزّن معرف التليگرام في «المستعاد» (username) وليس في
     // الحقل الفريد: القيم الحرفية يوزرات ← username، والقيم الرقمية معرفات
     // ← telegram الأصلي. telegramKey يبقى فارغاً حتى يربط البوت الحساب الفعلي.
     const telegram = sanitizeTelegramInput(asText(row.telegram));
@@ -351,7 +351,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // المفتاح الفريد يُحسب بدون تيليجرام — فحص التكرار يتم على اليوزر المستعاد.
+    // المفتاح الفريد يُحسب بدون تليگرام — فحص التكرار يتم على اليوزر المستعاد.
     const uniqueKeys = getStudentUniqueKeys({ name, phone, telegram: "" });
     if (uniqueKeys.nameKey) {
       const previous = seenNames.get(uniqueKeys.nameKey);
@@ -380,7 +380,7 @@ export async function POST(req: NextRequest) {
       if (previous)
         return NextResponse.json(
           {
-            error: `السطر ${rowNo}: معرف التيليجرام مكرر داخل النص مع السطر ${previous}`,
+            error: `السطر ${rowNo}: معرف التليگرام مكرر داخل النص مع السطر ${previous}`,
           },
           { status: 400 },
         );
@@ -451,7 +451,7 @@ export async function POST(req: NextRequest) {
       : Promise.resolve([]),
   ]);
   const databasePreviewRows = normalizedRows.map((row) => {
-    // التيليجرام لم يعد مفتاحاً فريداً هنا، فلا يُمرر لرسالة الرفض —
+    // التليگرام لم يعد مفتاحاً فريداً هنا، فلا يُمرر لرسالة الرفض —
     // التطابق على اليوزر يظهر كتحذير مستقل تحت.
     const duplicateMessage = getStudentDuplicateMessage(duplicateSource, {
       name: asText(row.payload.name),
@@ -480,8 +480,8 @@ export async function POST(req: NextRequest) {
         ...(handleMatch
           ? [
               row.telegramNumeric
-                ? `معرف التيليجرام موجود مسبقاً عند: ${handleMatch.name}`
-                : `يوزر التيليجرام (المستعاد) موجود مسبقاً عند: ${handleMatch.name}`,
+                ? `معرف التليگرام موجود مسبقاً عند: ${handleMatch.name}`
+                : `يوزر التليگرام (المستعاد) موجود مسبقاً عند: ${handleMatch.name}`,
             ]
           : []),
       ],

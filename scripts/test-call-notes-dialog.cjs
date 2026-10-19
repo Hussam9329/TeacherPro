@@ -468,7 +468,7 @@ const note = (id = 'n1') => ({
   assert(view.nodes('a').some((node) => node.props.href === 'tg://resolve?domain=legacy_student' + typed));
   assert(view.nodes('a').some((node) => node.props.href === 'tg://resolve?domain=current_student' + typed));
   assert(view.text().includes('123456789'));
-  assert(!view.text().includes('تيليجرام غير متوفر'), 'a missing Telegram shows nothing');
+  assert(!view.text().includes('تليگرام غير متوفر'), 'a missing Telegram shows nothing');
   // The Telegram button also copies the message, word for word, in case the app leaves the box empty.
   const chatLink = view.nodes('a').find((node) => node.props.href === 'tg://resolve?domain=current_student' + typed);
   const clicked = { tagName: 'A' };

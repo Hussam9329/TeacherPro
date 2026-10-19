@@ -392,35 +392,35 @@ export function validateExamForm(
   if (input.requireTelegramWindow && !hasTelegramOpen) {
     errors.add(
       "telegramOpenAt",
-      "حدد تاريخ ووقت فتح التسليم عبر تيليجرام",
+      "حدد تاريخ ووقت فتح التسليم عبر تليگرام",
     );
   }
   if (input.requireTelegramWindow && !hasTelegramClose) {
     errors.add(
       "telegramCloseAt",
-      "حدد تاريخ ووقت إغلاق التسليم عبر تيليجرام",
+      "حدد تاريخ ووقت إغلاق التسليم عبر تليگرام",
     );
   }
   if (hasTelegramOpen !== hasTelegramClose) {
     const missingField = hasTelegramOpen ? "telegramCloseAt" : "telegramOpenAt";
     errors.add(
       missingField,
-      "يجب تحديد وقتي فتح وإغلاق تسليم تيليجرام معاً، أو مسحهما معاً",
+      "يجب تحديد وقتي فتح وإغلاق تسليم تليگرام معاً، أو مسحهما معاً",
     );
   }
   if (hasTelegramOpen && hasTelegramClose) {
     const openAt = telegramWindowTime(input.telegramOpenAt);
     const closeAt = telegramWindowTime(input.telegramCloseAt);
     if (openAt === null) {
-      errors.add("telegramOpenAt", "تاريخ ووقت فتح تسليم تيليجرام غير صحيح");
+      errors.add("telegramOpenAt", "تاريخ ووقت فتح تسليم تليگرام غير صحيح");
     }
     if (closeAt === null) {
-      errors.add("telegramCloseAt", "تاريخ ووقت إغلاق تسليم تيليجرام غير صحيح");
+      errors.add("telegramCloseAt", "تاريخ ووقت إغلاق تسليم تليگرام غير صحيح");
     }
     if (openAt !== null && closeAt !== null && openAt >= closeAt) {
       errors.add(
         "telegramCloseAt",
-        "وقت إغلاق تسليم تيليجرام يجب أن يكون بعد وقت الفتح",
+        "وقت إغلاق تسليم تليگرام يجب أن يكون بعد وقت الفتح",
       );
     }
   }

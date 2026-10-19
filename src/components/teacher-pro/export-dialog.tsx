@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatAppDate } from "@/lib/format";
+import { formatAppDate, studentCount } from "@/lib/format";
 import {
   Dialog,
   DialogContent,
@@ -756,7 +756,7 @@ function reportDismissalEvents(
  * (درجات الامتحانات + سجل الفرص مع الأسباب) — نفس التحويل الحرفي
  * الذي يستخدمه تصدير HTML من صفحة إدارة الفرص.
  *
- * الدالة مشتركة عمداً بين تصدير HTML وزر تيليجرام في إدارة المفصولين
+ * الدالة مشتركة عمداً بين تصدير HTML وزر تليگرام في إدارة المفصولين
  * حتى يبقى مصدر الرسالة ومصدر الملف المتولد واحداً لا يتفرع.
  */
 export function buildStudentDetailsFromProfileLog(
@@ -1435,7 +1435,7 @@ const DETAILS_MODAL_JS = `
       suggestionsEl.innerHTML = '';
       suggestionsEl.classList.remove('open');
       searchInput.setAttribute('aria-expanded', 'false');
-      hintEl.textContent = 'لا يوجد طلاب مطابقون لهذا البحث.';
+      hintEl.textContent = 'ماكو طلاب مطابقون لهذا البحث.';
       return;
     }
     var html = '';
@@ -1620,7 +1620,7 @@ const DETAILS_MODAL_JS = `
           + mobileCell('الأثر على الفرص', esc(effectText), 'tp-result-effect', deltaChip(g.delta, gradeCat))
           + '</tr>';
       }).join('');
-      if (!data.grades || !data.grades.length) gradesBody.innerHTML += '<tr class="tp-empty-row" role="row"><td colspan="4" role="cell">لا توجد امتحانات لعرضها في هذه النسخة.</td></tr>';
+      if (!data.grades || !data.grades.length) gradesBody.innerHTML += '<tr class="tp-empty-row" role="row"><td colspan="4" role="cell">ماكو امتحانات لعرضها في هذه النسخة.</td></tr>';
     }
     if (!overlay.classList.contains('open')) {
       previouslyFocusedElement = document.activeElement;
@@ -2049,7 +2049,7 @@ export function ExportDialog<T = Record<string, unknown>>({
 
   const ensureExportable = (exportRows: T[]) => {
     if (exportRows.length === 0) {
-      toast.error("لا توجد بيانات للتصدير");
+      toast.error("ماكو بيانات للتصدير");
       return false;
     }
     if (selectedColumns.length === 0) {
@@ -2223,10 +2223,10 @@ export function ExportDialog<T = Record<string, unknown>>({
     });
     downloadBlob(html, `${safeFileName}.html`, "text/html;charset=utf-8");
     const detailsNote = reportDetailsMap
-      ? ` مع تفاصيل ${Object.keys(reportDetailsMap).length} طالب`
+      ? ` مع تفاصيل ${studentCount(Object.keys(reportDetailsMap).length)}`
       : "";
     toast.success(
-      `تم تصدير ${exportRows.length} طالب بصيغة HTML${detailsNote}`,
+      `تم تصدير ${studentCount(exportRows.length)} بصيغة HTML${detailsNote}`,
     );
     setOpen(false);
   };
@@ -2428,7 +2428,7 @@ export function ExportDialog<T = Record<string, unknown>>({
                       </span>
                     </label>
                   ))}
-                  {visibleHtmlReportExams.length === 0 && <p className="p-3 text-sm text-muted-foreground">{htmlReportExams.length ? "لا توجد امتحانات مطابقة للبحث." : "لا توجد امتحانات ضمن نطاق هذا التقرير."}</p>}
+                  {visibleHtmlReportExams.length === 0 && <p className="p-3 text-sm text-muted-foreground">{htmlReportExams.length ? "ماكو امتحانات مطابقة للبحث." : "ماكو امتحانات ضمن نطاق هذا التقرير."}</p>}
                 </div>
                 {selectedHtmlExamIds.length === 0 && <p className="text-sm text-muted-foreground">سيحتوي التقرير على الطلاب وفرصهم فقط، دون عرض امتحانات.</p>}
               </> : !exporting ? <div role="alert" className="space-y-3 rounded-xl border p-3 text-sm">

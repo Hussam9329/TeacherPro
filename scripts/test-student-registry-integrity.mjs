@@ -156,7 +156,7 @@ check('واجهة سجل الطلاب تستخدم statusAction للفصل وا�
 check('الواجهة توقف التعديل والفصل والأرشفة عند عرض نسخة محلية مؤقتة', registry.includes('registryServerUnavailable') && registry.includes('لا يمكن أرشفة طالب أثناء عرض نسخة محلية مؤقتة') && registry.includes('لا يمكن فصل طالب أثناء عرض نسخة محلية مؤقتة'));
 check('أرشفة الطالب في API محفوظة داخل transaction ومقيدة ببصمة علاقاتها', studentsRoute.includes('withSerializableTransaction') && studentsRoute.includes('previewToken !== impact.previewToken') && deleteImpact.includes('buildMutationPreviewToken') && studentsRoute.includes('studentNote.create') && studentsRoute.includes('auditLog.create'));
 check(
-  'تم حذف ميزة فك ارتباط تيليجرام بكل جذورها: لا مسار API ولا زر ولا نافذة تأكيد ولا سياسة إعادة تشغيل',
+  'تم حذف ميزة فك ارتباط تليگرام بكل جذورها: لا مسار API ولا زر ولا نافذة تأكيد ولا سياسة إعادة تشغيل',
   !fs.existsSync(path.join(root, 'src/app/api/students/unlink-telegram')) &&
     !registry.includes('unlinkTelegram') &&
     !registry.includes('فك الارتباط') &&
@@ -165,10 +165,10 @@ check(
     !mutationReplayPolicy.includes('unlink-telegram'),
 );
 check(
-  'مسح حقل التيليجرام من تعديل الطالب يفك الارتباط بأمان دون الحارس المحذوف أو ذكر زر غير موجود',
-  !studentsRoute.includes('استخدم زر فك ارتباط تيليجرام') &&
+  'مسح حقل التليگرام من تعديل الطالب يفك الارتباط بأمان دون الحارس المحذوف أو ذكر زر غير موجود',
+  !studentsRoute.includes('استخدم زر فك ارتباط تليگرام') &&
     studentsRoute.includes('data.telegramKey = identityKeys.telegramKey') &&
-    studentsRoute.includes('تعديل ارتباط تيليجرام متاح لمدير النظام والمشرفين فقط') &&
+    studentsRoute.includes('تعديل ارتباط تليگرام متاح لمدير النظام والمشرفين فقط') &&
     registry.includes('updateEditTelegram'),
 );
 check('الأرشفة لا تستبدل سبب الفصل السابق', !studentsRoute.includes('dismissalReason: "أرشفة إدارية"'));

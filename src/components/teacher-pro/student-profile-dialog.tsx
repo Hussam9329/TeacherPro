@@ -169,7 +169,7 @@ function InfoBox({ label, value }: { label: string; value: React.ReactNode }) {
 
 // The retired grace placeholder is not a result: show it as nothing recorded.
 function profileGradeStatus(status: string | null | undefined): string {
-  return status === LEGACY_GRACE_PLACEHOLDER_STATUS ? "لا توجد نتيجة" : String(status || "");
+  return status === LEGACY_GRACE_PLACEHOLDER_STATUS ? "ماكو نتيجة" : String(status || "");
 }
 
 function humanizeProfileText(value: unknown): string {
@@ -701,15 +701,15 @@ export function StudentProfileDialog({
   const profileContacts = [
     profileStudent.phone ? { key: "phone", label: "رقم الطالب", value: profileStudent.phone, href: whatsappLink(profileStudent.phone) } : null,
     profileStudent.parentPhone ? { key: "parent", label: "ولي الأمر", value: profileStudent.parentPhone, href: whatsappLink(profileStudent.parentPhone) } : null,
-    profileStudent.username ? { key: "username", label: "تيليجرام", value: profileStudent.username, href: telegramLink(profileStudent.username) } : null,
+    profileStudent.username ? { key: "username", label: "تليگرام", value: profileStudent.username, href: telegramLink(profileStudent.username) } : null,
     profileStudent.telegram && profileStudent.telegram !== profileStudent.username
-      ? { key: "telegram", label: "معرف تيليجرام", value: profileStudent.telegram, href: /^\d+$/.test(profileStudent.telegram) ? "" : telegramLink(profileStudent.telegram) }
+      ? { key: "telegram", label: "معرف تليگرام", value: profileStudent.telegram, href: /^\d+$/.test(profileStudent.telegram) ? "" : telegramLink(profileStudent.telegram) }
       : null,
   ].filter(Boolean) as Array<{ key: string; label: string; value: string; href: string }>;
   const missingProfileFacts = [
     !profileStudent.phone ? "رقم الطالب" : "",
     !profileStudent.parentPhone ? "رقم ولي الأمر" : "",
-    !profileStudent.username && !profileStudent.telegram ? "التيليجرام" : "",
+    !profileStudent.username && !profileStudent.telegram ? "التليگرام" : "",
     formatStudentLocation(profileStudent) === "—" ? "الموقع" : "",
   ].filter(Boolean);
   const profileFacts = [
@@ -783,7 +783,7 @@ export function StudentProfileDialog({
             <details className="rounded-2xl border bg-muted/30 p-3">
               <summary className="cursor-pointer font-black">الدرجات القديمة ({oldGrades.length})</summary>
               <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-                {oldGrades.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد درجات</p> : oldGrades.map((grade) => (
+                {oldGrades.length === 0 ? <p className="text-xs text-muted-foreground">ماكو درجات</p> : oldGrades.map((grade) => (
                   <div key={String(grade.id)} className="rounded-xl bg-background p-3 text-xs">
                     <p><b>{grade.exam?.name || "امتحان"}</b> — {profileGradeStatus(grade.status) || "—"} {grade.score !== null && grade.score !== undefined ? <b>({grade.score})</b> : null}</p>
                     <p className="mt-1 text-muted-foreground"><b>{profileDay(grade.exam?.date || grade.updatedAt || grade.createdAt)}</b></p>
@@ -794,7 +794,7 @@ export function StudentProfileDialog({
             <details className="rounded-2xl border bg-muted/30 p-3">
               <summary className="cursor-pointer font-black">الفرص والإجراءات القديمة ({oldOpportunities.length})</summary>
               <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-                {oldOpportunities.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد حركات</p> : oldOpportunities.map((log) => (
+                {oldOpportunities.length === 0 ? <p className="text-xs text-muted-foreground">ماكو حركات</p> : oldOpportunities.map((log) => (
                   <div key={String(log.id)} className="rounded-xl bg-background p-3 text-xs">
                     <p className="font-bold">{displayOpportunityAction(log.action) || "حركة"} {log.amount ? `— ${log.amount}` : ""}</p>
                     <p className="mt-1 break-words text-muted-foreground">{humanizeProfileText(displayReasonText(log.reason)) || "—"} — <b>{profileDay(log.date)}</b></p>
@@ -816,7 +816,7 @@ export function StudentProfileDialog({
             <details className="rounded-2xl border bg-muted/30 p-3">
               <summary className="cursor-pointer font-black">الملاحظات القديمة ({oldNotes.length})</summary>
               <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-                {oldNotes.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد ملاحظات</p> : oldNotes.map((note) => (
+                {oldNotes.length === 0 ? <p className="text-xs text-muted-foreground">ماكو ملاحظات</p> : oldNotes.map((note) => (
                   <div key={String(note.id)} className="rounded-xl bg-background p-3 text-xs">
                     <p className="font-bold">{note.kind || "ملاحظة"} — <b>{profileDay(note.date)}</b></p>
                     <p className="mt-1 break-words text-muted-foreground">{note.text || "—"}</p>
@@ -827,7 +827,7 @@ export function StudentProfileDialog({
             <details className="rounded-2xl border bg-muted/30 p-3">
               <summary className="cursor-pointer font-black">نسخ درجات الإجازات القديمة ({oldLeaveGradeBackups.length})</summary>
               <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-                {oldLeaveGradeBackups.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد نسخ درجات</p> : oldLeaveGradeBackups.map((backup) => (
+                {oldLeaveGradeBackups.length === 0 ? <p className="text-xs text-muted-foreground">ماكو نسخ درجات</p> : oldLeaveGradeBackups.map((backup) => (
                   <div key={String(backup.id)} className="rounded-xl bg-background p-3 text-xs">
                     <p className="font-bold">{backup.exam?.name || "امتحان"} — {backup.status || "—"} {backup.score !== null && backup.score !== undefined ? `(${backup.score})` : ""}</p>
                     <p className="mt-1 break-words text-muted-foreground">{backup.notes ? shortGradeNoteText(backup.notes) : "بدون ملاحظات"} — {profileDay(backup.gradeUpdatedAt || backup.gradeCreatedAt || backup.createdAt)}</p>
@@ -997,7 +997,7 @@ export function StudentProfileDialog({
             {chapterCardsState === "failed" ? (
               <div role="alert"><EmptyState compact icon={AlertCircle} title="تعذر تحميل ملف الطالب." /></div>
             ) : examRows.length === 0 ? (
-              <EmptyState compact title="لا توجد امتحانات أو حركات لعرضها" />
+              <EmptyState compact title="ماكو امتحانات أو حركات لعرضها" />
             ) : (
               <div className="tp-pf-exams">
                 <div className="tp-pf-exams__head" aria-hidden="true">
@@ -1067,7 +1067,7 @@ export function StudentProfileDialog({
               {chapterCardsState === "failed" ? (
                 <div role="alert"><EmptyState compact icon={AlertCircle} title="تعذر تحميل ملف الطالب." /></div>
               ) : !overview || overview.moves.length === 0 ? (
-                <EmptyState compact title="لا توجد امتحانات أو حركات لعرضها" />
+                <EmptyState compact title="ماكو امتحانات أو حركات لعرضها" />
               ) : (
                 <ol className="tp-pf-moves">
                   {overview.moves.slice(0, MOVES_SHOWN).map(({ row, after }) => {

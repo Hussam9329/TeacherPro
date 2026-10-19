@@ -192,7 +192,7 @@ must(
       !read("src/components/teacher-pro/call-notes-management-dialog.tsx").includes("${note.student.telegram") &&
       read("src/components/teacher-pro/code-closures-dialog.tsx").includes('${student.username || ""}') &&
       read("src/components/teacher-pro/student-registry-helpers.ts").includes("studentUsername.includes(username)"),
-    "البحث بكل الصفحات يلكه التيليجرام باليوزر المستعاد، مو بالمعرف الرقمي",
+    "البحث بكل الصفحات يلكه التليگرام باليوزر المستعاد، مو بالمعرف الرقمي",
   );
 }
 
@@ -237,7 +237,7 @@ must(
       notesDialog.includes('field="username"') && notesDialog.includes('[["phone", "الطالب"], ["parentPhone", "ولي الأمر"]]') &&
       registry.includes('<StudentContactEdit student={student} field="phone"') &&
       registry.includes('<StudentContactEdit student={student} field="parentPhone"') &&
-      registry.includes('<StudentContactEdit student={student} field="username" emptyLabel="معرف تيليجرام"') &&
+      registry.includes('<StudentContactEdit student={student} field="username" emptyLabel="معرف تليگرام"') &&
       registry.includes("actionProps.canEdit && student.status !== ARCHIVED_STUDENT_STATUS"),
     "تعديل سريع لليوزر ورقم الطالب ورقم ولي الأمر من الكارت، لمن عنده تعديل الطلاب",
   );

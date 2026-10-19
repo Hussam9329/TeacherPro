@@ -57,7 +57,7 @@ assert.match(backup, /const BACKUP_VERSION = 12/);
 assert.match(backup, /upsertRecord\(tx\.exam/);
 
 for (const form of [newForm, editForm]) {
-  assert.match(form, /نافذة تسليم الإجابات عبر تيليجرام/);
+  assert.match(form, /نافذة تسليم الإجابات عبر تليگرام/);
   assert.match(form, /telegramOpenAt/);
   assert.match(form, /telegramCloseAt/);
 }
@@ -68,6 +68,6 @@ for (const suffix of ["telegram-open-at", "telegram-close-at"]) {
   assert.ok(newForm.includes(`${suffix}-error`));
 }
 assert.doesNotMatch(newForm, /telegram-window-help/);
-assert.match(editForm, /امسحهما معاً لتعطيل التسليم عبر تيليجرام/);
+assert.match(editForm, /امسحهما معاً لتعطيل التسليم عبر تليگرام/);
 
 console.log("Telegram exam submission-window integrity checks passed.");

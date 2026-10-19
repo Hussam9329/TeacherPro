@@ -43,7 +43,7 @@ import {
   PlusCircle,
   ShieldAlert,
 } from "lucide-react";
-import { toLatinDigits } from "@/lib/format";
+import { toLatinDigits, arabicCount, studentCount } from "@/lib/format";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import {
   COURSE_PROGRAMS,
@@ -84,7 +84,7 @@ const COLUMN_NAMES = [
   "الفرص",
   "رقم هاتف الطالب",
   "رقم ولي الأمر",
-  "معرف التيليجرام",
+  "معرف التليگرام",
 ];
 
 const SAMPLE_TEXT = `مراد سلمان سرحان سلمان\tالياسمين للبنين\tذكر\tالدورة الصيفية\tمنهج كامل\t\tإلكتروني\tبغداد\tبغداد - عموم بغداد\tنشط\t0\t7505687475\t7505374138\tMorad_SS2
@@ -600,7 +600,7 @@ export function StudentBulkTextImportView() {
         (courseRow.activeChapterCount || 0) === 0
       ) {
         warnings.push(
-          "لا يوجد فصل نشط لهذه الدورة؛ سيُسجل الطالب بدون فرص.",
+          "ماكو فصل نشط لهذه الدورة؛ سيُسجل الطالب بدون فرص.",
         );
       } else if (courseRow?.activeChapter && opportunities <= 0) {
         warnings.push(
@@ -728,7 +728,7 @@ export function StudentBulkTextImportView() {
       if (telegramKey) {
         const previous = telegramMap.get(telegramKey);
         if (previous)
-          row.errors.push(`معرف التيليجرام مكرر داخل النص مع السطر ${previous}`);
+          row.errors.push(`معرف التليگرام مكرر داخل النص مع السطر ${previous}`);
         else telegramMap.set(telegramKey, row.rowNumber);
       }
       if (parentPhoneKey) {
@@ -814,7 +814,7 @@ export function StudentBulkTextImportView() {
       });
     } else {
       toast.success("اكتملت المعاينة", {
-        description: `جاهز لإضافة ${result.length} طالب بعد التأكيد`,
+        description: `جاهز لإضافة ${studentCount(result.length)} بعد التأكيد`,
       });
     }
   };
@@ -837,7 +837,7 @@ export function StudentBulkTextImportView() {
       .map((row) => row.student);
 
     if (studentsToImport.length === 0) {
-      toast.error("لا توجد أسطر جاهزة للاستيراد");
+      toast.error("ماكو أسطر جاهزة للاستيراد");
       return;
     }
 
@@ -862,7 +862,7 @@ export function StudentBulkTextImportView() {
       scopes: ["students", "opportunities", "dashboard", "bulk-import", "logs"],
     });
     toast.success("تمت الإضافة الجماعية", {
-      description: `تمت إضافة ${response.count ?? studentsToImport.length} طالب إلى سجل الطلاب${response.warnings?.length ? `، مع ${response.warnings.length} تنبيه فرص` : ""}`,
+      description: `تمت إضافة ${studentCount(response.count ?? studentsToImport.length)} إلى سجل الطلاب${response.warnings?.length ? `، مع ${response.warnings.length} تنبيه فرص` : ""}`,
     });
     setRawText("");
     setPreviewRows([]);
@@ -1088,8 +1088,8 @@ export function StudentBulkTextImportView() {
                   >
                     <ShieldAlert className="ml-2 inline size-4" />
                     {importPolicy === "valid-only"
-                      ? `سيتم استيراد ${summary.ready} طالب جاهز فقط، وتجاهل ${summary.blockingRows} سطر يحتاج مراجعة.`
-                      : `لن يتم الاستيراد لأن هناك ${summary.blockingRows} سطر يحتوي على خطأ مانع.`}
+                      ? `سيتم استيراد ${studentCount(summary.ready, { one: "جاهز", two: "جاهزين", few: "جاهزين" })} فقط، وتجاهل ${arabicCount(summary.blockingRows, "سطر واحد", "سطرين", "أسطر", "سطر")} يحتاج مراجعة.`
+                      : `لن يتم الاستيراد لأن هناك ${arabicCount(summary.blockingRows, "سطر واحد", "سطرين", "أسطر", "سطر")} فيه خطأ مانع.`}
                   </div>
                 )}
 
@@ -1144,8 +1144,8 @@ export function StudentBulkTextImportView() {
             <AlertDialogTitle>تأكيد الإضافة الجماعية</AlertDialogTitle>
             <AlertDialogDescription>
               {importPolicy === "valid-only" && summary.blockingRows > 0
-                ? `سيتم إضافة ${summary.ready} طالب جاهز فقط، ولن يتم إرسال ${summary.blockingRows} سطر يحتاج مراجعة.`
-                : `سيتم إضافة ${summary.ready} طالب إلى سجل الطلاب. هل تريد إكمال الإضافة الآن؟`}
+                ? `سيتم إضافة ${studentCount(summary.ready, { one: "جاهز", two: "جاهزين", few: "جاهزين" })} فقط، ولن يتم إرسال ${arabicCount(summary.blockingRows, "سطر واحد", "سطرين", "أسطر", "سطر")} يحتاج مراجعة.`
+                : `سيتم إضافة ${studentCount(summary.ready)} إلى سجل الطلاب. هل تريد إكمال الإضافة الآن؟`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -47,7 +47,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { callPhoneQrValue } from "@/lib/call-phone-qr";
-import { EmptyState } from "./ui-kit";
+import { EmptyState, ListPagination } from "./ui-kit";
 import { ListToolbar } from "./list-toolbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -259,7 +259,7 @@ const callExportColumns: ExportColumn<CallExportRow>[] = [
   { key: "code", label: "الكود", value: ({ row }) => row.student.code || "" },
   {
     key: "username",
-    label: "يوزر تيليجرام",
+    label: "يوزر تليگرام",
     value: ({ row }) => row.student.username || "",
   },
   {
@@ -316,7 +316,7 @@ const callExportColumns: ExportColumn<CallExportRow>[] = [
   },
   {
     key: "telegram",
-    label: "معرف التيليجرام",
+    label: "معرف التليگرام",
     value: ({ row }) => row.student.telegram || "",
   },
   { key: "note", label: "ملاحظات المكالمات", value: ({ note }) => note },
@@ -340,9 +340,9 @@ function whatsappLink(phone: string): string {
 
 function telegramLink(telegram: string): string {
   const username = normalizeTelegramIdentifier(telegram).replace(/^@+/, "");
-  // المعرفات الرقمية لا تصلح لروابط تيليجرام.
+  // المعرفات الرقمية لا تصلح لروابط تليگرام.
   if (!username || /^\d+$/.test(username)) return "#";
-  // فتح المحادثة داخل تطبيق تيليجرام مباشرة بدل نسخة الويب.
+  // فتح المحادثة داخل تطبيق تليگرام مباشرة بدل نسخة الويب.
   return `tg://resolve?domain=${encodeURIComponent(username)}`;
 }
 
@@ -1232,7 +1232,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   };
 
   const renderTelegramLink = (telegram?: string, username?: string | null) => {
-    // يوزر تيليجرام المستعاد أولاً — يفتح المحادثة داخل التطبيق.
+    // يوزر تليگرام المستعاد أولاً — يفتح المحادثة داخل التطبيق.
     const preferred = String(username || "").trim().replace(/^@+/, "");
     if (preferred) {
       return (
@@ -1242,7 +1242,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           target="_blank"
           rel="noreferrer"
         >
-          يوزر تيليجرام: {preferred}
+          يوزر تليگرام: {preferred}
         </a>
       );
     }
@@ -1250,11 +1250,11 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     if (!normalizedTelegram) {
       return (
         <span className="rounded-xl border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          التيليجرام: لا يوجد معرف
+          التليگرام: لا يوجد معرف
         </span>
       );
     }
-    // المعرف الرقمي يُعرض نصاً — لا يصلح لفتح محادثة تيليجرام.
+    // المعرف الرقمي يُعرض نصاً — لا يصلح لفتح محادثة تليگرام.
     if (/^\d+$/.test(normalizedTelegram)) {
       return (
         <span className="rounded-xl border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
@@ -1269,7 +1269,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
         target="_blank"
         rel="noreferrer"
       >
-        يوزر تيليجرام: {normalizedTelegram}
+        يوزر تليگرام: {normalizedTelegram}
       </a>
     );
   };
@@ -1311,18 +1311,18 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
             href={telegramLink(telegramHandle)}
             target="_blank"
             rel="noreferrer"
-            title={`تيليجرام: @${telegramHandle}`}
+            title={`تليگرام: @${telegramHandle}`}
           >
-            <Send aria-hidden="true" fill="currentColor" />تيليجرام
+            <Send aria-hidden="true" fill="currentColor" />تليگرام
           </a>
         ) : (
           <span
             className="tp-call-card__contact-btn"
             data-kind="telegram"
             aria-disabled="true"
-            title={telegramHandle ? `المعرف ${telegramHandle} (لا يوجد يوزر)` : "لا يوجد معرف تيليجرام"}
+            title={telegramHandle ? `المعرف ${telegramHandle} (لا يوجد يوزر)` : "ماكو معرف تليگرام"}
           >
-            <Send aria-hidden="true" fill="currentColor" />تيليجرام
+            <Send aria-hidden="true" fill="currentColor" />تليگرام
           </span>
         )}
       </div>
@@ -1482,7 +1482,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
         {noteHasConflict && (
           <div role="alert" className="tp-call-note__conflict">
             <p className="font-semibold">عدّل مستخدم آخر الملاحظة. تعديلك باقٍ في الحقل أعلاه.</p>
-            <p>المحفوظة الآن: {callNoteConflicts[noteDraftKey]?.notes || "لا توجد ملاحظة"}</p>
+            <p>المحفوظة الآن: {callNoteConflicts[noteDraftKey]?.notes || "ماكو ملاحظة"}</p>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" size="sm" disabled={noteSaving}
                 onClick={() => {
@@ -1565,7 +1565,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       <div className="tp-qr-tile" data-empty="true">
         <span data-part="label">{icon}{label}</span>
         <span className="tp-qr-tile__placeholder" aria-hidden="true" />
-        <span data-part="phone">لا يوجد رقم</span>
+        <span data-part="phone">ماكو رقم</span>
       </div>
     );
 
@@ -1747,8 +1747,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       ["الحالة", student.status],
       ["سبب الفصل", student.status === "مفصول" ? student.dismissalReason : ""],
       ["الفرص", studentOpportunityText(student)],
-      ["هاتف الطالب", student.phone || "لا يوجد"],
-      ["هاتف ولي الأمر", student.parentPhone || "لا يوجد"],
+      ["هاتف الطالب", student.phone || "ماكو"],
+      ["هاتف ولي الأمر", student.parentPhone || "ماكو"],
       ["تاريخ التسجيل", student.createdAt ? formatAppDate(student.createdAt) : ""],
     ];
     return facts.filter(([, value]) => String(value || "").trim());
@@ -1798,7 +1798,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                     {renderCallGradeChip(row, item)}
                   </ul>
                 ) : (
-                  <p className="tp-modal__muted">لا يوجد امتحان محدد.</p>
+                  <p className="tp-modal__muted">ماكو امتحان محدد.</p>
                 )}
                 {/* The exam card already names a recorded action; add what it lacks. */}
                 {!focusCall ? (
@@ -1835,9 +1835,9 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                   ))}
                 </div>
                 {displayedGradeItems.length === 0 ? (
-                  <EmptyState compact icon={FileText} title="لا توجد درجات مسجلة لهذا الطالب ضمن امتحانات هذه الدورة." />
+                  <EmptyState compact icon={FileText} title="ماكو درجات مسجلة لهذا الطالب ضمن امتحانات هذه الدورة." />
                 ) : historyGradeItems.length === 0 ? (
-                  <EmptyState compact icon={FileText} title="لا توجد امتحانات إضافية لعرضها غير الامتحان المختار." />
+                  <EmptyState compact icon={FileText} title="ماكو امتحانات إضافية لعرضها غير الامتحان المختار." />
                 ) : (
                   <ul className="tp-call-exams">
                     {historyGradeItems.map((gradeItem) => renderCallGradeChip(row, gradeItem))}
@@ -1984,7 +1984,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                     setCallGradePage(1);
                   }}
                   aria-label="بحث في الطلاب"
-                  placeholder="بحث: اسم، كود، هاتف، تيليجرام، مدرسة أو درجة"
+                  placeholder="بحث: اسم، كود، هاتف، تليگرام، مدرسة أو درجة"
                   title="كل الكلمات المكتوبة لازم تنطبق"
                 />
               </div>
@@ -2160,7 +2160,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
                 )}
               </div>
             ) : visibleCallRows.length === 0 ? (
-              <EmptyState title="لا يوجد طلاب مطابقون للدورة والامتحان والفلاتر الحالية." />
+              <EmptyState title="ماكو طلاب مطابقون للدورة والامتحان والفلاتر الحالية." />
             ) : (
               visibleCallRows.map(renderCallRow)
             )}
@@ -2177,33 +2177,23 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           )}
 
           {visibleCallRows.length > 0 && !callBatchView && (
-            <nav className="tp-calls__pager" aria-label="صفحات الطلاب">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={callSafePage <= 1}
-                onClick={() => setCallGradePage((page) => Math.max(1, page - 1))}
-              >
-                السابق
-              </Button>
-              <span>
-                صفحة <b>{callSafePage}</b> من <b>{callTotalPages}</b> · المعروض في الصفحة: <b>{visibleCallRows.length}</b>
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={callSafePage >= callTotalPages}
-                onClick={() => {
-                  // Students who left the contact filter shrank the list, so the
-                  // same page number now holds the next students: reload it
-                  // instead of skipping them.
-                  if (callDepartedCount > 0) setCallFilterRefreshKey((current) => current + 1);
-                  else setCallGradePage((page) => Math.min(callTotalPages, page + 1));
-                }}
-              >
-                التالي
-              </Button>
-            </nav>
+            <ListPagination
+              page={callSafePage}
+              totalPages={callTotalPages}
+              label="صفحات الطلاب"
+              summary={<>صفحة <b>{callSafePage}</b> من <b>{callTotalPages}</b> · المعروض في الصفحة: <b>{visibleCallRows.length}</b></>}
+              onPageChange={(next) => {
+                if (next < callSafePage) {
+                  setCallGradePage(Math.max(1, next));
+                  return;
+                }
+                // Students who left the contact filter shrank the list, so the
+                // same page number now holds the next students: reload it
+                // instead of skipping them.
+                if (callDepartedCount > 0) setCallFilterRefreshKey((current) => current + 1);
+                else setCallGradePage(Math.min(callTotalPages, next));
+              }}
+            />
           )}
         </>
       )}

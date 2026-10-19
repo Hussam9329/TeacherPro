@@ -255,7 +255,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
     window.open(mzCodeActionUrl(action, phone, student.name), "_blank", "noopener,noreferrer");
     if (action === "close") markStep(student, "platform");
     if (!phone) {
-      toast.error(`لا يوجد رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه بالاسم في المنصة.`);
+      toast.error(`ماكو رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه بالاسم في المنصة.`);
       return;
     }
     void copying.then((copied) => {
@@ -451,7 +451,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
             ) : loaded && visibleStudents.length === 0 ? (
               <EmptyState
                 icon={search.trim() || courseId ? Search : CheckCheck}
-                title={pendingIds.size > 0 ? "جاري حفظ اغلاق الكود..." : search.trim() || courseId ? "لا يوجد طلاب يطابقون البحث والفلاتر" : statusFilter === "unchecked" ? "لا توجد كودات بانتظار الإغلاق" : statusFilter === "checked" ? "لا توجد كودات مغلقة" : "لا يوجد طلاب مفصولون"}
+                title={pendingIds.size > 0 ? "جاري حفظ اغلاق الكود..." : search.trim() || courseId ? "ماكو طلاب يطابقون البحث والفلاتر" : statusFilter === "unchecked" ? "ماكو كودات بانتظار الإغلاق" : statusFilter === "checked" ? "ماكو كودات مغلقة" : "ماكو طلاب مفصولون"}
               />
             ) : (
               <div className="tp-modal__cards" data-columns="1">
@@ -573,7 +573,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                               title={telegram.value ? "معرّف رقمي — لا يوجد يوزر تليگرام لفتح المحادثة" : undefined}
                             >
                               <MessageCircle aria-hidden="true" />
-                              <span dir={telegram.value ? "ltr" : undefined}>{telegram.value || "لا يوجد معرّف"}</span>
+                              <span dir={telegram.value ? "ltr" : undefined}>{telegram.value || "ماكو معرّف"}</span>
                             </span>
                           )}
                           {canManage && (

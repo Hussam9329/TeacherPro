@@ -182,7 +182,7 @@ function statCard(
 }
 
 /** Said once at the top of the page and as a badge, not again per card. */
-const NO_ACTIVE_CHAPTER_WARNING = "لا يوجد فصل نشط لهذه الدورة";
+const NO_ACTIVE_CHAPTER_WARNING = "ماكو فصل نشط لهذه الدورة";
 function courseReviewWarnings(row: { warnings: string[] }) {
   return row.warnings.filter((warning) => warning !== NO_ACTIVE_CHAPTER_WARNING);
 }
@@ -812,7 +812,7 @@ export function ChaptersView() {
             الفصل النشط:{" "}
             {row.activeLink
               ? `${row.activeLink.chapter.name} (${row.activeLink.chapter.opportunities} فرص)`
-              : "لا يوجد"}
+              : "ماكو"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -875,7 +875,7 @@ export function ChaptersView() {
           </p>
           {row.links.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              لا يوجد أي فصل مربوط بهذه الدورة.
+              ماكو أي فصل مربوط بهذه الدورة.
             </p>
           ) : (
             <div className="tp-chapters__links">
@@ -1132,7 +1132,7 @@ export function ChaptersView() {
         {loading ? (
           renderLoadingSkeleton()
         ) : filteredChapters.length === 0 ? (
-          <EmptyState icon={BookOpen} title="لا توجد فصول مطابقة للفلاتر." />
+          <EmptyState icon={BookOpen} title="ماكو فصول مطابقة للفلاتر." />
         ) : (
           <div className="tp-chapters__list">{filteredChapters.map(renderChapterRow)}</div>
         )}
@@ -1145,7 +1145,7 @@ export function ChaptersView() {
         {loading ? (
           renderLoadingSkeleton()
         ) : filteredCourses.length === 0 ? (
-          <EmptyState title="لا توجد دورات مطابقة للفلاتر." />
+          <EmptyState title="ماكو دورات مطابقة للفلاتر." />
         ) : (
           <div className="tp-chapters__list">{filteredCourses.map(renderCourseRow)}</div>
         )}
@@ -1541,7 +1541,7 @@ export function ChaptersView() {
                   <b>{course.courseName}</b>: {course.students.total} طالب — نشط{" "}
                   {course.students.active}، مفصول {course.students.dismissed}،
                   مؤرشف {course.students.archived}. الفصل النشط حالياً:{" "}
-                  {course.currentActiveChapters.join("، ") || "لا يوجد"}.
+                  {course.currentActiveChapters.join("، ") || "ماكو"}.
                 </div>
               ))}
               <p className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs leading-6 text-muted-foreground">

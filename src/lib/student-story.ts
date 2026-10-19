@@ -580,7 +580,7 @@ export function buildStudentStory(rawInput: StudentStoryInput): StudentStory {
         break;
       case "code-closed": push("انقفل كوده.", ["decisions"]); break;
       case "code-reopened": push("انلغى قفل كوده.", ["decisions"]); break;
-      case "telegram-notice": push("انبعث تبليغ الفصل بالتيليجرام.", ["decisions"]); break;
+      case "telegram-notice": push("انبعث تبليغ الفصل بالتليگرام.", ["decisions"]); break;
       case "dismissal-notes": push(event.text ? `تعدّلت ملاحظة الفصل: ${storyValue(event.text)}` : "انمسحت ملاحظة الفصل.", ["decisions"]); break;
       case "manual-dismissal": push(`انفصل بقرار${event.text ? `: ${storyValue(event.text)}` : ""}.`, ["decisions"], "danger", "dismissal"); break;
       case "pledge-return": push("رجع بتعهّد.", ["decisions"], "good", "return"); break;

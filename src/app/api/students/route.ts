@@ -62,8 +62,8 @@ import { buildStudentRegistryWhere } from "@/lib/student-registry-filters-server
 import { addNewStudentGracePeriods } from "@/lib/new-student-grace-server";
 
 /**
- * يوزر تيليجرام المستعاد (username): قيمة حرفية بدون @، غير رقمية، غير فريدة.
- * القيم الفارغة/الرقمية تُحفظ null — الرقمي يعني معرف تيليجرام وليس يوزراً.
+ * يوزر تليگرام المستعاد (username): قيمة حرفية بدون @، غير رقمية، غير فريدة.
+ * القيم الفارغة/الرقمية تُحفظ null — الرقمي يعني معرف تليگرام وليس يوزراً.
  */
 function sanitizeUsernameValue(value: unknown): string | null {
   const cleaned = sanitizeTelegramInput(String(value ?? ""));
@@ -163,7 +163,7 @@ function getPrismaStudentErrorResponse(error: unknown) {
       : String(targetValue ?? "");
     if (target.includes("telegramKey")) {
       return NextResponse.json(
-        { error: "معرف التيليجرام مسجل مسبقاً لطالب آخر" },
+        { error: "معرف التليگرام مسجل مسبقاً لطالب آخر" },
         { status: 409 },
       );
     }
@@ -737,11 +737,11 @@ export async function PUT(req: NextRequest) {
   if (data.telegram !== undefined) {
     data.telegram = sanitizeTelegramInput(String(data.telegram ?? ""));
     const currentTelegram = sanitizeTelegramInput(String(currentStudent.telegram ?? ""));
-    // مسح حقل التيليجرام من نافذة التعديل يلغي ارتباط الحساب نهائياً؛
+    // مسح حقل التليگرام من نافذة التعديل يلغي ارتباط الحساب نهائياً؛
     // يُعاد حساب telegramKey تلقائياً إلى null أدناه فيمنع الحساب القديم من الدخول باسم الطالب.
     if (data.telegram !== currentTelegram && !oversees(principal)) {
       return NextResponse.json(
-        { error: "تعديل ارتباط تيليجرام متاح لمدير النظام والمشرفين فقط." },
+        { error: "تعديل ارتباط تليگرام متاح لمدير النظام والمشرفين فقط." },
         { status: 403 },
       );
     }

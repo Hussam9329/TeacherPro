@@ -132,7 +132,7 @@ must(
     page.includes("canUseSingleDismissedTelegramMessage") &&
     page.includes("navigator.clipboard.writeText(completeMessage)") &&
     page.includes("downloadOpportunityHtml(telegramStudent, details)") &&
-    page.includes("أطول من حد رسالة تيليجرام") &&
+    page.includes("أطول من حد رسالة تليگرام") &&
     page.includes("window.location.assign") &&
     !page.includes("window.location.href =") &&
     !page.includes("function historyText") &&
@@ -142,7 +142,7 @@ must(
     helper.includes("buildOpportunityTelegramHtml") &&
     helper.includes("DISMISSED_TELEGRAM_SINGLE_MESSAGE_MAX_LENGTH") &&
     route.includes("تاريخ الامتحان"),
-  "تيليجرام يبني رسالته من لوغ ملف الطالب (نفس مصدر تصدير HTML) مع إرسال ونسخ وملف احتياطي من نفس المصدر",
+  "تليگرام يبني رسالته من لوغ ملف الطالب (نفس مصدر تصدير HTML) مع إرسال ونسخ وملف احتياطي من نفس المصدر",
 );
 
 must(
@@ -154,14 +154,14 @@ must(
     page.includes("const rawDetails = buildStudentDetailsFromProfileLog(profile)") &&
     page.includes("sanitizeStudentDetailsForHtml({") &&
     page.includes("if (sections && !sections.grades && !sections.opportunities)"),
-  "زر تيليجرام وتصدير HTML يمران بنفس دالة التحويل والتنظيف من profile-log فلا يتفرع المصدر، وترسل الرسالة فقط عند توفر الصلاحية",
+  "زر تليگرام وتصدير HTML يمران بنفس دالة التحويل والتنظيف من profile-log فلا يتفرع المصدر، وترسل الرسالة فقط عند توفر الصلاحية",
 );
 
 must(
   route.includes("classifyDismissedOpportunityMovement") &&
     route.includes('movement === "deduction"') &&
     helper.includes("classifyDismissedOpportunityMovement"),
-  "السجل المرئي وتقرير تيليجرام يصنفان الخصم والإضافة من نوع الإجراء لا إشارة المقدار القديم",
+  "السجل المرئي وتقرير تليگرام يصنفان الخصم والإضافة من نوع الإجراء لا إشارة المقدار القديم",
 );
 
 must(

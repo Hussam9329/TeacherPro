@@ -11,7 +11,7 @@ import {
  * column used by the application. Keep this in sync with the newest migration.
  */
 export const REQUIRED_DATABASE_MIGRATION =
-  '20261019120000_sync_change_markers';
+  '20261019200000_search_and_query_indexes';
 
 const SCHEMA_NOT_READY_MESSAGE =
   'نسخة قاعدة البيانات أقدم من نسخة النظام. يلزم مسؤول النظام تطبيق تحديثات قاعدة البيانات قبل إعادة المحاولة.';

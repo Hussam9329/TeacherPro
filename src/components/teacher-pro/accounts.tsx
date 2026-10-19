@@ -31,6 +31,7 @@ import { searchAny } from '@/lib/validation';
 import { formatAuditLogDisplay } from '@/lib/audit-log-display';
 import { humanizeTeacherProText } from '@/lib/teacherpro-language';
 import './tp-list.css';
+import { arabicCount } from "@/lib/format";
 
 // ─── Permission categories for grouping ──────────────────────────────────────
 
@@ -155,7 +156,7 @@ function PermissionDetailsList({ permissions, showEmpty = false }: { permissions
               </Badge>
             </div>
             {enabledPermissions.length === 0 ? (
-              <p className="text-xs text-muted-foreground">لا توجد صلاحيات مفعّلة ضمن هذا القسم.</p>
+              <p className="text-xs text-muted-foreground">ماكو صلاحيات مفعّلة ضمن هذا القسم.</p>
             ) : (
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 {enabledPermissions.map(permission => (
@@ -351,7 +352,7 @@ function RolesTab() {
     const roleUsers = users.filter(u => u.roleId === editRoleId).length;
     toast.success(
       roleUsers
-        ? `تم تحديث الدور، وينطبق على ${roleUsers} حساب`
+        ? `تم تحديث الدور، وينطبق على ${arabicCount(roleUsers, "حساب واحد", "حسابين", "حسابات", "حساب")}`
         : 'تم تحديث الدور',
     );
   });
@@ -393,7 +394,7 @@ function RolesTab() {
                 <span className="tp-rcard__light" aria-hidden="true"><KeyRound /></span>
                 <h3 className="tp-rcard__name">{role.name}</h3>
                 <span className="tp-rcard__sep" aria-hidden="true" />
-                <span className="tp-rcard__sub">{userCount ? `${userCount} مستخدم` : 'بدون مستخدمين'}</span>
+                <span className="tp-rcard__sub">{userCount ? arabicCount(userCount, "مستخدم واحد", "مستخدمين", "مستخدمين", "مستخدم") : 'بدون مستخدمين'}</span>
                 {role.isDefault ? (
                   <span className="tp-rcard__head-end">
                     <span className="tp-rcard__pill">افتراضي</span>
@@ -1196,7 +1197,7 @@ function SecurityTab() {
 
   // One line instead of a strip of number boxes.
   const summaryParts = [
-    `${overview.summary.users} مستخدم`,
+    arabicCount(overview.summary.users, "مستخدم واحد", "مستخدمين", "مستخدمين", "مستخدم"),
     `${overview.summary.activeUsers} فعّال`,
     ...(overview.summary.disabledUsers ? [`${overview.summary.disabledUsers} معطّل`] : []),
     `${overview.summary.roles} أدوار`,
@@ -1245,7 +1246,7 @@ function SecurityTab() {
         <section className="tp-rcard content-start" aria-labelledby="security-risky-users">
           <h3 id="security-risky-users" className="tp-rcard__name">المستخدمين أصحاب الصلاحيات الحساسة</h3>
           {overview.riskyUsers.length === 0 ? (
-            <EmptyState compact icon={ShieldCheck} title="لا توجد صلاحيات حساسة خارج النطاق المتوقع." />
+            <EmptyState compact icon={ShieldCheck} title="ماكو صلاحيات حساسة خارج النطاق المتوقع." />
           ) : overview.riskyUsers.map((user) => (
             <div key={user.id} className="tp-rcard__panel">
               <span className="tp-rcard__title">{user.name}</span>
@@ -1264,7 +1265,7 @@ function SecurityTab() {
         <section className="tp-rcard content-start" aria-labelledby="security-risky-roles">
           <h3 id="security-risky-roles" className="tp-rcard__name">الأدوار الحساسة</h3>
           {overview.riskyRoles.length === 0 ? (
-            <EmptyState compact icon={ShieldCheck} title="لا توجد أدوار تحتوي صلاحيات حساسة." />
+            <EmptyState compact icon={ShieldCheck} title="ماكو أدوار تحتوي صلاحيات حساسة." />
           ) : overview.riskyRoles.map((role) => (
             <div key={role.id} className="tp-rcard__panel">
               <span className="tp-rcard__title">{role.name}</span>

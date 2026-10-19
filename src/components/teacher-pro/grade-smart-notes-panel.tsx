@@ -241,7 +241,7 @@ export function GradeSmartNotesPanel({
           ) : loading && notes.length === 0 ? (
             <LoadingState title="جاري تحميل الدرجات المعلّقة..." />
           ) : filteredNotes.length === 0 ? (
-            <EmptyState compact icon={CheckCircle2} title="لا توجد حالات من هذا النوع لهذا الامتحان." />
+            <EmptyState compact icon={CheckCircle2} title="ماكو حالات من هذا النوع لهذا الامتحان." />
           ) : (
             <>
               {totalCount > notes.length && !activeCategory && (

@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const ts = require("typescript");
 const { PGlite } = require("@electric-sql/pglite");
+const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
 const { NextRequest, NextResponse } = require("next/server");
 
 const source = fs.readFileSync("src/app/api/students/code-closures/route.ts", "utf8");
@@ -18,7 +19,7 @@ new Function("module", "exports", ts.transpileModule(fs.readFileSync("src/lib/co
 }).outputText)(dismissalModule, dismissalModule.exports);
 
 (async () => {
-  const pg = new PGlite();
+  const pg = new PGlite({ extensions: { pg_trgm } });
   try {
     await pg.exec(`
       CREATE TABLE "Course" (id text PRIMARY KEY, name text NOT NULL);

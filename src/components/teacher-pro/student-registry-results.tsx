@@ -77,7 +77,7 @@ export const registryIssueFilterLabels: Record<
   "opportunity-full": "فرص كاملة",
   "opportunity-over-limit": "فوق السقف",
   "missing-contact": "ناقص بيانات تواصل",
-  "no-telegram": "بلا تيليجرام",
+  "no-telegram": "بلا تليگرام",
 };
 
 function registryHealthBadges(student: Student) {
@@ -139,7 +139,7 @@ function registryHealthBadges(student: Student) {
     });
   }
 
-  // شارة «بلا تيليجرام» أُلغيت من كرت الطالب — الفلتر (بلا تيليجرام)
+  // شارة «بلا تليگرام» أُلغيت من كرت الطالب — الفلتر (بلا تليگرام)
   // في مشاكل السجل يبقى متاحاً للبحث عن هؤلاء الطلاب.
 
   return badges;
@@ -542,7 +542,7 @@ export function StudentRegistryResults({
                   </ContactLink>
                 </p>
                 <p>
-                  يوزر تيليجرام:{" "}
+                  يوزر تليگرام:{" "}
                   {student.username ? (
                     <ContactLink href={telegramLink(student.username)}>
                       {student.username}
@@ -552,7 +552,7 @@ export function StudentRegistryResults({
                   )}
                 </p>
                 <p>
-                  معرف تيليجرام:{" "}
+                  معرف تليگرام:{" "}
                   {student.telegram ? (
                     /^\d+$/.test(student.telegram) ? (
                       <span dir="ltr">{student.telegram}</span>
@@ -794,13 +794,13 @@ function StudentRegistryRow({
               ) : null}
               {telegramHandle || quickEdit ? (
                 <div className="tp-scard__contact-row">
-                  <span className="tp-scard__contact-label">تيليجرام</span>
+                  <span className="tp-scard__contact-label">تليگرام</span>
                   {telegramHandle ? (
                     <a className="tp-scard__contact" href={telegramLink(telegramHandle)} target="_blank" rel="noopener noreferrer" dir="ltr">
                       {telegramHandle.startsWith("@") ? telegramHandle : `@${telegramHandle}`}
                     </a>
                   ) : null}
-                  {quickEdit ? <StudentContactEdit student={student} field="username" emptyLabel="معرف تيليجرام" onSaved={(value) => actionProps.onContactSaved?.(student.id, "username", value)} /> : null}
+                  {quickEdit ? <StudentContactEdit student={student} field="username" emptyLabel="معرف تليگرام" onSaved={(value) => actionProps.onContactSaved?.(student.id, "username", value)} /> : null}
                 </div>
               ) : null}
             </div>
@@ -821,7 +821,7 @@ function StudentRegistryRow({
             </a>
           ) : null}
           {telegramHandle ? (
-            <a className="tp-scard__round" href={telegramLink(telegramHandle)} target="_blank" rel="noopener noreferrer" aria-label={`تيليجرام ${telegramHandle}`} title={telegramHandle.startsWith("@") ? telegramHandle : `@${telegramHandle}`}>
+            <a className="tp-scard__round" href={telegramLink(telegramHandle)} target="_blank" rel="noopener noreferrer" aria-label={`تليگرام ${telegramHandle}`} title={telegramHandle.startsWith("@") ? telegramHandle : `@${telegramHandle}`}>
               <Send aria-hidden="true" />
             </a>
           ) : null}
