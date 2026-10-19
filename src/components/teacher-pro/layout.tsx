@@ -33,6 +33,7 @@ import {
   PenTool,
   FileCheck,
   BarChart3,
+  BellRing,
   Target,
   PhoneCall,
   Shield,
@@ -98,6 +99,7 @@ const menuItems: {
   { id: "grade-records", title: "سجل الدرجات", icon: BarChart3 },
   { id: "opportunities", title: "الفرص", icon: Target },
   { id: "follow-up-calls", title: "المكالمات", icon: PhoneCall },
+  { id: "notifications", title: "إرسال إشعار", icon: BellRing },
   { id: "accounts", title: "الحسابات", icon: Shield },
   { id: "logs", title: "السجلات", icon: ScrollText },
 ];
@@ -196,6 +198,7 @@ const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
   "follow-up-calls": ["follow-up", "students", "dashboard"],
   "follow-up-leaves": ["follow-up", "students", "grades", "opportunities", "dashboard"],
   accounts: ["accounts", "logs"],
+  notifications: ["courses", "chapters"],
   logs: ["logs", "opportunity-logs"],
   // Legacy hidden section: old persisted links are redirected to logs.
   "admin-log-reset": ["logs", "opportunity-logs"],
@@ -391,6 +394,7 @@ import { FollowUpCallsView } from "./follow-up";
 import { LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog";
 import { AccountsView } from "./accounts";
 import { LogsView } from "./logs";
+import { NotificationsSendView } from "./notifications-send";
 import { EmptyState, LoadingState } from "./ui-kit";
 
 const sectionComponents: Record<SectionId, React.ComponentType> = {
@@ -412,6 +416,7 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   "follow-up-leaves": DashboardView,
   accounts: AccountsView,
   logs: LogsView,
+  notifications: NotificationsSendView,
   // Keep the legacy key type-safe while rendering the safe destination only.
   "admin-log-reset": LogsView,
 };

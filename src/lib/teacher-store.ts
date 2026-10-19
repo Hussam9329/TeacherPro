@@ -283,6 +283,7 @@ export type SectionId =
   | "follow-up-leaves"
   | "accounts"
   | "logs"
+  | "notifications"
   | "admin-log-reset";
 
 // ─── Permissions Catalog ────────────────────────────────────────────────────
@@ -312,6 +313,7 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   "follow-up-leaves": "follow-up.leaves.view",
   accounts: "accounts.users.view",
   logs: "logs.view",
+  notifications: "notifications.send",
   "admin-log-reset": "logs.clear",
 };
 

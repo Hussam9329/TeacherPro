@@ -344,9 +344,11 @@ async function executeRestore(
       if (mode === 'replace') {
         // One closed table list, RESTRICT by default: never cascade into omitted tables.
         // Open calls windows and their batches are never backed up; a restore ends them.
+        // Student-app devices are live sessions too: emptied here, never backed up.
         const names = [
           ...RESTORE_ORDER.map(key => `"${PRISMA_TABLE_NAMES[key]}"`),
           ...CALL_WINDOW_TABLES.map(name => `"${name}"`),
+          ...STUDENT_APP_SESSION_TABLES.map(name => `"${name}"`),
         ].join(', ');
         // A retired table still references Student, so it joins the same
         // statement when the database has it.
@@ -648,6 +650,8 @@ async function restoreTable(
 
 /** «دفعات» in إدارة المكالمات: live state of open windows, not data to restore. */
 const CALL_WINDOW_TABLES = ['CallReservation', 'CallWindow'];
+/** Student-app sign-ins: live sessions, not data to restore. A restore ends them; students sign in again. */
+const STUDENT_APP_SESSION_TABLES = ['StudentDevice'];
 // Tables of features since removed: never backed up, never dropped by a
 // deployment. A replace restore empties them with the rest when they exist.
 const RETIRED_TABLES = ['BotProblem'] as const;

@@ -35,6 +35,7 @@ import {
 } from "./export-dialog";
 import { STAFF_ROW_ICONS, staffRowNote } from "./opportunity-row-icons";
 import { EmptyState, LoadingState } from "./ui-kit";
+import { StudentDevicesFold } from "./student-devices-fold";
 
 import { displayReasonText } from "@/lib/reason-display";
 import { shortGradeNoteText } from "@/lib/grade-note-banners";
@@ -1307,6 +1308,7 @@ export function StudentProfileDialog({
                       <div className="mt-3 space-y-3">{databaseEnrollmentArchives.map(renderArchive)}</div>
                     </details>
                   ) : null}
+                  <StudentDevicesFold studentId={profileStudent.id} />
                 </div>
 
                 {databaseCanReadLogs && systemLogRows.length ? (

@@ -1861,6 +1861,24 @@ export const studentProfileLogApi = {
   },
 };
 
+export type StudentAppDevice = {
+  id: string;
+  deviceName: string;
+  platform: string;
+  createdAt: string;
+  lastSeenAt: string;
+  revokedAt: string | null;
+  active: boolean;
+};
+
+/** Devices signed in to the student mobile app, and revoking one of them. */
+export const studentDevicesApi = {
+  /** Resolves with `status` so a missing permission (403) reads as a notice, not an error. */
+  list: (studentId: string) =>
+    apiGetResponse<{ devices: StudentAppDevice[] }>(`students/devices?${buildQueryString({ studentId })}`, [403]),
+  revoke: (deviceId: string) => apiPost("students/devices", { deviceId }),
+};
+
 export const syncVersionApi = {
   get: () => apiGet<SyncVersionResponse>("sync/version"),
 };

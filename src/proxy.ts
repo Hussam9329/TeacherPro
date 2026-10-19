@@ -18,6 +18,11 @@ export function proxy(req: NextRequest) {
   if (['/api/bot/opportunities', '/api/bot/students/resolve', '/api/bot/students/link'].includes(url.pathname) && req.method === 'POST') {
     return requireBotToken(req) || NextResponse.next();
   }
+  // The student mobile app is not a browser either: no Origin header. Its
+  // routes authenticate with their own device token inside the handler.
+  if (url.pathname.startsWith('/api/student-app/') && req.method === 'POST') {
+    return NextResponse.next();
+  }
   // The Correction app is a server, not a browser: its own token, no Origin.
   if (CORRECTION_INTEGRATION_PATHS.includes(url.pathname) && req.method === 'POST') {
     return requireCorrectionToken(req) || NextResponse.next();
