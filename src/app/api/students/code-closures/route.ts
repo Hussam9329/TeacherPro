@@ -7,38 +7,7 @@ import { requirePermission } from "@/lib/server-auth";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { isDismissalActionNote, isDismissalOpportunityLog } from "@/lib/dismissed-history";
-
-type DismissalLog = {
-  action: string;
-  reason: string | null;
-  date: Date;
-  examId: string | null;
-  exam: { name: string; fullMark: number } | null;
-};
-
-/** The automatic dismissal behind the recorded reason, else the latest one with an exam. */
-function dismissingExamLog(logs: DismissalLog[], dismissalReason: string | null): DismissalLog | null {
-  const withExam = logs.filter((log) => log.action === "فصل تلقائي" && log.examId && log.exam);
-  const recorded = `تلقائي: ${dismissalReason || ""}`.trim();
-  return withExam.find((log) => String(log.reason || "").trim() === recorded) ||
-    withExam.reduce<DismissalLog | null>((latest, log) => (!latest || log.date > latest.date ? log : latest), null);
-}
-
-/** «غياب», «غش» or «12 من 100»; null when neither the grade nor the reason says. */
-function dismissalOutcome(
-  grade: { status: string; score: number | null } | undefined,
-  log: DismissalLog,
-): string | null {
-  const fullMark = log.exam?.fullMark;
-  if (grade?.status === "غائب") return "غياب";
-  if (grade?.status === "غش") return "غش";
-  if (grade?.status === "درجة" && typeof grade.score === "number") return `${grade.score} من ${fullMark}`;
-  const reason = String(log.reason || "");
-  if (reason.includes("غش")) return "غش";
-  if (reason.includes("غياب")) return "غياب";
-  const score = reason.match(/\((\d+)\)/)?.[1] ?? (reason.includes("درجة صفر") ? "0" : null);
-  return score === null ? null : `${score} من ${fullMark}`;
-}
+import { BOT_NOTICE_SENT_ACTION, dismissalOutcome, dismissingExamLog, readBotNoticeDetails } from "@/lib/code-closure-dismissal";
 
 /**
  * When each closed code was closed: the latest «اغلاق كود الطالب المفصول»
@@ -70,6 +39,30 @@ async function codeClosedTimes(students: Array<{ id: string; lastDismissalAt: st
     }
   }
   return closedAt;
+}
+
+/**
+ * When the bot delivered the dismissal notice to each student, for the
+ * current dismissal episode only (a later dismissal starts unsent). One read;
+ * a failed read never blocks the list.
+ */
+async function botNoticeSentTimes(students: Array<{ id: string; dismissedCheckEpoch: number }>): Promise<Map<string, string>> {
+  const sentAt = new Map<string, string>();
+  if (students.length === 0) return sentAt;
+  const epochs = new Map(students.map((student) => [student.id, student.dismissedCheckEpoch]));
+  const rows = await Promise.resolve().then(() => db.auditLog.findMany({
+    where: { module: "سجل الطلاب", action: BOT_NOTICE_SENT_ACTION },
+    select: { time: true, details: true },
+    orderBy: { time: "asc" },
+  })).catch((error: unknown) => {
+    console.error("[code-closures] bot notices from the log:", error);
+    return [] as Array<{ time: Date; details: string | null }>;
+  });
+  for (const row of rows) {
+    const notice = readBotNoticeDetails(row.details);
+    if (notice && epochs.get(notice.studentId) === notice.epoch) sentAt.set(notice.studentId, row.time.toISOString());
+  }
+  return sentAt;
 }
 
 export async function GET(req: NextRequest) {
@@ -149,12 +142,16 @@ export async function GET(req: NextRequest) {
       };
     });
     const checkedCount = students.reduce((count, student) => count + Number(student.dismissedChecked), 0);
-    const closedAt = await codeClosedTimes(students.filter((student) => student.dismissedChecked));
+    const [closedAt, noticeSentAt] = await Promise.all([
+      codeClosedTimes(students.filter((student) => student.dismissedChecked)),
+      botNoticeSentTimes(students),
+    ]);
 
     return NextResponse.json({
       students: students.map((student) => ({
         ...student,
         codeClosedAt: student.dismissedChecked ? closedAt.get(student.id) ?? null : null,
+        botNoticeSentAt: noticeSentAt.get(student.id) ?? null,
       })),
       totalCount: students.length,
       checkedCount,

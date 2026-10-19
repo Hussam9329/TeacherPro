@@ -1,40 +1,36 @@
-<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" xml:space="preserve">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- TeacherPro: gold graduation cap over a folded gold «T» in a gold-rimmed
+       green-black tile. The site's logo, used only as the browser tab icon. -->
   <defs>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#0E1F36"/>
-      <stop offset="100%" style="stop-color:#19293A"/>
+    <radialGradient id="tile" cx="50%" cy="28%" r="80%">
+      <stop offset="0%" stop-color="#173a31"/>
+      <stop offset="100%" stop-color="#071411"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fbe6ab"/>
+      <stop offset="45%" stop-color="#d9ad5c"/>
+      <stop offset="100%" stop-color="#8f6426"/>
     </linearGradient>
-    <linearGradient id="bookGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#FBF9EB"/>
-      <stop offset="100%" style="stop-color:#E6E3D9"/>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fdeebd"/>
+      <stop offset="55%" stop-color="#e2bb6a"/>
+      <stop offset="100%" stop-color="#b98536"/>
     </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#0E1F36" flood-opacity="0.15"/>
-    </filter>
+    <linearGradient id="front" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f3d185"/>
+      <stop offset="100%" stop-color="#c08a38"/>
+    </linearGradient>
+    <linearGradient id="side" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#b68134"/>
+      <stop offset="100%" stop-color="#7e5520"/>
+    </linearGradient>
   </defs>
-
-  <!-- خلفية مستديرة بتدرج -->
-  <rect width="64" height="64" rx="14" fill="url(#bgGrad)"/>
-
-  <!-- كتاب مفتوح -->
-  <g filter="url(#shadow)">
-    <!-- الصفحة اليسرى -->
-    <path d="M30 18 C26 16 20 16 16 18 L16 46 C20 44 26 44 30 46 Z" fill="url(#bookGrad)" opacity="0.95"/>
-    <!-- الصفحة اليمنى -->
-    <path d="M34 18 C38 16 44 16 48 18 L48 46 C44 44 38 44 34 46 Z" fill="url(#bookGrad)" opacity="0.95"/>
-    <!-- خط المنتصف -->
-    <line x1="32" y1="18" x2="32" y2="46" stroke="#CD938F" stroke-width="1.5"/>
-
-    <!-- خطوط الصفحة اليسرى -->
-    <line x1="20" y1="24" x2="26" y2="23" stroke="#5B6674" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
-    <line x1="20" y1="28" x2="26" y2="27" stroke="#5B6674" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
-    <line x1="20" y1="32" x2="26" y2="31" stroke="#5B6674" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
-
-    <!-- علامة الصح على الصفحة اليمنى -->
-    <path d="M37 32 L40 35 L45 28" stroke="#19293A" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
-
-  <!-- نقطة تأكيد علوية -->
-  <circle cx="48" cy="18" r="5" fill="#D15049"/>
-  <circle cx="48" cy="18" r="3" fill="#FBF9EB" opacity="0.9"/>
+  <rect x="3" y="3" width="58" height="58" rx="14" fill="url(#tile)" stroke="url(#rim)" stroke-width="2.4"/>
+  <path d="M26 31.2 L33.2 33.4 L33.2 53 L26 50.4 Z" fill="url(#front)"/>
+  <path d="M33.2 33.4 L39.4 30.8 L39.4 48.6 L33.2 53 Z" fill="url(#side)"/>
+  <path d="M20.5 24.6 L20.5 28.6 C20.5 30.6 25.6 32.4 32 32.4 C38.4 32.4 43.5 30.6 43.5 28.6 L43.5 24.6 L32 29 Z" fill="url(#side)"/>
+  <path d="M32 12.6 L53 20.6 L32 28.6 L11 20.6 Z" fill="url(#top)"/>
+  <path d="M32 12.6 L53 20.6" stroke="#fff6d8" stroke-opacity="0.65" stroke-width="0.8" stroke-linecap="round"/>
+  <path d="M14.2 21.6 L14.2 31.2" stroke="url(#rim)" stroke-width="1.4" stroke-linecap="round"/>
+  <circle cx="14.2" cy="32.6" r="2.1" fill="url(#rim)"/>
 </svg>

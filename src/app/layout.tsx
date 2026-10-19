@@ -19,7 +19,7 @@ export const viewport: Viewport = {
   // Browser chrome follows the palette: Background by day, Deep Dark by night.
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#FBF9EB" },
-    { media: "(prefers-color-scheme: dark)", color: "#0E1F36" },
+    { media: "(prefers-color-scheme: dark)", color: "#0A1A17" },
   ],
 };
 

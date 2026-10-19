@@ -209,6 +209,9 @@ test("stats route reads only student counts from one snapshot for every dashboar
         "student.count": (query) => {
           if (query?.where?.status === "نشط") return 21;
           if (query?.where?.status === "مفصول") return 4;
+          if (query?.where?.status === "مؤرشف") return 2;
+          // The dashboard total counts every student, archived included.
+          assert.equal(query?.where, undefined, "the total has no status filter");
           return 27;
         },
       },
@@ -222,17 +225,18 @@ test("stats route reads only student counts from one snapshot for every dashboar
     assert.equal(response.status, 200);
     assert.equal(response.body.activeStudents, 21);
     assert.equal(response.body.dismissedStudents, 4);
+    assert.equal(response.body.archivedStudents, 2);
     assert.equal(response.body.totalStudents, 27);
     assert.equal(response.body.source, "database");
     assert.ok(Number.isFinite(Date.parse(response.body.generatedAt)));
     assert.deepEqual(Object.keys(response.body).sort(), [
-      "activeStudents", "dismissedStudents", "generatedAt", "source", "totalStudents",
+      "activeStudents", "archivedStudents", "dismissedStudents", "generatedAt", "source", "totalStudents",
     ]);
     assert.deepEqual(permissions, ["system.dashboard"]);
     assert.equal(response.headers["Cache-Control"], "private, no-store, max-age=0");
     assert.deepEqual(
       database.calls.map((call) => call.key).sort(),
-      ["$transaction", "student.count", "student.count", "student.count"].sort(),
+      ["$transaction", "student.count", "student.count", "student.count", "student.count"].sort(),
       "no retired alert queries, audit-log reads, entity lookups, or writes run, including for admins",
     );
     const transactionCall = database.calls.find(
