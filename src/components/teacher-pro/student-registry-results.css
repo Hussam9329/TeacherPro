@@ -211,7 +211,6 @@
 .tp-scards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
-  align-items: start;
   gap: 1rem;
 }
 
@@ -239,6 +238,8 @@
 .tp-scard__head { display: flex; align-items: flex-start; gap: 0.5rem; }
 .tp-scard__who { flex: 1 1 auto; display: grid; gap: 0.2rem; min-inline-size: 0; }
 .tp-scard__name { margin: 0; color: var(--foreground); font-size: 1rem; font-weight: 700; line-height: 1.45; }
+.tp-scard :is(.tp-scard__name, .tp-scard__course) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+.tp-scard__course { margin: 0; color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.6; }
 .tp-scard__meta {
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem 0.4rem;
   margin: 0; color: var(--muted-foreground); font-size: 0.78rem; line-height: 1.6; column-gap: 0.6rem;
@@ -247,7 +248,6 @@
 
 .tp-scard__status {
   display: inline-flex; align-items: center; gap: 0.4rem; flex-shrink: 0;
-  margin-block-start: 0.2rem;
   color: var(--tone-ink, var(--muted-foreground));
   font-size: 0.75rem; font-weight: 600; white-space: nowrap;
 }

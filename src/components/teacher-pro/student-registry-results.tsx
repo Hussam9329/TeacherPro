@@ -650,16 +650,17 @@ function StudentRegistryRow({
     >
       <header className="tp-scard__head">
         <div className="tp-scard__who">
-          <h3 id={`registry-student-${student.id}`} className="tp-scard__name">{student.name}</h3>
+          {/* One line each: a long name or course ends in «…» and shows in full on hover. */}
+          <h3 id={`registry-student-${student.id}`} className="tp-scard__name" title={student.name}>{student.name}</h3>
           <p className="tp-scard__meta">
+            <span className="tp-scard__status" data-tone={tone}>{student.status}</span>
             <bdi className="tp-scard__code">{student.code}</bdi>
-            <span>
-              {courseName(student.courseId) || "بدون دورة"}
-              {row.activeChapter?.name ? ` · ${row.activeChapter.name}` : ""}
-            </span>
+          </p>
+          <p className="tp-scard__course" title={`${courseName(student.courseId) || "بدون دورة"}${row.activeChapter?.name ? ` · ${row.activeChapter.name}` : ""}`}>
+            {courseName(student.courseId) || "بدون دورة"}
+            {row.activeChapter?.name ? ` · ${row.activeChapter.name}` : ""}
           </p>
         </div>
-        <span className="tp-scard__status" data-tone={tone}>{student.status}</span>
         {moreActions.length ? (
           <RowActionsMenu label={`إجراءات أخرى لـ${student.name}`} actions={moreActions} />
         ) : null}
