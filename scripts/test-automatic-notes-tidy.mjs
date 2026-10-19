@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -217,7 +217,7 @@ test("the data migration is reviewed, idempotent in shape, and touches only auto
   const sql = read(`prisma/migrations/${name}/migration.sql`);
   const policy = JSON.parse(read("prisma/deployment-migration-policy.json"))[name];
   assert.equal(policy?.kind, "audited-data-reconciliation");
-  const { validatePendingMigration } = await import(path.join(root, "scripts/check-deployment-contract.mjs"));
+  const { validatePendingMigration } = await import(pathToFileURL(path.join(root, "scripts/check-deployment-contract.mjs")).href);
   validatePendingMigration(name, sql, policy, true);
 
   const statements = sql.replace(/--[^\n]*/g, "");

@@ -73,7 +73,8 @@ check(
 
 check(
   management.includes('"مفصول سابقاً"') &&
-    management.includes('useState<"all" | "current" | "former">("current")') &&
+    // The scope lives in the page link (useUrlState) and starts at «current».
+    management.includes('useUrlState("scope", "current")') &&
     management.includes('{ key: "former", label: "مفصول سابقاً"') &&
     filters.includes('scope === "former"') &&
     filters.includes('scope === "all"'),

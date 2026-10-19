@@ -16,7 +16,13 @@ const compiled = ts.transpileModule(source, {
     jsx: ts.JsxEmit.ReactJSX,
   },
 }).outputText;
-const validationContext = { exports: {} };
+// validation.ts imports ./format (Arabic digits become English before searching).
+const formatContext = { exports: {} };
+vm.runInNewContext(ts.transpileModule(
+  fs.readFileSync(path.join(root, 'src/lib/format.ts'), 'utf8'),
+  { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } },
+).outputText, formatContext);
+const validationContext = { exports: {}, require: (name) => (name === './format' ? formatContext.exports : require(name)) };
 vm.runInNewContext(ts.transpileModule(
   fs.readFileSync(path.join(root, 'src/lib/validation.ts'), 'utf8'),
   { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } },
@@ -592,7 +598,7 @@ function selectCourse(view, value) {
   view.render();
   assert.equal(view.copies.length, 2, 'nothing is copied without a usable phone');
   assert.equal(view.opened.length, 3, 'the platform still opens');
-  assert(view.errors.some((error) => error.includes('لا يوجد رقم هاتف صالح')));
+  assert(view.errors.some((error) => error.includes('ماكو رقم هاتف صالح')));
 
   // The green twin beside ☢️ asks the tool to open the code again.
   const restoreButtons = () => view.nodes('button').filter((node) => node.props.className === 'tp-closure-card__restore');

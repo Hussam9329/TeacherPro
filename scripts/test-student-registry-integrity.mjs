@@ -27,9 +27,11 @@ function check(label, condition) {
   checks.push({ label, ok: Boolean(condition) });
 }
 
-const registryUi = `${registry}\n${registryResults}\n${registryHelpers}`;
+// The link helpers live once in src/lib/contact-links.ts; the registry re-exports them.
+const contactLinks = read('src/lib/contact-links.ts');
+const registryUi = `${registry}\n${registryResults}\n${registryHelpers}\n${contactLinks}`;
 check('سجل الطلاب يستخدم روابط واتساب ويب https://wa.me وليس whatsapp://', registryUi.includes('https://wa.me/') && !registryUi.includes('whatsapp://'));
-check('سجل الطلاب يفتح تليكرام داخل التطبيق بروابط tg://resolve لليوزرات ويعرض المعرفات الرقمية بلا روابط', registryHelpers.includes('tg://resolve?domain=') && registryHelpers.includes('export function telegramLink') && registryHelpers.includes('describeTelegramHandle') && registry.includes('telegramLink={telegramLink}'));
+check('سجل الطلاب يفتح تليكرام داخل التطبيق بروابط tg://resolve لليوزرات ويعرض المعرفات الرقمية بلا روابط', contactLinks.includes('tg://resolve?domain=') && contactLinks.includes('export function telegramLink') && registryHelpers.includes('export { telegramLink, whatsappLink } from "@/lib/contact-links"') && registryHelpers.includes('describeTelegramHandle') && registry.includes('telegramLink={telegramLink}'));
 check('تحميل سجل الطلاب يستخدم AbortController فعلياً لمنع رجوع نتائج قديمة', registry.includes('new AbortController()') && registry.includes('controller.abort()') && registry.includes('quietAbort: true'));
 check('قائمة سجل الطلاب تطلب opportunityMode حتى تصل Badges الصحة من قاعدة البيانات', registry.includes('opportunityMode: true'));
 check(
