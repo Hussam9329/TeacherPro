@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlNumberState, useUrlState } from "@/hooks/use-url-state";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, ScrollText } from "lucide-react";
 import { EmptyState, ErrorState, LoadingState, ListPagination } from "./ui-kit";
@@ -121,15 +122,14 @@ export function LogsView() {
   const [modules, setModules] = useState<string[]>([]);
   const [moduleCounts, setModuleCounts] = useState<Array<{ module: string; count: number }>>([]);
   const [users, setUsers] = useState<string[]>([]);
-  const [search, setSearch] = useState("");
+  // Search, filters and page live in the link: a refresh or a copied link keeps them.
+  const [search, setSearch] = useUrlState("q");
   // Wait for a pause in typing so a name is one request, not one per letter.
   const debouncedSearch = useDebouncedValue(search, 350);
   // «عرض بالسجلات» from another page arrives with ?module=… already chosen.
-  const [filterModule, setFilterModule] = useState(() =>
-    typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("module") || "",
-  );
-  const [filterUser, setFilterUser] = useState("");
-  const [page, setPage] = useState(1);
+  const [filterModule, setFilterModule] = useUrlState("module");
+  const [filterUser, setFilterUser] = useUrlState("user");
+  const [page, setPage] = useUrlNumberState("page");
   const [pageSize, setPageSize] = useState(20);
   const [totalCount, setTotalCount] = useState(0);
   const [systemTotalCount, setSystemTotalCount] = useState(0);

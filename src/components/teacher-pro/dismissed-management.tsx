@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlNumberState, useUrlState } from "@/hooks/use-url-state";
 import { displayReasonText } from "@/lib/reason-display";
 import {
   useCallback,
@@ -403,10 +404,11 @@ export function DismissedManagementView() {
   const [search, setSearch] = useState(() => peekDismissedStudentFocus() ?? "");
   // Wait for a pause in typing so a name is one request, not one per letter.
   const debouncedSearch = useDebouncedValue(search, 350);
-  const [courseId, setCourseId] = useState("");
-  const [historyScope, setHistoryScope] = useState<"all" | "current" | "former">("current");
-  const [notesFilter, setNotesFilter] = useState<NotesFilter>("all");
-  const [page, setPage] = useState(1);
+  // Filters and page live in the link: a refresh or a copied link keeps them.
+  const [courseId, setCourseId] = useUrlState("course");
+  const [historyScope, setHistoryScope] = useUrlState("scope", "current") as unknown as ["all" | "current" | "former", React.Dispatch<React.SetStateAction<"all" | "current" | "former">>];
+  const [notesFilter, setNotesFilter] = useUrlState("notes", "all") as unknown as [NotesFilter, React.Dispatch<React.SetStateAction<NotesFilter>>];
+  const [page, setPage] = useUrlNumberState("page");
   // «إرجاع الطالب» from a profile opened while this page is already showing.
   useEffect(
     () =>

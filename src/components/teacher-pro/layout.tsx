@@ -1,5 +1,6 @@
 "use client";
 
+import { clearPageUrlState } from "@/hooks/use-url-state";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import { useShallow } from "zustand/react/shallow";
@@ -706,6 +707,8 @@ export function TeacherProLayout() {
       for (const key of dashboardActionQueryKeys) {
         nextUrl.searchParams.delete(key);
       }
+      // The page being left keeps its search and filters to itself.
+      clearPageUrlState(nextUrl);
       nextUrl.searchParams.set("section", section);
       nextUrl.hash = "";
       window.history.pushState({}, "", nextUrl.toString());

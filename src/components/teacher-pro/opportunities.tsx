@@ -1,4 +1,5 @@
 "use client";
+import { useUrlNumberState, useUrlState } from "@/hooks/use-url-state";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import { Fragment, useEffect, useState, useMemo } from "react";
@@ -114,12 +115,13 @@ export function OpportunitiesView() {
   // The chosen courses; empty is every course.
   const [filterCourseIds, setFilterCourseIds] = useState<string[]>([]);
   const filterCourseParam = courseFilterParam(filterCourseIds);
-  const [filterStatus, setFilterStatus] = useState("");
-  const [filterOpportunityCount, setFilterOpportunityCount] = useState("");
-  const [search, setSearch] = useState("");
+  // Search, filters and page live in the link: a refresh or a copied link keeps them.
+  const [filterStatus, setFilterStatus] = useUrlState("status");
+  const [filterOpportunityCount, setFilterOpportunityCount] = useUrlState("opportunityCount");
+  const [search, setSearch] = useUrlState("q");
   // Wait for a pause in typing so a name is one request, not one per letter.
   const debouncedSearch = useDebouncedValue(search, 350);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useUrlNumberState("page");
   const [pageSize] = useState(10);
   const [serverStudents, setServerStudents] = useState<OpportunityStudent[]>([]);
   const [serverTotalPages, setServerTotalPages] = useState(1);
@@ -147,30 +149,7 @@ export function OpportunitiesView() {
     useState<OpportunityBulkTargetsResponse | null>(null);
   const [bulkTargetLoading, setBulkTargetLoading] = useState(false);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("section") !== "opportunities") return;
-    const status = String(params.get("status") || "");
-    const opportunityCount = String(params.get("opportunityCount") || "");
-    if (
-      [
-        "active",
-        "dismissed",
-        "has-opportunities",
-        "no-opportunities",
-        "bonus-on-the-way",
-        "bonus-earned",
-      ].includes(status)
-    ) {
-      setFilterStatus(status);
-      setPage(1);
-    }
-    if (/^\d+$/.test(opportunityCount)) {
-      setFilterOpportunityCount(opportunityCount);
-      setPage(1);
-    }
-  }, []);
+  // ?status= and ?opportunityCount= (e.g. from a dashboard shortcut) are read by useUrlState above.
 
   // Action dialog
   const [actionDialog, setActionDialog] = useState<{

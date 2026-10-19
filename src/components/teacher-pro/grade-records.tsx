@@ -1,4 +1,5 @@
 "use client";
+import { useUrlNumberState, useUrlState } from "@/hooks/use-url-state";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import { useEffect, useMemo, useState } from "react";
@@ -293,16 +294,17 @@ export function GradeRecordsView() {
     useShallow((state) => ({ grades: state.grades, exams: state.exams, students: state.students, courses: state.courses, opportunityLogs: state.opportunityLogs, classification: state.classification, mergeStudentsCache: state.mergeStudentsCache, mergeGradesCache: state.mergeGradesCache, setSection: state.setSection })),
   );
 
-  const [search, setSearch] = useState("");
+  // Search, filters and page live in the link: a refresh or a copied link keeps them.
+  const [search, setSearch] = useUrlState("q");
   // Wait for a pause in typing so a name is one request, not one per letter.
   const debouncedSearch = useDebouncedValue(search, 350);
-  const [filterExamId, setFilterExamId] = useState("");
-  const [filterStatus, setFilterStatus] = useState<GradeStatusFilter>("all");
-  const [filterCourseId, setFilterCourseId] = useState("");
-  const [filterCourseProgram, setFilterCourseProgram] = useState("");
-  const [filterCourseTerm, setFilterCourseTerm] = useState("");
-  const [filterStudyType, setFilterStudyType] = useState("");
-  const [page, setPage] = useState(1);
+  const [filterExamId, setFilterExamId] = useUrlState("exam");
+  const [filterStatus, setFilterStatus] = useUrlState("status", "all") as unknown as [GradeStatusFilter, React.Dispatch<React.SetStateAction<GradeStatusFilter>>];
+  const [filterCourseId, setFilterCourseId] = useUrlState("course");
+  const [filterCourseProgram, setFilterCourseProgram] = useUrlState("program");
+  const [filterCourseTerm, setFilterCourseTerm] = useUrlState("term");
+  const [filterStudyType, setFilterStudyType] = useUrlState("studyType");
+  const [page, setPage] = useUrlNumberState("page");
   const [pageSize, setPageSize] = useState(10);
   const [studentList, setStudentList] = useState<GradeStudentListResponse | null>(null);
   const [studentListLoading, setStudentListLoading] = useState(false);

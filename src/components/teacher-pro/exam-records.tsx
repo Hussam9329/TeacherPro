@@ -1,4 +1,5 @@
 "use client";
+import { useUrlState } from "@/hooks/use-url-state";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -518,11 +519,12 @@ export function ExamRecordsView() {
     useShallow((state) => ({ exams: state.exams, grades: state.grades, students: state.students, courses: state.courses, courseChapters: state.courseChapters, opportunityLogs: state.opportunityLogs, studentLeaves: state.studentLeaves, studentCalls: state.studentCalls, loadFromServer: state.loadFromServer, courseName: state.courseName, classification: state.classification })),
   );
 
-  const [search, setSearch] = useState("");
+  // Search and filters live in the link: a refresh or a copied link keeps them.
+  const [search, setSearch] = useUrlState("q");
   const debouncedSearch = useDebouncedValue(search, 180);
-  const [filterType, setFilterType] = useState("");
-  const [filterCourseId, setFilterCourseId] = useState("");
-  const [filterStatus, setFilterStatus] = useState<ExamStatusLabel | "">("");
+  const [filterType, setFilterType] = useUrlState("type");
+  const [filterCourseId, setFilterCourseId] = useUrlState("course");
+  const [filterStatus, setFilterStatus] = useUrlState("status") as unknown as [ExamStatusLabel | "", React.Dispatch<React.SetStateAction<ExamStatusLabel | "">>];
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [databaseExamStats, setDatabaseExamStats] = useState<
     Record<string, ExamRecordStat>
