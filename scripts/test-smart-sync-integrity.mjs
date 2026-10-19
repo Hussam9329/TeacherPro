@@ -123,8 +123,7 @@ const checks = [
     ) &&
       syncMarkersMigration.includes("AFTER INSERT") &&
       syncMarkersMigration.includes("AFTER UPDATE") &&
-      syncMarkersMigration.includes("AFTER DELETE") &&
-      syncMarkersMigration.includes("AFTER TRUNCATE"),
+      syncMarkersMigration.includes("AFTER DELETE"),
   ],
   [
     "إعادة كتابة صف بنفس القيم أو إعادة حفظ نفس الملاحظة الذكية لا تُعد تغييراً",

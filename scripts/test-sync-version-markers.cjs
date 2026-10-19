@@ -19,6 +19,14 @@ const WATCHED = {
 };
 
 (async () => {
+  // The production build refuses a migration whose policy checksum does not
+  // match the committed (LF) file, or that names DROP/TRUNCATE/RENAME.
+  const { validatePendingMigration } = await import('./check-deployment-contract.mjs');
+  const migrationName = '20261019120000_sync_change_markers';
+  const committedSql = fs.readFileSync(path.join(root, 'prisma/migrations', migrationName, 'migration.sql'), 'utf8').split('\r\n').join('\n');
+  const policies = JSON.parse(fs.readFileSync(path.join(root, 'prisma/deployment-migration-policy.json'), 'utf8'));
+  validatePendingMigration(migrationName, committedSql, policies[migrationName], true);
+
   const pg = new PGlite();
   await pg.exec(Object.keys(WATCHED).map(t => `CREATE TABLE "${t}"(id text PRIMARY KEY, v int, "updatedAt" timestamp(3) DEFAULT CURRENT_TIMESTAMP);`).join('\n'));
   await pg.exec(fs.readFileSync(path.join(root, 'prisma/migrations/20261019120000_sync_change_markers/migration.sql'), 'utf8'));
@@ -75,9 +83,10 @@ const WATCHED = {
   assert.equal(next.counts.auditLogs, previous.counts.auditLogs + 1, 'a delete bumps its scope');
   previous = next;
 
-  await pg.exec(`TRUNCATE "OpportunityLog"`);
+  // A backup restore empties the tables, then inserts its rows again.
+  await pg.exec(`BEGIN; TRUNCATE "OpportunityLog"; INSERT INTO "OpportunityLog" VALUES ('restored', 1); COMMIT;`);
   next = await poll();
-  assert.equal(next.counts.opportunityLogs, previous.counts.opportunityLogs + 1, 'a truncate (backup restore) bumps its scope');
+  assert.equal(next.counts.opportunityLogs, previous.counts.opportunityLogs + 1, 'a backup restore bumps its scope through its inserts');
   previous = next;
 
   await pg.exec(`BEGIN; INSERT INTO "Exam" VALUES ('rolled-back', 1); ROLLBACK;`);
