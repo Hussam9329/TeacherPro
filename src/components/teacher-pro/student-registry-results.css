@@ -218,7 +218,6 @@
   --scard-tint: var(--status-success-bg);
   container: scard / inline-size;
   position: relative;
-  isolation: isolate;
   display: flex;
   flex-direction: column;
   gap: 0.875rem;
@@ -226,22 +225,11 @@
   padding: 1.125rem 1.125rem 0.75rem;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: 1.375rem;
-  background: var(--card);
+  /* The soft leaf in the far corner, as a background so nothing is clipped (the «⋯» menu opens over the card's edge). */
+  background:
+    radial-gradient(ellipse 12rem 9rem at 0 0, color-mix(in srgb, var(--scard-tint) 55%, transparent) 0 60%, transparent 61%),
+    var(--card);
   box-shadow: 0 10px 30px -18px color-mix(in srgb, var(--foreground) 28%, transparent);
-  overflow: hidden;
-}
-/* The soft leaf in the far corner. */
-.tp-scard::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  inset-block-start: -5rem;
-  inset-inline-end: -5rem;
-  inline-size: 13rem;
-  block-size: 11rem;
-  border-radius: 50%;
-  background: var(--scard-tint);
-  opacity: 0.45;
 }
 .tp-scard[data-status="dismissed"] { --scard-tint: var(--status-danger-bg); }
 .tp-scard[data-status="archived"] { --scard-tint: var(--muted); }

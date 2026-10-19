@@ -3,7 +3,7 @@ import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type Exam } from "@/lib/teacher-store";
-import { ChevronDown, Download } from "lucide-react";
+import { ChevronDown, Download, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -358,7 +358,7 @@ const ExamRecordCard = React.memo(function ExamRecordCard(props: ExamRecordVisua
       aria-label={exam.name}
     >
       <div className="tp-rcard__head">
-        <span className="tp-rcard__light" aria-hidden="true" />
+        <span className="tp-rcard__light" aria-hidden="true"><ClipboardList /></span>
         <h3 className="tp-rcard__name">{exam.name}</h3>
         <span className="tp-rcard__sep" aria-hidden="true" />
         <span className="tp-rcard__sub">{formatAppDate(exam.date)} · {courseLabel || "—"}</span>

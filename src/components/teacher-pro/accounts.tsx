@@ -20,7 +20,7 @@ import {
   useTeacherProSyncKey,
 } from '@/hooks/use-teacherpro-sync';
 import { baghdadTodayKey, formatBaghdadDateTime } from '@/lib/baghdad-time';
-import { ChevronDown, Download, FileUp, ScrollText, TriangleAlert, KeyRound, Lock, RefreshCw, ShieldAlert, ShieldCheck, ShieldPlus, Trash2, UserCheck, UserPen, UserPlus, UserRoundSearch, UserX } from 'lucide-react';
+import { ChevronDown, Download, FileUp, ScrollText, TriangleAlert, KeyRound, Lock, RefreshCw, ShieldAlert, ShieldCheck, ShieldPlus, Trash2, UserCheck, UserPen, UserPlus, User, UserRoundSearch, UserX } from 'lucide-react';
 import { RowActionsMenu, type RowAction } from './row-actions-menu';
 import { FormDialogHero } from './form-dialog';
 import { ListToolbar, type ListChip } from './list-toolbar';
@@ -387,6 +387,7 @@ function RolesTab() {
           return (
             <li key={role.id} className="tp-rcard">
               <div className="tp-rcard__head">
+                <span className="tp-rcard__light" aria-hidden="true"><KeyRound /></span>
                 <h3 className="tp-rcard__name">{role.name}</h3>
                 <span className="tp-rcard__sep" aria-hidden="true" />
                 <span className="tp-rcard__sub">{userCount ? `${userCount} مستخدم` : 'بدون مستخدمين'}</span>
@@ -767,7 +768,7 @@ function UsersTab() {
             return (
               <li key={user.id} className="tp-rcard" data-muted={user.active ? undefined : 'true'}>
                 <div className="tp-rcard__head">
-                  <span className="tp-rcard__light" data-tone={tone} aria-hidden="true" />
+                  <span className="tp-rcard__light" data-tone={tone} aria-hidden="true"><User /></span>
                   <h3 className="tp-rcard__name">{user.name}</h3>
                   <span className="tp-rcard__sep" aria-hidden="true" />
                   <span dir="ltr" className="tp-rcard__code">{user.username}</span>
@@ -1175,7 +1176,7 @@ function SecurityTab() {
           return (
             <li key={check.id} className="tp-rcard">
               <div className="tp-rcard__head">
-                <span className="tp-rcard__light" data-tone={tone} aria-hidden="true" />
+                <span className="tp-rcard__light" data-tone={tone} aria-hidden="true"><ShieldCheck /></span>
                 <h3 className="tp-rcard__name">{check.title}</h3>
                 <span className="tp-rcard__head-end">
                   <span className="tp-rcard__pill" data-tone={tone}>{check.ok ? 'سليم' : check.severity === 'danger' ? 'خطر' : 'تنبيه'}</span>

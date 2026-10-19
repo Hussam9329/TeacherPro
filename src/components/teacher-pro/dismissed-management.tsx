@@ -78,6 +78,7 @@ import {
   RotateCcw,
   Search,
   Send,
+  User,
 } from "lucide-react";
 
 const PAGE_SIZE = 24;
@@ -1042,7 +1043,7 @@ export function DismissedManagementView() {
             // and pill carry the colour, as in the registry and opportunities.
             <li key={student.id} className="tp-rcard">
               <div className="tp-rcard__head">
-                <span className="tp-rcard__light" data-tone={tone} aria-hidden="true" />
+                <span className="tp-rcard__light" data-tone={tone} aria-hidden="true"><User /></span>
                 <h3 className="tp-rcard__name">{student.name}</h3>
                 <span className="tp-rcard__sep" aria-hidden="true" />
                 <span dir="ltr" className="tp-rcard__code">{student.code}</span>

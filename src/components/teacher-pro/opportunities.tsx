@@ -40,7 +40,7 @@ import { StudentProfileDialog } from "./student-profile-dialog";
 import { BonusTracePanel } from "./bonus-trace-panel";
 import { StaleRecordsDialog } from "./stale-records-dialog";
 import { STAFF_ROW_ICONS, staffRowNote } from "./opportunity-row-icons";
-import { ChevronLeft, CircleMinus, CirclePlus, RotateCcw, Target } from "lucide-react";
+import { ChevronLeft, CircleMinus, CirclePlus, RotateCcw, Target, User } from "lucide-react";
 
 import { FormDialogHero } from "./form-dialog";
 import { EmptyState, LoadingState } from "./ui-kit";
@@ -905,7 +905,7 @@ export function OpportunitiesView() {
             return (
               <li key={student.id} className="tp-rcard" data-tone={dismissed ? "danger" : undefined} data-dismissed={dismissed || undefined}>
                 <div className="tp-rcard__head">
-                  <span className="tp-rcard__light" data-tone={tone} aria-hidden="true" />
+                  <span className="tp-rcard__light" data-tone={tone} aria-hidden="true"><User /></span>
                   <h3 className="tp-rcard__name">{student.name}</h3>
                   <span className="tp-rcard__sep" aria-hidden="true" />
                   <span dir="ltr" className="tp-rcard__code">{student.code}</span>
