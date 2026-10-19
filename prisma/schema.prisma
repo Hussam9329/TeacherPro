@@ -265,6 +265,7 @@ model StudentLeave {
   @@index([date])
   @@index([dateFrom])
   @@index([dateTo])
+  @@index([leaveType, dateFrom, dateTo])
 }
 
 model StudentCall {
@@ -457,6 +458,7 @@ model StudentNote {
   @@index([sourceType])
   @@index([sourceId])
   @@index([dismissalKey])
+  @@index([studentId, date])
 }
 
 model StudentLeaveGradeBackup {
@@ -578,6 +580,7 @@ model AuditLog {
 
   @@index([module])
   @@index([time])
+  @@index([module, action, time])
 }
 
 model LogClearBackup {

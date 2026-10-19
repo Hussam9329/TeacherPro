@@ -338,5 +338,9 @@
   "20261019120000_sync_change_markers": {
     "kind": "expand",
     "checksum": "c41c53a21524e1150589128b9a5a49a6468125df639527762a484c61f1e542eb"
+  },
+  "20261019200000_search_and_query_indexes": {
+    "kind": "expand",
+    "checksum": "3f793b99f2eda848e3d1c659d634ba0dc297878edefc128453b278a0210ab313"
   }
 }
