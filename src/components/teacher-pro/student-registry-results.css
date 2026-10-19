@@ -211,6 +211,7 @@
 .tp-scards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  align-items: start;
   gap: 1rem;
 }
 
@@ -218,9 +219,9 @@
   container: scard / inline-size;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
   min-inline-size: 0;
-  padding: 1.125rem 1.25rem 0;
+  padding: 1rem 1.125rem 0;
   border: 1px solid var(--border);
   border-radius: 0.875rem;
   background: var(--card);
@@ -240,7 +241,7 @@
 .tp-scard__name { margin: 0; color: var(--foreground); font-size: 1rem; font-weight: 700; line-height: 1.45; }
 .tp-scard__meta {
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem 0.4rem;
-  margin: 0; color: var(--muted-foreground); font-size: 0.78rem; line-height: 1.6;
+  margin: 0; color: var(--muted-foreground); font-size: 0.78rem; line-height: 1.6; column-gap: 0.6rem;
 }
 .tp-scard__code { color: var(--foreground); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
 
@@ -287,57 +288,50 @@
 /* The shared grace pill, flattened into a line like the others. */
 .tp-scard__grace > span { padding: 0; border: 0; background: none; font-size: 0.78rem; font-weight: 500; gap: 0.5rem; }
 
-/* Facts: label over value, in two columns. */
-.tp-scard__facts {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem 1rem;
-  margin: 0; padding-block-start: 1rem; border-block-start: 1px solid var(--border);
-}
-.tp-scard__facts > div { display: grid; gap: 0.1rem; min-inline-size: 0; }
-.tp-scard__facts dt { color: var(--muted-foreground); font-size: 0.7rem; font-weight: 500; }
-.tp-scard__facts dd { margin: 0; color: var(--foreground); font-size: 0.82rem; font-weight: 500; line-height: 1.5; }
+/* Details (on demand): labelled facts, then contacts with their edit. */
+.tp-scard__more { display: grid; gap: 0.875rem; padding-block-start: 0.875rem; border-block-start: 1px solid var(--border); }
+.tp-scard__facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem 1rem; margin: 0; }
+.tp-scard__facts > div { display: grid; gap: 0.05rem; min-inline-size: 0; }
+.tp-scard__facts dt { color: var(--muted-foreground); font-size: 0.7rem; }
+.tp-scard__facts dd { margin: 0; color: var(--foreground); font-size: 0.8rem; font-weight: 500; line-height: 1.5; }
 
-/* Contacts: plain rows, the pencil stays quiet until needed. */
-.tp-scard__contacts { display: grid; gap: 0.25rem; padding-block-start: 1rem; border-block-start: 1px solid var(--border); }
-.tp-scard__contact-row {
-  display: flex; align-items: center; gap: 0.5rem; min-block-size: 2rem;
-  font-size: 0.82rem;
-}
-.tp-scard__contact-row > svg { inline-size: 0.95rem; block-size: 0.95rem; flex-shrink: 0; color: var(--muted-foreground); }
-.tp-scard__contact-label { color: var(--muted-foreground); font-size: 0.75rem; min-inline-size: 4.25rem; }
+.tp-scard__contacts { display: grid; gap: 0.125rem; }
+.tp-scard__contact-row { display: flex; align-items: center; gap: 0.5rem; min-block-size: 2rem; font-size: 0.8rem; }
+.tp-scard__contact-label { color: var(--muted-foreground); font-size: 0.72rem; min-inline-size: 4.5rem; }
 .tp-scard__contact { color: var(--foreground); font-weight: 600; text-decoration: none; }
 .tp-scard__contact:hover { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
-.tp-scard__contact:focus-visible, .tp-scard__file:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 0.25rem; }
 .tp-scard__contact-row .tp-tg-edit__open:not([data-labelled]) {
   inline-size: 1.75rem; block-size: 1.75rem; margin-inline-start: auto;
-  border-color: transparent; background: transparent; opacity: 0.55;
+  border-color: transparent; background: transparent;
 }
 .tp-scard__contact-row .tp-tg-edit__open[data-labelled] {
-  border: 0; padding: 0; background: none; color: var(--muted-foreground); font-weight: 500; font-size: 0.78rem;
+  border: 0; padding: 0; background: none; color: var(--muted-foreground); font-weight: 500; font-size: 0.75rem;
 }
 .tp-scard__contact-row .tp-tg-edit__open[data-labelled]:hover { color: var(--primary); }
-.tp-scard:hover .tp-tg-edit__open, .tp-scard .tp-tg-edit__open:focus-visible { opacity: 1; }
-.tp-scard__missing { margin: 0.25rem 0 0; color: var(--status-warning-fg); font-size: 0.75rem; }
 
-/* The file: a full-width quiet footer link. */
-.tp-scard__file {
-  display: flex; align-items: center; gap: 0.5rem;
-  margin: auto -1.25rem 0; padding: 0.8rem 1.25rem;
-  max-inline-size: none;
-  border: 0; border-block-start: 1px solid var(--border); border-radius: 0 0 0.875rem 0.875rem;
-  background: transparent; color: var(--foreground);
-  font-size: 0.82rem; font-weight: 600; text-align: start; cursor: pointer;
+/* Footer: contact icons, the details toggle and the file. */
+.tp-scard__foot {
+  display: flex; align-items: center; gap: 0.25rem;
+  margin: auto -1.125rem 0; padding: 0.5rem 0.75rem;
+  border-block-start: 1px solid var(--border);
+}
+.tp-scard__icon, .tp-scard__toggle, .tp-scard__file {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem;
+  min-block-size: 2rem; border: 0; border-radius: 0.5rem; background: transparent;
+  color: var(--muted-foreground); font-size: 0.78rem; font-weight: 600; text-decoration: none; cursor: pointer;
   transition: background-color 150ms, color 150ms;
 }
-.tp-scard__file > svg { inline-size: 1rem; block-size: 1rem; color: var(--primary); flex-shrink: 0; }
-.tp-scard__file > small { margin-inline-start: auto; color: var(--muted-foreground); font-size: 0.72rem; font-weight: 400; }
-.tp-scard__file:hover { background: color-mix(in srgb, var(--muted) 60%, transparent); color: var(--primary); }
-
-@container scard (max-width: 20rem) {
-  .tp-scard__file > small { display: none; }
-}
+.tp-scard__icon { inline-size: 2rem; }
+.tp-scard__icon svg, .tp-scard__toggle svg, .tp-scard__file svg { inline-size: 0.95rem; block-size: 0.95rem; flex-shrink: 0; }
+.tp-scard__toggle { margin-inline-start: auto; padding-inline: 0.5rem; }
+.tp-scard__toggle, .tp-scard__file { flex-shrink: 0; white-space: nowrap; }
+.tp-scard__toggle svg { transition: transform 180ms ease; }
+.tp-scard__toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.tp-scard__file { padding-inline: 0.625rem; color: var(--primary); }
+.tp-scard__icon:hover, .tp-scard__toggle:hover, .tp-scard__file:hover { background: var(--muted); color: var(--foreground); }
+.tp-scard :is(.tp-scard__icon, .tp-scard__toggle, .tp-scard__file, .tp-scard__contact):focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
 @media (pointer: coarse) {
-  .tp-scard .tp-tg-edit__open { opacity: 1; }
-  .tp-scard__contact-row { min-block-size: 2.75rem; }
-  .tp-scard__file { min-block-size: 2.75rem; }
+  .tp-scard__icon { inline-size: 2.75rem; }
+  .tp-scard__icon, .tp-scard__toggle, .tp-scard__file, .tp-scard__contact-row { min-block-size: 2.75rem; }
 }
