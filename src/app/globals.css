@@ -3234,6 +3234,51 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
 [data-tone="danger"] { --tone: var(--status-danger-vivid); --tone-ink: var(--status-danger-fg); --tone-tint: var(--status-danger-bg); --tone-line: var(--status-danger-border); --tone-solid: var(--status-danger-solid); --tone-on: var(--status-danger-on); }
 [data-tone="info"] { --tone: var(--status-info-vivid); --tone-ink: var(--status-info-fg); --tone-tint: var(--status-info-bg); --tone-line: var(--status-info-border); --tone-solid: var(--status-info-solid); --tone-on: var(--status-info-on); }
 
+/* ═══ «لوحة النظام»: a calm palette that sits with the green-black ═══
+   The same meanings, in quieter colours drawn to the brand: emerald for
+   active, terracotta for dismissed, teal for registrations and the total,
+   the logo's gold for warnings, sage grey for archived. Dashboard only. */
+.tp-dashboard {
+  --dash-green: #2e9a6e;   --dash-green-ink: #1d6a4b;   --dash-green-solid: #23805a;
+  --dash-coral: #cf7a5c;   --dash-coral-ink: #a1543a;   --dash-coral-solid: #bd6548;
+  --dash-teal: #3a8c8a;    --dash-teal-ink: #1f6766;    --dash-teal-solid: #2a7473;
+  --dash-gold: #d2a64e;    --dash-gold-ink: #8a5f22;    --dash-gold-solid: #b98a35;
+  --dash-sage: #9ca59f;
+  --dash-on: var(--tp-bg);
+  --dash-tint-mix: 13%;
+  --dash-line-mix: 38%;
+  /* The chart and the ring read the same colours. */
+  --chart-1: var(--dash-teal);
+  --chart-2: var(--dash-green);
+  --chart-4: var(--dash-coral);
+  --chart-archived: var(--dash-sage);
+}
+.dark .tp-dashboard {
+  --dash-green: #5cc796;   --dash-green-ink: #82d6ae;   --dash-green-solid: #5cc796;
+  --dash-coral: #e5967b;   --dash-coral-ink: #efab93;   --dash-coral-solid: #e5967b;
+  --dash-teal: #6dbcb7;    --dash-teal-ink: #8fd0cb;    --dash-teal-solid: #6dbcb7;
+  --dash-gold: #e2bb6a;    --dash-gold-ink: #e9c87f;    --dash-gold-solid: #e2bb6a;
+  --dash-sage: #8f9894;
+  --dash-on: var(--tp-deep);
+  --dash-tint-mix: 16%;
+  --dash-line-mix: 42%;
+}
+.tp-dashboard [data-tone="success"] { --tone: var(--dash-green); --tone-ink: var(--dash-green-ink); --tone-solid: var(--dash-green-solid); }
+.tp-dashboard [data-tone="danger"] { --tone: var(--dash-coral); --tone-ink: var(--dash-coral-ink); --tone-solid: var(--dash-coral-solid); }
+.tp-dashboard [data-tone="info"] { --tone: var(--dash-teal); --tone-ink: var(--dash-teal-ink); --tone-solid: var(--dash-teal-solid); }
+.tp-dashboard [data-tone="warning"] { --tone: var(--dash-gold); --tone-ink: var(--dash-gold-ink); --tone-solid: var(--dash-gold-solid); }
+.tp-dashboard [data-tone] {
+  --tone-tint: color-mix(in srgb, var(--tone) var(--dash-tint-mix), var(--card));
+  --tone-line: color-mix(in srgb, var(--tone) var(--dash-line-mix), var(--card));
+  --tone-on: var(--dash-on);
+}
+/* Waiting counts on the shortcuts: terracotta, not alarm red. */
+.tp-dashboard .tp-dashboard__alert { background: var(--dash-coral-solid); color: var(--dash-on); box-shadow: 0 0 0 2px var(--card), 0 6px 14px -6px var(--dash-coral); }
+.tp-dashboard .tp-dashboard__alert[data-alert-tone="warning"] { background: var(--dash-gold-solid); box-shadow: 0 0 0 2px var(--card), 0 6px 14px -6px var(--dash-gold); }
+.tp-dashboard .tp-dashboard__alert[data-alert-tone="info"] { background: var(--dash-teal-solid); box-shadow: 0 0 0 2px var(--card), 0 6px 14px -6px var(--dash-teal); }
+/* The active-count axis follows its line. */
+.tp-dashboard .tp-trend__tick--band { fill: var(--dash-green-ink); }
+
 /* Dashboard statistics: solid glowing icon, coloured number, a wash of colour. */
 .tp-dashboard__stat[data-tone] {
   border-color: var(--tone-line);
