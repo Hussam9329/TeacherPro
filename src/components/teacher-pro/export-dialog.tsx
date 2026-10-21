@@ -1704,12 +1704,7 @@ export function ExportDialog<T = Record<string, unknown>>({
         <FormDialogHero
           icon={FileDown}
           title={htmlExamSelectionOpen ? "اختر امتحانات تقرير HTML" : title}
-          description={description || htmlExamSelectionOpen ? (
-            <>
-              {description}
-              {htmlExamSelectionOpen ? <span className="block">إخفاء امتحان من التقرير ما يغيّر الفرص.</span> : null}
-            </>
-          ) : null}
+          description={description || null}
         />
         <div className="tp-form-dialog__body">
           <div className="grid grid-cols-1 gap-2 rounded-xl border bg-muted/30 p-3 text-sm sm:grid-cols-2">
