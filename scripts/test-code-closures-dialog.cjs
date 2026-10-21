@@ -263,6 +263,9 @@ const student = (id, checked = false, courseId = 'course1') => ({
   status: 'مفصول',
   dismissedChecked: checked,
   dismissedCheckEpoch: 3,
+  // Both steps of this dismissal are done, so the code may be marked closed.
+  closurePlatformEpoch: 3,
+  closureTelegramEpoch: 3,
   courseId,
   course: { id: courseId, name: courseId === 'course1' ? 'الصيفية' : 'الشتوية' },
   dismissalReason: 'غياب في الامتحان',
@@ -618,6 +621,21 @@ function selectCourse(view, value) {
   view.render();
   assert.equal(view.contacts.length, before, 'read-only users do not save shared marks');
   assert.equal(links()[0].props['data-done'], true, 'but still see what they clicked');
+
+  // «الكود مغلق» waits for both steps: ☢️ on the platform and the notice.
+  for (const [label, waiting] of [
+    ['without the notice', { ...student('waiting'), closureTelegramEpoch: null }],
+    ['without ☢️', { ...student('waiting'), closurePlatformEpoch: null }],
+    ['with steps from an earlier dismissal', { ...student('waiting'), closurePlatformEpoch: 2, closureTelegramEpoch: 2 }],
+  ]) {
+    view = harness();
+    view.render();
+    view.reads[0].resolve(response([waiting]));
+    await view.flush();
+    assert.equal(view.nodes('Checkbox')[0].props.disabled, true, `the checkbox stays off ${label}`);
+    view.nodes('Checkbox')[0].props.onCheckedChange(true);
+    assert.equal(view.writes.length, 0, `nothing is saved ${label}`);
+  }
 
   // The bot notice: the button sends it straight away (no preview window).
   const unsent = { ...dangerous, closureTelegramEpoch: null, botNoticeSentAt: null };

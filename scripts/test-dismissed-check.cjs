@@ -59,13 +59,16 @@ function adapter(sql, options = {}) {
   let db = new PGlite(directory, { extensions: { pg_trgm } });
   try {
     await db.exec(`CREATE TABLE "Student" (id text PRIMARY KEY, name text NOT NULL, code text NOT NULL,
-      status text NOT NULL, opportunities integer NOT NULL, "dismissedChecked" boolean NOT NULL DEFAULT false);
+      status text NOT NULL, opportunities integer NOT NULL, "dismissedChecked" boolean NOT NULL DEFAULT false,
+      "closurePlatformEpoch" integer, "closureTelegramEpoch" integer);
       CREATE TABLE "Grade" (id text PRIMARY KEY, "studentId" text, score integer);
       CREATE TABLE "AuditLog" (id serial PRIMARY KEY, "userId" text, details text);
       INSERT INTO "Student" (id,name,code,status,opportunities) VALUES
         ('s','Student','TEST-1','مفصول',0), ('active','Active','TEST-2','نشط',2), ('archived','Archived','TEST-3','مؤرشف',0);
       INSERT INTO "Grade" VALUES ('g','s',35);`);
     await db.exec(migration);
+    // Both steps (☢️ and the notice) are done for the current dismissal.
+    await db.exec('UPDATE "Student" SET "closurePlatformEpoch" = 0, "closureTelegramEpoch" = 0');
     const mutate = (input, options) => db.transaction((sql) => update(adapter(sql, options), parse(input), actor));
     const read = async () => (await db.query('SELECT * FROM "Student" WHERE id=$1', ["s"])).rows[0];
     const beforeStudent = await read();
@@ -115,13 +118,16 @@ function adapter(sql, options = {}) {
       await assert.rejects(mutate({ studentId: "s", checked, expectedChecked: false, expectedEpoch: 0 }), error => error.status === 409,
         "prior-episode true and false requests are rejected even when their value already matches");
     }
+    await assert.rejects(mutate({ studentId: "s", checked: true, expectedChecked: false, expectedEpoch: 2 }), error => error.status === 409,
+      "a new dismissal is not marked closed until its own two steps are done");
+    await db.exec(`UPDATE "Student" SET "closurePlatformEpoch" = 2, "closureTelegramEpoch" = 2 WHERE id = 's'`);
     await mutate({ studentId: "s", checked: true, expectedChecked: false, expectedEpoch: 2 });
     await assert.rejects(mutate({ studentId: "s", checked: true, expectedChecked: false, expectedEpoch: 0 }), error => error.status === 409,
       "stale already-checked request must be rejected before the same-value early return");
     await mutate({ studentId: "s", checked: false, expectedChecked: true, expectedEpoch: 2 });
     assert.deepEqual((await db.query('SELECT * FROM "Grade"')).rows, beforeGrades);
     const finalStudent = await read();
-    assert.deepEqual({ ...finalStudent, dismissedCheckEpoch: 0 }, beforeStudent, "only the episode counter changes after a complete status cycle");
+    assert.deepEqual({ ...finalStudent, dismissedCheckEpoch: 0, closurePlatformEpoch: 0, closureTelegramEpoch: 0 }, beforeStudent, "only the episode counter changes after a complete status cycle");
 
     const route = fs.readFileSync("src/app/api/students/dismissed-check/route.ts", "utf8");
     assert.match(route, /requirePermission\(req, "students.view"\)/);

@@ -149,8 +149,16 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
     };
   }, [open, refresh]);
 
+  // «الكود مغلق» is ticked only after both steps of this dismissal: the red
+  // ☢️ (closing the code on the platform) and the notice, sent by the bot or
+  // through the Telegram chat link. Unticking (to undo) is always allowed.
+  function readyToMarkClosed(student: CodeClosureStudent): boolean {
+    return stepDone(student, "platform") && (stepDone(student, "telegram") || Boolean(botNoticeSentAt(student)));
+  }
+
   async function setChecked(student: CodeClosureStudent, checked: boolean) {
     if (!canManage || !loaded || pendingRef.current.has(student.id) || student.dismissedChecked === checked) return;
+    if (checked && !readyToMarkClosed(student)) return;
     const generation = generationRef.current;
     pendingRef.current.add(student.id);
     setPendingIds(new Set(pendingRef.current));
@@ -465,6 +473,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                   const reasonExpanded = expandedReasonIds.has(student.id);
                   const reasonId = `${filterId}-dismissal-reason-${student.id}`;
                   const busy = !canManage || pendingIds.has(student.id);
+                  const waitingForSteps = !student.dismissedChecked && !readyToMarkClosed(student);
                   return (
                   <article key={student.id} className="tp-closure-card" data-checked={student.dismissedChecked}>
                     <div className="tp-closure-card__main">
@@ -602,7 +611,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                           </span>
                         </div>
 
-                      <label className="tp-closure-card__toggle" data-checked={student.dismissedChecked} data-disabled={busy}>
+                      <label className="tp-closure-card__toggle" data-checked={student.dismissedChecked} data-disabled={busy || waitingForSteps}>
                         <span className="tp-closure-card__toggle-icon" aria-hidden="true">
                           {student.dismissedChecked ? <CheckCheck /> : <LockKeyhole />}
                         </span>
@@ -611,13 +620,19 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                         </span>
                         <Checkbox
                           checked={student.dismissedChecked}
-                          disabled={busy}
+                          disabled={busy || waitingForSteps}
                           onCheckedChange={(checked) => { if (typeof checked === "boolean") void setChecked(student, checked); }}
                           aria-label={`اغلاق كود ${student.name}`}
                           className="size-6"
                         />
                         <small className="tp-closure-card__toggle-hint">
-                          {pendingIds.has(student.id) ? "جاري الحفظ…" : student.dismissedChecked ? "ألغِ العلامة للتراجع" : "علّم بعد إغلاق الكود"}
+                          {pendingIds.has(student.id)
+                            ? "جاري الحفظ…"
+                            : student.dismissedChecked
+                              ? "ألغِ العلامة للتراجع"
+                              : waitingForSteps
+                                ? "يتفعّل بعد ☢️ إغلاق الكود وإرسال التبليغ (بالبوت أو التليگرام)"
+                                : "علّم بعد إغلاق الكود"}
                         </small>
                       </label>
                   </article>

@@ -42,7 +42,10 @@ export async function updateDismissedCheck(
 ) {
   const student = await tx.student.findUnique({
     where: { id: input.studentId },
-    select: { id: true, name: true, code: true, status: true, dismissedChecked: true, dismissedCheckEpoch: true },
+    select: {
+      id: true, name: true, code: true, status: true, dismissedChecked: true, dismissedCheckEpoch: true,
+      closurePlatformEpoch: true, closureTelegramEpoch: true,
+    },
   });
   if (!student) throw new DismissedCheckError("الطالب غير موجود.", 404);
   if (student.status !== "مفصول") {
@@ -57,6 +60,15 @@ export async function updateDismissedCheck(
   }
   if (student.dismissedChecked !== input.expectedChecked) {
     throw new DismissedCheckError("غيّر مستخدم آخر حالة اغلاق كود. راجع الحالة ثم أعد المحاولة.", 409);
+  }
+  // A code is marked closed only after both steps of this dismissal: ☢️ on the
+  // platform, and the notice (sent by the bot or opened in the Telegram chat).
+  if (
+    input.checked &&
+    (student.closurePlatformEpoch !== student.dismissedCheckEpoch ||
+      student.closureTelegramEpoch !== student.dismissedCheckEpoch)
+  ) {
+    throw new DismissedCheckError("اضغط ☢️ إغلاق الكود وأرسل التبليغ (بالبوت أو التليگرام) قبل ما تعلّم الكود مغلق.", 409);
   }
   const updated = await tx.student.updateMany({
     where: { id: student.id, status: "مفصول", dismissedChecked: input.expectedChecked, dismissedCheckEpoch: input.expectedEpoch },

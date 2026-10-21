@@ -342,5 +342,9 @@
   "20261019200000_search_and_query_indexes": {
     "kind": "expand",
     "checksum": "3f793b99f2eda848e3d1c659d634ba0dc297878edefc128453b278a0210ab313"
+  },
+  "20261021120000_reopen_unfinished_code_closures": {
+    "kind": "audited-data-reconciliation",
+    "checksum": "22b5ed50cdd2277994e217608b94af3f88defa67c923e0e1aec62ed079329a03"
   }
 }
