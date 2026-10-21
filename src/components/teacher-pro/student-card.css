@@ -187,6 +187,7 @@
 /* Wide cards: the chip and the date side by side, as in the design. */
 @container scard (min-width: 28rem) {
   .tp-scard__state { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+  .tp-scard__state > .tp-scard__when { flex: 1 1 auto; }
   .tp-scard__chip { flex-shrink: 0; }
 }
 
@@ -197,7 +198,8 @@
 @container scard (max-width: 24rem) {
   .tp-scard__ring { inline-size: 4.75rem; block-size: 4.75rem; }
   .tp-scard__ring-inner b { font-size: 0.85rem; }
-  .tp-scard__when-text b { font-size: 0.85rem; white-space: nowrap; }
+  /* Long text (a dismissal reason) wraps beside the ring instead of running under it. */
+  .tp-scard__when-text b { font-size: 0.85rem; text-wrap: balance; }
   .tp-scard__when-icon { display: none; }
   /* The study line wraps rather than cutting words. */
   .tp-scard__study { flex-wrap: wrap; row-gap: 0.35rem; }
