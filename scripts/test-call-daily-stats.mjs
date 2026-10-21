@@ -19,7 +19,7 @@ function load(file) {
   return module.exports;
 }
 
-const { buildCallDailyStats, baghdadDayRange, isCallStatsExamType, CALL_ACTION_SET, CALL_ACTION_CLEARED } = load("src/lib/call-daily-stats.ts");
+const { buildCallDailyStats, withChosenGroups, baghdadDayRange, isCallStatsExamType, CALL_ACTION_SET, CALL_ACTION_CLEARED } = load("src/lib/call-daily-stats.ts");
 const line = (time, user, studentId, examId, status, action = CALL_ACTION_SET) => ({
   time, action, userId: user.id, userName: user.name,
   details: JSON.stringify({ studentId, examId, status, previousStatus: "بدون إجراء" }),
@@ -142,7 +142,8 @@ assert.ok(!route.includes("export async function PUT"), "nobody types the requir
 assert.ok(route.includes('action: { in: [CALL_ACTION_SET, CALL_ACTION_CLEARED] }'));
 const panel = read("src/components/teacher-pro/calls-stats-panel.tsx");
 assert.ok(panel.includes('aria-pressed={extra.discounted}') && panel.includes('aria-pressed={extra.full}'), "the two optional columns have their own switch");
-assert.ok(panel.includes("{data.totals.actions}"), "the team's sum is the day's actions");
+assert.ok(panel.includes("{shown.totals.actions}"), "the team's sum is the day's actions");
+assert.ok(panel.includes("withChosenGroups(data, extra)"), "the required number follows the chosen groups");
 const examTargets = read("prisma/migrations/20261015180000_call_exam_targets/migration.sql");
 assert.ok(examTargets.includes('CREATE TABLE IF NOT EXISTS "CallExamTarget"') && !/\b(DROP|DELETE|UPDATE|TRUNCATE)\b/i.test(examTargets.replace(/--[^\n]*/g, "")));
 assert.ok(examTargets.includes('ON "CallExamTarget"("courseId", "examId")'));
@@ -157,5 +158,21 @@ assert.equal(policy["20261011150000_call_daily_target_exam"].kind, "expand");
 assert.equal(policy["20261015180000_call_exam_targets"].kind, "expand");
 assert.equal(policy["20261015210000_call_exam_target_recorded"].kind, "expand");
 assert.ok(migration.includes('CREATE TABLE "CallDailyTarget"') && !/\bDROP\b/i.test(migration.replace(/--[^\n]*/g, "")));
+
+// «العدد المطلوب» follows the chosen groups: discounted, full grades, or both added.
+{
+  const course = (id, target, full, done) => ({ id, name: id, examId: "e", examName: "e", target, discounted: target, full, done, doneToday: 0, remaining: 0, rate: null });
+  const stats = { courses: [course("a", 456, 130, 0), course("b", 42, 53, 87), course("c", null, null, 0)], employees: [], totals: { target: 498, done: 87, doneToday: 0, remaining: 456, rate: null, discounted: 498, full: 183, actions: 0 } };
+  const both = withChosenGroups(stats, { discounted: true, full: true });
+  assert.deepEqual(both.courses.map((c) => c.target), [586, 95, null], "both chosen: discounted + full grades");
+  assert.deepEqual(both.courses.map((c) => c.remaining), [586, 8, 0]);
+  assert.equal(both.totals.target, 681);
+  assert.equal(both.totals.remaining, 594);
+  assert.equal(Math.round(both.totals.rate * 1000), Math.round(((681 - 594) / 681) * 1000), "the rate counts a course only up to its number");
+  assert.deepEqual(withChosenGroups(stats, { discounted: false, full: true }).courses.map((c) => c.target), [130, 53, null], "full grades only");
+  assert.deepEqual(withChosenGroups(stats, { discounted: true, full: false }).courses.map((c) => c.target), [456, 42, null], "discounted only");
+  assert.deepEqual(withChosenGroups(stats, { discounted: false, full: false }).courses.map((c) => c.target), [456, 42, null], "neither: the discounted number");
+  assert.equal(stats.courses[0].target, 456, "the original numbers are not changed");
+}
 
 console.log("كل اختبارات إحصائيات المكالمات نجحت.");

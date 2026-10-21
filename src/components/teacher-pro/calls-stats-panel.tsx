@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AlertCircle, Check, ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { DateInput } from "@/components/ui/date-input";
 import { formatAppDate } from "@/lib/format";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
 import { callDailyStatsApi, type CallDailyStatsResponse } from "@/lib/call-daily-stats-client";
+import { withChosenGroups } from "@/lib/call-daily-stats";
 import { EmptyState, LoadingState } from "./ui-kit";
 
 /** «YYYY-MM-DD» moved by whole days. */
@@ -101,6 +102,14 @@ export function CallsStatsPanel() {
   }, [day, load]);
 
   const today = data?.today || baghdadTodayKey();
+  // «العدد المطلوب» (and the remaining count and rate) follows the chosen groups:
+  // «المخصومين», «الدرجات الكاملة», or both added together.
+  const shown = useMemo(() => (data ? { ...data, ...withChosenGroups(data, extra) } : null), [data, extra]);
+  const targetHint = extra.discounted && extra.full
+    ? "المخصومين والدرجات الكاملة لآخر امتحان تراكمي لكل دورة"
+    : extra.full
+      ? "الدرجات الكاملة لآخر امتحان تراكمي لكل دورة"
+      : "مخصومين آخر امتحان تراكمي لكل دورة";
 
   return (
     <section className="tp-cstats" aria-label="إحصائيات المكالمات">
@@ -133,29 +142,29 @@ export function CallsStatsPanel() {
         <div role="alert" className="tp-modal__error"><AlertCircle aria-hidden="true" /><p>{error}</p></div>
       ) : null}
 
-      {!data ? (
+      {!shown ? (
         loading ? <LoadingState title="جاري تحميل الإحصائيات..." /> : null
       ) : (
         <>
           <dl className="tp-cstats__kpis">
             <div className="tp-cstats__kpi">
               <dt>إجمالي المطلوب</dt>
-              <dd>{data.totals.target}</dd>
-              <small>مخصومين آخر امتحان تراكمي لكل دورة</small>
+              <dd>{shown.totals.target}</dd>
+              <small>{targetHint}</small>
             </div>
             <div className="tp-cstats__kpi" data-tone="done">
               <dt>إجمالي المنجز</dt>
-              <dd>{data.totals.done}</dd>
-              <small>لحد هذا اليوم · منها اليوم {data.totals.doneToday}</small>
+              <dd>{shown.totals.done}</dd>
+              <small>لحد هذا اليوم · منها اليوم {shown.totals.doneToday}</small>
             </div>
-            <div className="tp-cstats__kpi" data-tone={data.totals.remaining > 0 ? "left" : undefined}>
+            <div className="tp-cstats__kpi" data-tone={shown.totals.remaining > 0 ? "left" : undefined}>
               <dt>إجمالي المتبقي</dt>
-              <dd>{data.totals.remaining}</dd>
+              <dd>{shown.totals.remaining}</dd>
               <small>مجموع المتبقي بكل دورة</small>
             </div>
             <div className="tp-cstats__kpi">
               <dt>نسبة الإنجاز</dt>
-              <dd>{percent(data.totals.rate)}</dd>
+              <dd>{percent(shown.totals.rate)}</dd>
               <small>المنجز من المطلوب، كل دورة لحد عددها</small>
             </div>
           </dl>
@@ -165,11 +174,11 @@ export function CallsStatsPanel() {
               <h3 id="tp-cstats-employees">إنجاز الموظفين</h3>
               <p>كل إجراء سجّله الموظف بهذا اليوم على مكالمة امتحان تراكمي (طالب وامتحان)، وعلى أي دورات. الامتحانات اليومية ما تنحسب هنا.</p>
             </header>
-            {data.employees.length === 0 ? (
+            {shown.employees.length === 0 ? (
               <EmptyState compact title="ما سجّل أي موظف إجراء بهذا اليوم" />
             ) : (
               <ul className="tp-cstats__rows">
-                {data.employees.map((employee) => (
+                {shown.employees.map((employee) => (
                   <li key={employee.key} className="tp-cstats__employee">
                     <div className="tp-cstats__who">
                       <strong>{employee.name}</strong>
@@ -192,7 +201,7 @@ export function CallsStatsPanel() {
                 <li className="tp-cstats__employee" data-sum="true">
                   <div className="tp-cstats__who"><strong>مجموع إنجاز الفريق</strong></div>
                   <div className="tp-cstats__courses" />
-                  <span className="tp-cstats__total">{data.totals.actions}</span>
+                  <span className="tp-cstats__total">{shown.totals.actions}</span>
                 </li>
               </ul>
             )}
@@ -219,7 +228,7 @@ export function CallsStatsPanel() {
                 </button>
               </div>
             </header>
-            {data.courses.length === 0 ? (
+            {shown.courses.length === 0 ? (
               <EmptyState compact title="ماكو دورات فعّالة" />
             ) : (
               <div className="tp-cstats__table" style={{ "--tp-cstats-cols": columns } as CSSProperties}>
@@ -229,7 +238,7 @@ export function CallsStatsPanel() {
                   {extra.full ? <span>الدرجات الكاملة</span> : null}
                   <span>العدد المطلوب</span><span>المنجز</span><span>المتبقي</span><span>نسبة الإنجاز</span>
                 </div>
-                {data.courses.map((course) => {
+                {shown.courses.map((course) => {
                   const rate = course.rate === null ? 0 : Math.min(1, course.rate);
                   return (
                     <div key={course.id || "none"} className="tp-cstats__trow">
@@ -254,15 +263,15 @@ export function CallsStatsPanel() {
                 })}
                 <div className="tp-cstats__trow" data-sum="true">
                   <span className="tp-cstats__cname">المجموع</span>
-                  {extra.discounted ? <span className="tp-cstats__num" data-label="المخصومين" data-tone="discounted">{data.totals.discounted}</span> : null}
-                  {extra.full ? <span className="tp-cstats__num" data-label="الدرجات الكاملة" data-tone="full">{data.totals.full}</span> : null}
-                  <span className="tp-cstats__num" data-label="العدد المطلوب">{data.totals.target}</span>
+                  {extra.discounted ? <span className="tp-cstats__num" data-label="المخصومين" data-tone="discounted">{shown.totals.discounted}</span> : null}
+                  {extra.full ? <span className="tp-cstats__num" data-label="الدرجات الكاملة" data-tone="full">{shown.totals.full}</span> : null}
+                  <span className="tp-cstats__num" data-label="العدد المطلوب">{shown.totals.target}</span>
                   <span className="tp-cstats__num" data-label="المنجز">
-                    {data.totals.done}
-                    {data.totals.doneToday ? <small>اليوم {data.totals.doneToday}</small> : null}
+                    {shown.totals.done}
+                    {shown.totals.doneToday ? <small>اليوم {shown.totals.doneToday}</small> : null}
                   </span>
-                  <span className="tp-cstats__num" data-label="المتبقي">{data.totals.remaining}</span>
-                  <span className="tp-cstats__num" data-label="نسبة الإنجاز">{percent(data.totals.rate)}</span>
+                  <span className="tp-cstats__num" data-label="المتبقي">{shown.totals.remaining}</span>
+                  <span className="tp-cstats__num" data-label="نسبة الإنجاز">{percent(shown.totals.rate)}</span>
                 </div>
               </div>
             )}

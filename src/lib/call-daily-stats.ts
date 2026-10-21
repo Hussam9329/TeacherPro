@@ -269,3 +269,38 @@ export function baghdadDayRange(day: string): { from: Date; to: Date } | null {
   if (!Number.isFinite(from.getTime())) return null;
   return { from, to: new Date(from.getTime() + 24 * 60 * 60 * 1000) };
 }
+
+/**
+ * «العدد المطلوب» follows the groups chosen above the table: «المخصومين»
+ * (the kept number of the course's latest exam), «الدرجات الكاملة», or both
+ * added together. With neither chosen it stays the discounted number. The
+ * remaining count and the rate follow, per course and in the totals (a course
+ * over its number adds only its number, as before).
+ */
+export function withChosenGroups(stats: CallDailyStats, chosen: { discounted: boolean; full: boolean }): CallDailyStats {
+  const pickTarget = (course: CallDailyCourse): number | null => {
+    if (!chosen.discounted && !chosen.full) return course.target;
+    const parts = [chosen.discounted ? course.target : null, chosen.full ? course.full : null].filter(
+      (value): value is number => typeof value === "number",
+    );
+    return parts.length ? parts.reduce((total, value) => total + value, 0) : null;
+  };
+  const courses = stats.courses.map((course) => {
+    const target = pickTarget(course);
+    return {
+      ...course,
+      target,
+      remaining: target === null ? 0 : Math.max(0, target - course.done),
+      rate: rateOf(course.done, target),
+    };
+  });
+  const sum = (pick: (course: CallDailyCourse) => number | null) => courses.reduce((total, course) => total + (pick(course) || 0), 0);
+  const target = sum((course) => course.target);
+  const remaining = sum((course) => course.remaining);
+  return {
+    ...stats,
+    courses,
+    totals: { ...stats.totals, target, remaining, rate: rateOf(target - remaining, target || null) },
+  };
+}
+
