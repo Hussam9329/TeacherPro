@@ -619,7 +619,7 @@ function selectCourse(view, value) {
   assert.equal(view.contacts.length, before, 'read-only users do not save shared marks');
   assert.equal(links()[0].props['data-done'], true, 'but still see what they clicked');
 
-  // The bot notice: a separate button opens a preview; only «إرسال» sends it.
+  // The bot notice: the button sends it straight away (no preview window).
   const unsent = { ...dangerous, closureTelegramEpoch: null, botNoticeSentAt: null };
   const sentBefore = { ...first, id: 'sent', name: 'طالب أُبلغ', dismissalExamName: 'يومي 4', dismissalOutcome: '4 من 20', botNoticeSentAt: '2026-09-26T10:00:00.000Z' };
   const unknownResult = { ...doneBefore, botNoticeSentAt: null };
@@ -628,34 +628,20 @@ function selectCourse(view, value) {
   view.reads[0].resolve(response([unsent, sentBefore, unknownResult]));
   await view.flush();
   const botButtons = () => view.nodes('button').filter((node) => node.props.className === 'tp-closure-card__bot');
-  const botDialog = () => view.nodes('AlertDialog')[0];
   assert.equal(botButtons().length, 3, 'managers see the bot button on every card, beside the chat link');
   assert.equal(links().length, 3, 'the username still opens the chat');
   assert.deepEqual(botButtons().map((node) => Boolean(node.props.disabled)), [false, true, true], 'already sent, or an unknown exam/result, cannot be sent by the bot');
   assert.deepEqual(botButtons().map((node) => Boolean(node.props['data-sent'])), [false, true, false]);
-  assert.equal(botDialog().props.open, false, 'nothing is open before a click');
+  assert.equal(view.nodes('AlertDialog').length, 0, 'there is no preview window');
   botButtons()[0].props.onClick();
   view.render();
-  assert.equal(botDialog().props.open, true, 'the click opens the preview');
-  assert.equal(view.botSends.length, 0, 'the click alone sends nothing');
-  assert(view.text().includes('الامتحان: يومي 3') && view.text().includes('@hf_chances'), 'the preview shows the exact notice');
-  const cancel = view.nodes('AlertDialogCancel')[0];
-  assert(cancel, 'the preview can be cancelled');
-  botDialog().props.onOpenChange(false);
-  view.render();
-  assert.equal(botDialog().props.open, false);
-  assert.equal(view.botSends.length, 0, 'cancelling sends nothing');
-
+  assert.deepEqual(view.botSends.map((send) => send.args), [[unsent.id, 3]], 'one press sends once, for this dismissal episode');
+  assert(view.text().includes('جاري الإرسال…'), 'the button shows it is sending');
+  assert.equal(Boolean(botButtons()[0].props.disabled), true, 'and cannot be pressed again meanwhile');
   botButtons()[0].props.onClick();
-  view.render();
-  view.nodes('AlertDialogAction')[0].props.onClick({ preventDefault() {} });
-  view.render();
-  assert.deepEqual(view.botSends.map((send) => send.args), [[unsent.id, 3]], '«إرسال» sends once, for this dismissal episode');
-  view.nodes('AlertDialogAction')[0].props.onClick({ preventDefault() {} });
   assert.equal(view.botSends.length, 1, 'a second press while sending does nothing');
   view.botSends[0].resolve({ botNoticeSentAt: '2026-09-27T09:00:00.000Z' });
   await view.flush();
-  assert.equal(botDialog().props.open, false, 'the preview closes after sending');
   assert(view.successes.includes(`أرسل البوت تبليغ الفصل إلى ${unsent.name}`));
   assert.equal(botButtons()[0].props['data-sent'], true, 'the card shows the notice as sent');
   assert.equal(links()[0].props['data-done'], true, 'and the Telegram step as done');
@@ -667,7 +653,6 @@ function selectCourse(view, value) {
   await refused.flush();
   refused.nodes('button').find((node) => node.props.className === 'tp-closure-card__bot').props.onClick();
   refused.render();
-  refused.nodes('AlertDialogAction')[0].props.onClick({ preventDefault() {} });
   refused.botSends[0].reject(new Error('الطالب لم يبدأ محادثة مع البوت بعد'));
   await refused.flush();
   assert(refused.errors.includes('الطالب لم يبدأ محادثة مع البوت بعد'));
@@ -675,7 +660,7 @@ function selectCourse(view, value) {
 
   refused.setProps({ canManage: false });
   assert.equal(refused.nodes('button').filter((node) => node.props.className === 'tp-closure-card__bot').length, 0, 'read-only users cannot send through the bot');
-  console.log('PASS: the bot button previews the notice and sends only on «إرسال», once per dismissal; sent and unknown-result cards are locked; refusals are explained; the chat link stays.');
+  console.log('PASS: the bot button sends the notice straight away, once per dismissal; sent and unknown-result cards are locked; refusals are explained; the chat link stays.');
   console.log('PASS: platform button copies 00964 phone and opens the platform; Telegram link carries the filled notice; both highlight per dismissal and only managers save the shared mark.');
 })().catch((error) => {
   console.error(error);

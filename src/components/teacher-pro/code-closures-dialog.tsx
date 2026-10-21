@@ -5,7 +5,6 @@ import { AlertCircle, BookOpen, CalendarDays, CheckCheck, ChevronDown, Loader2, 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { codeClosuresApi, type CodeClosureStudent } from "@/lib/code-closures-client";
 import {
@@ -28,7 +27,6 @@ import { formatAppDate } from "@/lib/format";
 import { DateInput } from "@/components/ui/date-input";
 import { displayReasonText } from "@/lib/reason-display";
 import { EmptyState, LoadingState } from "./ui-kit";
-import { FormDialogHero } from "./form-dialog";
 import "./tp-modal.css";
 import "./code-closures-dialog.css";
 
@@ -68,9 +66,9 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
   const [expandedReasonIds, setExpandedReasonIds] = useState<Set<string>>(new Set());
   // Contact steps clicked here, shown at once while the shared mark is saved.
   const [clickedSteps, setClickedSteps] = useState<Record<string, number>>({});
-  // The bot notice: the student waiting for «إرسال», and the ones sent from here.
-  const [botTarget, setBotTarget] = useState<CodeClosureStudent | null>(null);
-  const [botSending, setBotSending] = useState(false);
+  // The bot notice: the student it is being sent to now, and the ones sent from here.
+  const [botSendingId, setBotSendingId] = useState("");
+  const botSending = Boolean(botSendingId);
   const [botSent, setBotSent] = useState<Record<string, { epoch: number; at: string }>>({});
   const pendingRef = useRef(new Set<string>());
   const openRef = useRef(open);
@@ -127,7 +125,6 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
     setDateFrom("");
     setDateTo("");
     setExpandedReasonIds(new Set());
-    setBotTarget(null);
     if (!open) return;
     void refresh();
     // Global background refresh pauses while dialogs are open, so this small
@@ -227,24 +224,21 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
     return student.botNoticeSentAt || (local?.epoch === student.dismissedCheckEpoch ? local.at : null);
   }
 
-  // Sent only after «إرسال» in the preview; the server refuses a second send.
-  async function sendBotNotice() {
-    const student = botTarget;
-    if (!student || botSending || !canManage) return;
-    setBotSending(true);
+  // Sent straight from «إرسال عبر البوت» (no preview); the server refuses a second send.
+  async function sendBotNotice(student: CodeClosureStudent) {
+    if (botSending || !canManage) return;
+    setBotSendingId(student.id);
     try {
       const { botNoticeSentAt: at } = await codeClosuresApi.sendBotNotice(student.id, student.dismissedCheckEpoch);
       setBotSent((current) => ({ ...current, [student.id]: { epoch: student.dismissedCheckEpoch, at } }));
       setClickedSteps((current) => ({ ...current, [`${student.id}:telegram`]: student.dismissedCheckEpoch }));
       toast.success(`أرسل البوت تبليغ الفصل إلى ${student.name}`);
-      setBotTarget(null);
       void refresh();
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "تعذر إرسال التبليغ عبر البوت.");
-      setBotTarget(null);
       void refresh();
     } finally {
-      setBotSending(false);
+      setBotSendingId("");
     }
   }
 
@@ -585,14 +579,17 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                               className="tp-closure-card__bot"
                               data-sent={sentAt ? true : undefined}
                               disabled={Boolean(sentAt) || !noticeReady || botSending}
-                              onClick={() => setBotTarget(student)}
+                              onClick={() => void sendBotNotice(student)}
+                              aria-busy={botSendingId === student.id || undefined}
                               aria-label={sentAt ? `أرسل البوت تبليغ الفصل إلى ${student.name}` : `إرسال تبليغ الفصل إلى ${student.name} عبر البوت`}
                               title={sentAt
                                 ? `أرسل البوت التبليغ ${formatAppDate(baghdadDateKey(sentAt), "")}`
                                 : noticeReady ? "إرسال تبليغ الفصل للطالب عبر بوت تليگرام" : "اسم الامتحان أو النتيجة غير معروفة؛ استخدم زر المحادثة وأكمل التبليغ يدوياً"}
                             >
-                              {sentAt ? <CheckCheck aria-hidden="true" /> : <Send aria-hidden="true" />}
-                              <span>{sentAt ? "أُرسل عبر البوت" : "إرسال عبر البوت"}</span>
+                              {botSendingId === student.id
+                                ? <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                : sentAt ? <CheckCheck aria-hidden="true" /> : <Send aria-hidden="true" />}
+                              <span>{botSendingId === student.id ? "جاري الإرسال…" : sentAt ? "أُرسل عبر البوت" : "إرسال عبر البوت"}</span>
                             </button>
                           )}
                           {canEditContacts && (
@@ -630,34 +627,6 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
             )}
           </section>
         </div>
-        <AlertDialog open={Boolean(botTarget)} onOpenChange={(next) => { if (!next && !botSending) setBotTarget(null); }}>
-          <AlertDialogContent className="tp-form-dialog sm:max-w-xl">
-            <FormDialogHero
-              alert
-              icon={Send}
-              title="إرسال تبليغ الفصل عبر البوت"
-              description={`سيرسل البوت هذه الرسالة إلى «${botTarget?.name || "الطالب"}» في تليگرام. لا يمكن سحبها بعد الإرسال.`}
-            />
-            <div className="tp-form-dialog__body">
-              <p className="tp-closures__bot-preview" dir="rtl">
-                {botTarget ? buildDismissalNotice(botTarget.dismissalExamName, botTarget.dismissalOutcome).replace(/\*\*/g, "") : ""}
-              </p>
-            </div>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={botSending}>إلغاء</AlertDialogCancel>
-              <AlertDialogAction
-                disabled={botSending}
-                onClick={(event) => {
-                  event.preventDefault();
-                  void sendBotNotice();
-                }}
-              >
-                {botSending ? <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
-                {botSending ? "جاري الإرسال…" : "إرسال"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </DialogContent>
     </Dialog>
   );
