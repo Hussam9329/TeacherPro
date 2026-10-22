@@ -148,8 +148,8 @@
 .tp-closure-card__row-label { display: inline-flex; align-items: center; gap: 0.45rem; color: var(--tp-text); font-size: 0.92rem; font-weight: 800; }
 .tp-closure-card__row-label svg { inline-size: 1.15rem; block-size: 1.15rem; color: var(--tp-text-muted); }
 /* A thin line before each group after the first (the edit stays with the bot). */
-.tp-closure-card__actions > :is(.tp-closure-card__restore, .tp-closure-card__telegram, .tp-closure-card__bot) { position: relative; }
-.tp-closure-card__actions > :is(.tp-closure-card__restore, .tp-closure-card__telegram, .tp-closure-card__bot)::before {
+.tp-closure-card__actions > :is(.tp-closure-card__restore, .tp-closure-card__telegram, .tp-closure-card__pair) { position: relative; }
+.tp-closure-card__actions > :is(.tp-closure-card__restore, .tp-closure-card__telegram, .tp-closure-card__pair)::before {
   content: "";
   position: absolute;
   inset-block: 0.35rem;
@@ -320,7 +320,7 @@ a.tp-closure-card__telegram[data-done]::after {
   /* The state chip takes its own line under the name rather than squeezing it. */
   .tp-closure-card__state { order: 3; margin-inline-start: calc(3.25rem + 0.9rem); }
   .tp-closure-card__actions { gap: 0.55rem 0.9rem; }
-  .tp-closure-card__actions > :is(.tp-closure-card__restore, .tp-closure-card__telegram, .tp-closure-card__bot)::before { display: none; }
+  .tp-closure-card__actions > :is(.tp-closure-card__restore, .tp-closure-card__telegram, .tp-closure-card__pair)::before { display: none; }
   .tp-closure-card__toggle { padding: 1rem; }
   .tp-closure-card__toggle-icon { inline-size: 3.25rem; block-size: 3.25rem; }
 }
@@ -378,24 +378,25 @@ a.tp-closure-card__telegram[data-done]::after {
 .tp-closure-card__bot:disabled { cursor: default; opacity: 0.6; }
 .tp-closure-card__bot[data-sent] { border-color: transparent; background: var(--status-success-bg); color: var(--status-success-fg); opacity: 1; }
 
-/* «انسحاب» on a closed code: quiet until hovered, it archives the student. */
+/* «انسحاب» and «إرسال عبر البوت» stay together, «انسحاب» on the right. */
+.tp-closure-card__pair { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 0.6rem; }
+/* «انسحاب»: the same shape as «إرسال عبر البوت», in red (it archives the student). */
 .tp-closure-card__withdraw {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  min-block-size: 2.25rem;
-  padding: 0.3rem 0.8rem;
-  border: 1px solid var(--status-danger-border);
-  border-radius: 999px;
-  background: transparent;
+  gap: 0.5rem;
+  min-block-size: 2.75rem;
+  padding: 0.3rem 1.1rem;
+  border: 1.5px solid color-mix(in srgb, var(--status-danger-border) 75%, transparent);
+  border-radius: 0.95rem;
+  background: var(--tp-card-inner);
   color: var(--status-danger-fg);
-  font-size: 0.8rem;
-  font-weight: 700;
+  font-size: 0.9rem;
+  font-weight: 750;
   cursor: pointer;
-  transition: background-color 150ms, color 150ms;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
-.tp-closure-card__withdraw svg { inline-size: 1rem; block-size: 1rem; }
-.tp-closure-card__withdraw:hover { background: var(--status-danger-bg); }
-.tp-closure-card__withdraw:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-@media (pointer: coarse) { .tp-closure-card__withdraw { min-block-size: 2.75rem; } }
+.tp-closure-card__withdraw svg { flex-shrink: 0; inline-size: 1.1rem; block-size: 1.1rem; }
+.tp-closure-card__withdraw:hover:not(:disabled) { border-color: transparent; background: var(--status-danger-solid); color: var(--status-danger-on); }
+.tp-closure-card__withdraw:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
 .tp-notes__head .tp-closure-card__withdraw { margin-inline-start: auto; }

@@ -586,25 +586,39 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                               <span dir={telegram.value ? "ltr" : undefined}>{telegram.value || "ماكو معرّف"}</span>
                             </span>
                           )}
-                          {canManage && (
-                            <button
-                              type="button"
-                              className="tp-closure-card__bot"
-                              data-sent={sentAt ? true : undefined}
-                              disabled={Boolean(sentAt) || !noticeReady || botSending}
-                              onClick={() => void sendBotNotice(student)}
-                              aria-busy={botSendingId === student.id || undefined}
-                              aria-label={sentAt ? `أرسل البوت تبليغ الفصل إلى ${student.name}` : `إرسال تبليغ الفصل إلى ${student.name} عبر البوت`}
-                              title={sentAt
-                                ? `أرسل البوت التبليغ ${formatAppDate(baghdadDateKey(sentAt), "")}`
-                                : noticeReady ? "إرسال تبليغ الفصل للطالب عبر بوت تليگرام" : "اسم الامتحان أو النتيجة غير معروفة؛ استخدم زر المحادثة وأكمل التبليغ يدوياً"}
-                            >
-                              {botSendingId === student.id
-                                ? <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                : sentAt ? <CheckCheck aria-hidden="true" /> : <Send aria-hidden="true" />}
-                              <span>{botSendingId === student.id ? "جاري الإرسال…" : sentAt ? "أُرسل عبر البوت" : "إرسال عبر البوت"}</span>
-                            </button>
-                          )}
+                          {/* «انسحاب» always sits right beside «إرسال عبر البوت». */}
+                          <span className="tp-closure-card__pair">
+                            {canWithdraw && student.dismissedChecked && (
+                              <button
+                                type="button"
+                                className="tp-closure-card__withdraw"
+                                onClick={() => setWithdrawTarget({ id: student.id, name: student.name })}
+                                aria-label={`انسحاب ${student.name}`}
+                              >
+                                <UserMinus aria-hidden="true" />
+                                <span>انسحاب</span>
+                              </button>
+                            )}
+                            {canManage && (
+                              <button
+                                type="button"
+                                className="tp-closure-card__bot"
+                                data-sent={sentAt ? true : undefined}
+                                disabled={Boolean(sentAt) || !noticeReady || botSending}
+                                onClick={() => void sendBotNotice(student)}
+                                aria-busy={botSendingId === student.id || undefined}
+                                aria-label={sentAt ? `أرسل البوت تبليغ الفصل إلى ${student.name}` : `إرسال تبليغ الفصل إلى ${student.name} عبر البوت`}
+                                title={sentAt
+                                  ? `أرسل البوت التبليغ ${formatAppDate(baghdadDateKey(sentAt), "")}`
+                                  : noticeReady ? "إرسال تبليغ الفصل للطالب عبر بوت تليگرام" : "اسم الامتحان أو النتيجة غير معروفة؛ استخدم زر المحادثة وأكمل التبليغ يدوياً"}
+                              >
+                                {botSendingId === student.id
+                                  ? <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                  : sentAt ? <CheckCheck aria-hidden="true" /> : <Send aria-hidden="true" />}
+                                <span>{botSendingId === student.id ? "جاري الإرسال…" : sentAt ? "أُرسل عبر البوت" : "إرسال عبر البوت"}</span>
+                              </button>
+                            )}
+                          </span>
                           {canEditContacts && (
                             <StudentContactEdit
                               student={student}
@@ -614,19 +628,6 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                           )}
                           </span>
                         </div>
-                        {canWithdraw && student.dismissedChecked ? (
-                          <div className="tp-closure-card__row">
-                            <button
-                              type="button"
-                              className="tp-closure-card__withdraw"
-                              onClick={() => setWithdrawTarget({ id: student.id, name: student.name })}
-                              aria-label={`انسحاب ${student.name}`}
-                            >
-                              <UserMinus aria-hidden="true" />
-                              <span>انسحاب</span>
-                            </button>
-                          </div>
-                        ) : null}
 
                       <label className="tp-closure-card__toggle" data-checked={student.dismissedChecked} data-disabled={busy || waitingForSteps}>
                         <span className="tp-closure-card__toggle-icon" aria-hidden="true">
