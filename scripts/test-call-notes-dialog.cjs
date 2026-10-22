@@ -180,6 +180,7 @@ function harness() {
     },
     './student-registry-helpers': loadHelper('src/components/teacher-pro/student-registry-helpers.ts'),
     './student-contact-edit': named(['StudentContactEdit']),
+    './withdraw-student-dialog': named(['WithdrawStudentDialog']),
     './ui-kit': named(['EmptyState', 'LoadingState']),
     './code-closures-dialog.css': {},
   };

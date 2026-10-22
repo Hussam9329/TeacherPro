@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { AlertCircle, BookOpen, CalendarDays, CheckCheck, ChevronDown, Loader2, LockKeyhole, LockKeyholeOpen, MessageCircle, Radiation, RefreshCw, Search, Send, SlidersHorizontal, UserRound, X } from "lucide-react";
+import { AlertCircle, BookOpen, CalendarDays, CheckCheck, ChevronDown, Loader2, LockKeyhole, LockKeyholeOpen, MessageCircle, Radiation, RefreshCw, Search, Send, SlidersHorizontal, UserMinus, UserRound, X } from "lucide-react";
+import { WithdrawStudentDialog } from "./withdraw-student-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -36,6 +37,8 @@ type Props = {
   canManage: boolean;
   /** May change the student's Telegram username here (students.edit). */
   canEditContacts?: boolean;
+  /** «انسحاب» on a closed code: adds «انسحاب» to the name and archives the student. */
+  canWithdraw?: boolean;
 };
 
 type StatusFilter = "all" | "checked" | "unchecked";
@@ -48,7 +51,8 @@ const STATUS_FILTERS: Array<{ key: StatusFilter; label: string; tone?: "success"
   { key: "checked", label: "مغلقة", tone: "success" },
 ];
 
-export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditContacts = false }: Props) {
+export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditContacts = false, canWithdraw = false }: Props) {
+  const [withdrawTarget, setWithdrawTarget] = useState<{ id: string; name: string } | null>(null);
   const filterId = useId();
   const [students, setStudents] = useState<CodeClosureStudent[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("unchecked");
@@ -610,6 +614,19 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                           )}
                           </span>
                         </div>
+                        {canWithdraw && student.dismissedChecked ? (
+                          <div className="tp-closure-card__row">
+                            <button
+                              type="button"
+                              className="tp-closure-card__withdraw"
+                              onClick={() => setWithdrawTarget({ id: student.id, name: student.name })}
+                              aria-label={`انسحاب ${student.name}`}
+                            >
+                              <UserMinus aria-hidden="true" />
+                              <span>انسحاب</span>
+                            </button>
+                          </div>
+                        ) : null}
 
                       <label className="tp-closure-card__toggle" data-checked={student.dismissedChecked} data-disabled={busy || waitingForSteps}>
                         <span className="tp-closure-card__toggle-icon" aria-hidden="true">
@@ -642,6 +659,15 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
             )}
           </section>
         </div>
+        <WithdrawStudentDialog
+          student={withdrawTarget}
+          onClose={() => setWithdrawTarget(null)}
+          onDone={(id) => {
+            // An archived student leaves the closures list.
+            setStudents((current) => current.filter((item) => item.id !== id));
+            void refresh();
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

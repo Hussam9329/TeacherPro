@@ -3,7 +3,8 @@
 import { toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
 import { formatAppDate, formatAppTime } from "@/lib/format";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, Check, CheckCheck, ClipboardList, LockKeyholeOpen, Radiation, RefreshCw, RotateCcw, Search, Send, SlidersHorizontal, UserRound, X } from "lucide-react";
+import { Archive, Check, CheckCheck, ClipboardList, LockKeyholeOpen, Radiation, RefreshCw, RotateCcw, Search, Send, SlidersHorizontal, UserMinus, UserRound, X } from "lucide-react";
+import { WithdrawStudentDialog } from "./withdraw-student-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,8 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canManage: boolean;
+  /** «انسحاب»: adds «انسحاب» to the student's name and archives them. */
+  canWithdraw?: boolean;
 };
 
 const GENERAL_NOTES = "__general__";
@@ -67,7 +70,8 @@ const VIEWS: Array<{ key: CallNotesView; label: string }> = [
   { key: "archive", label: "الأرشيف (المنجزة)" },
 ];
 
-export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Props) {
+export function CallNotesManagementDialog({ open, onOpenChange, canManage, canWithdraw = false }: Props) {
+  const [withdrawTarget, setWithdrawTarget] = useState<{ id: string; name: string } | null>(null);
   const [notes, setNotes] = useState<ManagedCallNote[]>([]);
   // The platform button, as in «إغلاق الكودات», for whoever the server allows.
   const [platform, setPlatform] = useState(false);
@@ -535,6 +539,17 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                             {group.length === 2 ? "ملاحظتان" : `${group.length} ملاحظات`}
                           </span>
                         )}
+                        {canWithdraw && (
+                          <button
+                            type="button"
+                            className="tp-closure-card__withdraw"
+                            onClick={() => setWithdrawTarget({ id: student.id, name: student.name })}
+                            aria-label={`انسحاب ${student.name}`}
+                          >
+                            <UserMinus aria-hidden="true" />
+                            <span>انسحاب</span>
+                          </button>
+                        )}
                       </div>
                       {contacts && (
                         <div className="tp-notes__contacts">
@@ -680,6 +695,12 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
             )}
           </section>
         </div>
+        <WithdrawStudentDialog
+          student={withdrawTarget}
+          onClose={() => setWithdrawTarget(null)}
+          // An archived student's notes leave the list.
+          onDone={(id) => setNotes((current) => current.filter((note) => note.studentId !== id))}
+        />
       </DialogContent>
     </Dialog>
   );

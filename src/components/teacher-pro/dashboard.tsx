@@ -228,6 +228,12 @@ export function DashboardView({
     actor.roleId === "role_admin" ||
     actor.permissions?.includes("students.edit")
   ));
+  // «انسحاب» archives the student: the same permission as «أرشفة».
+  const canWithdrawStudents = Boolean(actor && (
+    actor.username?.trim().toLowerCase() === "admin" ||
+    actor.roleId === "role_admin" ||
+    actor.permissions?.includes("students.delete")
+  ));
   const canManageCodeClosures = Boolean(actor && (
     actor.username?.trim().toLowerCase() === "admin" ||
     actor.roleId === "role_admin" ||
@@ -570,6 +576,7 @@ export function DashboardView({
           open={callNotesOpen}
           onOpenChange={closeAndRefresh(setCallNotesOpen)}
           canManage={canManageCallNotes}
+          canWithdraw={canWithdrawStudents}
         />
       )}
       {canViewGracePeriods && (
@@ -595,6 +602,7 @@ export function DashboardView({
           onOpenChange={closeAndRefresh(setCodeClosuresOpen)}
           canManage={canManageCodeClosures}
           canEditContacts={canEditStudents}
+          canWithdraw={canWithdrawStudents}
         />
       )}
     </div>

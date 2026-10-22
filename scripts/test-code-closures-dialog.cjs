@@ -179,6 +179,7 @@ function harness() {
     '@/lib/validation': validationContext.exports,
     './student-registry-helpers': registryHelpers,
     './student-contact-edit': named(['StudentContactEdit']),
+    './withdraw-student-dialog': named(['WithdrawStudentDialog']),
     './ui-kit': named(['EmptyState', 'LoadingState']),
     '@/lib/baghdad-time': loadHelper('@/lib/baghdad-time'),
     '@/lib/format': loadHelper('@/lib/format'),

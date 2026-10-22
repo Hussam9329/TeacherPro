@@ -377,3 +377,25 @@ a.tp-closure-card__telegram[data-done]::after {
 .tp-closure-card__bot:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
 .tp-closure-card__bot:disabled { cursor: default; opacity: 0.6; }
 .tp-closure-card__bot[data-sent] { border-color: transparent; background: var(--status-success-bg); color: var(--status-success-fg); opacity: 1; }
+
+/* «انسحاب» on a closed code: quiet until hovered, it archives the student. */
+.tp-closure-card__withdraw {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-block-size: 2.25rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--status-danger-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--status-danger-fg);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 150ms, color 150ms;
+}
+.tp-closure-card__withdraw svg { inline-size: 1rem; block-size: 1rem; }
+.tp-closure-card__withdraw:hover { background: var(--status-danger-bg); }
+.tp-closure-card__withdraw:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (pointer: coarse) { .tp-closure-card__withdraw { min-block-size: 2.75rem; } }
+.tp-notes__head .tp-closure-card__withdraw { margin-inline-start: auto; }

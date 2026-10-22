@@ -1557,6 +1557,9 @@ export const studentApi = {
   add: (student: Record<string, unknown>) => apiPost("students", student),
   statusAction: (payload: Record<string, unknown>) =>
     apiPost("students/status-action", payload),
+  /** «انسحاب»: adds «انسحاب» to the name and archives the student. */
+  withdraw: (studentId: string) =>
+    apiPost("students/withdraw", { studentId }),
   editSnapshot: (id: string) =>
     apiGet<{ student: Record<string, unknown> }>(
       `students/edit-snapshot?id=${encodeURIComponent(id)}`,
