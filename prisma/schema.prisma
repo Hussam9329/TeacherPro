@@ -368,6 +368,38 @@ model CorrectionReceipt {
   @@index([studentId, examId])
 }
 
+/// A grade from «Mirmaz Pro» that could not be placed by itself: the
+/// student's name or the exam did not match exactly one. «مرماز برو» lists
+/// the pending ones for a person to place (or set aside).
+model MirmazHold {
+  id                String    @id @default(cuid())
+  /// The Mirmaz (mz-exam) answer: one hold per paper.
+  answerId          String    @unique
+  status            String    @default("PENDING") // PENDING | RESOLVED | REJECTED
+  reason            String
+  reasonText        String
+  score             Int
+  studentName       String
+  examName          String
+  /// The exam's day as Mirmaz gives it (YYYY-MM-DD, Baghdad); "" when unknown.
+  examDate          String    @default("")
+  examFullMark      Int?
+  mzExamId          String    @default("")
+  correctedBy       String    @default("")
+  /// JSON: the students the name could be, closest first.
+  candidates        String    @default("[]")
+  /// JSON: the exams it could be.
+  examCandidates    String    @default("[]")
+  resolvedStudentId String?
+  resolvedExamId    String?
+  resolvedByName    String?
+  resolvedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([status, createdAt])
+}
+
 /// An open «إدارة المكالمات» window. It beats every few seconds while open;
 /// one that stops beating is dropped with the names it held.
 model CallWindow {

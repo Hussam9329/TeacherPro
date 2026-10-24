@@ -11,6 +11,8 @@ export type ShortcutAlerts = {
   codeClosuresPending: number | null;
   currentLeaves: number | null;
   currentGracePeriods: number | null;
+  /** Older servers do not send it. */
+  mirmazHoldsPending?: number | null;
   generatedAt: string;
 };
 

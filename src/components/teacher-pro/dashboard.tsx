@@ -8,6 +8,7 @@ import {
   CalendarCheck,
   CalendarClock,
   ChartColumn,
+  ClipboardCheck,
   ClipboardList,
   FilePlus2,
   ListChecks,
@@ -33,6 +34,7 @@ import { refreshShortcutAlerts, useShortcutAlerts } from "@/hooks/use-shortcut-a
 import { CallNotesManagementDialog } from "./call-notes-management-dialog";
 import { CallsDialog } from "./calls-dialog";
 import { CodeClosuresDialog } from "./code-closures-dialog";
+import { MirmazProDialog } from "./mirmaz-pro-dialog";
 import { GracePeriodsDialog } from "./grace-periods-dialog";
 import { LeavesDialog, LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog";
 import { TextShortcutsDialog } from "./text-shortcuts-dialog";
@@ -242,6 +244,13 @@ export function DashboardView({
     actor.permissions?.includes("students.reactivate")
   ));
   const [codeClosuresOpen, setCodeClosuresOpen] = useState(false);
+  // «مرماز برو»: grades from Mirmaz Pro waiting to be placed; placing one is a grade entry.
+  const canUseMirmazPro = Boolean(actor && (
+    actor.username?.trim().toLowerCase() === "admin" ||
+    actor.roleId === "role_admin" ||
+    actor.permissions?.includes("grades.add")
+  ));
+  const [mirmazProOpen, setMirmazProOpen] = useState(false);
   // «إدارة فترة السماح» is the only place that creates, edits or cancels grace.
   // «إدارة فترة السماح»: its own permissions («موظف فترات السماح»), or the
   // full students view / editing students as before.
@@ -443,7 +452,7 @@ export function DashboardView({
         <StudentStatusDonut stats={stats} loading={initialLoading} />
       </div>
 
-      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canViewGracePeriods || canViewLeaves || canUseTextShortcuts) && (
+      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canUseMirmazPro || canViewGracePeriods || canViewLeaves || canUseTextShortcuts) && (
         <nav aria-label="اختصارات لوحة التحكم" className="tp-dashboard__navigation">
           <h3 className="tp-dashboard__heading">
             <Zap aria-hidden="true" />
@@ -511,6 +520,23 @@ export function DashboardView({
                 <span className="tp-dashboard__shortcut-label">
                   اغلاق الكودات
                   <ShortcutAlert count={alerts?.codeClosuresPending} tone="danger" label="كود بانتظار الإغلاق" />
+                </span>
+              </button>
+            )}
+            {canUseMirmazPro && (
+              <button
+                type="button"
+                onClick={() => setMirmazProOpen(true)}
+                aria-haspopup="dialog"
+                data-tone="info"
+                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
+              >
+                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                  <ClipboardCheck />
+                </span>
+                <span className="tp-dashboard__shortcut-label">
+                  مرماز برو
+                  <ShortcutAlert count={alerts?.mirmazHoldsPending ?? null} tone="danger" label="درجة بانتظار المعالجة" />
                 </span>
               </button>
             )}
@@ -594,6 +620,9 @@ export function DashboardView({
           onOpenChange={closeAndRefresh(setLeavesOpen)}
           canManage={canManageLeaves}
         />
+      )}
+      {canUseMirmazPro && (
+        <MirmazProDialog key={`mirmaz-${actor?.id || ""}`} open={mirmazProOpen} onOpenChange={closeAndRefresh(setMirmazProOpen)} />
       )}
       {canViewCodeClosures && (
         <CodeClosuresDialog

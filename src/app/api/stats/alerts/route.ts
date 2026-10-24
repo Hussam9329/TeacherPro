@@ -30,6 +30,8 @@ export type ShortcutAlerts = {
   currentLeaves: number | null;
   /** Grace periods running now or later («إدارة فترة السماح»). */
   currentGracePeriods: number | null;
+  /** Mirmaz Pro grades waiting to be placed («مرماز برو»). */
+  mirmazHoldsPending: number | null;
   generatedAt: string;
 };
 
@@ -43,7 +45,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const today = baghdadTodayKey();
-    const [callNotesPending, gradeReviewsPending, dismissedStudents, codeClosuresPending, currentLeaves, currentGracePeriods] =
+    const [callNotesPending, gradeReviewsPending, dismissedStudents, codeClosuresPending, currentLeaves, currentGracePeriods, mirmazHoldsPending] =
       await Promise.all([
         can(principal, ["follow-up.calls.view", "follow-up.view"])
           ? db.studentCall.findMany({
@@ -88,6 +90,9 @@ export async function GET(req: NextRequest) {
         can(principal, ["students.view"])
           ? db.gracePeriod.count({ where: { cancelledAt: null, endDate: { gte: graceDateColumn(today) } } })
           : null,
+        can(principal, ["grades.add"])
+          ? db.mirmazHold.count({ where: { status: "PENDING" } })
+          : null,
       ]);
 
     const alerts: ShortcutAlerts = {
@@ -97,6 +102,7 @@ export async function GET(req: NextRequest) {
       codeClosuresPending,
       currentLeaves,
       currentGracePeriods,
+      mirmazHoldsPending,
       generatedAt: new Date().toISOString(),
     };
     return NextResponse.json(alerts, { headers: { "Cache-Control": "private, no-store, max-age=0" } });

@@ -39,6 +39,7 @@ const fakeDb = {
     ],
   },
   gracePeriod: { count: async (args) => { queries.push(["gracePeriod", args]); return 1; } },
+  mirmazHold: { count: async (args) => { queries.push(["mirmazHold", args]); return 5; } },
 };
 const originalLoad = Module._load;
 Module._load = function (request, parent, isMain) {
@@ -70,6 +71,8 @@ const call = async () => {
   assert.equal(all.codeClosuresPending, 2);
   assert.equal(all.currentLeaves, 1, "an ended leave is not a current leave");
   assert.equal(all.currentGracePeriods, 1);
+  assert.equal(all.mirmazHoldsPending, 5);
+  assert.deepEqual(queries.find(([name]) => name === "mirmazHold")[1], { where: { status: "PENDING" } }, "only grades still waiting");
   const callQuery = queries.find(([name]) => name === "studentCall")[1];
   assert.equal(callQuery.where.noteResolved, false, "only notes not marked done");
   assert.deepEqual(queries.find(([name]) => name === "gradeSmartNote")[1], { where: { status: "PENDING" } });
@@ -78,13 +81,13 @@ const call = async () => {
   principal = { isAdmin: false, permissions: ["follow-up.calls.view"] };
   const calls = (await call()).body;
   assert.equal(calls.callNotesPending, 2);
-  for (const key of ["gradeReviewsPending", "dismissedStudents", "codeClosuresPending", "currentLeaves", "currentGracePeriods"]) {
+  for (const key of ["gradeReviewsPending", "dismissedStudents", "codeClosuresPending", "currentLeaves", "currentGracePeriods", "mirmazHoldsPending"]) {
     assert.equal(calls[key], null, `${key} stays hidden without permission`);
   }
 
   principal = { isAdmin: false, permissions: [] };
   const none = (await call()).body;
-  for (const key of ["callNotesPending", "gradeReviewsPending", "dismissedStudents", "codeClosuresPending", "currentLeaves", "currentGracePeriods"]) {
+  for (const key of ["callNotesPending", "gradeReviewsPending", "dismissedStudents", "codeClosuresPending", "currentLeaves", "currentGracePeriods", "mirmazHoldsPending"]) {
     assert.equal(none[key], null);
   }
   console.log("PASS: shortcut numbers follow each window's rule and the viewer's permissions");
