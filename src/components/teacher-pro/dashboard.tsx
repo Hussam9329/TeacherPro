@@ -19,6 +19,7 @@ import {
   Shield,
   ShieldAlert,
   Target,
+  Trophy,
   Users,
   UsersRound,
   Zap,
@@ -38,6 +39,7 @@ import { MirmazProDialog } from "./mirmaz-pro-dialog";
 import { GracePeriodsDialog } from "./grace-periods-dialog";
 import { LeavesDialog, LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog";
 import { TextShortcutsDialog } from "./text-shortcuts-dialog";
+import { TopStudentsDialog } from "./top-students-dialog";
 import { StudentTrendChart } from "./student-trend-chart";
 // One look for the management windows opened from here.
 import "./tp-modal.css";
@@ -272,6 +274,13 @@ export function DashboardView({
     actor.permissions?.includes("follow-up.manage")
   ));
   const [leavesOpen, setLeavesOpen] = useState(false);
+  // «الطلبة المتميزين»: the same permissions as its route (students.view or grades.view).
+  const canViewTopStudents = hasFullStudentsView || Boolean(actor && (
+    actor.username?.trim().toLowerCase() === "admin" ||
+    actor.roleId === "role_admin" ||
+    actor.permissions?.includes("grades.view")
+  ));
+  const [topStudentsOpen, setTopStudentsOpen] = useState(false);
   useEffect(() => {
     if (!canViewLeaves) return;
     const openFromLink = () => {
@@ -452,7 +461,7 @@ export function DashboardView({
         <StudentStatusDonut stats={stats} loading={initialLoading} />
       </div>
 
-      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canUseMirmazPro || canViewGracePeriods || canViewLeaves || canUseTextShortcuts) && (
+      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canUseMirmazPro || canViewGracePeriods || canViewLeaves || canUseTextShortcuts || canViewTopStudents) && (
         <nav aria-label="اختصارات لوحة التحكم" className="tp-dashboard__navigation">
           <h3 className="tp-dashboard__heading">
             <Zap aria-hidden="true" />
@@ -572,6 +581,22 @@ export function DashboardView({
                 </span>
               </button>
             )}
+            {canViewTopStudents && (
+              <button
+                type="button"
+                onClick={() => setTopStudentsOpen(true)}
+                aria-haspopup="dialog"
+                data-tone="warning"
+                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
+              >
+                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                  <Trophy />
+                </span>
+                <span className="tp-dashboard__shortcut-label">
+                  الطلبة المتميزين
+                </span>
+              </button>
+            )}
             {canUseTextShortcuts && (
               <button
                 type="button"
@@ -590,6 +615,9 @@ export function DashboardView({
             )}
           </div>
         </nav>
+      )}
+      {canViewTopStudents && (
+        <TopStudentsDialog key={`top-${actor?.id || ""}`} open={topStudentsOpen} onOpenChange={setTopStudentsOpen} />
       )}
       {canUseTextShortcuts && (
         <TextShortcutsDialog open={textShortcutsOpen} onOpenChange={setTextShortcutsOpen} />

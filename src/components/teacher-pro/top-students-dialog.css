@@ -1,0 +1,105 @@
+/* «الطلبة المتميزين» — the controls panel, four summary tiles, the counted
+   exams, a podium for the first three (gold, silver, bronze from the
+   palette's gold), then the ranked list. Colours: tp-modal roles + palette. */
+
+.tp-top__controls { display: grid; gap: 0.85rem; }
+.tp-top__fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; }
+.tp-top__extra { padding-block-start: 0.85rem; border-block-start: 1px dashed var(--tp-border-strong); align-items: end; }
+.tp-top__clear { justify-self: start; }
+
+.tp-top__row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; }
+.tp-top__label { min-inline-size: 4.5rem; color: var(--tp-text-muted); font-size: 0.78rem; font-weight: 750; }
+.tp-top__tools { display: flex; gap: 0.4rem; margin-inline-start: auto; }
+.tp-top__range { display: grid; flex: 1 1 18rem; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+
+.tp-top__seg { display: inline-flex; flex-wrap: wrap; padding: 0.2rem; border: 1px solid var(--tp-border); border-radius: 999px; background: var(--tp-surface); }
+.tp-top__seg-btn { min-block-size: 2.25rem; min-inline-size: 2.4rem; padding: 0 0.9rem; border: 0; border-radius: 999px; background: transparent; color: var(--tp-text-muted); font: inherit; font-size: 0.82rem; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; transition: background-color 0.15s, color 0.15s; }
+.tp-top__seg-btn:hover { color: var(--tp-text); }
+.tp-top__seg-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
+.tp-top__seg-btn[aria-pressed="true"] { background: var(--tp-primary); color: var(--tp-on-primary); }
+
+.tp-top__results { display: grid; gap: 1rem; min-inline-size: 0; transition: opacity 0.15s; }
+.tp-top__results[data-loading] { opacity: 0.55; }
+
+/* Summary tiles */
+.tp-top__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 0.6rem; margin: 0; }
+.tp-top__stats > div { display: grid; gap: 0.2rem; padding: 0.75rem 0.9rem; border: 1px solid var(--tp-card-line); border-radius: 1rem; background: var(--tp-card); }
+.tp-top__stats dt { color: var(--tp-text-muted); font-size: 0.74rem; font-weight: 700; }
+.tp-top__stats dd { margin: 0; color: var(--tp-text); font-size: 1.35rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tp-top__stats small { color: var(--tp-text-muted); font-size: 0.78rem; font-weight: 650; }
+
+/* Counted exams */
+.tp-top__exams { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.tp-top__exam { display: inline-flex; align-items: center; gap: 0.45rem; max-inline-size: 100%; padding: 0.3rem 0.7rem 0.3rem 0.35rem; border: 1px solid var(--tp-border); border-radius: 999px; background: var(--tp-surface); font-size: 0.78rem; }
+.tp-top__exam b { display: grid; place-items: center; inline-size: 1.4rem; block-size: 1.4rem; border-radius: 50%; background: var(--tp-primary); color: var(--tp-on-primary); font-size: 0.72rem; }
+.tp-top__exam-name { overflow: hidden; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.tp-top__exam-date { color: var(--tp-text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Podium */
+.tp-top__podium { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.65rem; }
+.tp-top__podium-card {
+  --medal: var(--tp-gold);
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  padding: 1rem 0.85rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--medal) 55%, var(--tp-card-line));
+  border-radius: 1.25rem;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--medal) 16%, var(--tp-card)), var(--tp-card) 70%);
+  box-shadow: var(--tp-card-shadow);
+  text-align: center;
+}
+.tp-top__podium-card[data-place="2"] { --medal: color-mix(in srgb, var(--tp-muted) 60%, var(--tp-line)); }
+.tp-top__podium-card[data-place="3"] { --medal: var(--tp-accent); }
+.tp-top__podium-icon { display: grid; place-items: center; inline-size: 2.6rem; block-size: 2.6rem; border-radius: 50%; background: var(--medal); color: var(--tp-deep); }
+.tp-top__podium-card[data-place="1"] .tp-top__podium-icon { background: var(--tp-gold-gradient); }
+.tp-top__podium-icon svg { inline-size: 1.25rem; block-size: 1.25rem; }
+.tp-top__podium-rank { color: var(--tp-text-muted); font-size: 0.74rem; font-weight: 750; }
+.tp-top__podium-name { font-size: 0.98rem; font-weight: 800; line-height: 1.5; overflow-wrap: anywhere; }
+.tp-top__podium-avg { color: var(--tp-text); font-size: 1.6rem; font-weight: 850; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.tp-top__podium-meta { color: var(--tp-text-muted); font-size: 0.74rem; font-weight: 650; }
+
+/* Ranked list */
+.tp-top__list { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.tp-top__item {
+  container: top-item / inline-size;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "rank who score" "cells cells cells";
+  align-items: center;
+  gap: 0.55rem 0.8rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--tp-card-line);
+  border-radius: 1.1rem;
+  background: var(--tp-card-inner);
+}
+.tp-top__rank { grid-area: rank; display: grid; place-items: center; inline-size: 2.2rem; block-size: 2.2rem; border-radius: 0.75rem; background: var(--tp-panel-strong); color: var(--tp-text); font-weight: 850; font-variant-numeric: tabular-nums; }
+.tp-top__item[data-rank="1"] .tp-top__rank { background: var(--tp-gold-gradient); color: var(--tp-deep); }
+.tp-top__item[data-rank="2"] .tp-top__rank { background: color-mix(in srgb, var(--tp-muted) 45%, var(--tp-line)); color: var(--tp-deep); }
+.tp-top__item[data-rank="3"] .tp-top__rank { background: color-mix(in srgb, var(--tp-accent) 75%, var(--tp-bg)); color: var(--tp-deep); }
+.tp-top__who { grid-area: who; display: grid; gap: 0.1rem; min-inline-size: 0; }
+.tp-top__name { font-size: 0.95rem; font-weight: 800; line-height: 1.5; overflow-wrap: anywhere; }
+.tp-top__meta { display: flex; flex-wrap: wrap; gap: 0.3rem; color: var(--tp-text-muted); font-size: 0.74rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tp-top__meta [data-tone="danger"] { color: var(--status-danger-fg); }
+.tp-top__cells { grid-area: cells; display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.tp-top__cell { display: inline-block; min-inline-size: 3.2rem; padding: 0.15rem 0.45rem; border-radius: 0.55rem; background: var(--tp-panel-strong); color: var(--tp-text); font-size: 0.74rem; font-weight: 750; font-variant-numeric: tabular-nums; text-align: center; }
+.tp-top__cell[data-full] { background: var(--status-success-bg); color: var(--status-success-fg); }
+.tp-top__cell[data-state="absent"] { background: var(--status-danger-bg); color: var(--status-danger-fg); }
+.tp-top__cell[data-state="excused"] { background: var(--status-info-bg); color: var(--status-info-fg); }
+.tp-top__cell[data-state="pending"] { color: var(--tp-text-muted); }
+.tp-top__score { grid-area: score; display: grid; justify-items: end; gap: 0.3rem; min-inline-size: 5.5rem; }
+.tp-top__avg { font-size: 1.15rem; font-weight: 850; font-variant-numeric: tabular-nums; }
+.tp-top__bar { display: block; inline-size: 100%; block-size: 0.35rem; overflow: hidden; border-radius: 999px; background: var(--tp-panel-strong); }
+.tp-top__bar > span { display: block; block-size: 100%; border-radius: inherit; background: var(--tp-primary); }
+.tp-top__item[data-rank] .tp-top__bar > span { background: var(--tp-gold-gradient); }
+
+@container top-item (min-width: 40rem) {
+  .tp-top__item { grid-template-columns: auto minmax(10rem, 1fr) auto auto; grid-template-areas: "rank who cells score"; }
+  .tp-top__cells { justify-content: flex-end; }
+}
+
+@media (max-width: 640px) {
+  .tp-top__label { min-inline-size: 100%; }
+  .tp-top__tools { margin-inline-start: 0; }
+  .tp-top__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
