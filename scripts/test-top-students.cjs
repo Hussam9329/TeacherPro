@@ -11,7 +11,7 @@ require.extensions[".ts"] = (module, file) => module._compile(
   ts.transpileModule(fs.readFileSync(file, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText,
   file,
 );
-const { rankTopStudents } = require("../src/lib/top-students.ts");
+const { rankTopStudents, degreeTone } = require("../src/lib/top-students.ts");
 const { topStudentsSearch } = (() => {
   // The client helper imports browser-only modules; only the query builder is tested.
   const source = fs.readFileSync(path.join(root, "src/lib/top-students-client.ts"), "utf8").replace(/^import .*$/gm, "");
@@ -57,6 +57,19 @@ assert.equal(zero.qualified, 5);
 
 const cut = rankTopStudents({ exams, students, grades, attendance: "all", limit: 1 });
 assert.deepEqual(cut.rows.map((row) => row.id), ["a", "b"], "everyone tied with the last place shown stays");
+
+// Degrees: out of the exams' shared full mark, else out of 100.
+assert.equal(all.scale, 100, "mixed full marks (50 and 100) show out of 100");
+assert.equal(all.rows[0].averageScore, 95);
+const fifty = exams.map((exam) => ({ ...exam, fullMark: 50 }));
+const out50 = rankTopStudents({ exams: fifty, students: [students[0]], grades: [g("a", "e1", "درجة", 50), g("a", "e2", "درجة", 47)], attendance: "all", limit: 10 });
+assert.equal(out50.scale, 50);
+assert.equal(out50.rows[0].averageScore, 48.5, "(50 + 47) / 2 out of 50");
+assert.equal(out50.courseAverageScore, 48.5);
+
+// Colours by closeness to the full mark (out of 50): 50 · 48 · 45 · 40 · 39.
+assert.deepEqual([50, 48, 47, 45, 44, 40, 39].map((score) => degreeTone((score / 50) * 100)),
+  ["full", "high", "orange", "orange", "yellow", "yellow", "low"]);
 
 const none = rankTopStudents({ exams: [], students, grades: [], attendance: "all", limit: 10 });
 assert.equal(none.rows.length, 0);

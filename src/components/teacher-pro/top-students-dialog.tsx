@@ -10,7 +10,7 @@ import { copyText } from "@/lib/code-closure-contact";
 import { COURSE_PROGRAMS, LOCATION_SCOPES, OUT_OF_COUNTRY_LOCATION_SCOPE, STUDY_TYPES } from "@/lib/course-config";
 import { formatAppDate } from "@/lib/format";
 import { useTeacherStore } from "@/lib/teacher-store";
-import type { TopStudentExamResult, TopStudentRow, TopStudentsAttendance } from "@/lib/top-students";
+import { degreeTone, type TopStudentExamResult, type TopStudentRow, type TopStudentsAttendance, type TopStudentsExam } from "@/lib/top-students";
 import { topStudentsApi, type TopStudentsQuery, type TopStudentsResponse } from "@/lib/top-students-client";
 import { toast } from "@/lib/user-toast";
 import { EmptyState, ErrorState, LoadingState } from "./ui-kit";
@@ -54,10 +54,27 @@ function SelectField({ label, value, onChange, children }: { label: string; valu
   );
 }
 
-function ExamCell({ result }: { result: TopStudentExamResult }) {
-  if (result.state === "mark") return <span className="tp-top__cell" data-state="mark" data-full={result.percent === 100 || undefined}>{fmt(result.percent as number)}%</span>;
-  const text = { absent: "غائب", excused: "مجاز", pending: "—" }[result.state];
-  return <span className="tp-top__cell" data-state={result.state}>{text}</span>;
+/** A degree in a box coloured by how close it is to the full mark. */
+function Degree({ value, percent, outOf, size }: { value: number; percent: number; outOf?: number; size?: "lg" }) {
+  return (
+    <span className="tp-top__degree" dir="ltr" data-tone={degreeTone(percent)} data-size={size}>
+      {fmt(value)}
+      {outOf !== undefined && <small>/{outOf}</small>}
+    </span>
+  );
+}
+
+function ExamCell({ result, exam, showOutOf }: { result: TopStudentExamResult; exam?: TopStudentsExam; showOutOf: boolean }) {
+  const name = exam ? `${exam.name} — من ${exam.fullMark}` : undefined;
+  if (result.state === "mark" && result.score !== null && exam) {
+    return (
+      <span title={name}>
+        <Degree value={result.score} percent={(result.score / exam.fullMark) * 100} outOf={showOutOf ? exam.fullMark : undefined} />
+      </span>
+    );
+  }
+  const text = { mark: "—", absent: "غائب", excused: "مجاز", pending: "—" }[result.state];
+  return <span className="tp-top__cell" data-state={result.state} title={name}>{text}</span>;
 }
 
 const PODIUM_ICONS = [Crown, Medal, Award];
@@ -125,7 +142,9 @@ export function TopStudentsDialog({ open, onOpenChange }: { open: boolean; onOpe
   const fresh = data && data.course.id === activeCourseId ? data : null;
   const examsById = useMemo(() => new Map((fresh?.exams || []).map((exam) => [exam.id, exam])), [fresh]);
   const podium = (fresh?.rows || []).filter((row) => row.rank <= 3).slice(0, 3);
-  const top = fresh?.rows[0]?.average ?? null;
+  const top = fresh?.rows[0] ?? null;
+  // Each exam's own full mark is shown only when the exams do not share one.
+  const mixedFullMarks = Boolean(fresh?.exams.some((exam) => exam.fullMark !== fresh.scale));
 
   const changeCourse = (value: string) => {
     setCourseId(value);
@@ -148,7 +167,7 @@ export function TopStudentsDialog({ open, onOpenChange }: { open: boolean; onOpe
       `الطلبة المتميزون — ${fresh.course.name}`,
       `${periodText} (${fresh.exams.length} امتحان)`,
       "",
-      ...fresh.rows.map((row) => `${row.rank}. ${row.name} — ${fmt(row.average)}%`),
+      ...fresh.rows.map((row) => `${row.rank}. ${row.name} — ${fmt(row.averageScore)} من ${fresh.scale}`),
     ];
     const done = await copyText(lines.join("\n"), listRef.current);
     if (done) toast.success("تم نسخ القائمة.");
@@ -162,7 +181,7 @@ export function TopStudentsDialog({ open, onOpenChange }: { open: boolean; onOpe
           <span className="tp-modal__hero-icon" aria-hidden="true"><Trophy /></span>
           <DialogHeader className="tp-modal__heading">
             <DialogTitle>الطلبة المتميزين</DialogTitle>
-            <DialogDescription>حسب نسبة درجاتهم من الدرجة الكاملة بالامتحانات التراكمية، للطلاب النشطين.</DialogDescription>
+            <DialogDescription>حسب درجاتهم بالامتحانات التراكمية، للطلاب النشطين.</DialogDescription>
           </DialogHeader>
         </div>
 
@@ -252,8 +271,8 @@ export function TopStudentsDialog({ open, onOpenChange }: { open: boolean; onOpe
               <dl className="tp-top__stats">
                 <div><dt>الامتحانات المحسوبة</dt><dd>{fresh.exams.length}</dd></div>
                 <div><dt>الطلاب الداخلين بالترتيب</dt><dd>{fresh.qualified}<small> من {fresh.considered}</small></dd></div>
-                <div><dt>معدل الدورة</dt><dd>{fresh.courseAverage === null ? "—" : `${fmt(fresh.courseAverage)}%`}</dd></div>
-                <div><dt>أعلى معدل</dt><dd>{top === null ? "—" : `${fmt(top)}%`}</dd></div>
+                <div><dt>معدل الدورة</dt><dd>{fresh.courseAverageScore === null ? "—" : fmt(fresh.courseAverageScore)}<small> من {fresh.scale}</small></dd></div>
+                <div><dt>أعلى معدل</dt><dd>{top === null ? "—" : fmt(top.averageScore)}<small> من {fresh.scale}</small></dd></div>
               </dl>
 
               {fresh.exams.length > 0 && (
@@ -278,7 +297,7 @@ export function TopStudentsDialog({ open, onOpenChange }: { open: boolean; onOpe
               ) : (
                 <>
                   <div className="tp-top__podium" aria-label="المراكز الأولى">
-                    {podium.map((row, index) => <PodiumCard key={row.id} row={row} place={index} />)}
+                    {podium.map((row, index) => <PodiumCard key={row.id} row={row} place={index} scale={fresh.scale} />)}
                   </div>
 
                   <div className="tp-modal__toolbar">
@@ -303,16 +322,14 @@ export function TopStudentsDialog({ open, onOpenChange }: { open: boolean; onOpe
                             {row.excused > 0 && <span>· مجاز {row.excused}</span>}
                           </span>
                         </div>
-                        <div className="tp-top__cells" aria-label="نسبة كل امتحان">
+                        <div className="tp-top__cells" aria-label="درجة كل امتحان">
                           {row.exams.map((result) => (
-                            <span key={result.examId} title={examsById.get(result.examId)?.name}>
-                              <ExamCell result={result} />
-                            </span>
+                            <ExamCell key={result.examId} result={result} exam={examsById.get(result.examId)} showOutOf={mixedFullMarks} />
                           ))}
                         </div>
-                        <div className="tp-top__score">
-                          <span className="tp-top__avg">{fmt(row.average)}%</span>
-                          <span className="tp-top__bar" aria-hidden="true"><span style={{ inlineSize: `${row.average}%` }} /></span>
+                        <div className="tp-top__score" aria-label={`المعدل ${fmt(row.averageScore)} من ${fresh.scale}`}>
+                          <span className="tp-top__score-label">المعدل</span>
+                          <Degree value={row.averageScore} percent={row.average} size="lg" />
                         </div>
                       </li>
                     ))}
@@ -327,14 +344,14 @@ export function TopStudentsDialog({ open, onOpenChange }: { open: boolean; onOpe
   );
 }
 
-function PodiumCard({ row, place }: { row: TopStudentRow; place: number }) {
+function PodiumCard({ row, place, scale }: { row: TopStudentRow; place: number; scale: number }) {
   const Icon = PODIUM_ICONS[Math.min(place, 2)];
   return (
     <div className="tp-top__podium-card" data-place={row.rank}>
       <span className="tp-top__podium-icon" aria-hidden="true"><Icon /></span>
       <span className="tp-top__podium-rank">المركز {row.rank}</span>
       <span className="tp-top__podium-name">{row.name}</span>
-      <span className="tp-top__podium-avg">{fmt(row.average)}%</span>
+      <Degree value={row.averageScore} percent={row.average} outOf={scale} size="lg" />
       <span className="tp-top__podium-meta">{row.marks} امتحان{row.fullMarks > 0 ? ` · ${row.fullMarks} كاملة` : ""}</span>
     </div>
   );

@@ -1,7 +1,8 @@
 /**
  * «الطلبة المتميزين»: students ranked by their grades in the chosen exams
  * (cumulative, optionally finals too). Every exam counts as a percentage of
- * its full mark, so exams out of 50 and out of 100 weigh the same.
+ * its full mark, so exams out of 50 and out of 100 weigh the same. The
+ * averages are shown as degrees out of the exams' shared full mark.
  *
  * Per exam a grade is one of:
  *  - a mark (status «درجة» with a score): counted;
@@ -15,6 +16,19 @@
 export const TOP_STUDENT_EXAM_TYPES = ["تراكمي", "فاينل"] as const;
 export type TopStudentsAttendance = "all" | "zero";
 
+/**
+ * The colour of a degree by how close it is to the full mark:
+ * full (dark green) · 95%+ (light green) · 90%+ (orange) · 80%+ (yellow) · below (red).
+ */
+export type DegreeTone = "full" | "high" | "orange" | "yellow" | "low";
+export function degreeTone(percent: number): DegreeTone {
+  if (percent >= 100) return "full";
+  if (percent >= 95) return "high";
+  if (percent >= 90) return "orange";
+  if (percent >= 80) return "yellow";
+  return "low";
+}
+
 export type TopStudentsExam = { id: string; name: string; date: string; type: string; fullMark: number };
 export type TopStudentsStudent = { id: string; name: string; code: string; gender?: string | null; studyType?: string | null; createdAt?: string | null };
 export type TopStudentsGrade = { studentId: string; examId: string; status: string; score: number | null };
@@ -25,7 +39,10 @@ export type TopStudentRow = {
   id: string;
   name: string;
   code: string;
+  /** Average percent of the full mark: the ranking key. */
   average: number;
+  /** The same average as a degree out of `scale`. */
+  averageScore: number;
   marks: number;
   absences: number;
   excused: number;
@@ -41,6 +58,9 @@ export type TopStudentsResult = {
   qualified: number;
   /** The average of the qualified students (the course's level in these exams). */
   courseAverage: number | null;
+  courseAverageScore: number | null;
+  /** The full mark the averages are shown out of: the exams' own when they share one, else 100. */
+  scale: number;
 };
 
 const EXCUSED = new Set(["مجاز", "إجازة", "اجازة", "قبل تسجيل الطالب"]);
@@ -75,6 +95,8 @@ export function rankTopStudents(input: {
 }): TopStudentsResult {
   const exams = [...input.exams].sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name, "ar"));
   const gradeOf = new Map(input.grades.map((grade) => [`${grade.studentId}|${grade.examId}`, grade]));
+  const fullMarks = new Set(exams.map((exam) => exam.fullMark).filter((mark) => mark > 0));
+  const scale = fullMarks.size === 1 ? [...fullMarks][0] : 100;
   const ranked: Omit<TopStudentRow, "rank">[] = [];
 
   for (const student of input.students) {
@@ -91,6 +113,7 @@ export function rankTopStudents(input: {
       name: student.name,
       code: student.code,
       average: round1(average),
+      averageScore: round1((average * scale) / 100),
       marks: marks.length,
       absences,
       excused: results.filter((result) => result.state === "excused").length,
@@ -126,5 +149,7 @@ export function rankTopStudents(input: {
     considered: input.students.length,
     qualified,
     courseAverage,
+    courseAverageScore: courseAverage === null ? null : round1((courseAverage * scale) / 100),
+    scale,
   };
 }
