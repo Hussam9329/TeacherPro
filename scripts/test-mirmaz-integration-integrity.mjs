@@ -74,4 +74,14 @@ check("the holds table is additive and its migration is reviewed by checksum", (
   assert.match(schema, /model MirmazHold \{[\s\S]*answerId\s+String\s+@unique/);
 });
 
+check("every grade that came from Mirmaz is listed in «مرماز برو», by exam, read-only", () => {
+  const saves = intake.match(/await recordSavedMirmazGrade\(/g) || [];
+  assert.equal(saves.length, 2, "a grade saved, and a grade already there, are both kept on the paper's row");
+  assert.match(server, /status: "SAVED"/);
+  assert.match(server, /resolved\?\.status === "RESOLVED" \|\| resolved\?\.status === "SAVED"/, "a re-correction goes where the saved grade went");
+  assert.match(holds, /params\.get\("view"\) === "all"/);
+  assert.doesNotMatch(holds.slice(holds.indexOf("async function allGrades"), holds.indexOf("export async function GET")), /\.(create|update|upsert|delete)\w*\(/, "the list only reads");
+  assert.match(dialog, /useState<MirmazView>\("ALL"\)/, "«كل الدرجات» opens first");
+});
+
 console.log(`\n${count} Mirmaz Pro integration checks passed.`);

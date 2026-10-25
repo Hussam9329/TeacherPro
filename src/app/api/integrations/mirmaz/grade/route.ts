@@ -22,6 +22,7 @@ import {
   mirmazSessionCookie,
   placeMirmazGrade,
   placedChoices,
+  recordSavedMirmazGrade,
   saveThroughGradeEntry,
   type ExamCandidate,
   type MirmazExam,
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest) {
     const before = await correctionSnapshot(db, studentId, examId);
     const current = before.grade;
     if (current && current.status === "درجة" && current.score === score) {
-      await db.mirmazHold.updateMany({ where: { answerId, status: "PENDING" }, data: { status: "RESOLVED", resolvedStudentId: studentId, resolvedExamId: examId, resolvedByName: "تلقائي", resolvedAt: new Date() } });
+      await recordSavedMirmazGrade({ answerId, score, studentName, exam, correctedBy, studentId, examId, note: "الدرجة كانت موجودة أصلاً بنفس القيمة" });
       return NextResponse.json({ ok: true, answerId, stored: "already" });
     }
     const hasResult = current && (current.score !== null || current.status !== "درجة");
@@ -137,7 +138,10 @@ export async function POST(req: NextRequest) {
     };
     const done = await finishCorrectionKey(key, { status: 200, body: reply });
     key = "";
-    await db.mirmazHold.updateMany({ where: { answerId, status: "PENDING" }, data: { status: "RESOLVED", resolvedStudentId: studentId, resolvedExamId: examId, resolvedByName: "تلقائي", resolvedAt: new Date() } });
+    await recordSavedMirmazGrade({
+      answerId, score, studentName, exam, correctedBy, studentId, examId,
+      note: pending ? "انحفظت كملاحظة معلّقة (حسب قواعد TeacherPro)" : "",
+    });
     await writeAuditLog(account.principal, "الدرجات", "درجة من Mirmaz Pro", { answerId, studentId, examId, score, correctedBy, stored: reply.stored });
     return done;
   } catch (error) {

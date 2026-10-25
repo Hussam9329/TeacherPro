@@ -8,10 +8,12 @@ import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { writeAuditLog } from "@/lib/audit-log-server";
 import { normalizeForSearch } from "@/lib/validation";
 import { compareNames } from "@/lib/mirmaz-name-match";
-import { examsAround, saveThroughGradeEntry } from "@/lib/mirmaz-integration-server";
+import { MIRMAZ_KEY_PREFIX, examsAround, saveThroughGradeEntry } from "@/lib/mirmaz-integration-server";
 
 /**
- * «مرماز برو»: grades from Mirmaz Pro that did not place themselves.
+ * «مرماز برو»: every grade that came from Mirmaz Pro, and the ones that did
+ * not place themselves, to place by hand.
+ *   GET ?view=all               every grade from Mirmaz, grouped by exam, with its state now
  *   GET                         pending holds (or ?status=RESOLVED|REJECTED) and the counts
  *   GET ?students=<name>        students for a manual pick (same name matching as the tool, then plain search)
  *   GET ?examsNear=<day>&fullMark=<n>  exams within a week of that day
@@ -22,6 +24,7 @@ import { examsAround, saveThroughGradeEntry } from "@/lib/mirmaz-integration-ser
 
 const STATUSES = new Set(["PENDING", "RESOLVED", "REJECTED"]);
 const LIST_LIMIT = 300;
+const ALL_LIMIT = 5000;
 
 function parseJson<T>(value: string, fallback: T): T {
   try {
@@ -31,11 +34,119 @@ function parseJson<T>(value: string, fallback: T): T {
   }
 }
 
+type LedgerRow = {
+  answerId: string;
+  /** SAVED (placed itself) | RESOLVED (placed by hand) | PENDING (waits) | REJECTED (set aside) */
+  status: string;
+  holdId: string | null;
+  score: number;
+  studentName: string;
+  examName: string;
+  examDate: string;
+  examFullMark: number | null;
+  correctedBy: string;
+  note: string;
+  studentId: string | null;
+  examId: string | null;
+  byName: string | null;
+  at: string;
+};
+
+/**
+ * Grades that placed themselves before each paper kept its own row (status
+ * SAVED): read from their receipts, the newest per paper.
+ */
+async function savedBeforeRows(known: Set<string>): Promise<LedgerRow[]> {
+  const receipts = await db.correctionReceipt.findMany({
+    where: { kind: "mirmaz-grade", response: { not: { contains: "\"pending\":true" } } },
+    orderBy: { createdAt: "desc" },
+    take: ALL_LIMIT,
+    select: { key: true, studentId: true, examId: true, response: true, createdAt: true },
+  });
+  const rows: LedgerRow[] = [];
+  for (const receipt of receipts) {
+    const [answerId, score] = receipt.key.slice(MIRMAZ_KEY_PREFIX.length).split(":");
+    if (!answerId || known.has(answerId)) continue;
+    const stored = parseJson<{ status?: number; body?: { stored?: string } }>(receipt.response, {});
+    if (stored.status !== 200) continue;
+    known.add(answerId);
+    rows.push({
+      answerId, status: "SAVED", holdId: null, score: Number(score) || 0,
+      studentName: "", examName: "", examDate: "", examFullMark: null, correctedBy: "",
+      note: stored.body?.stored === "pending_note" ? "انحفظت كملاحظة معلّقة (حسب قواعد TeacherPro)" : "",
+      studentId: receipt.studentId, examId: receipt.examId, byName: "تلقائي", at: receipt.createdAt.toISOString(),
+    });
+  }
+  return rows;
+}
+
+/** Every grade from Mirmaz, grouped by exam (TeacherPro's exam once placed, else Mirmaz's), newest first. */
+async function allGrades() {
+  const holds = await db.mirmazHold.findMany({ orderBy: { updatedAt: "desc" }, take: ALL_LIMIT });
+  const rows: LedgerRow[] = holds.map((hold) => ({
+    answerId: hold.answerId,
+    status: hold.status,
+    holdId: hold.id,
+    score: hold.score,
+    studentName: hold.studentName,
+    examName: hold.examName,
+    examDate: hold.examDate,
+    examFullMark: hold.examFullMark,
+    correctedBy: hold.correctedBy,
+    note: hold.status === "PENDING" ? hold.reasonText : hold.status === "SAVED" ? hold.reasonText : "",
+    studentId: hold.resolvedStudentId,
+    examId: hold.resolvedExamId,
+    byName: hold.resolvedByName,
+    at: (hold.resolvedAt ?? hold.updatedAt).toISOString(),
+  }));
+  rows.push(...(await savedBeforeRows(new Set(rows.map((row) => row.answerId)))));
+
+  const studentIds = [...new Set(rows.map((row) => row.studentId).filter(Boolean))] as string[];
+  const examIds = [...new Set(rows.map((row) => row.examId).filter(Boolean))] as string[];
+  // `in: []` matches nothing, so empty lists need no special case.
+  const [students, exams, grades] = await Promise.all([
+    db.student.findMany({ where: { id: { in: studentIds } }, select: { id: true, name: true } }),
+    db.exam.findMany({ where: { id: { in: examIds } }, select: { id: true, name: true, date: true, fullMark: true } }),
+    db.grade.findMany({ where: { studentId: { in: studentIds }, examId: { in: examIds } }, select: { studentId: true, examId: true, status: true, score: true } }),
+  ]);
+  const studentName = new Map(students.map((student) => [student.id, student.name]));
+  const examById = new Map(exams.map((exam) => [exam.id, exam]));
+  const gradeOf = new Map(grades.map((grade) => [`${grade.studentId}:${grade.examId}`, grade]));
+
+  type Group = { key: string; title: string; date: string; fullMark: number | null; placed: boolean; rows: Array<Record<string, unknown>> };
+  const groups = new Map<string, Group>();
+  for (const row of rows) {
+    const exam = row.examId ? examById.get(row.examId) : undefined;
+    const key = exam ? `tp:${exam.id}` : `mz:${row.examName || "—"}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = exam
+        ? { key, title: exam.name, date: exam.date.toISOString().slice(0, 10), fullMark: exam.fullMark, placed: true, rows: [] }
+        : { key, title: row.examName || "امتحان غير معروف", date: row.examDate, fullMark: row.examFullMark, placed: false, rows: [] };
+      groups.set(key, group);
+    }
+    const now = row.studentId && row.examId ? gradeOf.get(`${row.studentId}:${row.examId}`) : undefined;
+    group.rows.push({
+      ...row,
+      tpStudentName: row.studentId ? studentName.get(row.studentId) ?? null : null,
+      fullMark: exam?.fullMark ?? row.examFullMark,
+      current: now ? { status: now.status, score: now.score } : null,
+    });
+  }
+  const counts = { ALL: rows.length, SAVED: 0, RESOLVED: 0, PENDING: 0, REJECTED: 0 } as Record<string, number>;
+  for (const row of rows) counts[row.status] = (counts[row.status] ?? 0) + 1;
+  return { groups: [...groups.values()], counts, generatedAt: new Date().toISOString() };
+}
+
 export async function GET(req: NextRequest) {
   const principal = await requirePermissionPrincipal(req, "grades.add");
   if (principal instanceof NextResponse) return principal;
   try {
     const params = req.nextUrl.searchParams;
+
+    if (params.get("view") === "all") {
+      return NextResponse.json(await allGrades(), { headers: { "Cache-Control": "no-store" } });
+    }
 
     const studentQuery = params.get("students");
     if (studentQuery !== null) {
@@ -75,6 +186,7 @@ export async function GET(req: NextRequest) {
     ]);
     const counts = { PENDING: 0, RESOLVED: 0, REJECTED: 0 } as Record<string, number>;
     for (const row of grouped) counts[row.status] = row._count._all;
+    counts.ALL = grouped.reduce((sum, row) => sum + row._count._all, 0); // «كل الدرجات» (receipts from before are counted there)
     const placedIds = holds.flatMap((hold) => [hold.resolvedStudentId, hold.resolvedExamId]).filter(Boolean) as string[];
     const [placedStudents, placedExams] = placedIds.length
       ? await Promise.all([

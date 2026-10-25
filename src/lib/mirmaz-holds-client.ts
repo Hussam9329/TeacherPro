@@ -37,7 +37,32 @@ export type MirmazHold = {
   createdAt: string;
 };
 
-export type MirmazHoldsResponse = { holds: MirmazHold[]; counts: Record<MirmazHoldStatus, number>; generatedAt: string };
+export type MirmazHoldsResponse = { holds: MirmazHold[]; counts: Partial<Record<MirmazView, number>>; generatedAt: string };
+
+/** «كل الدرجات» plus the three hold views. */
+export type MirmazView = "ALL" | MirmazHoldStatus;
+
+/** One grade that came from Mirmaz, as «كل الدرجات» shows it. */
+export type MirmazLedgerRow = {
+  answerId: string;
+  /** SAVED: placed itself · RESOLVED: placed by hand · PENDING: waits · REJECTED: set aside */
+  status: "SAVED" | MirmazHoldStatus;
+  holdId: string | null;
+  score: number;
+  fullMark: number | null;
+  studentName: string;
+  tpStudentName: string | null;
+  correctedBy: string;
+  note: string;
+  byName: string | null;
+  at: string;
+  /** The grade on the student in TeacherPro now (it may have been changed since). */
+  current: { status: string; score: number | null } | null;
+};
+
+export type MirmazLedgerGroup = { key: string; title: string; date: string; fullMark: number | null; placed: boolean; rows: MirmazLedgerRow[] };
+
+export type MirmazLedgerResponse = { groups: MirmazLedgerGroup[]; counts: Partial<Record<MirmazView | "SAVED", number>>; generatedAt: string };
 
 /** A refusal that asks for a decision (e.g. replacing a grade already there). */
 export class MirmazHoldError extends Error {
@@ -68,6 +93,9 @@ async function patch(body: Record<string, unknown>, fallbackError: string): Prom
 }
 
 export const mirmazHoldsApi = {
+  all(signal?: AbortSignal): Promise<MirmazLedgerResponse> {
+    return read("/api/mirmaz-holds?view=all", "تعذر تحميل درجات مرماز. أعد المحاولة.", signal);
+  },
   list(status: MirmazHoldStatus, signal?: AbortSignal): Promise<MirmazHoldsResponse> {
     return read(`/api/mirmaz-holds?status=${status}`, "تعذر تحميل «مرماز برو». أعد المحاولة.", signal);
   },

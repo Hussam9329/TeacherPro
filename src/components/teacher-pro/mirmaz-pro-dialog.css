@@ -96,8 +96,63 @@
 .tp-mirmaz__done { margin: 0; color: var(--tp-text-muted); font-size: 0.86rem; line-height: 1.8; }
 .tp-mirmaz__done b { color: var(--tp-text); }
 
+/* «كل الدرجات»: one block per exam, its students inside. */
+.tp-mirmaz__groups { display: grid; gap: 0.75rem; }
+.tp-mirmaz__group { border: 1px solid var(--tp-border); border-radius: 1rem; background: var(--tp-surface); overflow: hidden; }
+.tp-mirmaz__group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.9rem;
+  padding: 0.8rem 1rem;
+  background: var(--tp-panel);
+  cursor: pointer;
+  list-style: none;
+}
+.tp-mirmaz__group-head::-webkit-details-marker { display: none; }
+.tp-mirmaz__group[open] > .tp-mirmaz__group-head { border-block-end: 1px solid var(--tp-border); }
+.tp-mirmaz__group-title { display: inline-flex; align-items: center; gap: 0.45rem; min-inline-size: 0; color: var(--tp-text); }
+.tp-mirmaz__group-title b { font-weight: 800; overflow-wrap: anywhere; }
+.tp-mirmaz__group-title svg { flex-shrink: 0; inline-size: 1.05rem; block-size: 1.05rem; color: var(--tp-text-muted); }
+.tp-mirmaz__group-title em { color: var(--status-warning-fg, var(--tp-text-muted)); font-size: 0.75rem; font-style: normal; font-weight: 700; }
+.tp-mirmaz__group-meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.8rem; color: var(--tp-text-muted); font-size: 0.8rem; }
+.tp-mirmaz__group-meta > span { display: inline-flex; align-items: center; gap: 0.3rem; }
+.tp-mirmaz__group-meta svg { inline-size: 0.95rem; block-size: 0.95rem; }
+.tp-mirmaz__group-waiting { padding: 0.1rem 0.55rem; border-radius: 999px; background: var(--status-warning-bg, var(--tp-muted-tint)); color: var(--status-warning-fg, var(--tp-text)); font-weight: 700; }
+
+.tp-mirmaz__rows { display: grid; margin: 0; padding: 0; list-style: none; }
+.tp-mirmaz__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem;
+  border-block-end: 1px solid var(--tp-border);
+}
+.tp-mirmaz__row:last-child { border-block-end: 0; }
+.tp-mirmaz__row-main { display: grid; gap: 0.2rem; min-inline-size: 0; }
+.tp-mirmaz__row-main b { color: var(--tp-text); font-weight: 750; overflow-wrap: anywhere; }
+.tp-mirmaz__row-main small { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; color: var(--tp-text-muted); font-size: 0.78rem; }
+.tp-mirmaz__row-note { color: var(--tp-text-muted); }
+.tp-mirmaz__row-changed { color: var(--status-warning-fg, var(--tp-text)) !important; font-weight: 700; }
+.tp-mirmaz__row-side { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.45rem; flex-shrink: 0; }
+.tp-mirmaz__state {
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--tp-border);
+  color: var(--tp-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.tp-mirmaz__state[data-tone="success"] { border-color: transparent; background: var(--status-success-bg, var(--tp-panel)); color: var(--status-success-fg, var(--tp-text)); }
+.tp-mirmaz__state[data-tone="warning"] { border-color: transparent; background: var(--status-warning-bg, var(--tp-panel)); color: var(--status-warning-fg, var(--tp-text)); }
+
 @media (max-width: 640px) {
   .tp-mirmaz__head { flex-wrap: wrap; }
   .tp-mirmaz__score { order: -1; margin-inline-start: auto; }
   .tp-mirmaz__search { flex-direction: column; }
+  .tp-mirmaz__row { flex-direction: column; align-items: stretch; }
+  .tp-mirmaz__row-side { justify-content: flex-start; }
 }

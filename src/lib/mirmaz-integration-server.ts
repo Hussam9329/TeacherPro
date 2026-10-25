@@ -198,7 +198,7 @@ export async function earlierPlacement(answerId: string): Promise<{ studentId: s
     where: { answerId },
     select: { status: true, resolvedStudentId: true, resolvedExamId: true },
   });
-  if (resolved?.status === "RESOLVED" && resolved.resolvedStudentId && resolved.resolvedExamId) {
+  if ((resolved?.status === "RESOLVED" || resolved?.status === "SAVED") && resolved.resolvedStudentId && resolved.resolvedExamId) {
     return { studentId: resolved.resolvedStudentId, examId: resolved.resolvedExamId };
   }
   const receipt = await db.correctionReceipt.findFirst({
@@ -226,6 +226,49 @@ export type HoldInput = {
   candidates: StudentCandidate[];
   examCandidates: ExamCandidate[];
 };
+
+export type SavedInput = {
+  answerId: string;
+  score: number;
+  studentName: string;
+  exam: MirmazExam;
+  correctedBy: string;
+  studentId: string;
+  examId: string;
+  /** Shown with it in «كل الدرجات»: "" for a plain grade, else what happened (a pending note, already there). */
+  note: string;
+};
+
+/**
+ * A grade that placed itself is kept on the paper's row too (status SAVED),
+ * so «مرماز برو» lists every grade that came from Mirmaz, not only the held
+ * ones. Never fails the delivery: the grade is already saved by now.
+ */
+export async function recordSavedMirmazGrade(input: SavedInput): Promise<void> {
+  const data = {
+    status: "SAVED",
+    reason: "",
+    reasonText: input.note.slice(0, 400),
+    score: input.score,
+    studentName: input.studentName.slice(0, 200),
+    examName: input.exam.name.slice(0, 200),
+    examDate: mirmazExamDay(input.exam),
+    examFullMark: input.exam.fullMark,
+    mzExamId: input.exam.id.slice(0, 40),
+    correctedBy: input.correctedBy.slice(0, 120),
+    candidates: "[]",
+    examCandidates: "[]",
+    resolvedStudentId: input.studentId,
+    resolvedExamId: input.examId,
+    resolvedByName: "تلقائي",
+    resolvedAt: new Date(),
+  };
+  try {
+    await db.mirmazHold.upsert({ where: { answerId: input.answerId }, create: { answerId: input.answerId, ...data }, update: data });
+  } catch (error) {
+    console.error("[mirmaz] could not record a saved grade:", error);
+  }
+}
 
 /** Holds the paper's grade for «مرماز برو» (one hold per paper; a newer grade replaces the held one). */
 export async function holdMirmazGrade(input: HoldInput): Promise<void> {

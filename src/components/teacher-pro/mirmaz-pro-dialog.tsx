@@ -10,9 +10,12 @@ import {
   mirmazHoldsApi,
   type MirmazExamOption,
   type MirmazHold,
-  type MirmazHoldStatus,
   type MirmazHoldsResponse,
+  type MirmazLedgerGroup,
+  type MirmazLedgerResponse,
+  type MirmazLedgerRow,
   type MirmazStudentOption,
+  type MirmazView,
 } from "@/lib/mirmaz-holds-client";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
@@ -25,39 +28,58 @@ import "./mirmaz-pro-dialog.css";
 
 type Props = { open: boolean; onOpenChange: (open: boolean) => void };
 
-const VIEWS: Array<{ key: MirmazHoldStatus; label: string; tone?: "warning" | "success" }> = [
+const VIEWS: Array<{ key: MirmazView; label: string; tone?: "warning" | "success" }> = [
+  { key: "ALL", label: "كل الدرجات" },
   { key: "PENDING", label: "بانتظار المعالجة", tone: "warning" },
-  { key: "RESOLVED", label: "انحفظت", tone: "success" },
+  { key: "RESOLVED", label: "انحفظت يدوياً", tone: "success" },
   { key: "REJECTED", label: "متروكة" },
 ];
 
+const INTRO: Record<MirmazView, string> = {
+  ALL: "كل درجة وصلت من Mirmaz Pro، حسب الامتحان، وويا حالتها: انحفظت لحالها، انحفظت يدوياً، تنتظر، أو انتركت.",
+  PENDING: "درجات انصححت بـMirmaz Pro وما انحفظت لحالها، لأن اسم الطالب أو الامتحان ما طابق واحد أكيد. اختر الطالب والامتحان واحفظ.",
+  RESOLVED: "درجات انحفظت من هنا يدوياً بعد ما انتظرت.",
+  REJECTED: "درجات انتركت من هنا وما انحفظت.",
+};
+
 /**
- * «مرماز برو»: grades corrected on Mirmaz that did not place themselves in
- * TeacherPro (the student's name or the exam did not match exactly one).
- * Each one is placed here by choosing the student and the exam; saving goes
- * through the grade entry screen as the signed-in user.
+ * «مرماز برو»: every grade that came from Mirmaz Pro, grouped by exam
+ * («كل الدرجات»), and the ones that did not place themselves in TeacherPro
+ * (the student's name or the exam did not match exactly one). Each of those
+ * is placed here by choosing the student and the exam; saving goes through
+ * the grade entry screen as the signed-in user.
  */
 export function MirmazProDialog({ open, onOpenChange }: Props) {
-  const [view, setView] = useState<MirmazHoldStatus>("PENDING");
+  const [view, setView] = useState<MirmazView>("ALL");
   const [data, setData] = useState<MirmazHoldsResponse | null>(null);
+  const [ledger, setLedger] = useState<MirmazLedgerResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const requestRef = useRef<AbortController | null>(null);
 
-  const load = useCallback(async (status: MirmazHoldStatus) => {
+  const load = useCallback(async (which: MirmazView) => {
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
     setLoading(true);
     try {
-      const result = await mirmazHoldsApi.list(status, controller.signal);
-      if (controller.signal.aborted) return;
-      setData(result);
+      if (which === "ALL") {
+        const result = await mirmazHoldsApi.all(controller.signal);
+        if (controller.signal.aborted) return;
+        setLedger(result);
+        setData(null);
+      } else {
+        const result = await mirmazHoldsApi.list(which, controller.signal);
+        if (controller.signal.aborted) return;
+        setData(result);
+        setLedger(null);
+      }
       setError("");
     } catch (cause) {
       if (controller.signal.aborted) return;
       setData(null);
+      setLedger(null);
       setError(cause instanceof Error ? cause.message : "تعذر تحميل «مرماز برو». أعد المحاولة.");
     } finally {
       if (requestRef.current === controller) {
@@ -72,6 +94,7 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
     else {
       requestRef.current?.abort();
       setData(null);
+      setLedger(null);
       setSearch("");
     }
   }, [open, view, load]);
@@ -81,6 +104,22 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
     const holds = data?.holds || [];
     return query ? holds.filter((hold) => normalizeForSearch(`${hold.studentName} ${hold.examName}`).includes(query)) : holds;
   }, [data, search]);
+
+  // «كل الدرجات»: a group shows when its exam matches, else only its matching students.
+  const visibleGroups = useMemo(() => {
+    const query = normalizeForSearch(search);
+    const groups = ledger?.groups || [];
+    if (!query) return groups;
+    return groups.flatMap((group) => {
+      if (normalizeForSearch(group.title).includes(query)) return [group];
+      const rows = group.rows.filter((row) => normalizeForSearch(`${row.studentName} ${row.tpStudentName || ""}`).includes(query));
+      return rows.length ? [{ ...group, rows }] : [];
+    });
+  }, [ledger, search]);
+
+  const counts = view === "ALL" ? ledger?.counts : data?.counts;
+  const loaded = view === "ALL" ? Boolean(ledger) : Boolean(data);
+  const empty = view === "ALL" ? visibleGroups.length === 0 : visible.length === 0;
 
   function handled(message: string) {
     toast.success(message);
@@ -121,25 +160,29 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
               >
                 {option.tone && <span className="tp-modal__filter-dot" aria-hidden="true" />}
                 <span className="tp-modal__filter-label">{option.label}</span>
-                <span className="tp-modal__filter-count">{data ? data.counts[option.key] ?? 0 : "…"}</span>
+                <span className="tp-modal__filter-count">{counts ? counts[option.key] ?? 0 : "…"}</span>
               </button>
             ))}
           </div>
 
-          <p className="tp-modal__muted tp-mirmaz__intro">
-            درجات انصححت بـMirmaz Pro وما انحفظت لحالها، لأن اسم الطالب أو الامتحان ما طابق واحد أكيد. اختر الطالب والامتحان واحفظ.
-          </p>
+          <p className="tp-modal__muted tp-mirmaz__intro">{INTRO[view]}</p>
 
           {error && <div role="alert" className="tp-modal__error"><AlertCircle aria-hidden="true" /><p>{error}</p></div>}
 
           <section className="tp-modal__section" aria-label="الدرجات">
-            {!data && loading ? (
+            {!loaded && loading ? (
               <LoadingState title="جاري التحميل..." />
-            ) : data && visible.length === 0 ? (
+            ) : loaded && empty ? (
               <EmptyState
                 icon={search.trim() ? Search : view === "PENDING" ? CheckCheck : Inbox}
-                title={search.trim() ? "ماكو نتائج للبحث" : view === "PENDING" ? "ماكو درجات بانتظار المعالجة" : "ماكو شي هنا"}
+                title={search.trim() ? "ماكو نتائج للبحث" : view === "PENDING" ? "ماكو درجات بانتظار المعالجة" : view === "ALL" ? "ما وصلت درجات من مرماز بعد" : "ماكو شي هنا"}
               />
+            ) : view === "ALL" ? (
+              <div className="tp-mirmaz__groups">
+                {visibleGroups.map((group, index) => (
+                  <LedgerGroup key={group.key} group={group} openAtStart={index === 0 || Boolean(search.trim())} onHandle={() => setView("PENDING")} />
+                ))}
+              </div>
             ) : (
               <div className="tp-modal__cards" data-columns="1">
                 {visible.map((hold) => (
@@ -334,6 +377,68 @@ function HoldCard({ hold, onHandled }: { hold: MirmazHold; onHandled: (message: 
         <span className="tp-mirmaz__when">وصلت {formatAppDate(baghdadDateKey(hold.createdAt), "")}</span>
       </div>
     </article>
+  );
+}
+
+const STATE: Record<MirmazLedgerRow["status"], { label: string; tone?: "success" | "warning" }> = {
+  SAVED: { label: "انحفظت تلقائياً", tone: "success" },
+  RESOLVED: { label: "انحفظت يدوياً", tone: "success" },
+  PENDING: { label: "بانتظار المعالجة", tone: "warning" },
+  REJECTED: { label: "متروكة" },
+};
+
+// One exam of «كل الدرجات»: its name, date and how many grades, then its students.
+function LedgerGroup({ group, openAtStart, onHandle }: { group: MirmazLedgerGroup; openAtStart: boolean; onHandle: () => void }) {
+  const waiting = group.rows.filter((row) => row.status === "PENDING").length;
+  return (
+    <details className="tp-mirmaz__group" open={openAtStart}>
+      <summary className="tp-mirmaz__group-head">
+        <span className="tp-mirmaz__group-title">
+          <BookOpen aria-hidden="true" />
+          <b>{group.title}</b>
+          {!group.placed && <em>بمرماز، مو مربوط بامتحان بعد</em>}
+        </span>
+        <span className="tp-mirmaz__group-meta">
+          {group.date && <span><CalendarDays aria-hidden="true" />{formatAppDate(group.date, group.date)}</span>}
+          <span>{group.rows.length} درجة</span>
+          {waiting > 0 && <span className="tp-mirmaz__group-waiting">{waiting} تنتظر</span>}
+        </span>
+      </summary>
+      <ul className="tp-mirmaz__rows">
+        {group.rows.map((row) => <LedgerRowItem key={row.answerId} row={row} onHandle={onHandle} />)}
+      </ul>
+    </details>
+  );
+}
+
+function LedgerRowItem({ row, onHandle }: { row: MirmazLedgerRow; onHandle: () => void }) {
+  const state = STATE[row.status] ?? { label: row.status };
+  const name = row.tpStudentName || row.studentName || "—";
+  const changed = row.current && (row.current.status !== "درجة" || row.current.score !== row.score);
+  return (
+    <li className="tp-mirmaz__row" data-tone={state.tone}>
+      <span className="tp-mirmaz__row-main">
+        <b>{name}</b>
+        <small>
+          {row.tpStudentName && row.studentName && normalizeForSearch(row.studentName) !== normalizeForSearch(row.tpStudentName) && <span>بمرماز: {row.studentName}</span>}
+          {row.correctedBy && <span>صححها: {row.correctedBy}</span>}
+          <span>{formatAppDate(baghdadDateKey(row.at), "")}</span>
+        </small>
+        {row.note && <small className="tp-mirmaz__row-note">{row.note}</small>}
+        {changed && (
+          <small className="tp-mirmaz__row-changed">
+            بـTeacherPro هسه: {row.current!.score !== null ? row.current!.score : `«${row.current!.status}»`}
+          </small>
+        )}
+      </span>
+      <span className="tp-mirmaz__row-side">
+        <span className="tp-mirmaz__score" dir="ltr">{row.score}{row.fullMark ? ` / ${row.fullMark}` : ""}</span>
+        <span className="tp-mirmaz__state" data-tone={state.tone}>{state.label}{row.status === "RESOLVED" && row.byName ? ` · ${row.byName}` : ""}</span>
+        {row.status === "PENDING" && (
+          <Button type="button" size="sm" variant="outline" onClick={onHandle}>معالجة</Button>
+        )}
+      </span>
+    </li>
   );
 }
 
