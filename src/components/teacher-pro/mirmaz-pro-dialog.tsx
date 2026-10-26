@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import {
   MirmazHoldError,
   mirmazHoldsApi,
+  type MirmazArchivedOption,
   type MirmazExamOption,
   type MirmazHold,
   type MirmazHoldsResponse,
@@ -252,9 +253,46 @@ function HoldCard({ hold, onHandled }: { hold: MirmazHold; onHandled: (message: 
   const [studentId, setStudentId] = useState(fullOnes.length === 1 ? fullOnes[0].id : "");
   const [examId, setExamId] = useState(hold.examCandidates.length === 1 ? hold.examCandidates[0].id : "");
   const [query, setQuery] = useState("");
-  const [busy, setBusy] = useState<"" | "save" | "reject" | "search" | "exams">("");
+  const [busy, setBusy] = useState<"" | "save" | "reject" | "search" | "exams" | "archived">("");
   const [problem, setProblem] = useState("");
   const [replaceAsk, setReplaceAsk] = useState("");
+  // «الطالب مؤرشف»: null until asked; then the archived students it can be, and the one (and exam) confirmed.
+  const [archived, setArchived] = useState<MirmazArchivedOption[] | null>(null);
+  const [archivedId, setArchivedId] = useState("");
+  const [archivedExamId, setArchivedExamId] = useState("");
+
+  function pickArchived(option: MirmazArchivedOption) {
+    setArchivedId(option.id);
+    setArchivedExamId(option.exam?.id || (option.examOptions.length === 1 ? option.examOptions[0].id : ""));
+  }
+
+  async function findArchived() {
+    setBusy("archived");
+    setProblem("");
+    try {
+      const found = await mirmazHoldsApi.archivedFor(hold.id);
+      setArchived(found);
+      const sure = found.filter((option) => option.full);
+      if (sure.length === 1) pickArchived(sure[0]);
+      else if (found.length === 1) pickArchived(found[0]);
+    } catch (cause) {
+      setProblem(cause instanceof Error ? cause.message : "تعذر البحث بين المؤرشفين.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function saveArchived() {
+    setBusy("save");
+    setProblem("");
+    try {
+      const saved = await mirmazHoldsApi.holdForArchived(hold.id, archivedId, archivedExamId);
+      onHandled(`انحفظت درجة ${String(saved.studentName)} (مؤرشف) بـ ${String(saved.examName)}؛ تنزل بسجله بدون أثر أكاديمي لمن ينستعاد.`);
+    } catch (cause) {
+      setProblem(cause instanceof Error ? cause.message : "تعذر حفظ الدرجة للطالب المؤرشف.");
+      setBusy("");
+    }
+  }
 
   async function findStudents() {
     if (query.trim().length < 2) return;
@@ -390,10 +428,69 @@ function HoldCard({ hold, onHandled }: { hold: MirmazHold; onHandled: (message: 
         </div>
       )}
 
+      {archived !== null && (
+        <section className="tp-mirmaz__archived" aria-label="الطالب مؤرشف">
+          <header>
+            <b>الطالب مؤرشف</b>
+            <button type="button" className="tp-mirmaz__archived-close" aria-label="إغلاق" disabled={locked} onClick={() => { setArchived(null); setArchivedId(""); setArchivedExamId(""); }}>
+              <X aria-hidden="true" />
+            </button>
+          </header>
+          {archived.length === 0 ? (
+            <p className="tp-modal__muted">ماكو طالب مؤرشف بهذا الاسم.</p>
+          ) : (
+            <>
+              <p className="tp-modal__muted">تأكد إنه هو. درجته تنحفظ على ملفه، وتنزل بسجله بدون أثر أكاديمي لمن ينستعاد من الأرشيف.</p>
+              <div className="tp-mirmaz__options">
+                {archived.map((option) => (
+                  <label key={option.id} className="tp-mirmaz__option" data-chosen={archivedId === option.id}>
+                    <input type="radio" name={`archived-${hold.id}`} checked={archivedId === option.id} disabled={locked} onChange={() => pickArchived(option)} />
+                    <span className="tp-mirmaz__option-main">
+                      <b>{option.name}</b>
+                      <small>{[option.course || "دورة غير معروفة", option.code].filter(Boolean).join(" · ")}</small>
+                      <small>{option.exam ? `الامتحان: ${option.exam.name} · ${formatAppDate(option.exam.date, option.exam.date)}` : option.examOptions.length ? "اختر الامتحان تحت" : "ما لگيت امتحان بدورته بهذا اليوم"}</small>
+                    </span>
+                    <em data-full={option.full}>{matchLabel(option)}</em>
+                  </label>
+                ))}
+              </div>
+              {(() => {
+                const chosen = archived.find((option) => option.id === archivedId);
+                if (!chosen || chosen.exam || chosen.examOptions.length < 2) return null;
+                return (
+                  <fieldset className="tp-mirmaz__pick" disabled={locked}>
+                    <legend>امتحان دورته</legend>
+                    <div className="tp-mirmaz__options">
+                      {chosen.examOptions.map((option) => (
+                        <label key={option.id} className="tp-mirmaz__option" data-chosen={archivedExamId === option.id}>
+                          <input type="radio" name={`archived-exam-${hold.id}`} checked={archivedExamId === option.id} onChange={() => setArchivedExamId(option.id)} />
+                          <span className="tp-mirmaz__option-main">
+                            <b>{option.name}</b>
+                            <small>{formatAppDate(option.date, option.date)} · من {option.fullMark}</small>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                );
+              })()}
+              <Button type="button" onClick={() => void saveArchived()} disabled={locked || !archivedId || !archivedExamId}>
+                {busy === "save" ? <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <CheckCheck className="size-4" aria-hidden="true" />}
+                تأكيد: هو هذا الطالب، احفظ درجته
+              </Button>
+            </>
+          )}
+        </section>
+      )}
+
       <div className="tp-modal__card-foot tp-mirmaz__actions">
         <Button type="button" onClick={() => void save(false)} disabled={locked || !studentId || !examId || Boolean(replaceAsk)}>
           {busy === "save" ? <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <CheckCheck className="size-4" aria-hidden="true" />}
           حفظ الدرجة
+        </Button>
+        <Button type="button" variant="outline" onClick={() => void findArchived()} disabled={locked}>
+          {busy === "archived" ? <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <UserRound className="size-4" aria-hidden="true" />}
+          الطالب مؤرشف
         </Button>
         <Button type="button" variant="ghost" onClick={() => void reject()} disabled={locked}>
           {busy === "reject" ? <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <X className="size-4" aria-hidden="true" />}
@@ -408,17 +505,19 @@ function HoldCard({ hold, onHandled }: { hold: MirmazHold; onHandled: (message: 
 const STATE: Record<MirmazLedgerRow["status"], { label: string; tone?: "success" | "warning" }> = {
   SAVED: { label: "انحفظت تلقائياً", tone: "success" },
   RESOLVED: { label: "انحفظت يدوياً", tone: "success" },
+  ARCHIVED: { label: "محفوظة لطالب مؤرشف", tone: "success" },
   PENDING: { label: "بانتظار المعالجة", tone: "warning" },
   REJECTED: { label: "متروكة" },
 };
 
-// How many grades are in each state, and the saved ones' average, highest and lowest.
+// How many grades are in each state, and the saved ones' average, highest and
+// lowest (those on students' records: not the ones held for archived students).
 function tally(rows: MirmazLedgerRow[]) {
-  const by = { SAVED: 0, RESOLVED: 0, PENDING: 0, REJECTED: 0 } as Record<MirmazLedgerRow["status"], number>;
+  const by = { SAVED: 0, RESOLVED: 0, ARCHIVED: 0, PENDING: 0, REJECTED: 0 } as Record<MirmazLedgerRow["status"], number>;
   for (const row of rows) by[row.status] = (by[row.status] ?? 0) + 1;
   const scores = rows.filter((row) => row.status === "SAVED" || row.status === "RESOLVED").map((row) => row.score);
   const average = scores.length ? Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10) / 10 : null;
-  return { by, saved: by.SAVED + by.RESOLVED, average, highest: scores.length ? Math.max(...scores) : null, lowest: scores.length ? Math.min(...scores) : null };
+  return { by, saved: by.SAVED + by.RESOLVED + by.ARCHIVED, average, highest: scores.length ? Math.max(...scores) : null, lowest: scores.length ? Math.min(...scores) : null };
 }
 
 // «كل الدرجات» at a glance: the totals (of the chosen day, when one is chosen), then every day with its count; a day narrows the list to it.
@@ -466,6 +565,7 @@ function LedgerGroup({ group, openAtStart, onHandle }: { group: MirmazLedgerGrou
   const parts = [
     t.by.SAVED && `${t.by.SAVED} تلقائياً`,
     t.by.RESOLVED && `${t.by.RESOLVED} يدوياً`,
+    t.by.ARCHIVED && `${t.by.ARCHIVED} لمؤرشفين`,
     t.by.REJECTED && `${t.by.REJECTED} متروكة`,
   ].filter(Boolean);
   return (

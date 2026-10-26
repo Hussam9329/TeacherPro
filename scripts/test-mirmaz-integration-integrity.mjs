@@ -92,4 +92,25 @@ check("every grade that came from Mirmaz is listed in «مرماز برو», by 
   assert.match(dialog, /useState<MirmazView>\("ALL"\)/, "«كل الدرجات» opens first");
 });
 
+check("«الطالب مؤرشف»: a person confirms an archived student; the grade is held on his file, with no effect until his restore", () => {
+  const reactivation = read("src/lib/grade-smart-note-reactivation-server.ts");
+  const notes = read("src/lib/grade-smart-notes-server.ts");
+  // Grades never look among archived students by themselves.
+  assert.match(server, /where: \{ status: \{ not: "مؤرشف" \} \},\s*select: \{ id: true, name: true, code: true, courseId: true/);
+  // Only a person, with «إدخال درجات», and only for a student archived now.
+  assert.match(holds, /\["resolve", "reject", "archived"\]\.includes\(action\)/);
+  assert.match(holds, /if \(student\.status !== STUDENT_STATUS_ARCHIVED\)/);
+  // Held, never a grade on the archived file; one transaction with leaving «بانتظار المعالجة».
+  const save = server.slice(server.indexOf("export async function holdGradeForArchivedStudent"));
+  assert.match(save, /await db\.\$transaction\(async \(tx\) => \{\s*await upsertGradeSmartNote\(\{\s*tx,\s*category: "ARCHIVED_PENDING",\s*status: "PENDING"/);
+  assert.match(save, /status: "ARCHIVED"/);
+  assert.doesNotMatch(save, /\.grade\.(create|update|upsert)/, "nothing is written on the archived record itself");
+  // At the restore: a grade with no academic effect, the official one winning.
+  assert.match(notes, /"ARCHIVED_PENDING",\n\] as const;/);
+  assert.match(notes, /source\.startsWith\("GradeSmartNote:ARCHIVED_PENDING:"\)/, "protected like the dismissal's held grades");
+  assert.match(reactivation, /ARCHIVED_PENDING: \{\s*reason: ARCHIVED_PENDING_GRADE_EXCLUSION_REASON/);
+  assert.match(reactivation, /academicEffectExcluded: true,\s*academicEffectExclusionReason: HELD\[category\]\.reason,\s*academicEffectExclusionSource: `GradeSmartNote:\$\{category\}:\$\{note\.id\}`/);
+  assert.match(reactivation, /category: \{ in: HELD_CATEGORIES \},\s*status: \{ not: "PROCESSED" \},\s*student: \{ status: "نشط" \}/);
+});
+
 console.log(`\n${count} Mirmaz Pro integration checks passed.`);

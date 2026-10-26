@@ -8,6 +8,9 @@ export const GRADE_SMART_NOTE_CATEGORIES = [
   "GRACE_SCORED",
   "BEFORE_REGISTRATION_PENDING",
   "LEAVE_PENDING",
+  // A grade from Mirmaz Pro for an archived student, held on the file
+  // until the restore from the archive (grade-smart-note-reactivation-server).
+  "ARCHIVED_PENDING",
 ] as const;
 
 export const GRADE_SMART_NOTE_STATUSES = [
@@ -25,6 +28,7 @@ export function isProtectedSmartNoteHistoricalGrade(grade: {
   const source = String(grade.academicEffectExclusionSource || "");
   return (
     source.startsWith("GradeSmartNote:DISMISSED_PENDING:") ||
+    source.startsWith("GradeSmartNote:ARCHIVED_PENDING:") ||
     source.startsWith("GradeSmartNote:GRACE_SCORED:")
   );
 }

@@ -8,7 +8,14 @@ import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { writeAuditLog } from "@/lib/audit-log-server";
 import { normalizeForSearch } from "@/lib/validation";
 import { compareNames } from "@/lib/mirmaz-name-match";
-import { MIRMAZ_KEY_PREFIX, examsAround, saveThroughGradeEntry } from "@/lib/mirmaz-integration-server";
+import {
+  MIRMAZ_KEY_PREFIX,
+  archivedCandidates,
+  examsAround,
+  holdGradeForArchivedStudent,
+  saveThroughGradeEntry,
+} from "@/lib/mirmaz-integration-server";
+import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 
 /**
  * «مرماز برو»: every grade that came from Mirmaz Pro, and the ones that did
@@ -17,7 +24,9 @@ import { MIRMAZ_KEY_PREFIX, examsAround, saveThroughGradeEntry } from "@/lib/mir
  *   GET                         pending holds (or ?status=RESOLVED|REJECTED) and the counts
  *   GET ?students=<name>        students for a manual pick (same name matching as the tool, then plain search)
  *   GET ?examsNear=<day>&fullMark=<n>  exams within a week of that day
+ *   GET ?archivedFor=<holdId>   «الطالب مؤرشف»: the archived students it can be, each with his exam
  *   PATCH { id, action: "resolve", studentId, examId, confirmReplace? }  saves it as the signed-in user
+ *   PATCH { id, action: "archived", studentId, examId }  held on the archived student's file until his restore
  *   PATCH { id, action: "reject" }       sets it aside
  * Placing a grade needs «إدخال درجات» (grades.add), like the grade entry screen.
  */
@@ -36,7 +45,7 @@ function parseJson<T>(value: string, fallback: T): T {
 
 type LedgerRow = {
   answerId: string;
-  /** SAVED (placed itself) | RESOLVED (placed by hand) | PENDING (waits) | REJECTED (set aside) */
+  /** SAVED (placed itself) | RESOLVED (placed by hand) | ARCHIVED (held for an archived student) | PENDING (waits) | REJECTED (set aside) */
   status: string;
   holdId: string | null;
   score: number;
@@ -138,7 +147,7 @@ async function allGrades() {
       current: now ? { status: now.status, score: now.score } : null,
     });
   }
-  const counts = { ALL: rows.length, SAVED: 0, RESOLVED: 0, PENDING: 0, REJECTED: 0 } as Record<string, number>;
+  const counts = { ALL: rows.length, SAVED: 0, RESOLVED: 0, ARCHIVED: 0, PENDING: 0, REJECTED: 0 } as Record<string, number>;
   for (const row of rows) counts[row.status] = (counts[row.status] ?? 0) + 1;
   return { groups: [...groups.values()], counts, generatedAt: new Date().toISOString() };
 }
@@ -174,6 +183,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ students: ranked }, { headers: { "Cache-Control": "no-store" } });
     }
 
+    const archivedFor = params.get("archivedFor");
+    if (archivedFor !== null) {
+      const hold = await db.mirmazHold.findUnique({ where: { id: archivedFor } });
+      if (!hold) return validationError("الدرجة المعلّقة غير موجودة.", 404);
+      const students = await archivedCandidates(hold.studentName, {
+        name: hold.examName,
+        datetime: hold.examDate,
+        fullMark: hold.examFullMark,
+      });
+      return NextResponse.json({ students }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     const near = params.get("examsNear");
     if (near !== null) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(near)) return NextResponse.json({ exams: [] });
@@ -189,7 +210,7 @@ export async function GET(req: NextRequest) {
       db.mirmazHold.findMany({ where: { status }, orderBy: { createdAt: status === "PENDING" ? "asc" : "desc" }, take: LIST_LIMIT }),
       db.mirmazHold.groupBy({ by: ["status"], _count: { _all: true } }),
     ]);
-    const counts = { PENDING: 0, RESOLVED: 0, REJECTED: 0 } as Record<string, number>;
+    const counts = { PENDING: 0, RESOLVED: 0, REJECTED: 0, ARCHIVED: 0 } as Record<string, number>;
     for (const row of grouped) counts[row.status] = row._count._all;
     counts.ALL = grouped.reduce((sum, row) => sum + row._count._all, 0); // «كل الدرجات» (receipts from before are counted there)
     const placedIds = holds.flatMap((hold) => [hold.resolvedStudentId, hold.resolvedExamId]).filter(Boolean) as string[];
@@ -223,10 +244,35 @@ export async function PATCH(req: NextRequest) {
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     const id = String(body?.id || "").trim();
     const action = String(body?.action || "");
-    if (!id || !["resolve", "reject"].includes(action)) return validationError("طلب غير صحيح.");
+    if (!id || !["resolve", "reject", "archived"].includes(action)) return validationError("طلب غير صحيح.");
     const hold = await db.mirmazHold.findUnique({ where: { id } });
     if (!hold) return validationError("الدرجة المعلّقة غير موجودة.", 404);
     if (hold.status !== "PENDING") return validationError("هذي الدرجة انعالجت قبل.", 409);
+
+    if (action === "archived") {
+      const studentId = String(body?.studentId || "").trim();
+      const examId = String(body?.examId || "").trim();
+      if (!studentId || !examId) return validationError("اختر الطالب والامتحان.");
+      const [student, exam] = await Promise.all([
+        db.student.findUnique({ where: { id: studentId }, select: { id: true, name: true, code: true, status: true } }),
+        db.exam.findUnique({ where: { id: examId }, select: { id: true, name: true, date: true, fullMark: true } }),
+      ]);
+      if (!student || !exam) return validationError("الطالب أو الامتحان غير موجود.", 404);
+      if (student.status !== STUDENT_STATUS_ARCHIVED) {
+        return validationError(`${student.name} مو مؤرشف هسه؛ احفظ درجته بالطريقة العادية.`, 409);
+      }
+      if (hold.score > exam.fullMark) return validationError(`الدرجة ${hold.score} أكبر من الدرجة الكاملة لهذا الامتحان (${exam.fullMark}).`);
+      await holdGradeForArchivedStudent({
+        holdId: id,
+        answerId: hold.answerId,
+        score: hold.score,
+        student: { id: student.id, name: student.name, code: student.code },
+        exam: { id: exam.id, name: exam.name, date: exam.date },
+        actor: { id: principal.id, name: principal.name },
+      });
+      await writeAuditLog(principal, "الدرجات", "درجة من Mirmaz Pro لطالب مؤرشف", { holdId: id, answerId: hold.answerId, studentId, examId, score: hold.score });
+      return NextResponse.json({ ok: true, studentName: student.name, examName: exam.name });
+    }
 
     if (action === "reject") {
       await db.mirmazHold.update({ where: { id }, data: { status: "REJECTED", resolvedByName: principal.name, resolvedAt: new Date() } });

@@ -32,6 +32,7 @@ require.extensions['.ts'] = (m,f) => m._compile(ts.transpileModule(fs.readFileSy
     const flat = where.studentId_examId || where;
     return { values, clause: Object.entries(flat).map(([key,value]) => {
       if (value && typeof value === 'object' && 'not' in value) { values.push(value.not);return `"${key}"<>$${values.length}`; }
+      if (value && typeof value === 'object' && 'in' in value) { values.push(value.in);return `"${key}"=ANY($${values.length})`; }
       values.push(value);return `"${key}"=$${values.length}`;
     }).join(' AND ') || 'true' };
   }

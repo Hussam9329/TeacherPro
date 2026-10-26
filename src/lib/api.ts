@@ -1233,7 +1233,8 @@ export type GradeSmartNoteCategory =
   | "DISMISSED_PENDING"
   | "GRACE_SCORED"
   | "BEFORE_REGISTRATION_PENDING"
-  | "LEAVE_PENDING";
+  | "LEAVE_PENDING"
+  | "ARCHIVED_PENDING";
 
 export type GradeSmartNoteStatus =
   | "PENDING"

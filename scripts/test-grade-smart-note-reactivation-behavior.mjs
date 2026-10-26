@@ -51,6 +51,7 @@ const { classifyGradeAcademicImpact } = require(
   path.join(root, "src/lib/grade-classification.ts"),
 );
 const {
+  ARCHIVED_PENDING_GRADE_EXCLUSION_REASON,
   DISMISSED_PENDING_GRADE_EXCLUSION_REASON,
   migrateDismissedPendingGradesAfterActivation,
 } = require(
@@ -148,8 +149,9 @@ function createFakeTransaction(initialNotes, initialGrades = []) {
                 new Date(b.attemptedAt).getTime() ||
               a.id.localeCompare(b.id),
           )
-          .map(({ id, examId, score, reason, examFullMark = 100 }) => ({
+          .map(({ id, category, examId, score, reason, examFullMark = 100 }) => ({
             id,
+            category,
             examId,
             score,
             reason,
@@ -348,6 +350,41 @@ test("reactivation migrates only DISMISSED_PENDING once and records provenance",
   );
 });
 
+
+test("a Mirmaz Pro grade held for an archived student becomes a grade with no academic effect at the restore", async () => {
+  const tx = createFakeTransaction([
+    smartNote({ id: "note-archived", examId: "exam-4", category: "ARCHIVED_PENDING", score: 37, reason: "درجة من Mirmaz Pro والطالب مؤرشف" }),
+    smartNote({ id: "note-leave", examId: "exam-3", category: "LEAVE_PENDING" }),
+  ]);
+  const resolvedAt = new Date("2026-10-27T10:00:00.000Z");
+
+  const first = await migrateDismissedPendingGradesAfterActivation(tx, "student-1", { id: "admin-1", name: "مدير النظام" }, resolvedAt);
+  const second = await migrateDismissedPendingGradesAfterActivation(tx, "student-1", { id: "admin-1", name: "مدير النظام" }, resolvedAt);
+
+  assert.equal(first.processed, 1);
+  assert.equal(second.processed, 0, "never twice");
+  assert.equal(tx.state.grades.length, 1);
+  const grade = tx.state.grades[0];
+  assert.equal(grade.score, 37);
+  assert.equal(grade.academicEffectExcluded, true);
+  assert.equal(grade.academicEffectExclusionReason, ARCHIVED_PENDING_GRADE_EXCLUSION_REASON);
+  assert.equal(grade.academicEffectExclusionSource, "GradeSmartNote:ARCHIVED_PENDING:note-archived");
+  assert.equal(grade.notes, "درجة مؤجلة أثناء الأرشفة");
+  assert.equal(tx.state.notes.find((note) => note.id === "note-archived").status, "PROCESSED");
+  assert.equal(tx.state.notes.find((note) => note.id === "note-leave").status, "PENDING", "other held kinds are left alone");
+});
+
+test("an archived student's held grade goes when the exam already has an official grade", async () => {
+  const tx = createFakeTransaction(
+    [smartNote({ id: "note-archived", examId: "exam-4", category: "ARCHIVED_PENDING", score: 37 })],
+    [{ id: "official", studentId: "student-1", examId: "exam-4", status: "درجة", score: 20 }],
+  );
+  const result = await migrateDismissedPendingGradesAfterActivation(tx, "student-1", { id: null, name: "النظام" });
+  assert.equal(result.deleted, 1);
+  assert.equal(tx.state.grades.length, 1);
+  assert.equal(tx.state.grades[0].id, "official");
+  assert.equal(tx.state.notes.length, 0);
+});
 
 test("a held score above the current full mark is deleted, no grade is made", async () => {
   const tx = createFakeTransaction([

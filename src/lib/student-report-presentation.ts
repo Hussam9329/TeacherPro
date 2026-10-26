@@ -11,6 +11,9 @@ export const DISMISSED_NO_GRADE_TEXT = "الطالب مفصول - بلا درج�
 export const DURING_DISMISSAL_GRADE_MARK = "(الامتحان اثناء فصل الطالب)";
 export const NO_OPPORTUNITY_EFFECT_TEXT = "بدون أثر على الفرص";
 
+/** Beside a score from Mirmaz Pro that arrived while the student was archived, kept for the record only after the restore. */
+export const DURING_ARCHIVE_GRADE_MARK = "(وصلت اثناء أرشفة الطالب)";
+
 /** A score typed during a dismissal and made official at the return: on record, never counted. */
 export function isDuringDismissalGrade(grade: {
   academicEffectExcluded?: unknown;
@@ -18,6 +21,15 @@ export function isDuringDismissalGrade(grade: {
 } | null | undefined): boolean {
   return Boolean(grade?.academicEffectExcluded) &&
     String(grade?.academicEffectExclusionSource || "").startsWith("GradeSmartNote:DISMISSED_PENDING:");
+}
+
+/** A score from Mirmaz Pro held while the student was archived and made official at the restore: on record, never counted. */
+export function isDuringArchiveGrade(grade: {
+  academicEffectExcluded?: unknown;
+  academicEffectExclusionSource?: unknown;
+} | null | undefined): boolean {
+  return Boolean(grade?.academicEffectExcluded) &&
+    String(grade?.academicEffectExclusionSource || "").startsWith("GradeSmartNote:ARCHIVED_PENDING:");
 }
 
 export type ReportDismissalPeriod = { from: string; until: string | null };

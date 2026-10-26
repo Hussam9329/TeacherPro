@@ -5,6 +5,8 @@ import { readServerEnv } from "@/lib/bot-integration-auth";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { mintCorrectionSession } from "@/lib/correction-integration-server";
 import { findStudentsByName } from "@/lib/mirmaz-name-match";
+import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
+import { upsertGradeSmartNote } from "@/lib/grade-smart-notes-server";
 import { POST as manualGradeEntry } from "@/app/api/grades/route";
 
 /**
@@ -291,4 +293,79 @@ export async function holdMirmazGrade(input: HoldInput): Promise<void> {
     resolvedAt: null,
   };
   await db.mirmazHold.upsert({ where: { answerId: input.answerId }, create: { answerId: input.answerId, ...data }, update: data });
+}
+
+// ---------- «الطالب مؤرشف»: a held grade whose student is archived ----------
+
+export type ArchivedCandidate = StudentCandidate & { exam: ExamCandidate | null; examOptions: ExamCandidate[] };
+
+/**
+ * The archived students a Mirmaz name can be (found as «أداة مرماز» finds
+ * one, closest first), each with the exam of his course on the exam's day:
+ * the one certain exam, or the ones to choose from. Grades never look among
+ * archived students by themselves; this is only asked for by a person.
+ */
+export async function archivedCandidates(studentName: string, exam: Pick<MirmazExam, "name" | "datetime" | "fullMark">): Promise<ArchivedCandidate[]> {
+  const students = await db.student.findMany({
+    where: { status: STUDENT_STATUS_ARCHIVED },
+    select: { id: true, name: true, code: true, courseId: true, course: { select: { name: true } } },
+  });
+  const found = findStudentsByName(studentName, students).slice(0, MAX_CANDIDATES);
+  if (!found.length) return [];
+  const day = mirmazExamDay(exam);
+  const exams = await examsAround(day, exam.fullMark, 7);
+  return found.map((student) => {
+    const placed = examFor(student.courseId, day, exams);
+    return {
+      id: student.id,
+      name: student.name,
+      code: student.code,
+      course: student.course?.name || "",
+      matched: student.nameMatch.matched,
+      of: student.nameMatch.of,
+      full: student.nameMatch.full,
+      exam: placed.exam ? asCandidate(placed.exam) : null,
+      examOptions: placed.options.map(asCandidate),
+    };
+  });
+}
+
+/**
+ * The one write ever made on an archived student, and only from «مرماز برو»
+ * by a person: his Mirmaz grade held on the file (ARCHIVED_PENDING), which
+ * changes nothing in his record now. At «استعادة من الأرشيف» it becomes a
+ * grade with no academic effect (grade-smart-note-reactivation-server);
+ * an official grade for that exam by then stays, and the held one goes.
+ * The Mirmaz grade leaves «بانتظار المعالجة» (status ARCHIVED).
+ */
+export async function holdGradeForArchivedStudent(input: {
+  holdId: string;
+  answerId: string;
+  score: number;
+  student: { id: string; name: string; code: string };
+  exam: { id: string; name: string; date: Date };
+  actor: { id?: string | null; name?: string | null };
+}): Promise<void> {
+  await db.$transaction(async (tx) => {
+    await upsertGradeSmartNote({
+      tx,
+      category: "ARCHIVED_PENDING",
+      status: "PENDING",
+      student: input.student,
+      exam: input.exam,
+      score: input.score,
+      reason: `درجة من Mirmaz Pro (الورقة ${input.answerId}) وصلت والطالب مؤرشف؛ تنزل بسجله بدون أثر أكاديمي عند استعادته.`,
+      actor: input.actor,
+    });
+    await tx.mirmazHold.update({
+      where: { id: input.holdId },
+      data: {
+        status: "ARCHIVED",
+        resolvedStudentId: input.student.id,
+        resolvedExamId: input.exam.id,
+        resolvedByName: input.actor.name || null,
+        resolvedAt: new Date(),
+      },
+    });
+  });
 }

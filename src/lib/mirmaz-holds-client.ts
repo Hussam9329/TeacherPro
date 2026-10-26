@@ -16,6 +16,9 @@ export type MirmazStudentOption = {
 
 export type MirmazExamOption = { id: string; name: string; date: string; fullMark: number };
 
+/** «الطالب مؤرشف»: an archived student the Mirmaz name can be, with the exam of his course (or the ones to choose from). */
+export type MirmazArchivedOption = MirmazStudentOption & { exam: MirmazExamOption | null; examOptions: MirmazExamOption[] };
+
 export type MirmazHold = {
   id: string;
   answerId: string;
@@ -45,8 +48,8 @@ export type MirmazView = "ALL" | MirmazHoldStatus;
 /** One grade that came from Mirmaz, as «كل الدرجات» shows it. */
 export type MirmazLedgerRow = {
   answerId: string;
-  /** SAVED: placed itself · RESOLVED: placed by hand · PENDING: waits · REJECTED: set aside */
-  status: "SAVED" | MirmazHoldStatus;
+  /** SAVED: placed itself · RESOLVED: placed by hand · ARCHIVED: held for an archived student · PENDING: waits · REJECTED: set aside */
+  status: "SAVED" | "ARCHIVED" | MirmazHoldStatus;
   holdId: string | null;
   score: number;
   fullMark: number | null;
@@ -116,5 +119,14 @@ export const mirmazHoldsApi = {
   },
   reject(id: string) {
     return patch({ id, action: "reject" }, "تعذر ترك الدرجة.");
+  },
+  /** «الطالب مؤرشف»: the archived students this held grade can be, each with his exam. */
+  async archivedFor(id: string, signal?: AbortSignal): Promise<MirmazArchivedOption[]> {
+    const data = await read<{ students: MirmazArchivedOption[] }>(`/api/mirmaz-holds?archivedFor=${encodeURIComponent(id)}`, "تعذر البحث بين المؤرشفين.", signal);
+    return data.students || [];
+  },
+  /** Held on the archived student's file; becomes a grade with no academic effect at his restore. */
+  holdForArchived(id: string, studentId: string, examId: string) {
+    return patch({ id, action: "archived", studentId, examId }, "تعذر حفظ الدرجة للطالب المؤرشف.");
   },
 };

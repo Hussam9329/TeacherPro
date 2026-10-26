@@ -65,6 +65,14 @@ const CATEGORY_META: Record<
       "border-success-line border-s-4 border-s-success-vivid bg-success-soft/80 text-success",
     icon: FileWarning,
   },
+  ARCHIVED_PENDING: {
+    title: "درجات طلاب مؤرشفين من مرماز برو",
+    shortTitle: "طالب مؤرشف",
+    decision: "محفوظة على ملفه للعلم فقط، ولا تحتاج أي إجراء: تنزل بسجله تلقائياً بدون أثر أكاديمي عند «استعادة من الأرشيف».",
+    className:
+      "border-info-line border-s-4 border-s-info-vivid bg-info-soft/80 text-info",
+    icon: UserRound,
+  },
 };
 
 const STATUS_LABELS: Record<GradeSmartNoteStatus, string> = {
@@ -270,7 +278,9 @@ export function GradeSmartNotesPanel({
                           variant={STATUS_VARIANTS[note.status]}
                           className="shrink-0"
                         >
-                          {STATUS_LABELS[note.status]}
+                          {note.category === "ARCHIVED_PENDING" && note.status === "PENDING"
+                            ? "محفوظة لحين الاستعادة" // kept, not waiting for anyone
+                            : STATUS_LABELS[note.status]}
                         </Badge>
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center gap-2">

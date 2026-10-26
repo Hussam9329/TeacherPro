@@ -3,6 +3,31 @@ import type { Prisma } from "@prisma/client";
 export const DISMISSED_PENDING_GRADE_EXCLUSION_REASON =
   "أُدخلت الدرجة أثناء فصل الطالب، وحُفظت بعد إعادة التفعيل للتوثيق فقط دون أي خصم أو فصل أو محاسبة أكاديمية.";
 
+export const ARCHIVED_PENDING_GRADE_EXCLUSION_REASON =
+  "وصلت الدرجة من Mirmaz Pro والطالب مؤرشف، وحُفظت بعد استعادته من الأرشيف للتوثيق فقط دون أي خصم أو فصل أو محاسبة أكاديمية.";
+
+/**
+ * Grades held on a student's file while it could take none, each becoming a
+ * grade with no academic effect once the student is active again:
+ * - DISMISSED_PENDING: typed while the student was dismissed;
+ * - ARCHIVED_PENDING: from Mirmaz Pro while the student was archived.
+ */
+const HELD = {
+  DISMISSED_PENDING: {
+    reason: DISMISSED_PENDING_GRADE_EXCLUSION_REASON,
+    // نص قصير معتمد — البانر في الواجهة يشرح القصة كاملة
+    note: "درجة مؤجلة أثناء الفصل",
+    resolution: "نُقلت الدرجة بعد إعادة التفعيل للتوثيق فقط، وهي مستبعدة دائماً من الخصم والفصل والمحاسبة الأكاديمية.",
+  },
+  ARCHIVED_PENDING: {
+    reason: ARCHIVED_PENDING_GRADE_EXCLUSION_REASON,
+    note: "درجة مؤجلة أثناء الأرشفة",
+    resolution: "نُقلت الدرجة بعد الاستعادة من الأرشيف للتوثيق فقط، وهي مستبعدة دائماً من الخصم والفصل والمحاسبة الأكاديمية.",
+  },
+} as const;
+type HeldCategory = keyof typeof HELD;
+const HELD_CATEGORIES = Object.keys(HELD) as HeldCategory[];
+
 export type GradeSmartNoteResolutionActor = {
   id?: string | null;
   name?: string | null;
@@ -20,15 +45,16 @@ export type DismissedPendingGradeMigrationResult = {
 export const SYSTEM_RESOLUTION_ACTOR: GradeSmartNoteResolutionActor = { id: null, name: "النظام" };
 
 /**
- * A student who is not dismissed keeps no held grade. Each grade held while
- * the student was dismissed becomes a grade with no academic effect when the
+ * An active student keeps no held grade. Each grade held while the student
+ * was dismissed or archived becomes a grade with no academic effect when the
  * exam has no official grade; when the exam already has one, the held grade
  * is deleted (the official grade stays as it is). A held score outside the
  * exam's current range is deleted too.
  *
- * Runs inside the transaction that ends the dismissal (a manual return, a
- * status action, or a recalculation that cancels it). createMany
- * (skipDuplicates) keeps a concurrent official grade authoritative.
+ * Runs inside the transaction that ends the dismissal or the archiving (a
+ * manual return, a status action, a restore from the archive, or a
+ * recalculation). createMany (skipDuplicates) keeps a concurrent official
+ * grade authoritative.
  */
 export async function migrateDismissedPendingGradesAfterActivation(
   tx: Prisma.TransactionClient,
@@ -49,12 +75,13 @@ export async function migrateDismissedPendingGradesAfterActivation(
   const notes = await tx.gradeSmartNote.findMany({
     where: {
       studentId,
-      category: "DISMISSED_PENDING",
+      category: { in: HELD_CATEGORIES },
       status: { not: "PROCESSED" },
     },
     orderBy: [{ attemptedAt: "asc" }, { id: "asc" }],
     select: {
       id: true,
+      category: true,
       examId: true,
       score: true,
       reason: true,
@@ -64,7 +91,7 @@ export async function migrateDismissedPendingGradesAfterActivation(
 
   const remove = async (noteId: string) => {
     const deleted = await tx.gradeSmartNote.deleteMany({
-      where: { id: noteId, category: "DISMISSED_PENDING", status: { not: "PROCESSED" } },
+      where: { id: noteId, category: { in: HELD_CATEGORIES }, status: { not: "PROCESSED" } },
     });
     if (deleted.count > 0) {
       result.deleted += 1;
@@ -72,13 +99,12 @@ export async function migrateDismissedPendingGradesAfterActivation(
     }
   };
 
-  const markProcessed = async (noteId: string, gradeId: string) => {
+  const markProcessed = async (noteId: string, category: HeldCategory, gradeId: string) => {
     const processed = await tx.gradeSmartNote.updateMany({
-      where: { id: noteId, category: "DISMISSED_PENDING", status: { not: "PROCESSED" } },
+      where: { id: noteId, category, status: { not: "PROCESSED" } },
       data: {
         status: "PROCESSED",
-        resolution:
-          "نُقلت الدرجة بعد إعادة التفعيل للتوثيق فقط، وهي مستبعدة دائماً من الخصم والفصل والمحاسبة الأكاديمية.",
+        resolution: HELD[category].resolution,
         resolutionById: actor.id || null,
         resolutionByName: actor.name || null,
         resolvedAt,
@@ -92,6 +118,7 @@ export async function migrateDismissedPendingGradesAfterActivation(
   };
 
   for (const note of notes) {
+    const category = note.category as HeldCategory;
     const officialGrade = await tx.grade.findUnique({
       where: { studentId_examId: { studentId, examId: note.examId } },
       select: { id: true, smartNoteId: true },
@@ -99,7 +126,7 @@ export async function migrateDismissedPendingGradesAfterActivation(
 
     if (officialGrade) {
       // Already this attempt's grade: only the note's status was behind.
-      if (officialGrade.smartNoteId === note.id) await markProcessed(note.id, officialGrade.id);
+      if (officialGrade.smartNoteId === note.id) await markProcessed(note.id, category, officialGrade.id);
       // Two grades for one exam: the official one stays, the held one goes.
       else await remove(note.id);
       continue;
@@ -122,12 +149,11 @@ export async function migrateDismissedPendingGradesAfterActivation(
           examId: note.examId,
           status: "درجة",
           score: note.score,
-          // نص قصير معتمد — البانر في الواجهة يشرح القصة كاملة
-          notes: "درجة مؤجلة أثناء الفصل",
+          notes: HELD[category].note,
           academicAccountingChecked: false,
           academicEffectExcluded: true,
-          academicEffectExclusionReason: DISMISSED_PENDING_GRADE_EXCLUSION_REASON,
-          academicEffectExclusionSource: `GradeSmartNote:DISMISSED_PENDING:${note.id}`,
+          academicEffectExclusionReason: HELD[category].reason,
+          academicEffectExclusionSource: `GradeSmartNote:${category}:${note.id}`,
           smartNoteId: note.id,
         },
       ],
@@ -138,7 +164,7 @@ export async function migrateDismissedPendingGradesAfterActivation(
       where: { studentId_examId: { studentId, examId: note.examId } },
       select: { id: true, smartNoteId: true },
     });
-    if (migratedGrade?.smartNoteId === note.id) await markProcessed(note.id, migratedGrade.id);
+    if (migratedGrade?.smartNoteId === note.id) await markProcessed(note.id, category, migratedGrade.id);
     // An official grade arrived at the same moment: it wins, the held one goes.
     else await remove(note.id);
   }
@@ -148,9 +174,10 @@ export async function migrateDismissedPendingGradesAfterActivation(
 
 /**
  * After a recalculation: active students who still hold grades from a
- * dismissal (one the recalculation itself cancelled, or an older return)
- * have them settled. Dismissed students keep theirs; archived records are
- * read-only and are left alone.
+ * dismissal or an archiving (one the recalculation itself cancelled, a
+ * restore from the archive, or an older return) have them settled.
+ * Dismissed students keep theirs; archived records are read-only and are
+ * left alone.
  */
 export async function settleHeldGradesOfActiveStudents(
   tx: Prisma.TransactionClient,
@@ -161,7 +188,7 @@ export async function settleHeldGradesOfActiveStudents(
   const held = await tx.gradeSmartNote.findMany({
     where: {
       studentId: { in: studentIds },
-      category: "DISMISSED_PENDING",
+      category: { in: HELD_CATEGORIES },
       status: { not: "PROCESSED" },
       student: { status: "نشط" },
     },
