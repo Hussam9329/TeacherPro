@@ -350,5 +350,12 @@
   "20261024180000_mirmaz_holds": {
     "kind": "expand",
     "checksum": "4daabac2b3e163e7846c3ea3ac9715010bd6f4489819f05bacc6247e71bef4df"
+  },
+  "20261027120000_archived_pending_smart_note": {
+    "kind": "expand",
+    "widensCheck": [
+      "GradeSmartNote_category_check"
+    ],
+    "checksum": "b777c947b1d7565c111c4d210c5fb94fcf8e67930821cb9eedf6da62071c38d5"
   }
 }

@@ -8,7 +8,17 @@ export function validatePendingMigration(name, sql, policy, populated) {
   return;
  }
  if (!['expand', 'audited-data-reconciliation'].includes(policy.kind)) throw new Error(`Contract migration cannot run during build: ${name}`);
- const statements = sql.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+ let statements = sql.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+ // A reviewed policy may name CHECK constraints the migration widens. Each one is
+ // dropped and added back under the same name in one ALTER TABLE, so the table is
+ // never without it; any other DROP still stops the build.
+ for (const constraint of policy.widensCheck || []) {
+  if (policy.kind !== 'expand' || typeof constraint !== 'string' || !/^\w+$/.test(constraint)) throw new Error(`Invalid CHECK widening policy: ${name}`);
+  const replaced = new RegExp(`DROP\\s+CONSTRAINT\\s+(?:IF\\s+EXISTS\\s+)?"${constraint}"\\s*,(?=\\s*ADD\\s+CONSTRAINT\\s+"${constraint}"\\s+CHECK\\b)`, 'gi');
+  const widened = statements.replace(replaced, '');
+  if (widened === statements) throw new Error(`Policy names a CHECK widening the migration does not do: ${name}`);
+  statements = widened;
+ }
  if (/\b(?:DROP\b|TRUNCATE\b|RENAME\b|ALTER\s+COLUMN\s+\S+\s+(?:TYPE|SET\s+NOT\s+NULL))/i.test(statements)) throw new Error(`Destructive schema change requires a separate contract release: ${name}`);
 }
 if (process.argv[1]?.endsWith('check-deployment-contract.mjs')) {
