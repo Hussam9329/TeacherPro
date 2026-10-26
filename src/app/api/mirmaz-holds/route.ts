@@ -50,6 +50,8 @@ type LedgerRow = {
   examId: string | null;
   byName: string | null;
   at: string;
+  /** When the grade arrived from Mirmaz (its latest arrival, for a paper corrected again): the day it counts on in the stats. */
+  arrivedAt: string;
 };
 
 /**
@@ -74,7 +76,8 @@ async function savedBeforeRows(known: Set<string>): Promise<LedgerRow[]> {
       answerId, status: "SAVED", holdId: null, score: Number(score) || 0,
       studentName: "", examName: "", examDate: "", examFullMark: null, correctedBy: "",
       note: stored.body?.stored === "pending_note" ? "انحفظت كملاحظة معلّقة (حسب قواعد TeacherPro)" : "",
-      studentId: receipt.studentId, examId: receipt.examId, byName: "تلقائي", at: receipt.createdAt.toISOString(),
+      studentId: receipt.studentId, examId: receipt.examId, byName: "تلقائي",
+      at: receipt.createdAt.toISOString(), arrivedAt: receipt.createdAt.toISOString(),
     });
   }
   return rows;
@@ -98,6 +101,8 @@ async function allGrades() {
     examId: hold.resolvedExamId,
     byName: hold.resolvedByName,
     at: (hold.resolvedAt ?? hold.updatedAt).toISOString(),
+    // A saved or waiting row is rewritten on every arrival; one placed or set aside by hand keeps its first.
+    arrivedAt: (hold.status === "SAVED" ? hold.resolvedAt ?? hold.updatedAt : hold.status === "PENDING" ? hold.updatedAt : hold.createdAt).toISOString(),
   }));
   rows.push(...(await savedBeforeRows(new Set(rows.map((row) => row.answerId)))));
 

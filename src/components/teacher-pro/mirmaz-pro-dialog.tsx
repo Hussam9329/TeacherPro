@@ -56,6 +56,7 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [day, setDay] = useState(""); // «كل الدرجات» narrowed to one arrival day (YYYY-MM-DD), or all
   const requestRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async (which: MirmazView) => {
@@ -96,6 +97,7 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
       setData(null);
       setLedger(null);
       setSearch("");
+      setDay("");
     }
   }, [open, view, load]);
 
@@ -105,17 +107,37 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
     return query ? holds.filter((hold) => normalizeForSearch(`${hold.studentName} ${hold.examName}`).includes(query)) : holds;
   }, [data, search]);
 
-  // «كل الدرجات»: a group shows when its exam matches, else only its matching students.
+  // «كل الدرجات» by the day the grades arrived, newest first: how many, in how many exams.
+  const days = useMemo(() => {
+    const byDay = new Map<string, { count: number; exams: Set<string> }>();
+    for (const group of ledger?.groups || []) {
+      for (const row of group.rows) {
+        const key = baghdadDateKey(row.arrivedAt);
+        if (!key) continue;
+        const entry = byDay.get(key) ?? { count: 0, exams: new Set<string>() };
+        entry.count += 1;
+        entry.exams.add(group.key);
+        byDay.set(key, entry);
+      }
+    }
+    return [...byDay.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([key, entry]) => ({ key, count: entry.count, exams: entry.exams.size }));
+  }, [ledger]);
+
+  // «كل الدرجات»: the chosen day only, then a group shows when its exam matches the search, else only its matching students.
   const visibleGroups = useMemo(() => {
     const query = normalizeForSearch(search);
-    const groups = ledger?.groups || [];
+    const groups = (ledger?.groups || []).flatMap((group) => {
+      if (!day) return [group];
+      const rows = group.rows.filter((row) => baghdadDateKey(row.arrivedAt) === day);
+      return rows.length ? [{ ...group, rows }] : [];
+    });
     if (!query) return groups;
     return groups.flatMap((group) => {
       if (normalizeForSearch(group.title).includes(query)) return [group];
       const rows = group.rows.filter((row) => normalizeForSearch(`${row.studentName} ${row.tpStudentName || ""}`).includes(query));
       return rows.length ? [{ ...group, rows }] : [];
     });
-  }, [ledger, search]);
+  }, [ledger, search, day]);
 
   const counts = view === "ALL" ? ledger?.counts : data?.counts;
   const loaded = view === "ALL" ? Boolean(ledger) : Boolean(data);
@@ -178,11 +200,14 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
                 title={search.trim() ? "ماكو نتائج للبحث" : view === "PENDING" ? "ماكو درجات بانتظار المعالجة" : view === "ALL" ? "ما وصلت درجات من مرماز بعد" : "ماكو شي هنا"}
               />
             ) : view === "ALL" ? (
-              <div className="tp-mirmaz__groups">
-                {visibleGroups.map((group, index) => (
-                  <LedgerGroup key={group.key} group={group} openAtStart={index === 0 || Boolean(search.trim())} onHandle={() => setView("PENDING")} />
-                ))}
-              </div>
+              <>
+                <LedgerStats groups={visibleGroups} days={days} day={day} onDay={(key) => setDay((current) => (current === key ? "" : key))} />
+                <div className="tp-mirmaz__groups">
+                  {visibleGroups.map((group, index) => (
+                    <LedgerGroup key={group.key} group={group} openAtStart={index === 0 || Boolean(search.trim()) || Boolean(day)} onHandle={() => setView("PENDING")} />
+                  ))}
+                </div>
+              </>
             ) : (
               <div className="tp-modal__cards" data-columns="1">
                 {visible.map((hold) => (
@@ -387,21 +412,80 @@ const STATE: Record<MirmazLedgerRow["status"], { label: string; tone?: "success"
   REJECTED: { label: "متروكة" },
 };
 
-// One exam of «كل الدرجات»: its name, date and how many grades, then its students.
+// How many grades are in each state, and the saved ones' average, highest and lowest.
+function tally(rows: MirmazLedgerRow[]) {
+  const by = { SAVED: 0, RESOLVED: 0, PENDING: 0, REJECTED: 0 } as Record<MirmazLedgerRow["status"], number>;
+  for (const row of rows) by[row.status] = (by[row.status] ?? 0) + 1;
+  const scores = rows.filter((row) => row.status === "SAVED" || row.status === "RESOLVED").map((row) => row.score);
+  const average = scores.length ? Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10) / 10 : null;
+  return { by, saved: by.SAVED + by.RESOLVED, average, highest: scores.length ? Math.max(...scores) : null, lowest: scores.length ? Math.min(...scores) : null };
+}
+
+// «كل الدرجات» at a glance: the totals (of the chosen day, when one is chosen), then every day with its count; a day narrows the list to it.
+function LedgerStats({ groups, days, day, onDay }: {
+  groups: MirmazLedgerGroup[];
+  days: Array<{ key: string; count: number; exams: number }>;
+  day: string;
+  onDay: (key: string) => void;
+}) {
+  const all = tally(groups.flatMap((group) => group.rows));
+  const cards: Array<{ label: string; value: number; tone?: "success" | "warning" }> = [
+    { label: "كل الدرجات", value: all.saved + all.by.PENDING + all.by.REJECTED },
+    { label: "انحفظت", value: all.saved, tone: "success" },
+    { label: "تنتظر المعالجة", value: all.by.PENDING, tone: "warning" },
+    { label: "امتحانات", value: groups.length },
+  ];
+  return (
+    <section className="tp-mirmaz__stats" aria-label="إحصائيات درجات مرماز">
+      <div className="tp-mirmaz__cards">
+        {cards.map((card) => (
+          <div key={card.label} className="tp-mirmaz__stat" data-tone={card.tone}>
+            <strong dir="ltr">{card.value}</strong>
+            <span>{card.label}</span>
+          </div>
+        ))}
+      </div>
+      {days.length > 0 && (
+        <div className="tp-mirmaz__days" role="group" aria-label="حسب يوم الوصول">
+          <span className="tp-mirmaz__days-label">حسب اليوم{day ? " (اضغط اليوم مرة ثانية للكل)" : ""}</span>
+          {days.map((entry) => (
+            <button key={entry.key} type="button" className="tp-mirmaz__day" aria-pressed={day === entry.key} onClick={() => onDay(entry.key)}>
+              <b>{formatAppDate(entry.key, entry.key)}</b>
+              <span>{entry.count} درجة · {entry.exams} {entry.exams === 1 ? "امتحان" : "امتحانات"}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// One exam of «كل الدرجات»: its name and date, how many grades (big), how they stand, and their average; then its students.
 function LedgerGroup({ group, openAtStart, onHandle }: { group: MirmazLedgerGroup; openAtStart: boolean; onHandle: () => void }) {
-  const waiting = group.rows.filter((row) => row.status === "PENDING").length;
+  const t = tally(group.rows);
+  const parts = [
+    t.by.SAVED && `${t.by.SAVED} تلقائياً`,
+    t.by.RESOLVED && `${t.by.RESOLVED} يدوياً`,
+    t.by.REJECTED && `${t.by.REJECTED} متروكة`,
+  ].filter(Boolean);
   return (
     <details className="tp-mirmaz__group" open={openAtStart}>
       <summary className="tp-mirmaz__group-head">
-        <span className="tp-mirmaz__group-title">
-          <BookOpen aria-hidden="true" />
-          <b>{group.title}</b>
-          {!group.placed && <em>بمرماز، مو مربوط بامتحان بعد</em>}
-        </span>
-        <span className="tp-mirmaz__group-meta">
-          {group.date && <span><CalendarDays aria-hidden="true" />{formatAppDate(group.date, group.date)}</span>}
-          <span>{group.rows.length} درجة</span>
-          {waiting > 0 && <span className="tp-mirmaz__group-waiting">{waiting} تنتظر</span>}
+        <span className="tp-mirmaz__group-count" dir="ltr" aria-label={`${group.rows.length} درجة`}>{group.rows.length}</span>
+        <span className="tp-mirmaz__group-main">
+          <span className="tp-mirmaz__group-title">
+            <BookOpen aria-hidden="true" />
+            <b>{group.title}</b>
+            {!group.placed && <em>بمرماز، مو مربوط بامتحان بعد</em>}
+          </span>
+          <span className="tp-mirmaz__group-meta">
+            {group.date && <span><CalendarDays aria-hidden="true" />{formatAppDate(group.date, group.date)}</span>}
+            {parts.length > 0 && <span>{parts.join(" · ")}</span>}
+            {t.by.PENDING > 0 && <span className="tp-mirmaz__group-waiting">{t.by.PENDING} تنتظر</span>}
+            {t.average !== null && (
+              <span>المعدل <b dir="ltr">{t.average}</b>{group.fullMark ? ` من ${group.fullMark}` : ""} · أعلى <b dir="ltr">{t.highest}</b> · أقل <b dir="ltr">{t.lowest}</b></span>
+            )}
+          </span>
         </span>
       </summary>
       <ul className="tp-mirmaz__rows">

@@ -56,6 +56,8 @@ export type MirmazLedgerRow = {
   note: string;
   byName: string | null;
   at: string;
+  /** When it arrived from Mirmaz: the day it counts on in the stats. */
+  arrivedAt: string;
   /** The grade on the student in TeacherPro now (it may have been changed since). */
   current: { status: string; score: number | null } | null;
 };
