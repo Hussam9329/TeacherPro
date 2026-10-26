@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { constantTimeEqual, readServerEnv } from "@/lib/bot-integration-auth";
 
-/** The path «Mirmaz Pro» (through its own server) calls with its token instead of a browser session. */
-export const MIRMAZ_INTEGRATION_PATHS = ["/api/integrations/mirmaz/grade"];
+/** The paths «Mirmaz Pro» (through its own server) calls with its token instead of a browser session. */
+export const MIRMAZ_INTEGRATION_PATHS = ["/api/integrations/mirmaz/grade", "/api/integrations/mirmaz/courses"];
 
 /** A shorter secret is treated as not set: it could be guessed. */
 const MIN_TOKEN_LENGTH = 32;

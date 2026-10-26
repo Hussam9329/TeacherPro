@@ -11,6 +11,7 @@ const proxy = read("src/proxy.ts");
 const auth = read("src/lib/mirmaz-integration-auth.ts");
 const server = read("src/lib/mirmaz-integration-server.ts");
 const intake = read("src/app/api/integrations/mirmaz/grade/route.ts");
+const courses = read("src/app/api/integrations/mirmaz/courses/route.ts");
 const holds = read("src/app/api/mirmaz-holds/route.ts");
 const dialog = read("src/components/teacher-pro/mirmaz-pro-dialog.tsx");
 const dashboard = read("src/components/teacher-pro/dashboard.tsx");
@@ -21,12 +22,19 @@ const schema = read("prisma/schema.prisma");
 let count = 0;
 const check = (name, fn) => { fn(); count += 1; console.log(`✅ ${name}`); };
 
-check("only the Mirmaz path skips the browser origin check, and only with Mirmaz's own token", () => {
-  assert.match(auth, /MIRMAZ_INTEGRATION_PATHS = \["\/api\/integrations\/mirmaz\/grade"\]/);
+check("only the Mirmaz paths skip the browser origin check, and only with Mirmaz's own token", () => {
+  assert.match(auth, /MIRMAZ_INTEGRATION_PATHS = \["\/api\/integrations\/mirmaz\/grade", "\/api\/integrations\/mirmaz\/courses"\]/);
   assert.match(proxy, /MIRMAZ_INTEGRATION_PATHS\.includes\(url\.pathname\) && req\.method === 'POST'\) \{\s*return requireMirmazToken\(req\) \|\| NextResponse\.next\(\);/);
   assert.match(auth, /readServerEnv\("MIRMAZ_GRADES_TOKEN"\)/);
   assert.match(auth, /constantTimeEqual\(token, configured\)/);
   assert.match(intake, /const tokenError = requireMirmazToken\(req\);\s*if \(tokenError\) return tokenError;/);
+  assert.match(courses, /const tokenError = requireMirmazToken\(req\);\s*if \(tokenError\) return tokenError;/);
+});
+
+check("the students' courses are only read, and found by the tool's own name matching", () => {
+  assert.doesNotMatch(courses, /\.(create|update|upsert|delete)\w*\(/, "the course list only reads");
+  assert.match(courses, /import \{ nameWords, wordsMatch \} from "@\/lib\/mirmaz-name-match";/);
+  assert.match(courses, /matches\[answerId\] = found\.size === 1 \? \[\.\.\.found\]\[0\] : null;/, "several courses or none: no course, never a guess");
 });
 
 check("grades are saved by the grade entry screen's own handler, as a «grades.add»-only account", () => {
