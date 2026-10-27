@@ -88,6 +88,16 @@ const runtimeDdlFiles = runtimeFiles
   .map((file) => path.relative(root, file));
 
 check(
+  buildScript.includes('runNode("scripts/run-all-tests.mjs", testEnv)') &&
+    buildScript.includes("DATABASE_URL: _database, DIRECT_URL: _direct, ...testEnv") &&
+    buildScript.indexOf('runNode("scripts/run-all-tests.mjs"') <
+      buildScript.indexOf('run("next", ["build"]') &&
+    buildScript.indexOf('runNode("scripts/run-all-tests.mjs"') <
+      buildScript.indexOf('run("prisma", ["migrate", "deploy"]') &&
+    pkg.scripts?.test === "node scripts/run-all-tests.mjs",
+  "a production build runs every test, without the database address, before compiling or migrating",
+);
+check(
   pkg.scripts?.build === "node scripts/vercel-build.mjs" &&
     pkg.scripts?.["vercel-build"] === "node scripts/vercel-build.mjs",
   "default and Vercel builds use the guarded deployment runner",

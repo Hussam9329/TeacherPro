@@ -35,18 +35,26 @@ function runNode(script, env = process.env) {
   if (result.status !== 0) fail(`${script} exited with code ${result.status ?? "unknown"}. Deployment stopped without changing legacy data.`);
 }
 
-run("prisma", ["generate"]);
-
-// Compile first. If application compilation fails, the production database is
-// left untouched and the previous deployment keeps running on its old schema.
-run("next", ["build"]);
-
 // A production deployment is valid only when its migrations run in the same
 // guarded build. Preview/local builds may compile without touching a database.
 const migrationsEnabled =
   String(process.env.TEACHERPRO_RUN_MIGRATIONS || "").trim() === "true";
 const isVercelProduction =
   String(process.env.VERCEL_ENV || "").trim() === "production";
+
+run("prisma", ["generate"]);
+
+// Every test runs before anything reaches the database. A failing test stops
+// the deployment here, so the database and the live site stay as they are.
+// The tests never need a database, so its addresses are not passed to them.
+if (migrationsEnabled || isVercelProduction) {
+  const { DATABASE_URL: _database, DIRECT_URL: _direct, ...testEnv } = process.env;
+  runNode("scripts/run-all-tests.mjs", testEnv);
+}
+
+// Compile first. If application compilation fails, the production database is
+// left untouched and the previous deployment keeps running on its old schema.
+run("next", ["build"]);
 
 if (!migrationsEnabled && isVercelProduction) {
   fail("Production requires TEACHERPRO_RUN_MIGRATIONS=true. Deployment stopped before code/schema divergence.");

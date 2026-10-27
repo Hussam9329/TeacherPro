@@ -9,6 +9,7 @@
     "postinstall": "DATABASE_URL=${DATABASE_URL:-postgresql://user:password@localhost:5432/db} prisma generate",
     "start": "NODE_ENV=production node .next/standalone/server.js",
     "lint": "eslint .",
+    "test": "node scripts/run-all-tests.mjs",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:status": "prisma migrate status",
