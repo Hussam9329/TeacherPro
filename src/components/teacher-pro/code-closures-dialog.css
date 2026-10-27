@@ -400,3 +400,64 @@ a.tp-closure-card__telegram[data-done]::after {
 .tp-closure-card__withdraw:hover:not(:disabled) { border-color: transparent; background: var(--status-danger-solid); color: var(--status-danger-on); }
 .tp-closure-card__withdraw:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
 .tp-notes__head .tp-closure-card__withdraw { margin-inline-start: auto; }
+
+/* ── Bulk actions ─────────────────────────────────────────────────────────
+   A tick on each card and «تحديد الكل»; the bar stays at the bottom of the
+   window while cards are ticked (code-closures-bulk-bar.tsx). */
+.tp-closure-card__select { flex-shrink: 0; align-self: flex-start; margin-block-start: 0.2rem; }
+.tp-closure-card[data-selected] { border-color: var(--tp-primary); box-shadow: inset 0 0 0 1px var(--tp-primary), var(--tp-card-shadow); }
+.tp-closures__select-all { display: inline-flex; align-items: center; gap: 0.45rem; min-block-size: 2.25rem; padding-inline: 0.6rem; border: 1px solid var(--tp-border); border-radius: 0.8rem; background: var(--tp-surface); color: var(--tp-text); font-size: 0.82rem; font-weight: 700; cursor: pointer; }
+
+.tp-closures__bulk {
+  position: sticky;
+  inset-block-end: -1.25rem;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.9rem;
+  margin-block-end: -1.25rem;
+  margin-inline: -0.25rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--tp-card-line);
+  border-radius: 1.1rem 1.1rem 0 0;
+  background: color-mix(in srgb, var(--tp-surface) 92%, transparent);
+  box-shadow: 0 -14px 30px -22px color-mix(in srgb, var(--tp-deep) 55%, transparent);
+  backdrop-filter: blur(8px);
+}
+.tp-closures__bulk-count { color: var(--tp-text); font-size: 0.85rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tp-closures__bulk-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-inline-start: auto; }
+.tp-closures__bulk-btn {
+  --tone-fg: var(--status-danger-fg);
+  --tone-line: var(--status-danger-border);
+  --tone-solid: var(--status-danger-solid);
+  --tone-on: var(--status-danger-on);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-block-size: 2.6rem;
+  max-inline-size: 100%;
+  padding: 0.3rem 0.95rem;
+  border: 1.5px solid color-mix(in srgb, var(--tone-line) 75%, transparent);
+  border-radius: 0.95rem;
+  background: var(--tp-card-inner);
+  color: var(--tone-fg);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.tp-closures__bulk-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-closures__bulk-btn[data-tone="success"] { --tone-fg: var(--status-success-fg); --tone-line: var(--status-success-border); --tone-solid: var(--status-success-solid); --tone-on: var(--status-success-on); }
+.tp-closures__bulk-btn svg { flex-shrink: 0; inline-size: 1.05rem; block-size: 1.05rem; }
+.tp-closures__bulk-btn:hover:not(:disabled) { border-color: transparent; background: var(--tone-solid); color: var(--tone-on); }
+.tp-closures__bulk-btn:focus-visible, .tp-closures__bulk-clear:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--tp-focus); }
+.tp-closures__bulk-btn:disabled { cursor: default; opacity: 0.5; }
+.tp-closures__bulk-clear { display: grid; place-items: center; inline-size: 2.6rem; block-size: 2.6rem; border: 1px solid var(--tp-border); border-radius: 0.9rem; background: var(--tp-surface); color: var(--tp-text-muted); cursor: pointer; }
+.tp-closures__bulk-clear svg { inline-size: 1.05rem; block-size: 1.05rem; }
+@media (max-width: 640px) {
+  .tp-closures__bulk { inset-block-end: -1.5rem; margin-block-end: -1.5rem; }
+  .tp-closures__bulk-actions { margin-inline-start: 0; inline-size: 100%; }
+  .tp-closures__bulk-btn { flex: 1 1 auto; justify-content: center; }
+}

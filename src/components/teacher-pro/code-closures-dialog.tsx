@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { AlertCircle, BookOpen, CalendarDays, CheckCheck, ChevronDown, Loader2, LockKeyhole, LockKeyholeOpen, MessageCircle, Radiation, RefreshCw, Search, Send, SlidersHorizontal, UserMinus, UserRound, X } from "lucide-react";
 import { WithdrawStudentDialog } from "./withdraw-student-dialog";
+import { CodeClosuresBulkBar } from "./code-closures-bulk-bar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -53,6 +54,8 @@ const STATUS_FILTERS: Array<{ key: StatusFilter; label: string; tone?: "success"
 
 export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditContacts = false, canWithdraw = false }: Props) {
   const [withdrawTarget, setWithdrawTarget] = useState<{ id: string; name: string } | null>(null);
+  // Cards ticked for the bulk actions; only the ones still shown count.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const filterId = useId();
   const [students, setStudents] = useState<CodeClosureStudent[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("unchecked");
@@ -129,6 +132,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
     setDateFrom("");
     setDateTo("");
     setExpandedReasonIds(new Set());
+    setSelectedIds(new Set());
     if (!open) return;
     void refresh();
     // Global background refresh pauses while dialogs are open, so this small
@@ -236,22 +240,30 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
     return student.botNoticeSentAt || (local?.epoch === student.dismissedCheckEpoch ? local.at : null);
   }
 
-  // Sent straight from «إرسال عبر البوت» (no preview); the server refuses a second send.
-  async function sendBotNotice(student: CodeClosureStudent) {
-    if (botSending || !canManage) return;
+  // Sends one notice; resolves with the error message, or null when sent.
+  // The server refuses a second send in the same dismissal.
+  async function deliverBotNotice(student: CodeClosureStudent): Promise<string | null> {
+    if (!canManage) return "ما عندك صلاحية الإرسال.";
     setBotSendingId(student.id);
     try {
       const { botNoticeSentAt: at } = await codeClosuresApi.sendBotNotice(student.id, student.dismissedCheckEpoch);
       setBotSent((current) => ({ ...current, [student.id]: { epoch: student.dismissedCheckEpoch, at } }));
       setClickedSteps((current) => ({ ...current, [`${student.id}:telegram`]: student.dismissedCheckEpoch }));
-      toast.success(`أرسل البوت تبليغ الفصل إلى ${student.name}`);
-      void refresh();
+      return null;
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "تعذر إرسال التبليغ عبر البوت.");
-      void refresh();
+      return cause instanceof Error ? cause.message : "تعذر إرسال التبليغ عبر البوت.";
     } finally {
       setBotSendingId("");
+      void refresh();
     }
+  }
+
+  // Sent straight from «إرسال عبر البوت» (no preview).
+  async function sendBotNotice(student: CodeClosureStudent) {
+    if (botSending) return;
+    const error = await deliverBotNotice(student);
+    if (error) toast.error(error);
+    else toast.success(`أرسل البوت تبليغ الفصل إلى ${student.name}`);
   }
 
   // ☢️ closes the code, its green twin opens it again; only closing is a
@@ -303,6 +315,16 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
     if (statusFilter === "unchecked") return !student.dismissedChecked;
     return true;
   }), [scopedStudents, statusFilter]);
+  const selectedStudents = visibleStudents.filter((student) => selectedIds.has(student.id));
+  const allSelected = visibleStudents.length > 0 && selectedStudents.length === visibleStudents.length;
+  function toggleSelected(studentId: string, on: boolean) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (on) next.add(studentId);
+      else next.delete(studentId);
+      return next;
+    });
+  }
   const hasFilters = Boolean(search.trim() || courseId || dateFiltered || statusFilter !== "unchecked");
   const activePanelFilters = Number(Boolean(courseId)) + Number(dateFiltered);
 
@@ -444,11 +466,21 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
             <span className="tp-modal__count" aria-live="polite">
               {loaded ? `المعروض ${visibleStudents.length} من ${scopedStudents.length} طالب مفصول` : "الطلاب المفصولون"}
             </span>
-            {hasFilters && (
-              <div className="tp-modal__tools">
+            <div className="tp-modal__tools">
+              {loaded && visibleStudents.length > 0 && (
+                <label className="tp-closures__select-all">
+                  <Checkbox
+                    checked={allSelected ? true : selectedStudents.length ? "indeterminate" : false}
+                    onCheckedChange={(checked) => setSelectedIds(checked === true ? new Set(visibleStudents.map((student) => student.id)) : new Set())}
+                    aria-label="تحديد كل الطلاب المعروضين"
+                  />
+                  تحديد الكل
+                </label>
+              )}
+              {hasFilters && (
                 <Button type="button" variant="ghost" size="sm" onClick={clearFilters}><X className="size-4" aria-hidden="true" />مسح الفلاتر</Button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {error && <div role="alert" className="tp-modal__error"><AlertCircle aria-hidden="true" /><p>{error}</p></div>}
@@ -479,9 +511,15 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                   const busy = !canManage || pendingIds.has(student.id);
                   const waitingForSteps = !student.dismissedChecked && !readyToMarkClosed(student);
                   return (
-                  <article key={student.id} className="tp-closure-card" data-checked={student.dismissedChecked}>
+                  <article key={student.id} className="tp-closure-card" data-checked={student.dismissedChecked} data-selected={selectedIds.has(student.id) || undefined}>
                     <div className="tp-closure-card__main">
                     <header className="tp-closure-card__head">
+                      <Checkbox
+                        className="tp-closure-card__select size-5"
+                        checked={selectedIds.has(student.id)}
+                        onCheckedChange={(checked) => toggleSelected(student.id, checked === true)}
+                        aria-label={`تحديد ${student.name}`}
+                      />
                       <span className="tp-closure-card__avatar" data-tone={student.dismissedChecked ? "success" : "warning"} aria-hidden="true">
                         <UserRound />
                       </span>
@@ -659,6 +697,22 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
               </div>
             )}
           </section>
+          <CodeClosuresBulkBar
+            selected={selectedStudents}
+            canManage={canManage}
+            canWithdraw={canWithdraw}
+            platformDone={(student) => stepDone(student, "platform")}
+            botSentAt={botNoticeSentAt}
+            openPlatform={(student, button) => openPlatform(student, button)}
+            sendBotNotice={deliverBotNotice}
+            onWithdrawn={(ids) => {
+              const gone = new Set(ids);
+              setStudents((current) => current.filter((item) => !gone.has(item.id)));
+              setSelectedIds((current) => new Set([...current].filter((id) => !gone.has(id))));
+              void refresh();
+            }}
+            onClear={() => setSelectedIds(new Set())}
+          />
         </div>
         <WithdrawStudentDialog
           student={withdrawTarget}

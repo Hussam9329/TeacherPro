@@ -180,6 +180,7 @@ function harness() {
     './student-registry-helpers': registryHelpers,
     './student-contact-edit': named(['StudentContactEdit']),
     './withdraw-student-dialog': named(['WithdrawStudentDialog']),
+    './code-closures-bulk-bar': named(['CodeClosuresBulkBar']),
     './ui-kit': named(['EmptyState', 'LoadingState']),
     '@/lib/baghdad-time': loadHelper('@/lib/baghdad-time'),
     '@/lib/format': loadHelper('@/lib/format'),
@@ -295,7 +296,11 @@ function filter(view, name) {
   view.render();
 }
 function checkedValues(view) {
-  return view.nodes('Checkbox').map((node) => node.props.checked);
+  return closeBoxes(view).map((node) => node.props.checked);
+}
+// The «اغلاق الكود» ticks; the cards' selection ticks are for the bulk bar.
+function closeBoxes(view) {
+  return view.nodes('Checkbox').filter((node) => String(node.props['aria-label'] || '').startsWith('اغلاق كود'));
 }
 function setSearch(view, value) {
   view.nodes('Input')[0].props.onChange({ target: { value } });
@@ -358,7 +363,7 @@ function selectCourse(view, value) {
   console.log('PASS: all saved checked flags remain intact; initial unChecked, Checked and All show exact memberships.');
 
   selectCourse(view, 'course2');
-  assert.equal(view.nodes('Checkbox').length, 1);
+  assert.equal(closeBoxes(view).length, 1);
   assert(view.text().includes('المعروض 1 من 1 طالب مفصول'));
   const courseCount = (name) => {
     const children = filterButton(view, name).props.children;
@@ -371,7 +376,7 @@ function selectCourse(view, value) {
   assert.equal(courseCount('unChecked'), 1);
   selectCourse(view, 'course1');
   setSearch(view, 'احمد');
-  assert.equal(view.nodes('Checkbox').length, 1);
+  assert.equal(closeBoxes(view).length, 1);
   assert(view.text().includes('أحمد علي'));
   setSearch(view, 'BIO-saved');
   assert.deepEqual(checkedValues(view), [true]);
@@ -383,13 +388,13 @@ function selectCourse(view, value) {
   assert.equal(view.nodes('select')[0].props.value, '');
   console.log('PASS: Arabic name/code search and course filter narrow the full set; clearing restores pending codes.');
 
-  view.nodes('Checkbox')[0].props.onCheckedChange(true);
+  closeBoxes(view)[0].props.onCheckedChange(true);
   view.render();
-  assert.equal(view.nodes('Checkbox').length, 1, 'Checking hides the row immediately from unChecked');
+  assert.equal(closeBoxes(view).length, 1, 'Checking hides the row immediately from unChecked');
   assert.deepEqual(view.writes[0].args, [first.id, true, false, 3]);
   filter(view, 'All');
   assert.deepEqual(checkedValues(view), [true, true, false]);
-  assert.equal(view.nodes('Checkbox')[0].props.disabled, true);
+  assert.equal(closeBoxes(view)[0].props.disabled, true);
   view.tick();
   assert.equal(view.reads.length, 1);
   view.writes[0].resolve(snapshot(first, true));
@@ -398,9 +403,9 @@ function selectCourse(view, value) {
   view.reads[1].resolve(response([{ ...first, dismissedChecked: true }, saved, second]));
   await view.flush();
   filter(view, 'Checked');
-  view.nodes('Checkbox')[0].props.onCheckedChange(false);
+  closeBoxes(view)[0].props.onCheckedChange(false);
   view.render();
-  assert.equal(view.nodes('Checkbox').length, 1, 'Unchecking hides the row from Checked');
+  assert.equal(closeBoxes(view).length, 1, 'Unchecking hides the row from Checked');
   assert.deepEqual(view.writes[1].args, [first.id, false, true, 3]);
   view.writes[1].resolve(snapshot(first, false));
   await view.flush();
@@ -410,30 +415,30 @@ function selectCourse(view, value) {
   console.log('PASS: check/uncheck save explicit expected values and dismissal epoch; optimistic filtering preserves other students.');
 
   filter(view, 'unChecked');
-  view.nodes('Checkbox')[0].props.onCheckedChange(true);
+  closeBoxes(view)[0].props.onCheckedChange(true);
   view.render();
   view.writes[2].reject(new Error('Network unavailable'));
   await view.flush();
-  assert.equal(view.nodes('Checkbox').length, 0, 'Uncertain writes must wait for authoritative reconciliation');
+  assert.equal(closeBoxes(view).length, 0, 'Uncertain writes must wait for authoritative reconciliation');
   assert.equal(view.errors.length, 1);
   assert.equal(view.reads.length, 4);
   assert(!view.text().includes('المعروض 0 من 0'));
   view.reads[3].resolve(response([{ ...first, dismissedChecked: true }, saved, second]));
   await view.flush();
-  assert.equal(view.nodes('Checkbox').length, 1, 'Committed but disconnected write is reflected by the next read');
+  assert.equal(closeBoxes(view).length, 1, 'Committed but disconnected write is reflected by the next read');
   assert.equal(view.writes.length, 3, 'An uncertain write must not be retried');
   console.log('PASS: uncertain-save failures clear untrusted rows, preserve database outcome, and never replay a write.');
 
   view.tick();
   view.reads[4].reject(new Error('Read failed'));
   await view.flush();
-  assert.equal(view.nodes('Checkbox').length, 0);
+  assert.equal(closeBoxes(view).length, 0);
   assert(view.text().includes('Read failed'));
   assert(!view.text().includes('المعروض 0 من 0'));
   view.tick();
   view.reads[5].resolve(response([second]));
   await view.flush();
-  assert.equal(view.nodes('Checkbox').length, 1);
+  assert.equal(closeBoxes(view).length, 1);
   assert(!view.text().includes('Read failed'));
   console.log('PASS: failed refresh never presents stale students/counts as current and recovers automatically.');
 
@@ -441,11 +446,11 @@ function selectCourse(view, value) {
   view.render();
   view.reads[0].resolve(response([first, saved, second]));
   await view.flush();
-  const boxes = view.nodes('Checkbox');
+  const boxes = closeBoxes(view);
   boxes[0].props.onCheckedChange(true);
   boxes[1].props.onCheckedChange(true);
   view.render();
-  assert.equal(view.nodes('Checkbox').length, 0);
+  assert.equal(closeBoxes(view).length, 0);
   view.writes[0].resolve(snapshot(first, true));
   await view.flush();
   assert.equal(view.reads.length, 1);
@@ -465,12 +470,12 @@ function selectCourse(view, value) {
   view.reads[2].resolve(response([saved, { ...second, dismissedChecked: true }, newcomer]));
   await view.flush();
   assert.equal(view.nodes('select')[0].props.value, 'course2');
-  assert.equal(view.nodes('Checkbox').length, 1);
+  assert.equal(closeBoxes(view).length, 1);
   assert(view.text().includes('طالب new'));
   assert(!view.text().includes('أحمد علي'));
   filter(view, 'All');
   selectCourse(view, '');
-  assert.equal(view.nodes('Checkbox').length, 3);
+  assert.equal(closeBoxes(view).length, 3);
   assert(view.text().includes('المعروض 3 من 3 طالب مفصول'));
   console.log('PASS: polling removes activated students, receives new dismissals/other users’ checks, and preserves active filters.');
 
@@ -482,41 +487,41 @@ function selectCourse(view, value) {
   assert.equal(view.reads[0].signal.aborted, true);
   view.reads[0].resolve(response([student('old')]));
   await view.flush();
-  assert.equal(view.nodes('Checkbox').length, 0);
+  assert.equal(closeBoxes(view).length, 0);
   view.reads[1].resolve(response([first, saved]));
   await view.flush();
-  assert.equal(view.nodes('Checkbox').length, 1);
+  assert.equal(closeBoxes(view).length, 1);
   assert(!view.text().includes('طالب old'));
   console.log('PASS: old-opening read responses cannot replace a current list.');
 
   view.tick();
   const staleRead = view.reads[2];
-  view.nodes('Checkbox')[0].props.onCheckedChange(true);
+  closeBoxes(view)[0].props.onCheckedChange(true);
   view.render();
   assert.equal(staleRead.signal.aborted, true);
   staleRead.resolve(response([first, saved]));
   await view.flush();
-  assert.equal(view.nodes('Checkbox').length, 0);
+  assert.equal(closeBoxes(view).length, 0);
   filter(view, 'All');
   setSearch(view, 'احمد');
   view.setProps({ open: false });
   view.setProps({ open: true });
   assert.equal(view.reads.length, 3, 'Reopening waits for a pending write before reading');
   assert.equal(view.nodes('Input')[0].props.value, '');
-  assert.equal(view.nodes('Checkbox').length, 0);
+  assert.equal(closeBoxes(view).length, 0);
   view.writes[0].resolve(snapshot(first, true));
   await view.flush();
   assert.equal(view.reads.length, 4, 'Pending write settles into a refresh for the new opening');
   view.reads[3].resolve(response([{ ...first, dismissedChecked: true }, saved, second]));
   await view.flush();
-  assert.equal(view.nodes('Checkbox').length, 1, 'Reopening always returns to unChecked');
+  assert.equal(closeBoxes(view).length, 1, 'Reopening always returns to unChecked');
   assert(view.text().includes('طالب second'));
   assert(!view.text().includes('أحمد علي'));
   console.log('PASS: stale reads cannot undo optimistic changes; close/reopen during a write preserves pending state and resets filters safely.');
 
   view.setProps({ canManage: false });
-  assert.equal(view.nodes('Checkbox')[0].props.disabled, true);
-  view.nodes('Checkbox')[0].props.onCheckedChange(true);
+  assert.equal(closeBoxes(view)[0].props.disabled, true);
+  closeBoxes(view)[0].props.onCheckedChange(true);
   view.render();
   assert.equal(view.writes.length, 1);
   console.log('PASS: read-only users cannot issue closure mutations.');
@@ -537,7 +542,7 @@ function selectCourse(view, value) {
   assert.equal(view.reads.length, 3);
   view.reads[2].resolve(response([first]));
   await view.flush();
-  view.nodes('Checkbox')[0].props.onCheckedChange(true);
+  closeBoxes(view)[0].props.onCheckedChange(true);
   view.render();
   view.unmount();
   view.writes[0].resolve(snapshot(first, true));
@@ -633,8 +638,8 @@ function selectCourse(view, value) {
     view.render();
     view.reads[0].resolve(response([waiting]));
     await view.flush();
-    assert.equal(view.nodes('Checkbox')[0].props.disabled, true, `the checkbox stays off ${label}`);
-    view.nodes('Checkbox')[0].props.onCheckedChange(true);
+    assert.equal(closeBoxes(view)[0].props.disabled, true, `the checkbox stays off ${label}`);
+    closeBoxes(view)[0].props.onCheckedChange(true);
     assert.equal(view.writes.length, 0, `nothing is saved ${label}`);
   }
 
