@@ -30,12 +30,16 @@ const commands = [...new Set(
   Object.keys(scripts).filter((name) => name.startsWith("test:")).flatMap((name) => leafCommands(name)),
 )];
 
+// Tests always run as tests: a deploy builds with NODE_ENV=production, which
+// would switch the code under test to its production rules.
+const testEnv = { ...process.env, NODE_ENV: "test", FORCE_COLOR: "0" };
+
 function run(command) {
   return new Promise((resolve) => {
     const started = performance.now();
     // Each test runs on the same Node as this runner, not whichever `node` is on PATH.
     const resolved = command.replace(/^node /, `"${process.execPath}" `);
-    const child = spawn(resolved, { cwd: root, shell: true, env: { ...process.env, FORCE_COLOR: "0" } });
+    const child = spawn(resolved, { cwd: root, shell: true, env: testEnv });
     let output = "";
     child.stdout.on("data", (chunk) => { output += chunk; });
     child.stderr.on("data", (chunk) => { output += chunk; });
