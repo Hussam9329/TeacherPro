@@ -18,7 +18,13 @@ import {
 import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { bonusReturnsDismissedStudent, recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
-import { gradeMatchesStatusFilterUnified, isExamBeforeStudentRegistration, type StudentGraceLike } from "@/lib/grade-classification";
+import { isExamBeforeStudentRegistration } from "@/lib/grade-classification";
+import {
+  CLASSIFIED_GRADE_FILTERS,
+  findGradesMatchingStatusFilter,
+  gradeStatusFilterIsExact,
+  gradeStatusFilterWhere,
+} from "@/lib/grade-status-filter-server";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 import {
   archivedStudentLockedResponse,
@@ -204,20 +210,11 @@ type GradeStatusFilter =
   | "full-mark"
   | "has-grade";
 
-type GradeWithRelations = Prisma.GradeGetPayload<{
-  include: { student: { include: { studentLeaves: true } }; exam: true };
-}>;
-
-const databaseComputedGradeFilters = new Set<GradeStatusFilter>([
-  "excused",
-  "grace-period",
-  "discounted",
-  "failed",
-  "academic-accounting",
-  "passed",
-  "full-mark",
-  "has-grade",
-]);
+/** Rows of a classified filter keep the shape they always had. */
+const CLASSIFIED_GRADE_INCLUDE = {
+  student: { include: { studentLeaves: true } },
+  exam: true,
+} as const satisfies Prisma.GradeInclude;
 
 class GradeWriteConflictError extends Error {
   constructor() {
@@ -400,17 +397,6 @@ async function withStudentGracePeriods<T extends { student: { id: string } }>(
   }));
 }
 
-function gradeMatchesServerStatusFilter(
-  filter: GradeStatusFilter,
-  grade: GradeWithRelations,
-): boolean {
-  return gradeMatchesStatusFilterUnified(filter, grade, grade.exam, {
-    // withStudentGracePeriods attached the student's active grace periods.
-    student: grade.student as unknown as StudentGraceLike,
-    leaves: grade.student.studentLeaves,
-  });
-}
-
 function normalizeGradeStatusFilter(
   searchParams: URLSearchParams,
 ): GradeStatusFilter {
@@ -473,18 +459,15 @@ async function listGradesGroupedByStudent(
   ]).then(([all, hasGrade, absent, cheating]) => ({ all, hasGrade, absent, cheating }));
 
   let matchingStudentIds: string[];
-  if (databaseComputedGradeFilters.has(statusFilter)) {
-    const allGrades = await withStudentGracePeriods(await db.grade.findMany({
-      where: baseWhere,
-      include: { student: { include: { studentLeaves: true } }, exam: true },
-    }));
-    matchingStudentIds = [
-      ...new Set(
-        allGrades
-          .filter((grade) => gradeMatchesServerStatusFilter(statusFilter, grade))
-          .map((grade) => grade.studentId),
-      ),
-    ];
+  if (gradeStatusFilterIsExact(statusFilter)) {
+    const rows = await db.grade.groupBy({
+      by: ["studentId"],
+      where: { AND: [baseWhere, gradeStatusFilterWhere(statusFilter)!] },
+    });
+    matchingStudentIds = rows.map((row) => row.studentId);
+  } else if (CLASSIFIED_GRADE_FILTERS.has(statusFilter)) {
+    const matching = await findGradesMatchingStatusFilter(baseWhere, statusFilter, { withSettlements: false });
+    matchingStudentIds = [...new Set(matching.map((grade) => grade.studentId))];
   } else {
     const statusWhere: Prisma.GradeWhereInput =
       statusFilter === "absent"
@@ -601,29 +584,40 @@ export async function GET(req: NextRequest) {
       return await listGradesGroupedByStudent(searchParams, page, pageSize, statusFilter);
     }
 
-    // The old UI-only filters (full mark / discounted / failed / accounting / grace)
-    // must be computed over the complete database result, then paginated after that.
-    // Otherwise page 1 only is filtered locally and totals/exports become incomplete.
+    // Classified filters (full mark / discounted / failed / accounting / grace…)
+    // are decided over every matching grade before paging, so totals and later
+    // pages stay complete; only the requested page is loaded in full.
     const where = await buildGradeWhereWithExamCourseFilter(searchParams);
-    const needsDatabaseComputedFilter =
-      databaseComputedGradeFilters.has(statusFilter);
 
-    if (needsDatabaseComputedFilter) {
-      const allGrades = await withStudentGracePeriods(await db.grade.findMany({
-        where,
-        orderBy: { updatedAt: "desc" },
-        include: { student: { include: { studentLeaves: true } }, exam: true },
-      }));
-      await annotateGradeSettlementEffects(allGrades);
-      const matchingGrades = allGrades.filter((grade) =>
-        gradeMatchesServerStatusFilter(statusFilter, grade),
-      );
-      const totalCount = matchingGrades.length;
+    if (CLASSIFIED_GRADE_FILTERS.has(statusFilter)) {
+      const skip = (page - 1) * pageSize;
+      let totalCount: number;
+      let pageRows: Prisma.GradeGetPayload<{ include: typeof CLASSIFIED_GRADE_INCLUDE }>[];
+      if (gradeStatusFilterIsExact(statusFilter)) {
+        const exactWhere: Prisma.GradeWhereInput = { AND: [where, gradeStatusFilterWhere(statusFilter)!] };
+        [totalCount, pageRows] = await Promise.all([
+          db.grade.count({ where: exactWhere }),
+          db.grade.findMany({
+            where: exactWhere,
+            orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+            skip,
+            take: pageSize,
+            include: CLASSIFIED_GRADE_INCLUDE,
+          }),
+        ]);
+      } else {
+        const matching = await findGradesMatchingStatusFilter(where, statusFilter, { withSettlements: true });
+        totalCount = matching.length;
+        const pageIds = matching.slice(skip, skip + pageSize).map((grade) => grade.id);
+        const rows = pageIds.length
+          ? await db.grade.findMany({ where: { id: { in: pageIds } }, include: CLASSIFIED_GRADE_INCLUDE })
+          : [];
+        const rowById = new Map(rows.map((row) => [row.id, row]));
+        pageRows = pageIds.flatMap((id) => rowById.get(id) ?? []);
+      }
+      const grades = await withStudentGracePeriods(pageRows);
+      await annotateGradeSettlementEffects(grades);
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-      const grades = matchingGrades.slice(
-        (page - 1) * pageSize,
-        page * pageSize,
-      );
       if (includeRecordedImpact) await annotateGradeRecordedImpacts(grades);
 
       return NextResponse.json({

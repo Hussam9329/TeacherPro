@@ -175,6 +175,12 @@ function routeHarness({ denied = false, computed = false } = {}) {
     ["@/lib/all-filter", { normalizeListFilter: value => value && value !== "all" ? value : "" }],
     ["@/lib/grace-periods-server", { loadActiveGracePeriodsByStudent: async () => new Map(), withoutLegacyGraceFields: value => value }],
     ["@/lib/grade-classification", { gradeMatchesStatusFilterUnified: () => true }],
+    ["@/lib/grade-status-filter-server", {
+      CLASSIFIED_GRADE_FILTERS: new Set(["full-mark"]),
+      gradeStatusFilterIsExact: () => false,
+      gradeStatusFilterWhere: () => null,
+      findGradesMatchingStatusFilter: async () => rows.map(row => ({ id: row.id, studentId: row.studentId })),
+    }],
     ["@/lib/grade-settlement-server", { annotateGradeSettlementEffects: async grades => {
       for (const row of grades) row.effectiveImpactExcluded = true;
       calls.push({ type: "settlement", ids: grades.map(row => row.id) });
