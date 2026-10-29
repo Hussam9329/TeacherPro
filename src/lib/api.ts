@@ -1978,6 +1978,9 @@ export const callStatsApi = {
   },
 };
 
+/** «المتابعة» export: candidate pages requested at the same time. */
+const CALL_EXPORT_PARALLEL_PAGES = 3;
+
 export const callCandidatesApi = {
   get: (query: CallCandidatesQuery = {}, options: ApiGetOptions = {}) => {
     const queryString = buildQueryString({
@@ -2013,15 +2016,25 @@ export const callCandidatesApi = {
     const collectedCalls: Array<Record<string, unknown>> = [];
     const collectedRows: Array<Record<string, unknown>> = [];
     const collectedExams = new Map<string, Record<string, unknown>>();
-    let page = 1;
+    const first = await callCandidatesApi.get({ ...query, page: 1, pageSize });
+    if (!first) return null;
+    const totalPages = first.hasMore ? Math.max(1, Number(first.totalPages || 1)) : 1;
+    const results: Array<CallCandidatesResponse | null> = [first];
+    // The other pages are independent reads, so a few go at once. A request
+    // that holds or lets go of a batch keeps them one after another.
+    const parallel = query.window || query.claim || query.release ? 1 : CALL_EXPORT_PARALLEL_PAGES;
+    let nextPage = 2;
+    await Promise.all(Array.from({ length: Math.min(parallel, totalPages - 1) }, async () => {
+      while (nextPage <= totalPages) {
+        const page = nextPage++;
+        results[page - 1] = await callCandidatesApi.get({ ...query, page, pageSize });
+      }
+    }));
+    if (results.some((result) => !result)) return null;
     let totalCount = 0;
-    let totalPages = 1;
 
-    while (page <= totalPages) {
-      const result = await callCandidatesApi.get({ ...query, page, pageSize });
-      if (!result) return null;
+    for (const result of results as CallCandidatesResponse[]) {
       totalCount = Number(result.totalCount || 0);
-      totalPages = Math.max(1, Number(result.totalPages || 1));
       collectedStudents.push(...(result.students || []));
       collectedGrades.push(...(result.grades || []));
       collectedCalls.push(...(result.studentCalls || []));
@@ -2030,8 +2043,6 @@ export const callCandidatesApi = {
         const id = String(exam.id || "");
         if (id && !collectedExams.has(id)) collectedExams.set(id, exam);
       });
-      if (!result.hasMore || page >= totalPages) break;
-      page += 1;
     }
 
     return {

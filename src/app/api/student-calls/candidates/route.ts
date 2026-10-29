@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import type { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { loadActiveGracePeriodsByStudent } from "@/lib/grace-periods-server";
 import { annotateGradeRecordedImpacts } from "@/lib/grade-recorded-impact-server";
@@ -133,6 +134,23 @@ type DbExamLite = {
   active: boolean;
   scheduledActivateAt: Date | null;
 };
+
+const EXAM_LITE_SELECT = {
+  id: true,
+  name: true,
+  type: true,
+  date: true,
+  courseIds: true,
+  mainSite: true,
+  fullMark: true,
+  passMark: true,
+  discountMark: true,
+  opportunitiesPenalty: true,
+  dismissalGrade: true,
+  noDiscount: true,
+  active: true,
+  scheduledActivateAt: true,
+} as const satisfies Prisma.ExamSelect;
 
 type DbLeaveLite = {
   studentId: string;
@@ -523,143 +541,78 @@ export async function GET(req: NextRequest) {
 
     if (!courseId || !examId) return emptyResponse(page, pageSize);
 
-    const exam = await db.exam.findUnique({
-      where: { id: examId },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        date: true,
-        courseIds: true,
-        mainSite: true,
-        fullMark: true,
-        passMark: true,
-        discountMark: true,
-        opportunitiesPenalty: true,
-        dismissalGrade: true,
-        noDiscount: true,
-        active: true,
-        scheduledActivateAt: true,
-      },
-    });
+    // Round 1: every read that needs only the course and the exam ids.
+    const [exam, allExams, selectedStudents, selectedGrades, scoredAttempts] = await Promise.all([
+      db.exam.findUnique({ where: { id: examId }, select: EXAM_LITE_SELECT }),
+      db.exam.findMany({
+        select: EXAM_LITE_SELECT,
+        orderBy: [{ date: "desc" }, { name: "asc" }],
+      }) as Promise<DbExamLite[]>,
+      db.student.findMany({
+        where: studentCourseScopeWhere(courseId, "followup"),
+        orderBy: [{ name: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          school: true,
+          gender: true,
+          phone: true,
+          parentPhone: true,
+          telegram: true,
+          username: true,
+          courseProgram: true,
+          courseTerm: true,
+          studyType: true,
+          locationScope: true,
+          baghdadMode: true,
+          mainSite: true,
+          subSite: true,
+          code: true,
+          status: true,
+          dismissalReason: true,
+          dismissalNotes: true,
+          opportunities: true,
+          baseOpportunities: true,
+          createdAt: true,
+          courseId: true,
+        },
+      }) as Promise<DbStudentLite[]>,
+      // The grade's student is one of selectedStudents (same course scope).
+      db.grade.findMany({
+        where: {
+          examId,
+          student: { is: studentCourseScopeWhere(courseId, "followup") },
+        },
+        orderBy: [{ student: { name: "asc" } }, { updatedAt: "desc" }],
+        select: {
+          id: true,
+          studentId: true,
+          examId: true,
+          status: true,
+          score: true,
+          notes: true,
+          academicAccountingChecked: true,
+          academicEffectExcluded: true,
+          academicEffectExclusionReason: true,
+          academicEffectExclusionSource: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }) as Promise<DbGradeLite[]>,
+      db.gradeSmartNote.findMany({
+        where: {
+          examId,
+          score: { not: null },
+          student: { is: studentCourseScopeWhere(courseId, "followup") },
+        },
+        select: { studentId: true },
+      }),
+    ]);
     if (!exam || !examIncludesCourse(exam, courseId)) return emptyResponse(page, pageSize);
 
-    const courseExams = ((await db.exam.findMany({
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        date: true,
-        courseIds: true,
-        mainSite: true,
-        fullMark: true,
-        passMark: true,
-        discountMark: true,
-        opportunitiesPenalty: true,
-        dismissalGrade: true,
-        noDiscount: true,
-        active: true,
-        scheduledActivateAt: true,
-      },
-      orderBy: [{ date: "desc" }, { name: "asc" }],
-    })) as DbExamLite[]).filter((item) => examIncludesCourse(item, courseId));
+    const courseExams = allExams.filter((item) => examIncludesCourse(item, courseId));
     const courseExamById = new Map(courseExams.map((item) => [item.id, item]));
     const courseExamIds = courseExams.map((item) => item.id);
-
-    const selectedStudents = (await db.student.findMany({
-      where: studentCourseScopeWhere(courseId, "followup"),
-      orderBy: [{ name: "asc" }, { id: "asc" }],
-      select: {
-        id: true,
-        name: true,
-        school: true,
-        gender: true,
-        phone: true,
-        parentPhone: true,
-        telegram: true,
-        username: true,
-        courseProgram: true,
-        courseTerm: true,
-        studyType: true,
-        locationScope: true,
-        baghdadMode: true,
-        mainSite: true,
-        subSite: true,
-        code: true,
-        status: true,
-        dismissalReason: true,
-        dismissalNotes: true,
-        opportunities: true,
-        baseOpportunities: true,
-        createdAt: true,
-        courseId: true,
-      },
-    })) as DbStudentLite[];
-
-    const selectedGrades = (await db.grade.findMany({
-      where: {
-        examId,
-        student: { is: studentCourseScopeWhere(courseId, "followup") },
-      },
-      orderBy: [{ student: { name: "asc" } }, { updatedAt: "desc" }],
-      select: {
-        id: true,
-        studentId: true,
-        examId: true,
-        status: true,
-        score: true,
-        notes: true,
-        academicAccountingChecked: true,
-        academicEffectExcluded: true,
-        academicEffectExclusionReason: true,
-        academicEffectExclusionSource: true,
-        createdAt: true,
-        updatedAt: true,
-        student: {
-          select: {
-            id: true,
-            name: true,
-            school: true,
-            gender: true,
-            phone: true,
-            parentPhone: true,
-            telegram: true,
-            username: true,
-            courseProgram: true,
-            courseTerm: true,
-            studyType: true,
-            locationScope: true,
-            baghdadMode: true,
-            mainSite: true,
-            subSite: true,
-            code: true,
-            status: true,
-                dismissalReason: true,
-            dismissalNotes: true,
-            opportunities: true,
-            baseOpportunities: true,
-            createdAt: true,
-            courseId: true,
-          },
-        },
-      },
-    })) as Array<DbGradeLite & { student: DbStudentLite }>;
-    const gracePeriodsByStudent = await loadActiveGracePeriodsByStudent(db, [
-      ...selectedStudents.map((student) => student.id),
-      ...selectedGrades.map((grade) => grade.student.id),
-    ]);
-    for (const student of [...selectedStudents, ...selectedGrades.map((grade) => grade.student)]) {
-      student.gracePeriods = gracePeriodsByStudent.get(student.id) || [];
-    }
-
-    const scoredAttempts = await db.gradeSmartNote.findMany({
-      where: {
-        examId,
-        score: { not: null },
-        student: { is: studentCourseScopeWhere(courseId, "followup") },
-      },
-      select: { studentId: true },
-    });
     const attemptEvidenceStudentIds = new Set([
       ...scoredAttempts.map((note) => note.studentId),
     ]);
@@ -689,27 +642,67 @@ export async function GET(req: NextRequest) {
     const candidateStudentIds = selectedStudents.map((student) => student.id);
     const examDayStart = startOfUtcDay(exam.date);
     const examDayEnd = dayAfter(exam.date);
-    const selectedLeaves = await db.studentLeave.findMany({
-      where: {
-        studentId: { in: candidateStudentIds },
-        OR: [
-          { examId },
-          {
-            leaveType: "period",
-            dateFrom: { lt: examDayEnd },
-            dateTo: { gte: examDayStart },
+
+    const loadNoteCalls = async () => {
+      if (notesFilter === "with-notes") {
+        return db.studentCall.findMany({
+          where: {
+            studentId: { in: candidateStudentIds },
+            category: CALL_STUDENT_NOTE_CATEGORY,
+            OR: [{ examId }, { examId: null }],
+            notes: { not: "" },
           },
-        ],
-      },
-      select: {
-        studentId: true,
-        examId: true,
-        leaveType: true,
-        date: true,
-        dateFrom: true,
-        dateTo: true,
-      },
-    });
+          select: { studentId: true, category: true, notes: true },
+        });
+      }
+      return [];
+    };
+
+    // Round 2: the reads that need the course's students.
+    const [gracePeriodsByStudent, selectedLeaves, noteCalls, selectedExamCalls] = await Promise.all([
+      loadActiveGracePeriodsByStudent(db, candidateStudentIds),
+      db.studentLeave.findMany({
+        where: {
+          studentId: { in: candidateStudentIds },
+          OR: [
+            { examId },
+            {
+              leaveType: "period",
+              dateFrom: { lt: examDayEnd },
+              dateTo: { gte: examDayStart },
+            },
+          ],
+        },
+        select: {
+          studentId: true,
+          examId: true,
+          leaveType: true,
+          date: true,
+          dateFrom: true,
+          dateTo: true,
+        },
+      }),
+      loadNoteCalls(),
+      db.studentCall.findMany({
+        where: {
+          examId,
+          studentId: { in: candidateStudentIds },
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: {
+          studentId: true,
+          category: true,
+          status: true,
+          completed: true,
+          actedAt: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+    for (const student of selectedStudents) {
+      student.gracePeriods = gracePeriodsByStudent.get(student.id) || [];
+    }
+
     const selectedLeavesByStudentId = new Map<string, DbLeaveLite[]>();
     selectedLeaves.forEach((leave) => {
       const list = selectedLeavesByStudentId.get(leave.studentId) || [];
@@ -718,41 +711,15 @@ export async function GET(req: NextRequest) {
     });
 
     const studentIdsWithNotes = new Set<string>();
-    if (notesFilter === "with-notes") {
-      const noteCalls = await db.studentCall.findMany({
-        where: {
-          studentId: { in: candidateStudentIds },
-          category: CALL_STUDENT_NOTE_CATEGORY,
-          OR: [{ examId }, { examId: null }],
-          notes: { not: "" },
-        },
-        select: { studentId: true, category: true, notes: true },
-      });
-      noteCalls.forEach((call) => {
-        if (hasManualCallNote(call)) studentIdsWithNotes.add(call.studentId);
-      });
-    }
+    noteCalls.forEach((call) => {
+      if (hasManualCallNote(call)) studentIdsWithNotes.add(call.studentId);
+    });
 
     const now = new Date();
     const bestCallByStudentId = new Map<
       string,
       { status: string; completed: boolean; actedAt: Date | null; createdAt: Date }
     >();
-    const selectedExamCalls = await db.studentCall.findMany({
-      where: {
-        examId,
-        studentId: { in: candidateStudentIds },
-      },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      select: {
-        studentId: true,
-        category: true,
-        status: true,
-        completed: true,
-        actedAt: true,
-        createdAt: true,
-      },
-    });
     selectedExamCalls.forEach((call) => {
       // Student + exam is the call identity. Category may point to an old
       // Grade row and is intentionally ignored when selecting contact state.
