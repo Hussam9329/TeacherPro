@@ -1,6 +1,6 @@
 "use client";
 import { useUrlState } from "@/hooks/use-url-state";
-import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type Exam } from "@/lib/teacher-store";
@@ -44,6 +44,7 @@ import {
 import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { examApi, examStatsApi, type ApiResult, type ExamRecordStat } from "@/lib/api";
+import { chunkIds, ExamStatsCache } from "@/lib/exam-stats-cache";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
 import { visibleGradeNote } from "@/lib/grade-note-banners";
@@ -355,6 +356,7 @@ const ExamRecordCard = React.memo(function ExamRecordCard(props: ExamRecordVisua
 
   return (
     <article
+      data-exam-id={exam.id}
       className={`tp-rcard tp-exam-card ${detailsOpen ? "" : "tp-exam-record-card-collapsed"}`}
       data-tone={tone}
       aria-label={exam.name}
@@ -432,7 +434,7 @@ const ExamRecordTableRow = React.memo(function ExamRecordTableRow(props: ExamRec
 
   return (
     <React.Fragment>
-      <tr className="border-t align-top">
+      <tr className="border-t align-top" data-exam-id={exam.id}>
         <td className="p-3 font-bold">{exam.name}</td>
         <td className="p-3">{formatAppDate(exam.date)}</td>
         <td className="p-3">
@@ -494,6 +496,18 @@ const ExamRecordTableRow = React.memo(function ExamRecordTableRow(props: ExamRec
   );
 });
 
+/** Exams per «سجل الامتحانات» numbers request. */
+const EXAM_STATS_BATCH_SIZE = 24;
+const EXAM_STATS_COALESCE_MS = 120;
+
+/** The nearest scrolling ancestor, or null for the window. */
+function scrollParentOf(element: HTMLElement | null | undefined): HTMLElement | null {
+  for (let node = element?.parentElement; node; node = node.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(node).overflowY)) return node;
+  }
+  return null;
+}
+
 export function ExamRecordsView() {
   const syncKey = useTeacherProSyncKey([
     "exams",
@@ -502,7 +516,6 @@ export function ExamRecordsView() {
     "students",
     "dashboard",
   ]);
-  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const {
     exams,
     grades,
@@ -526,22 +539,20 @@ export function ExamRecordsView() {
   const [filterCourseId, setFilterCourseId] = useUrlState("course");
   const [filterStatus, setFilterStatus] = useUrlState("status") as unknown as [ExamStatusLabel | "", React.Dispatch<React.SetStateAction<ExamStatusLabel | "">>];
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
-  const [databaseExamStats, setDatabaseExamStats] = useState<
-    Record<string, ExamRecordStat>
-  >({});
-  const [databaseExamStatsLoading, setDatabaseExamStatsLoading] =
-    useState(false);
+  // A new object after each change of the cache, so the views re-read it.
+  const [examStatsView, setExamStatsView] = useState(() => ({
+    cache: new ExamStatsCache<ExamRecordStat>(),
+  }));
+  const examStatsCache = examStatsView.cache;
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
     id: string;
     name: string;
-    gradeCount: number | null;
     dependentCount: number;
   }>({
     open: false,
     id: "",
     name: "",
-    gradeCount: null,
     dependentCount: 0,
   });
   const [editingExamId, setEditingExamId] = useState<string | null>(null);
@@ -645,52 +656,120 @@ export function ExamRecordsView() {
     [filteredExams],
   );
 
+  // «سجل الامتحانات» numbers: only exams on screen (or in an open dialog) are
+  // requested, in batches; a search or filter reuses what is already loaded.
+  const examListRef = useRef<HTMLDivElement>(null);
+  const visibleExamIdsRef = useRef(new Set<string>());
+  const dialogExamIdsRef = useRef<string[]>([]);
+  const examStatsRequestsRef = useRef(new Set<AbortController>());
+  const examStatsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const sendExamStatsRequests = useCallback(() => {
+    examStatsTimerRef.current = null;
+    const { ids, generation } = examStatsCache.take([
+      ...visibleExamIdsRef.current,
+      ...dialogExamIdsRef.current,
+    ]);
+    for (const batch of chunkIds(ids, EXAM_STATS_BATCH_SIZE)) {
+      const controller = new AbortController();
+      examStatsRequestsRef.current.add(controller);
+      examStatsApi
+        .get(batch, { signal: controller.signal, quietAbort: true })
+        .then((result) => result?.statsByExamId ?? null, () => null)
+        .then((stats) => {
+          examStatsRequestsRef.current.delete(controller);
+          if (controller.signal.aborted) return;
+          examStatsCache.resolve(batch, generation, stats);
+          setExamStatsView((view) => ({ cache: view.cache }));
+        });
+    }
+  }, [examStatsCache]);
+
+  // Cards that come on screen together (a scroll, a filter) share one request.
+  const requestExamStats = useCallback(() => {
+    if (examStatsTimerRef.current === null) {
+      examStatsTimerRef.current = setTimeout(sendExamStatsRequests, EXAM_STATS_COALESCE_MS);
+    }
+  }, [sendExamStatsRequests]);
+
   useEffect(() => {
-    const examIds = filteredExamIdsKey.split(",").filter(Boolean);
-    if (examIds.length === 0) {
-      setDatabaseExamStats({});
-      setDatabaseExamStatsLoading(false);
+    const requests = examStatsRequestsRef.current;
+    const timer = examStatsTimerRef;
+    return () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+      timer.current = null;
+      for (const controller of requests) controller.abort();
+    };
+  }, []);
+
+  // Which cards or rows are on screen, or close to it.
+  useEffect(() => {
+    const visible = visibleExamIdsRef.current;
+    visible.clear();
+    const list = examListRef.current;
+    const targets = list?.querySelectorAll<HTMLElement>("[data-exam-id]") ?? [];
+    if (typeof IntersectionObserver === "undefined") {
+      targets.forEach((target) => visible.add(target.dataset.examId || ""));
+      requestExamStats();
       return;
     }
-
-    const controller = new AbortController();
-    // A refresh from a change elsewhere keeps the numbers until the new ones arrive.
-    const silent = isBackgroundSync();
-    if (!silent) setDatabaseExamStatsLoading(true);
-    examStatsApi
-      .get(examIds, { signal: controller.signal, quietAbort: true })
-      .then((result) => {
-        if (!controller.signal.aborted) {
-          setDatabaseExamStats(result?.statsByExamId || {});
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const examId = (entry.target as HTMLElement).dataset.examId;
+          if (!examId) continue;
+          if (entry.isIntersecting) visible.add(examId);
+          else visible.delete(examId);
         }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted && !silent) setDatabaseExamStats({});
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setDatabaseExamStatsLoading(false);
-      });
+        requestExamStats();
+      },
+      // The page scrolls inside its own panel; the margin loads the numbers
+      // a little before a card scrolls into view.
+      { root: scrollParentOf(list), rootMargin: "600px 0px" },
+    );
+    targets.forEach((target) => observer.observe(target));
+    return () => observer.disconnect();
+  }, [filteredExamIdsKey, viewMode, requestExamStats]);
 
-    return () => controller.abort();
-  }, [filteredExamIdsKey, syncKey, isBackgroundSync]);
+  // A data change: the numbers on screen refresh now (the old ones stay until
+  // the new ones arrive), the rest when they are scrolled to.
+  const statsSyncKeyRef = useRef(syncKey);
+  useEffect(() => {
+    if (statsSyncKeyRef.current === syncKey) return;
+    statsSyncKeyRef.current = syncKey;
+    examStatsCache.invalidate();
+    setExamStatsView((view) => ({ cache: view.cache }));
+    requestExamStats();
+  }, [syncKey, examStatsCache, requestExamStats]);
+
+  // The delete and disable dialogs need their exam's count even off screen.
+  useEffect(() => {
+    dialogExamIdsRef.current = [deleteDialog.open ? deleteDialog.id : "", disableExamId || ""].filter(Boolean);
+    requestExamStats();
+  }, [deleteDialog.open, deleteDialog.id, disableExamId, requestExamStats]);
 
   const examStatValue = useCallback(
     (examId: string, key: keyof ExamRecordStat) => {
-      const stat = databaseExamStats[examId];
-      if (databaseExamStatsLoading && !stat) return "…";
-      return stat ? stat[key] : "—";
+      const stat = examStatsView.cache.value(examId);
+      if (stat) return stat[key];
+      return examStatsView.cache.state(examId) === "missing" ? "—" : "…";
     },
-    [databaseExamStats, databaseExamStatsLoading],
+    [examStatsView],
   );
 
   const examStatNumber = useCallback(
     (examId: string, key: keyof ExamRecordStat): number | null => {
-      const stat = databaseExamStats[examId];
-      const value = stat?.[key];
+      const value = examStatsView.cache.value(examId)?.[key];
       return typeof value === "number" && Number.isFinite(value) ? value : null;
     },
-    [databaseExamStats],
+    [examStatsView],
   );
+
+  // Deleting is decided on an up-to-date count only, never a stale one.
+  const deleteGradeCount =
+    deleteDialog.open && examStatsView.cache.state(deleteDialog.id) === "fresh"
+      ? examStatNumber(deleteDialog.id, "total")
+      : null;
 
   const examRows = useCallback(
     (examId: string) => {
@@ -910,13 +989,11 @@ export function ExamRecordsView() {
         open: true,
         id: examId,
         name: exam?.name || "",
-        gradeCount: examStatNumber(examId, "total"),
         dependentCount,
       });
     },
     [
       examById,
-      examStatNumber,
       opportunityLogs,
       studentCalls,
       studentLeaves,
@@ -924,13 +1001,13 @@ export function ExamRecordsView() {
   );
 
   const handleDeleteExam = runDeleteExamLocked(async () => {
-    if (deleteDialog.gradeCount === null) {
+    if (deleteGradeCount === null) {
       toast.error("انتظر اكتمال التحقق من سجلات الدرجات قبل الحذف.");
       return;
     }
-    if (deleteDialog.gradeCount > 0) {
+    if (deleteGradeCount > 0) {
       toast.error(
-        `لا يمكن حذف هذا الامتحان لأن عليه ${arabicCount(deleteDialog.gradeCount, "سجل درجات واحد", "سجلين درجات", "سجلات درجات", "سجل درجات")}. عطّل الامتحان بدلاً من حذفه.`,
+        `لا يمكن حذف هذا الامتحان لأن عليه ${arabicCount(deleteGradeCount, "سجل درجات واحد", "سجلين درجات", "سجلات درجات", "سجل درجات")}. عطّل الامتحان بدلاً من حذفه.`,
       );
       return;
     }
@@ -951,7 +1028,6 @@ export function ExamRecordsView() {
       open: false,
       id: "",
       name: "",
-      gradeCount: null,
       dependentCount: 0,
     });
     await refreshExamRecordsAfterMutation("exam-records-delete");
@@ -1202,7 +1278,9 @@ export function ExamRecordsView() {
         }
       />
 
-      {viewMode === "cards" ? renderCards() : renderTable()}
+      <div ref={examListRef}>
+        {viewMode === "cards" ? renderCards() : renderTable()}
+      </div>
 
       {editingExam ? (
         <ExamEditDialog
@@ -1280,7 +1358,6 @@ export function ExamRecordsView() {
                   open: false,
                   id: "",
                   name: "",
-                  gradeCount: null,
                   dependentCount: 0,
                 },
           )
@@ -1291,14 +1368,14 @@ export function ExamRecordsView() {
             <AlertDialogTitle>حذف «{deleteDialog.name}»؟</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
-                {deleteDialog.gradeCount === null ? (
+                {deleteGradeCount === null ? (
                   <p className="rounded-lg border border-warning-line border-s-4 border-s-warning-vivid bg-warning-soft p-3 font-semibold text-warning">
                     جاري التحقق من السجلات المرتبطة بالامتحان...
                   </p>
-                ) : deleteDialog.gradeCount > 0 ? (
+                ) : deleteGradeCount > 0 ? (
                   <p className="rounded-lg border border-danger-line border-s-4 border-s-danger-vivid bg-danger-soft p-3 font-semibold text-danger">
                     لا يمكن حذف امتحان عليه درجات. يوجد{" "}
-                    {deleteDialog.gradeCount} سجل درجات مرتبط بهذا الامتحان.
+                    {deleteGradeCount} سجل درجات مرتبط بهذا الامتحان.
                     استخدم التعطيل إذا كان الهدف إيقاف ظهوره في إدخال الدرجات.
                   </p>
                 ) : deleteDialog.dependentCount > 0 ? (
@@ -1323,17 +1400,17 @@ export function ExamRecordsView() {
               onClick={handleDeleteExam}
               disabled={
                 isDeletingExam ||
-                deleteDialog.gradeCount === null ||
-                Number(deleteDialog.gradeCount) > 0 ||
+                deleteGradeCount === null ||
+                Number(deleteGradeCount) > 0 ||
                 deleteDialog.dependentCount > 0
               }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isDeletingExam
                 ? "جاري الحذف..."
-                : deleteDialog.gradeCount === null
+                : deleteGradeCount === null
                   ? "جاري التحقق..."
-                  : Number(deleteDialog.gradeCount) > 0 ||
+                  : Number(deleteGradeCount) > 0 ||
                       deleteDialog.dependentCount > 0
                     ? "الحذف ممنوع"
                     : "حذف الامتحان"}
