@@ -46,6 +46,7 @@ import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
 import { displayOpportunityAction, isRetiredFollowupNote } from "@/lib/retired-followup-compat";
 import { buildStudentStory, type StoryCategory, type StoryEvent } from "@/lib/student-story";
 import { storyDay, storyStamp, storyTime, type StoryPart } from "@/lib/student-story-format";
+import { StudentCodeButtons } from "./student-code-buttons";
 
 type StudentProfileDialogProps = {
   student: Student | null;
@@ -1206,6 +1207,7 @@ export function StudentProfileDialog({
                           إرجاع الطالب…
                         </button>
                       ) : null}
+                      <StudentCodeButtons student={profileStudent} />
                     </div>
                   ) : null}
                   {shareStatus ? <p role="status" className="tp-pf-hero__status">{shareStatus}</p> : null}

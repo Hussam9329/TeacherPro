@@ -51,6 +51,7 @@ import { EmptyState, ErrorState, LoadingState, ListPagination } from "./ui-kit";
 import { ListToolbar } from "./list-toolbar";
 import { CourseCheckboxFilter, courseFilterLabel, courseFilterParam, courseFilterSummary } from "./course-checkbox-filter";
 import { RowActionsMenu } from "./row-actions-menu";
+import { StudentCodeButtons } from "./student-code-buttons";
 import {
   formatOpportunityBalance,
   getOpportunityBalance,
@@ -1023,6 +1024,7 @@ export function OpportunitiesView() {
                         <Send aria-hidden="true" />
                       </a>
                     ) : null}
+                    <StudentCodeButtons student={student} />
                   </div>
                   <span className="tp-scard__divider" aria-hidden="true" />
                   <button type="button" className="tp-scard__action" onClick={() => setDetailsStudentId(student.id)}>

@@ -11,13 +11,10 @@ import { Input } from "@/components/ui/input";
 import { codeClosuresApi, type CodeClosureStudent } from "@/lib/code-closures-client";
 import {
   buildDismissalNotice,
-  copyText,
-  mzCodeActionUrl,
-  mzPlatformPhone,
   telegramNoticeHref,
   type ClosureContactStep,
-  type MzCodeAction,
 } from "@/lib/code-closure-contact";
+import { openMzCodePage } from "@/lib/code-closure-open";
 import { saveDismissedCheck } from "@/lib/dismissed-check-api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
@@ -266,23 +263,30 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
     else toast.success(`أرسل البوت تبليغ الفصل إلى ${student.name}`);
   }
 
-  // ☢️ closes the code, its green twin opens it again; only closing is a
-  // contact step of the dismissal.
-  function openPlatform(student: CodeClosureStudent, button: Element, action: MzCodeAction = "close") {
-    const phone = mzPlatformPhone(student.phone);
-    // Copy first: the new tab takes the focus the clipboard needs. The copy
-    // stays for whoever has no «أداة مرماز» (Tampermonkey) to do it.
-    const copying = phone ? copyText(phone, button) : Promise.resolve(false);
-    window.open(mzCodeActionUrl(action, phone, student.name), "_blank", "noopener,noreferrer");
-    if (action === "close") markStep(student, "platform");
-    if (!phone) {
-      toast.error(`ماكو رقم هاتف صالح للطالب ${student.name}؛ ابحث عنه بالاسم في المنصة.`);
-      return;
-    }
-    void copying.then((copied) => {
-      if (copied) toast.success(`نُسخ رقم الطالب ${phone}`);
-      else toast.error(`تعذر النسخ تلقائياً. رقم الطالب: ${phone}`);
+  // ☢️ closes the code (a contact step of the dismissal); its green twin opens
+  // it again and clears ☢️ and «الكود مغلق», so ☢️ can be pressed again.
+  function closeCode(student: CodeClosureStudent, button: Element) {
+    openMzCodePage(student, "close", button);
+    markStep(student, "platform");
+  }
+
+  function reopenCode(student: CodeClosureStudent, button: Element) {
+    if (!canManage) return;
+    openMzCodePage(student, "open", button);
+    setClickedSteps((current) => {
+      const next = { ...current };
+      delete next[`${student.id}:platform`];
+      return next;
     });
+    codeClosuresApi.reopenCode(student.id, student.dismissedCheckEpoch).then(
+      () => emitTeacherProDataChanged({
+        source: "local-mutation",
+        reason: "فتح كود الطالب",
+        scopes: ["students", "dashboard", "logs"],
+        dispatchLocal: false,
+      }),
+      (cause) => toast.error(cause instanceof Error ? cause.message : "تعذر حفظ فتح كود الطالب."),
+    ).finally(() => void refresh());
   }
 
   const courses = useMemo(() => {
@@ -503,6 +507,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                     buildDismissalNotice(student.dismissalExamName, student.dismissalOutcome),
                   );
                   const platformDone = stepDone(student, "platform");
+                  const codeClosed = platformDone || student.dismissedChecked;
                   const telegramDone = stepDone(student, "telegram");
                   const sentAt = botNoticeSentAt(student);
                   const noticeReady = Boolean(student.dismissalExamName && student.dismissalOutcome);
@@ -586,19 +591,21 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                           <button
                             type="button"
                             className="tp-closure-card__danger"
-                            data-done={platformDone || undefined}
-                            onClick={(event) => openPlatform(student, event.currentTarget)}
-                            aria-label={`فتح المنصة لإغلاق كود ${student.name} ونسخ رقم هاتفه${platformDone ? " — تم" : ""}`}
-                            title={platformDone ? "تم فتح المنصة ونسخ الرقم" : "فتح المنصة لإغلاق كود الطالب ونسخ رقم هاتفه"}
+                            data-done={codeClosed || undefined}
+                            disabled={codeClosed}
+                            onClick={(event) => closeCode(student, event.currentTarget)}
+                            aria-label={`فتح المنصة لإغلاق كود ${student.name} ونسخ رقم هاتفه${codeClosed ? " — تم" : ""}`}
+                            title={codeClosed ? "الكود مغلق؛ افتحه بالزر الأخضر حتى تگدر تغلقه مرة ثانية" : "فتح المنصة لإغلاق كود الطالب ونسخ رقم هاتفه"}
                           >
                             <Radiation aria-hidden="true" />
                           </button>
                           <button
                             type="button"
                             className="tp-closure-card__restore"
-                            onClick={(event) => openPlatform(student, event.currentTarget, "open")}
+                            disabled={!codeClosed || !canManage}
+                            onClick={(event) => reopenCode(student, event.currentTarget)}
                             aria-label={`فتح المنصة لإعادة فتح كود ${student.name} ونسخ رقم هاتفه`}
-                            title="فتح المنصة لإعادة فتح كود الطالب ونسخ رقم هاتفه"
+                            title={codeClosed ? "فتح المنصة لإعادة فتح كود الطالب ونسخ رقم هاتفه" : "الكود مفتوح"}
                           >
                             <LockKeyholeOpen aria-hidden="true" />
                           </button>
@@ -703,7 +710,7 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
             canWithdraw={canWithdraw}
             platformDone={(student) => stepDone(student, "platform")}
             botSentAt={botNoticeSentAt}
-            openPlatform={(student, button) => openPlatform(student, button)}
+            openPlatform={(student, button) => closeCode(student, button)}
             sendBotNotice={deliverBotNotice}
             onWithdrawn={(ids) => {
               const gone = new Set(ids);

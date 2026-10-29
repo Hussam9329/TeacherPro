@@ -85,6 +85,7 @@ import { shortGradeNoteText } from "@/lib/grade-note-banners";
 import { refreshShortcutAlerts } from "@/hooks/use-shortcut-alerts";
 import "./tp-modal.css";
 import "./calls.css";
+import { StudentCodeButtons } from "./student-code-buttons";
 
 type CallCategory =
   | "absent"
@@ -1636,7 +1637,10 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
 
             <div className="tp-call-card__row">
               <span className="tp-call-card__row-label"><Phone aria-hidden="true" />التواصل</span>
-              <div className="tp-call-card__row-content">{renderContactButtons(row.student, callNumbersHidden(row))}</div>
+              <div className="tp-call-card__row-content">
+                {renderContactButtons(row.student, callNumbersHidden(row))}
+                <StudentCodeButtons student={row.student} />
+              </div>
             </div>
 
             <div className="tp-call-card__row">

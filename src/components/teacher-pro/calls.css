@@ -311,6 +311,8 @@
 .tp-call-card__row-label > svg { inline-size: 1.05rem; block-size: 1.05rem; color: var(--muted-foreground); }
 .tp-call-card__last { grid-column: 1 / -1; margin-block-start: 0.15rem; color: var(--muted-foreground); font-size: 0.72rem; font-weight: 650; }
 .tp-call-card__row-content { min-inline-size: 0; }
+/* A dismissed student's ☢️ / «فتح الكود» pair sits after the contacts. */
+.tp-call-card__row-content:has(> .tp-code-buttons) { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 
 .tp-call-card__contact { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .tp-call-card__contact-btn {

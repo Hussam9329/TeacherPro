@@ -112,3 +112,24 @@ export function copyText(text: string, near?: Element | null): Promise<boolean> 
   if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) return Promise.resolve(false);
   return navigator.clipboard.writeText(text).then(() => true, () => false);
 }
+
+/**
+ * A dismissed student's code counts as closed once ☢️ was pressed in this
+ * dismissal, or once it was marked «الكود مغلق». The green «فتح الكود» clears
+ * both, so ☢️ can be pressed again.
+ */
+export function isStudentCodeClosed(student: {
+  dismissedChecked?: boolean | null;
+  dismissedCheckEpoch?: number | null;
+  closurePlatformEpoch?: number | null;
+}): boolean {
+  if (student.dismissedChecked === true) return true;
+  const epoch = student.dismissedCheckEpoch ?? 0;
+  return student.closurePlatformEpoch != null && student.closurePlatformEpoch === epoch;
+}
+
+/** The close/open buttons on student cards are for the admin and the supervisor only. */
+export function canUseStudentCodeButtons(user: { username?: string | null; roleId?: string | null } | null | undefined): boolean {
+  if (!user) return false;
+  return user.username?.trim().toLowerCase() === "admin" || user.roleId === "role_admin" || user.roleId === "role_supervisor";
+}

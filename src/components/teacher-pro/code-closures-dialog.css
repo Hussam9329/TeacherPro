@@ -231,6 +231,9 @@ a.tp-closure-card__telegram:focus-visible { outline: none; box-shadow: 0 0 0 3px
 .tp-closure-card__restore:hover { background: var(--status-success-solid); color: var(--status-success-on); transform: scale(1.07); }
 .tp-closure-card__restore:active { transform: scale(0.93); }
 .tp-closure-card__restore:focus-visible { outline: 3px solid var(--tp-focus); outline-offset: 2px; }
+/* Only one of the pair works at a time: ☢️ while the code is open, green once it is closed. */
+.tp-closure-card__restore:disabled { cursor: not-allowed; opacity: 0.4; filter: grayscale(0.6); transform: none; background: color-mix(in srgb, var(--status-success-bg) 75%, var(--tp-card-inner)); color: var(--status-success-fg); }
+.tp-closure-card__danger:disabled { cursor: not-allowed; transform: none; }
 @media (prefers-reduced-motion: reduce) {
   .tp-closure-card__restore { transition: none; }
 }

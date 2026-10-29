@@ -71,6 +71,7 @@ function harness() {
   const reads = [];
   const writes = [];
   const contacts = [];
+  const reopens = [];
   const botSends = [];
   const copies = [];
   let copyWorks = true;
@@ -144,6 +145,11 @@ function harness() {
       writes.push({ ...request, args });
       return request.promise;
     },
+    reopenCode(...args) {
+      const request = deferred();
+      reopens.push({ ...request, args });
+      return request.promise;
+    },
     markContact(...args) {
       const request = deferred();
       contacts.push({ ...request, args });
@@ -189,6 +195,15 @@ function harness() {
   const context = {
     exports: {},
     require(name) {
+      // The real shared opener, run with this window and the recorded clipboard.
+      if (name === '@/lib/code-closure-open' && !(name in dependencies)) {
+        const opener = { exports: {} };
+        vm.runInNewContext(ts.transpileModule(
+          fs.readFileSync(path.join(root, 'src/lib/code-closure-open.ts'), 'utf8'),
+          { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } },
+        ).outputText, { module: opener, exports: opener.exports, window: context.window, Promise, require: (dep) => dependencies[dep] });
+        dependencies[name] = opener.exports;
+      }
       if (!(name in dependencies)) throw new Error(`Unexpected dependency: ${name}`);
       return dependencies[name];
     },
@@ -237,7 +252,7 @@ function harness() {
   }
 
   return {
-    reads, writes, contacts, botSends, copies, opened, successes, errors, render,
+    reads, writes, contacts, reopens, botSends, copies, opened, successes, errors, render,
     failCopies() { copyWorks = false; },
     async flush() {
       // Drain promises originating in the VM realm before applying state updates.
@@ -609,17 +624,28 @@ function selectCourse(view, value) {
   assert.equal(view.opened.length, 3, 'the platform still opens');
   assert(view.errors.some((error) => error.includes('ماكو رقم هاتف صالح')));
 
-  // The green twin beside ☢️ asks the tool to open the code again.
+  // The green twin beside ☢️ asks the tool to open the code again. Only one
+  // of the pair works at a time: ☢️ while open, green once closed.
   const restoreButtons = () => view.nodes('button').filter((node) => node.props.className === 'tp-closure-card__restore');
   assert.equal(restoreButtons().length, 2, 'every card has the green open-code button beside ☢️');
   assert(restoreButtons().every((node) => node.props.children.type === 'LockKeyholeOpen'));
+  assert.deepEqual(dangerButtons().map((node) => Boolean(node.props.disabled)), [true, true], 'a closed code cannot be closed again');
+  assert.deepEqual(restoreButtons().map((node) => Boolean(node.props.disabled)), [false, false], 'and can be opened');
   const contactsBefore = view.contacts.length;
   restoreButtons()[0].props.onClick({ currentTarget: clicked });
   view.render();
   assert.deepEqual(view.opened.at(-1), [mzRequest('open'), '_blank', 'noopener,noreferrer'], 'the green button asks «أداة مرماز» to open the code');
   assert.equal(view.copies.at(-1).text, '009647705550679', 'and copies the phone too');
   assert.equal(view.contacts.length, contactsBefore, 'opening the code is not a contact step of the dismissal');
+  assert.deepEqual(view.reopens.map((reopen) => reopen.args), [[dangerous.id, 3]], 'opening clears ☢️ and «الكود مغلق» for this dismissal');
   assert.equal(restoreButtons()[0].props['data-done'], undefined);
+  view.reopens[0].resolve();
+  await view.flush();
+  view.reads.at(-1).resolve(response([{ ...dangerous, closurePlatformEpoch: null }, doneBefore]));
+  await view.flush();
+  assert.equal(dangerButtons()[0].props.disabled, false, 'once opened, ☢️ works again');
+  assert.equal(dangerButtons()[0].props['data-done'], undefined);
+  assert.equal(restoreButtons()[0].props.disabled, true, 'and the green button waits for the next close');
 
   view.setProps({ canManage: false });
   const before = view.contacts.length;

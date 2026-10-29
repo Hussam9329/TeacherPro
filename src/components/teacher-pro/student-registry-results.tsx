@@ -35,6 +35,7 @@ import {
 } from "./student-registry-helpers";
 import { displayReasonText } from "@/lib/reason-display";
 import { RowActionsMenu, type RowAction } from "./row-actions-menu";
+import { StudentCodeButtons } from "./student-code-buttons";
 import { StudentContactEdit, type StudentContactField } from "./student-contact-edit";
 import "./student-registry-results.css";
 import "./student-card.css";
@@ -825,6 +826,7 @@ function StudentRegistryRow({
               <Send aria-hidden="true" />
             </a>
           ) : null}
+          <StudentCodeButtons student={student} />
         </div>
         <span className="tp-scard__divider" aria-hidden="true" />
         <button type="button" className="tp-scard__action" aria-expanded={open} aria-controls={moreId} onClick={() => setOpen((value) => !value)}>

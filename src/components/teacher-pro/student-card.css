@@ -195,6 +195,15 @@
   .tp-scard__action > svg:last-child { display: none; }
 }
 
+/* A dismissed student's ☢️ / «فتح الكود» pair needs room: contacts and the
+   pair take the first row (the pair at the far end), the actions the next. */
+@container scard (max-width: 34rem) {
+  .tp-scard__foot:has(.tp-code-buttons) { flex-wrap: wrap; row-gap: 0.5rem; }
+  .tp-scard__foot:has(.tp-code-buttons) > .tp-scard__reach { flex: 1 1 100%; justify-content: flex-start; }
+  .tp-scard__foot:has(.tp-code-buttons) > .tp-scard__reach + .tp-scard__divider { display: none; }
+  .tp-scard__reach > .tp-code-buttons { margin-inline-start: auto; }
+}
+
 @container scard (max-width: 24rem) {
   .tp-scard__ring { inline-size: 4.75rem; block-size: 4.75rem; }
   .tp-scard__ring-inner b { font-size: 0.85rem; }

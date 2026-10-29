@@ -50,6 +50,7 @@ import {
 } from "@/lib/dismissed-focus";
 import { ListToolbar } from "./list-toolbar";
 import { RowActionsMenu } from "./row-actions-menu";
+import { StudentCodeButtons } from "./student-code-buttons";
 import { FormDialogHero } from "./form-dialog";
 import { EmptyState, ErrorState, LoadingState, ListPagination } from "./ui-kit";
 import { toLatinDigits } from "@/lib/format";
@@ -1223,6 +1224,7 @@ export function DismissedManagementView() {
                       <Send aria-hidden="true" />
                     </button>
                   ) : null}
+                  <StudentCodeButtons student={student} />
                 </div>
                 {current && canReactivate ? (
                   <>

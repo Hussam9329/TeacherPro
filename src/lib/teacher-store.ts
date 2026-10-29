@@ -89,6 +89,8 @@ export interface Student {
   dismissalNotes: string;
   dismissedChecked?: boolean;
   dismissedCheckEpoch?: number;
+  /** The dismissal episode in which ☢️ (closing the code on the platform) was pressed. */
+  closurePlatformEpoch?: number | null;
   createdAt: string;
   opportunities: number;
   baseOpportunities: number;
@@ -619,6 +621,7 @@ function normalizeStudentRecord(st: Record<string, unknown>): Student {
     dismissalNotes: String(st.dismissalNotes || ""),
     dismissedChecked: st.status === "مفصول" && st.dismissedChecked === true,
     dismissedCheckEpoch: Number(st.dismissedCheckEpoch || 0),
+    closurePlatformEpoch: Number.isSafeInteger(st.closurePlatformEpoch) ? Number(st.closurePlatformEpoch) : null,
     createdAt: st.createdAt
       ? baghdadDateKey(st.createdAt as string | Date) || todayISO()
       : todayISO(),

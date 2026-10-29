@@ -1,0 +1,66 @@
+/* ☢️ «إغلاق الكود» and the green «فتح الكود» on student cards: the same
+   pair as the «اغلاق الكودات» window, sized like the card's round buttons. */
+.tp-code-buttons { display: inline-flex; align-items: center; gap: 0.45rem; flex-shrink: 0; }
+
+.tp-code-buttons > button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  inline-size: 2.4rem;
+  block-size: 2.4rem;
+  padding: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 120ms ease, background-color 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+.tp-code-buttons > button svg { inline-size: 1.1rem; block-size: 1.1rem; }
+.tp-code-buttons > button:not(:disabled):hover { transform: scale(1.07); }
+.tp-code-buttons > button:not(:disabled):active { transform: scale(0.93); }
+.tp-code-buttons > button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.tp-code-buttons > button:disabled { cursor: not-allowed; }
+
+.tp-code-buttons__close {
+  border: 3px solid transparent;
+  background:
+    radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--status-danger-solid) 55%, white), var(--status-danger-solid) 55%, color-mix(in srgb, var(--status-danger-solid) 65%, black)) padding-box,
+    repeating-linear-gradient(45deg, var(--status-warning-vivid) 0 4px, var(--tp-deep) 4px 8px) border-box;
+  color: var(--status-warning-vivid);
+  box-shadow: 0 4px 12px -5px var(--status-danger-vivid);
+}
+.tp-code-buttons__close svg { filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.55)); }
+/* Closed: a green ring and a check, as in the window. */
+.tp-code-buttons__close[data-done] { box-shadow: 0 0 0 2px var(--status-success-vivid); opacity: 0.75; }
+.tp-code-buttons__close[data-done]::after {
+  content: "✓";
+  position: absolute;
+  inset-block-start: -0.5rem;
+  inset-inline-end: -0.5rem;
+  display: grid;
+  place-items: center;
+  inline-size: 1.05rem;
+  block-size: 1.05rem;
+  border-radius: 50%;
+  background: var(--status-success-solid);
+  color: var(--status-success-on);
+  font-size: 0.65rem;
+  font-weight: 900;
+  box-shadow: 0 0 0 2px var(--card);
+}
+
+.tp-code-buttons__open {
+  border: 1px solid color-mix(in srgb, var(--status-success-border) 60%, transparent);
+  background: var(--status-success-bg);
+  color: var(--status-success-fg);
+}
+.tp-code-buttons__open:not(:disabled):hover { background: var(--status-success-solid); color: var(--status-success-on); }
+.tp-code-buttons__open:disabled { opacity: 0.4; filter: grayscale(0.6); }
+
+/* Without the right, both stay visible but quiet. */
+.tp-code-buttons__close:disabled:not([data-done]) { opacity: 0.45; filter: grayscale(0.5); box-shadow: none; }
+
+@media (pointer: coarse) {
+  .tp-code-buttons > button { inline-size: 2.75rem; block-size: 2.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tp-code-buttons > button { transition: none; }
+}

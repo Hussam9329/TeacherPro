@@ -98,6 +98,7 @@
     "test:stale-records-integrity": "node scripts/test-stale-records-integrity.mjs",
     "test:text-shortcuts": "node scripts/test-text-shortcuts.mjs",
     "test:correction-integration-integrity": "node scripts/test-correction-integration-integrity.mjs",
+    "test:student-code-buttons": "node scripts/test-student-code-buttons.cjs",
     "test:mirmaz-integration": "node scripts/test-mirmaz-integration-integrity.mjs && node --experimental-strip-types --test scripts/test-mirmaz-name-match.mjs"
   },
   "dependencies": {

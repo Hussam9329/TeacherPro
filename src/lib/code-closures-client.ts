@@ -63,6 +63,17 @@ export const codeClosuresApi = {
     const data = await response.json().catch(() => null);
     if (!response.ok) throw new Error(data?.error || "تعذر حفظ علامة التواصل مع الطالب.");
   },
+  /** The code was opened again on the platform: clears ☢️ and «الكود مغلق» for this dismissal. */
+  async reopenCode(studentId: string, expectedEpoch: number): Promise<void> {
+    const response = await fetch("/api/students/code-closures/reopen", {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", ...ownerHeaders() },
+      body: JSON.stringify({ studentId, expectedEpoch }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.error || "تعذر حفظ فتح كود الطالب.");
+  },
   /** The bot sends the dismissal notice; the error says why when it could not. */
   async sendBotNotice(studentId: string, expectedEpoch: number): Promise<{ botNoticeSentAt: string }> {
     const response = await fetch("/api/students/code-closures/bot-notice", {

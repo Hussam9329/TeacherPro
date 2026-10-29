@@ -136,7 +136,7 @@ export function buildStoryAuditFacts(
       continue;
     }
     if (action === "اغلاق كود الطالب المفصول" && ownStudent) { push("code-closed"); continue; }
-    if (action === "إلغاء اغلاق كود الطالب المفصول" && ownStudent) { push("code-reopened"); continue; }
+    if ((action === "إلغاء اغلاق كود الطالب المفصول" || action === "فتح كود الطالب المفصول على المنصة") && ownStudent) { push("code-reopened"); continue; }
     if (action === "فتح تبليغ الفصل في تليكرام" && ownStudent) { push("telegram-notice"); continue; }
     if (action === "تعديل ملاحظات الفصل" && data && ownStudent) {
       const after = data.after as Record<string, unknown> | undefined;

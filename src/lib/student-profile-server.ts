@@ -100,6 +100,8 @@ export const STUDENT_PROFILE_STUDENT_SELECT = {
   courseId: true,
   username: true,
   dismissedChecked: true,
+  dismissedCheckEpoch: true,
+  closurePlatformEpoch: true,
   bonusProgress: true,
   bonusWaitingExamName: true,
 } satisfies Prisma.StudentSelect;
