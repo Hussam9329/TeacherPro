@@ -34,6 +34,7 @@ import {
 } from "@/lib/course-config";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
+import { attachStudentPledgeSummaries } from "@/lib/pledge-limit-server";
 import { studentsWithGracePeriodsForResponse } from "@/lib/grace-periods-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import {
@@ -269,8 +270,9 @@ export async function GET(req: NextRequest) {
     students as unknown as Array<Record<string, unknown>>;
 
   if (opportunityMode && students.length > 0) {
-    responseStudents = (await attachStudentOpportunitySnapshots(
-      students,
+    responseStudents = (await attachStudentPledgeSummaries(
+      db,
+      await attachStudentOpportunitySnapshots(students),
     )) as unknown as Array<Record<string, unknown>>;
   }
 

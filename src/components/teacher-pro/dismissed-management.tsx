@@ -51,6 +51,9 @@ import {
 import { ListToolbar } from "./list-toolbar";
 import { RowActionsMenu } from "./row-actions-menu";
 import { StudentCodeButtons } from "./student-code-buttons";
+import { PledgeChip } from "./pledge-chip";
+import { PledgeListDialog } from "./pledge-list-dialog";
+import { PLEDGE_LIMIT_REACHED_REASON, type StudentPledgeSummary } from "@/lib/pledge-limit";
 import { FormDialogHero } from "./form-dialog";
 import { EmptyState, ErrorState, LoadingState, ListPagination } from "./ui-kit";
 import { toLatinDigits } from "@/lib/format";
@@ -154,6 +157,7 @@ type ManagedDismissalStudent = Student & {
   wasDismissed?: boolean;
   lastDismissalReason?: string;
   lastDismissalAt?: string;
+  pledges?: StudentPledgeSummary | null;
 };
 
 type ListResponse = {
@@ -952,6 +956,7 @@ export function DismissedManagementView() {
           { key: "former", label: "مفصول سابقاً", tone: "warning", count: statsLoading ? null : stats.former },
           { key: "all", label: "الحاليون والسابقون", count: statsLoading ? null : stats.current + stats.former },
         ]}
+        actions={<PledgeListDialog courseName={courseName} />}
         chipsLabel="حالة الفصل"
         activeChip={historyScope}
         onChipChange={(value) => {
@@ -1046,6 +1051,7 @@ export function DismissedManagementView() {
           ].filter(Boolean);
           const canEditNote = current && canEditDismissalNotes;
           const editingNote = canEditNote && Boolean(editingNoteIds[student.id]);
+          const pledgeLimitReached = current && Boolean(student.pledges?.limitReached);
 
           return (
             // The same card as «سجل الطلاب»: avatar, study line, a panel with the reason and the balance ring.
@@ -1106,6 +1112,12 @@ export function DismissedManagementView() {
                       ) : null}
                     </span>
                   </div>
+                  <PledgeChip pledges={student.pledges} showEmpty={current} />
+                  {pledgeLimitReached ? (
+                    <small id={`pledge-limit-${student.id}`} className="tp-pledge-limit-note">
+                      إرجاع الطالب مقفل: {PLEDGE_LIMIT_REACHED_REASON}
+                    </small>
+                  ) : null}
                 </div>
                 <div
                   className="tp-scard__ring"
@@ -1232,8 +1244,9 @@ export function DismissedManagementView() {
                     <button
                       type="button"
                       className="tp-scard__action"
-                      disabled={isReactivating}
-                      title="بتعهّد أو بفرص تختارها"
+                      disabled={isReactivating || pledgeLimitReached}
+                      title={pledgeLimitReached ? PLEDGE_LIMIT_REACHED_REASON : "بتعهّد أو بفرص تختارها"}
+                      aria-describedby={pledgeLimitReached ? `pledge-limit-${student.id}` : undefined}
                       onClick={() => {
                         setRestorationMode("pledge");
                         setRestorationAmount("1");

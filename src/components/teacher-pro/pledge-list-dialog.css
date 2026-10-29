@@ -1,0 +1,49 @@
+/* «قائمة التعهدات» — filters, three summary tiles, then one card per student
+   and chapter. Colours: tp-modal roles + the shared signal tones. */
+
+.tp-pledges__controls { display: grid; gap: 0.75rem; }
+.tp-pledges__fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.65rem; }
+
+.tp-pledges__results { display: grid; gap: 0.85rem; min-inline-size: 0; container: pledges / inline-size; transition: opacity 0.15s; }
+.tp-pledges__results[data-loading] { opacity: 0.55; }
+
+.tp-pledges__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; margin: 0; }
+.tp-pledges__stats > div { display: grid; gap: 0.15rem; padding: 0.7rem 0.85rem; border: 1px solid var(--tp-card-line); border-radius: 1rem; background: var(--tp-card); }
+.tp-pledges__stats dt { color: var(--tp-text-muted); font-size: 0.74rem; font-weight: 700; }
+.tp-pledges__stats dd { margin: 0; color: var(--tp-text); font-size: 1.35rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tp-pledges__stats > div[data-tone="danger"] dd { color: var(--status-danger-fg); }
+
+.tp-pledges__list { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.tp-pledges__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "rank who count" "dates dates dates";
+  align-items: center;
+  gap: 0.55rem 0.8rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--tp-card-line);
+  border-radius: 1.1rem;
+  background: var(--tp-card-inner);
+}
+.tp-pledges__item[data-limit] { border-color: var(--status-danger-border); background: color-mix(in srgb, var(--status-danger-bg) 55%, var(--tp-card-inner)); }
+.tp-pledges__rank { grid-area: rank; display: grid; place-items: center; inline-size: 2.2rem; block-size: 2.2rem; border-radius: 0.75rem; background: var(--tp-panel-strong); color: var(--tp-text); font-weight: 850; font-variant-numeric: tabular-nums; }
+.tp-pledges__who { grid-area: who; display: grid; gap: 0.15rem; min-inline-size: 0; }
+.tp-pledges__name { overflow: hidden; color: var(--tp-text); font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.tp-pledges__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.4rem; color: var(--tp-text-muted); font-size: 0.78rem; font-weight: 600; }
+.tp-pledges__status { padding: 0.05rem 0.55rem; border-radius: 999px; background: var(--tone-tint, var(--tp-muted-tint)); color: var(--tone-ink, var(--tp-text-muted)); font-weight: 750; }
+
+.tp-pledges__dates { grid-area: dates; display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+.tp-pledges__dates > li { display: inline-flex; align-items: baseline; gap: 0.4rem; padding: 0.25rem 0.65rem; border: 1px solid var(--tp-border); border-radius: 999px; background: var(--tp-surface); font-size: 0.8rem; }
+.tp-pledges__dates bdi { font-weight: 750; font-variant-numeric: tabular-nums; }
+.tp-pledges__dates small { color: var(--tp-text-muted); font-size: 0.72rem; }
+
+.tp-pledges__count { grid-area: count; display: grid; justify-items: center; min-inline-size: 3.6rem; padding: 0.35rem 0.6rem; border-radius: 0.85rem; background: var(--tp-panel-strong); }
+.tp-pledges__count b { color: var(--tp-text); font-size: 1.15rem; font-weight: 850; font-variant-numeric: tabular-nums; }
+.tp-pledges__count small { color: var(--tp-text-muted); font-size: 0.7rem; font-weight: 700; }
+.tp-pledges__item[data-limit] .tp-pledges__count { background: var(--status-danger-solid); }
+.tp-pledges__item[data-limit] .tp-pledges__count :is(b, small) { color: var(--status-danger-on); }
+
+@container pledges (min-width: 44rem) {
+  .tp-pledges__item { grid-template-columns: auto minmax(12rem, 1fr) auto auto; grid-template-areas: "rank who dates count"; }
+  .tp-pledges__dates { justify-content: flex-end; }
+}

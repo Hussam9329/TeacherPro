@@ -31,6 +31,8 @@ require.extensions['.ts'] = (m,f) => m._compile(ts.transpileModule(fs.readFileSy
   function predicate(where, values=[]) {
     const flat = where.studentId_examId || where;
     return { values, clause: Object.entries(flat).map(([key,value]) => {
+      if (key === 'AND' || key === 'OR') return `(${value.map(part => `(${predicate(part, values).clause})`).join(key === 'AND' ? ' AND ' : ' OR ')})`;
+      if (value === null) return `"${key}" IS NULL`;
       if (value && typeof value === 'object' && 'not' in value) { values.push(value.not);return `"${key}"<>$${values.length}`; }
       if (value && typeof value === 'object' && 'in' in value) { values.push(value.in);return `"${key}"=ANY($${values.length})`; }
       values.push(value);return `"${key}"=$${values.length}`;
@@ -51,6 +53,7 @@ require.extensions['.ts'] = (m,f) => m._compile(ts.transpileModule(fs.readFileSy
     tx[model] = {
       findUnique: async ({where}) => (await rows(table,where))[0] || null,
       findMany: async ({where={}}={}) => rows(table,where),
+      count: async ({where={}}={}) => (await rows(table,where)).length,
       create: async ({data}) => insert(table,data),
       update: async ({where,data}) => (await update(table,where,data))[0],
       updateMany: async ({where,data}) => ({count:(await update(table,where,data)).length}),

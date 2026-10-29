@@ -228,3 +228,8 @@
 /* A short note row (e.g. the dismissal note and its edit). */
 .tp-scard__memo { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; min-inline-size: 0; font-size: 0.82rem; }
 .tp-scard__memo-label { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 600; }
+
+/* «التعهدات 1/2» with the pledge dates; wraps on a narrow card. */
+.tp-pledge-chip { flex-wrap: wrap; white-space: normal; row-gap: 0.15rem; }
+.tp-pledge-chip__dates { font-weight: 600; opacity: 0.85; font-variant-numeric: tabular-nums; }
+.tp-pledge-limit-note { color: var(--status-danger-fg); font-size: 0.75rem; font-weight: 700; }

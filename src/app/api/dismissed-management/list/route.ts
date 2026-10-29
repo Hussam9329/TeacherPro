@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import { buildDismissedStudentWhere } from "@/lib/dismissed-student-filters-server";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
+import { attachStudentPledgeSummaries } from "@/lib/pledge-limit-server";
 import { displayReasonText } from "@/lib/reason-display";
 import { withStudentMutationToken } from "@/lib/student-mutation-token";
 
@@ -45,9 +46,7 @@ export async function GET(req: NextRequest) {
     ]);
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
     const studentsWithOpportunity = await studentsWithGracePeriodsForResponse(
-      await attachStudentOpportunitySnapshots(
-      students,
-    ),
+      await attachStudentPledgeSummaries(db, await attachStudentOpportunitySnapshots(students)),
     );
     const studentIds = students.map((student) => student.id);
     const [dismissalNotes, dismissalLogs] = studentIds.length

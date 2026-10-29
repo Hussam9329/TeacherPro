@@ -13,6 +13,8 @@ import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-
 import { STUDENT_STATUS_DISMISSED } from "@/lib/student-status-enums";
 import { REACTIVATION_OPPORTUNITY_GRANT } from "@/lib/opportunity-balance";
 import { restoreDismissedStudentManually, StudentActionError } from "@/lib/manual-student-restoration-server";
+import { assertPledgeLimitNotReached } from "@/lib/pledge-limit-server";
+import { PLEDGE_AUDIT_ACTION, PLEDGE_BALANCE_REASON } from "@/lib/pledge-limit";
 import {
   buildStudentMutationToken,
   withStudentMutationToken,
@@ -401,6 +403,10 @@ export async function POST(req: NextRequest) {
         expectedStatus,
         expectedMutationToken,
       );
+      // Both ways of «إرجاع الطالب» close after two pledges in the chapter.
+      if (student.status === STUDENT_STATUS_DISMISSED) {
+        await assertPledgeLimitNotReached(tx, student);
+      }
       if (reactivationMode === "manual") {
         return restoreDismissedStudentManually(tx, {
           studentId, amount: body.amount, reason: cleanText(body.reason),
@@ -481,7 +487,7 @@ export async function POST(req: NextRequest) {
           ledgerVersion: 2,
           settledGradeIds: JSON.stringify((await tx.grade.findMany({ where: { studentId }, select: { id: true } })).map(grade => grade.id)),
           amount: REACTIVATION_OPPORTUNITY_GRANT,
-          reason: "تم تعهد الطالب: إرجاعه إلى الحالة النشطة برصيد فرصتين بسبب التعهد",
+          reason: PLEDGE_BALANCE_REASON,
           chapterId: activeChapter?.id || null,
           chapterNameSnapshot: activeChapter?.name || null,
         },
@@ -500,7 +506,7 @@ export async function POST(req: NextRequest) {
       await tx.auditLog.create({
         data: {
           module: "سجل الطلاب",
-          action: "تم تعهد الطالب - إعادة تفعيل بفرصتين",
+          action: PLEDGE_AUDIT_ACTION,
           details: `${student.name} - ${student.code}`,
           userId: principal.id,
           userName: principal.name,

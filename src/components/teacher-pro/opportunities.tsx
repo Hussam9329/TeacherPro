@@ -42,6 +42,9 @@ import {
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { BonusTracePanel } from "./bonus-trace-panel";
 import { StaleRecordsDialog } from "./stale-records-dialog";
+import { PledgeChip } from "./pledge-chip";
+import { PledgeListDialog } from "./pledge-list-dialog";
+import type { StudentPledgeSummary } from "@/lib/pledge-limit";
 import { STAFF_ROW_ICONS, staffRowNote } from "./opportunity-row-icons";
 import { BookOpen, Building2, CalendarDays, ChevronDown, ChevronRight, CircleMinus, CirclePlus, Clock, FileText, Folder, GraduationCap, MessageCircle, Phone, RotateCcw, Send, Target, User } from "lucide-react";
 import "./student-card.css";
@@ -94,6 +97,7 @@ type OpportunityStudent = Student & {
   activeChapter?: { id: string; name: string; opportunities: number } | null;
   isOpportunityFull?: boolean;
   isOpportunityOverLimit?: boolean;
+  pledges?: StudentPledgeSummary | null;
 };
 
 export function OpportunitiesView() {
@@ -780,6 +784,7 @@ export function OpportunitiesView() {
                   : null
               }
             />
+            <PledgeListDialog courseName={courseName} />
             <StaleRecordsDialog courseName={courseName} onFixed={() => setRefreshKey((key) => key + 1)} />
           </>
         }
@@ -964,6 +969,7 @@ export function OpportunitiesView() {
                         {bonusLabel}
                       </span>
                     ) : null}
+                    <PledgeChip pledges={student.pledges} showEmpty={dismissed} />
                     <div className="tp-scard__when">
                       <span className="tp-scard__when-icon" aria-hidden="true">
                         <CalendarDays />
