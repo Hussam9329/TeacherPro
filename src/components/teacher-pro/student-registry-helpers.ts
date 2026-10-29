@@ -92,6 +92,7 @@ export const studentExportColumns: ExportColumn<any>[] = [
   { key: "phone", label: "الهاتف", value: (student) => student.phone || "" },
   { key: "parentPhone", label: "ولي الأمر", value: (student) => student.parentPhone || "" },
   { key: "telegram", label: "Telegram ID", value: (student) => student.telegram || "" },
+  { key: "username", label: "يوزر تليگرام", value: (student) => student.username || "" },
 ];
 
 export function academicImpactKindLabel(kind: string): string {
