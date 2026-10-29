@@ -19,6 +19,7 @@ import {
   RotateCcw,
   Send,
   User,
+  UserCheck,
   UserX,
 } from "lucide-react";
 import type { Student } from "@/lib/teacher-store";
@@ -34,6 +35,7 @@ import {
   formatStudentCurrentGrace,
 } from "./student-registry-helpers";
 import { displayReasonText } from "@/lib/reason-display";
+import { unwithdrawnStudentName } from "@/lib/withdrawal-rules";
 import { RowActionsMenu, type RowAction } from "./row-actions-menu";
 import { StudentCodeButtons } from "./student-code-buttons";
 import { StudentContactEdit, type StudentContactField } from "./student-contact-edit";
@@ -347,6 +349,8 @@ type StudentActionsProps = {
   onEdit: (student: Student) => void;
   onDismiss: (student: Student) => void;
   onRestore: (student: Student) => void;
+  /** «الغاء الانسحاب» on an archived student whose name ends with «انسحاب». */
+  onUnwithdraw: (student: Student) => void;
   onArchive: (student: Student) => void;
   /** A number fixed right on the card: the list shows it at once. */
   onContactSaved?: (studentId: string, field: StudentContactField, value: string | null) => void;
@@ -362,10 +366,12 @@ function studentMoreActions({
   onEdit,
   onDismiss,
   onRestore,
+  onUnwithdraw,
   onArchive,
 }: StudentActionsProps): RowAction[] {
   const actions: RowAction[] = [];
-  // An archived student is frozen: «استعادة من الأرشيف» is the only action.
+  // An archived student is frozen: «استعادة من الأرشيف» (and «الغاء الانسحاب»
+  // for a withdrawn one) are its only actions.
   if (canEdit && student.status !== ARCHIVED_STUDENT_STATUS) {
     actions.push({
       key: "edit",
@@ -382,6 +388,15 @@ function studentMoreActions({
       icon: <RotateCcw aria-hidden="true" />,
       disabled: serverUnavailable || statusActionSaving,
       onSelect: () => onRestore(student),
+    });
+  }
+  if (canEdit && student.status === ARCHIVED_STUDENT_STATUS && unwithdrawnStudentName(student.name)) {
+    actions.push({
+      key: "unwithdraw",
+      label: "الغاء الانسحاب",
+      icon: <UserCheck aria-hidden="true" />,
+      disabled: serverUnavailable || statusActionSaving,
+      onSelect: () => onUnwithdraw(student),
     });
   }
   if (canEdit && student.status === "نشط") {

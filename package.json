@@ -18,6 +18,7 @@
     "db:deploy": "prisma migrate deploy",
     "test:calls-integrity": "node scripts/test-calls-integrity.mjs && node --test scripts/test-call-absence-behavior.mjs && node scripts/test-call-batches-behavior.cjs && npm run test:call-history-migration",
     "test:student-withdrawal": "node scripts/test-student-withdrawal.cjs",
+    "test:student-unwithdrawal": "node scripts/test-student-unwithdrawal.cjs",
     "test:top-students": "node scripts/test-top-students.cjs",
     "test:pledge-limit": "node scripts/test-pledge-limit.cjs",
     "test:code-closures-bulk": "node scripts/test-code-closures-bulk.cjs",

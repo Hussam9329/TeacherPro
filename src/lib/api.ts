@@ -1561,6 +1561,9 @@ export const studentApi = {
   /** «انسحاب»: adds «انسحاب» to the name and archives the student. */
   withdraw: (studentId: string) =>
     apiPost("students/withdraw", { studentId }),
+  /** «الغاء الانسحاب»: removes «انسحاب» from the name and restores the student's previous state. */
+  unwithdraw: (studentId: string) =>
+    apiPost("students/unwithdraw", { studentId }),
   editSnapshot: (id: string) =>
     apiGet<{ student: Record<string, unknown> }>(
       `students/edit-snapshot?id=${encodeURIComponent(id)}`,

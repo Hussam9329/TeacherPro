@@ -96,6 +96,7 @@ import {
 import { StudentRegistryEditDialog } from "./student-registry-edit-dialog";
 import { StudentRegistryFilters } from "./student-registry-filters";
 import { StudentRegistryStatusDialogs } from "./student-registry-status-dialogs";
+import { UnwithdrawStudentDialog } from "./unwithdraw-student-dialog";
 import "./student-registry.css";
 
 export function StudentRegistryView() {
@@ -372,6 +373,7 @@ export function StudentRegistryView() {
     student: Student | null;
     open: boolean;
   }>({ student: null, open: false });
+  const [unwithdrawStudent, setUnwithdrawStudent] = useState<Student | null>(null);
 
   const [fileDialog, setFileDialog] = useState<{
     student: Student | null;
@@ -2117,6 +2119,7 @@ export function StudentRegistryView() {
                   onRestore={(student) =>
                     setRestoreDialog({ student, open: true })
                   }
+                  onUnwithdraw={setUnwithdrawStudent}
                   onArchive={openDeleteDialog}
                   onContactSaved={(studentId, field, value) =>
                     setServerStudents((current) =>
@@ -2207,6 +2210,14 @@ export function StudentRegistryView() {
         dismissNotes={dismissNotes}
         setDismissNotes={setDismissNotes}
         handleDismiss={handleDismiss}
+      />
+      <UnwithdrawStudentDialog
+        student={unwithdrawStudent}
+        onClose={() => setUnwithdrawStudent(null)}
+        onDone={(updatedStudent) => {
+          if (updatedStudent) reconcileMutationStudent(updatedStudent);
+          setServerRefreshKey((value) => value + 1);
+        }}
       />
     </div>
   );

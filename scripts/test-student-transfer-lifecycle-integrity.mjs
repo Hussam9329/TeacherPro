@@ -7,7 +7,8 @@ const schema = read("prisma/schema.prisma");
 const migration = read("prisma/migrations/20260712220000_student_enrollment_archives/migration.sql");
 const studentsRoute = read("src/app/api/students/route.ts");
 const impactRoute = read("src/app/api/students/update-impact/route.ts");
-const statusRoute = read("src/app/api/students/status-action/route.ts");
+// «استعادة من الأرشيف» runs in the route through the shared restore helper.
+const statusRoute = ["src/app/api/students/status-action/route.ts", "src/lib/student-archive-restore-server.ts"].map(read).join("\n");
 const archiveHelper = read("src/lib/student-enrollment-archive-server.ts");
 const tokenHelper = read("src/lib/student-academic-impact-token.ts");
 const profileRoute = read("src/app/api/students/profile-log/route.ts");

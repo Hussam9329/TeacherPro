@@ -4,10 +4,11 @@ import {
   buildStudentArchiveSummary,
   getStudentDeleteImpactInTransaction,
 } from "@/lib/student-delete-impact";
+import { restoreArchivedStudentInTransaction } from "@/lib/student-archive-restore-server";
 import { getStudentUniqueKeys } from "@/lib/student-utils";
+import { statusBeforeWithdrawal, unwithdrawnStudentName, WITHDRAWAL_WORD, withdrawnStudentName } from "@/lib/withdrawal-rules";
 
-/** The word added to a withdrawn student's name: «حسام خليل» → «حسام خليل انسحاب». */
-export const WITHDRAWAL_WORD = "انسحاب";
+export { statusBeforeWithdrawal, unwithdrawnStudentName, WITHDRAWAL_WORD, withdrawnStudentName };
 
 export class StudentWithdrawalError extends Error {
   constructor(message: string, public readonly status: number) {
@@ -16,10 +17,20 @@ export class StudentWithdrawalError extends Error {
   }
 }
 
-/** The name with «انسحاب» at its end, added once. */
-export function withdrawnStudentName(name: string): string {
-  const trimmed = name.trim();
-  return new RegExp(`(^|\\s)${WITHDRAWAL_WORD}$`).test(trimmed) ? trimmed : `${trimmed} ${WITHDRAWAL_WORD}`;
+/** The name key for `name`, refused when another student already holds it. */
+async function freeNameKey(
+  tx: Prisma.TransactionClient,
+  student: { id: string; phone: string | null; telegram: string | null },
+  name: string,
+) {
+  const { nameKey } = getStudentUniqueKeys({ id: student.id, name, phone: student.phone, telegram: student.telegram });
+  if (nameKey) {
+    const sameName = await tx.student.findFirst({ where: { nameKey, id: { not: student.id } }, select: { name: true, code: true } });
+    if (sameName) {
+      throw new StudentWithdrawalError(`يوجد طالب آخر باسم «${sameName.name}» (${sameName.code})؛ عدّل أحد الاسمين ثم أعد المحاولة.`, 409);
+    }
+  }
+  return nameKey;
 }
 
 /**
@@ -46,13 +57,7 @@ export async function withdrawStudentInTransaction(
   if (!current) throw new StudentWithdrawalError("تعذر العثور على الطالب المطلوب.", 404);
 
   const name = withdrawnStudentName(current.name);
-  const { nameKey } = getStudentUniqueKeys({ id: studentId, name, phone: current.phone, telegram: current.telegram });
-  if (nameKey) {
-    const sameName = await tx.student.findFirst({ where: { nameKey, id: { not: studentId } }, select: { name: true, code: true } });
-    if (sameName) {
-      throw new StudentWithdrawalError(`يوجد طالب آخر باسم «${sameName.name}» (${sameName.code})؛ عدّل أحد الاسمين ثم أعد المحاولة.`, 409);
-    }
-  }
+  const nameKey = await freeNameKey(tx, { id: studentId, phone: current.phone, telegram: current.telegram }, name);
 
   const relationSummary = buildStudentArchiveSummary(impact.counts);
   const balanceBefore = Math.max(0, Number(current.opportunities ?? 0));
@@ -86,4 +91,57 @@ export async function withdrawStudentInTransaction(
     },
   });
   return student;
+}
+
+/**
+ * «الغاء الانسحاب», the exact reverse of «انسحاب», in the caller's
+ * transaction: «انسحاب» leaves the end of the name, and the student leaves
+ * the archive through «استعادة من الأرشيف» back to the state they held
+ * before: «مفصول» with the same reason, or «نشط». A note and an audit line
+ * record it.
+ */
+export async function unwithdrawStudentInTransaction(
+  tx: Prisma.TransactionClient,
+  studentId: string,
+  actor: { id: string; name: string },
+) {
+  const student = await tx.student.findUnique({ where: { id: studentId } });
+  if (!student) throw new StudentWithdrawalError("تعذر العثور على الطالب المطلوب.", 404);
+  if (student.status !== ARCHIVED_STUDENT_STATUS) {
+    throw new StudentWithdrawalError("الطالب غير مؤرشف؛ «الغاء الانسحاب» للمؤرشفين فقط.", 409);
+  }
+  const name = unwithdrawnStudentName(student.name);
+  if (!name) {
+    throw new StudentWithdrawalError(`اسم الطالب لا ينتهي بكلمة «${WITHDRAWAL_WORD}»؛ استخدم «استعادة من الأرشيف».`, 409);
+  }
+  const nameKey = await freeNameKey(tx, student, name);
+  const previousStatus = statusBeforeWithdrawal(student);
+
+  const { updatedStudent, activeChapter, academicRecalculation } = await restoreArchivedStudentInTransaction(tx, student, {
+    status: previousStatus,
+    data: { name, nameKey },
+  });
+  const studentNote = await tx.studentNote.create({
+    data: {
+      studentId,
+      kind: "استعادة",
+      text: `الغاء انسحاب الطالب: شِيلت كلمة «${WITHDRAWAL_WORD}» من اسمه ورجع من الأرشيف لحالته قبل الانسحاب (${previousStatus}). الاسم السابق: ${student.name}. أُعيد احتساب ملفه حسب الفصل النشط: ${activeChapter.name}، وحالته الآن: ${updatedStudent.status}.`,
+      sourceType: "student-archive-restore",
+      sourceId: studentId,
+    },
+  });
+  await tx.auditLog.create({
+    data: {
+      module: "سجل الطلاب",
+      action: "الغاء انسحاب طالب",
+      details: `${student.name} ← ${name} - ${student.code} - ${updatedStudent.status} - رصيد ${updatedStudent.opportunities}/${updatedStudent.baseOpportunities}`,
+      userId: actor.id,
+      userName: actor.name,
+    },
+  });
+  return {
+    student: updatedStudent,
+    studentNotes: [studentNote],
+    opportunityLogs: academicRecalculation.automaticOpportunityLogs,
+  };
 }

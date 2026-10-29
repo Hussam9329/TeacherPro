@@ -3,11 +3,9 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { studentsWithGracePeriodsForResponse } from "@/lib/grace-periods-server";
-import type { Prisma } from "@prisma/client";
 import { requirePermissionPrincipal } from "@/lib/server-auth";
 import { ARCHIVED_STUDENT_STATUS } from "@/lib/student-delete-impact";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
-import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
 import { STUDENT_STATUS_DISMISSED } from "@/lib/student-status-enums";
@@ -16,33 +14,16 @@ import { restoreDismissedStudentManually, StudentActionError } from "@/lib/manua
 import { assertPledgeLimitNotReached } from "@/lib/pledge-limit-server";
 import { PLEDGE_AUDIT_ACTION, PLEDGE_BALANCE_REASON } from "@/lib/pledge-limit";
 import {
+  chapterFromResolution,
+  getActiveChapterForCourse,
+  restoreArchivedStudentInTransaction,
+} from "@/lib/student-archive-restore-server";
+import {
   buildStudentMutationToken,
   withStudentMutationToken,
 } from "@/lib/student-mutation-token";
 
 type RegistryStatusAction = "dismiss" | "reactivate" | "restore";
-
-type ActiveChapterSnapshot = {
-  id: string;
-  name: string;
-  opportunities: number;
-};
-
-type ActiveChapterResolution =
-  | { kind: "missing"; activeCount: 0 }
-  | { kind: "conflict"; activeCount: number }
-  | {
-      kind: "zero-limit";
-      activeCount: 1;
-      chapter: ActiveChapterSnapshot;
-      opportunities: 0;
-    }
-  | {
-      kind: "ready";
-      activeCount: 1;
-      chapter: ActiveChapterSnapshot;
-      opportunities: number;
-    };
 
 function cleanText(value: unknown): string {
   return String(value ?? "").trim();
@@ -90,53 +71,6 @@ function prismaErrorResponse(error: unknown) {
     { error: "تعذر تنفيذ إجراء حالة الطالب حالياً. حاول مرة أخرى." },
     { status: 500 },
   );
-}
-
-async function getActiveChapterForCourse(
-  tx: Prisma.TransactionClient,
-  courseId: string,
-): Promise<ActiveChapterResolution> {
-  const links = await tx.courseChapter.findMany({
-    where: { courseId, active: true, archived: false },
-    select: {
-      chapter: { select: { id: true, name: true, opportunities: true } },
-    },
-  });
-
-  if (links.length === 0) {
-    return { kind: "missing", activeCount: 0 };
-  }
-  if (links.length > 1) {
-    return { kind: "conflict", activeCount: links.length };
-  }
-
-  const chapter = links[0].chapter;
-  const opportunities = Math.max(
-    0,
-    Math.trunc(Number(chapter.opportunities || 0)),
-  );
-  if (opportunities <= 0) {
-    return {
-      kind: "zero-limit",
-      activeCount: 1,
-      chapter,
-      opportunities: 0,
-    };
-  }
-  return {
-    kind: "ready",
-    activeCount: 1,
-    chapter,
-    opportunities,
-  };
-}
-
-function chapterFromResolution(
-  resolution: ActiveChapterResolution,
-): ActiveChapterSnapshot | null {
-  return resolution.kind === "ready" || resolution.kind === "zero-limit"
-    ? resolution.chapter
-    : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -289,60 +223,12 @@ export async function POST(req: NextRequest) {
           expectedStatus,
           expectedMutationToken,
         );
-        if (student.status !== ARCHIVED_STUDENT_STATUS) {
-          throw statusActionConflict(
-            "إجراء الاستعادة مخصص للطلاب المؤرشفين فقط. حدّث سجل الطالب ثم أعد المحاولة.",
-            "not-archived",
-          );
-        }
-
-        // The chapter state is authoritative only when read inside this same
-        // serializable transaction. Never restore at a guessed zero balance:
-        // the administrator must first resolve a missing, conflicting, or
-        // zero-limit active chapter.
-        const activeChapterResolution = await getActiveChapterForCourse(
-          tx,
-          student.courseId,
-        );
-        if (activeChapterResolution.kind === "missing") {
-          throw statusActionConflict(
-            "لا يمكن استعادة الطالب لأن دورته لا تحتوي على فصل نشط. فعّل فصلاً واحداً بفرص صالحة ثم أعد المحاولة.",
-            "missing-active-chapter",
-          );
-        }
-        if (activeChapterResolution.kind === "conflict") {
-          throw statusActionConflict(
-            `لا يمكن استعادة الطالب لأن دورته تحتوي على ${activeChapterResolution.activeCount} فصول نشطة متعارضة. أصلح التعارض واجعل فصلاً واحداً فقط نشطاً ثم أعد المحاولة.`,
-            "conflicting-active-chapters",
-          );
-        }
-        if (activeChapterResolution.kind === "zero-limit") {
-          throw statusActionConflict(
-            `لا يمكن استعادة الطالب لأن الفصل النشط «${activeChapterResolution.chapter.name}» سقف فرصه 0. عدّل فرص الفصل إلى قيمة صالحة ثم أعد المحاولة.`,
-            "zero-opportunity-limit",
-          );
-        }
-
-        const activeChapter = activeChapterResolution.chapter;
-        const baseline = activeChapterResolution.opportunities;
-        await tx.student.update({
-          where: { id: studentId },
-          data: {
-            status: "نشط",
-            dismissalReason: "",
-            dismissalNotes: "",
-            opportunities: baseline,
-            baseOpportunities: baseline,
-          },
-        });
-
-        const academicRecalculation = await recalculateStudentsAcademicState(
-          [studentId],
-          { tx },
-        );
-        const updatedStudent = await tx.student.findUniqueOrThrow({
-          where: { id: studentId },
-        });
+        const {
+          updatedStudent,
+          activeChapter,
+          baseline,
+          academicRecalculation,
+        } = await restoreArchivedStudentInTransaction(tx, student);
         const studentNote = await tx.studentNote.create({
           data: {
             studentId,
