@@ -49,7 +49,10 @@ assert.match(route, /telegramOpenAt,\s*\n\s*telegramCloseAt,/);
 assert.match(route, /'telegramOpenAt', 'telegramCloseAt'/);
 assert.match(route, /data\.telegramOpenAt !== undefined/);
 assert.match(route, /data\.telegramCloseAt !== undefined/);
-assert.doesNotMatch(academicSnapshot, /telegram(?:Open|Close)At/);
+// The opening time decides which exams a pledge covers; the closing time
+// has no academic effect.
+assert.match(academicSnapshot, /telegramOpenAt: canonicalDateTime\(exam\.telegramOpenAt\)/);
+assert.doesNotMatch(academicSnapshot, /telegramCloseAt/);
 
 assert.match(mutationToken, /"telegramOpenAt"/);
 assert.match(mutationToken, /"telegramCloseAt"/);

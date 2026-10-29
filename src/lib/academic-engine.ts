@@ -680,6 +680,21 @@ export function recalculateAcademicState(
       studentManualLogs,
       isReactivationBalanceOpportunityLog,
     );
+    const reactivationStartTime = Math.max(-Infinity, ...studentManualLogs
+      .filter(isReactivationBalanceOpportunityLog)
+      .map((log) => Date.parse(String(log.date || "")))
+      .filter(Number.isFinite));
+    // A pledge covers every exam that had already opened when it was
+    // recorded: one taken during an exam or after it, to the second. An exam
+    // without a recorded opening time falls back to its calendar day.
+    const examOpenedBeforeReactivation = (exam: AcademicExam, eventDay: string): boolean => {
+      if (!reactivationStartDate) return false;
+      const openTime = Date.parse(String(exam.telegramOpenAt || ""));
+      if (Number.isFinite(openTime) && Number.isFinite(reactivationStartTime)) {
+        return openTime <= reactivationStartTime;
+      }
+      return Boolean(eventDay) && eventDay < reactivationStartDate;
+    };
     let manualZeroBalanceViolation: AcademicOpportunityLog | null = null;
     // Version 2 commands replay with exam chronology. Legacy records retain
     // their original interpretation until explicitly reconciled.
@@ -953,7 +968,7 @@ export function recalculateAcademicState(
       if (settledGradeIds.has(grade.id) || grade.status === "مجاز") return true;
       if (historicalGradeExclusion(grade, exam, historicalSettlementDate)) return true;
       const eventDay = dayKey(exam.date || grade.updatedAt || grade.createdAt || "");
-      if (reactivationStartDate && eventDay < reactivationStartDate) return true;
+      if (examOpenedBeforeReactivation(exam, eventDay)) return true;
       if (manualDismissal && manualDismissalDate && eventDay && eventDay < manualDismissalDate) return true;
       if (!isExamOnOrAfterStudentRegistration(student, exam)) return true;
       if (normalizedLeaves.some((leave) => studentLeaveAppliesToExam(leave, student.id, exam))) return true;
@@ -1033,6 +1048,7 @@ export function recalculateAcademicState(
         studentMatchesExamMainSites(student, splitSelection(String(exam.mainSite || ""))) &&
         !examChapterExclusion(exam, student.courseId, activeChapter?.id) &&
         !exam.noDiscount &&
+        !examOpenedBeforeReactivation(exam, dayKey(exam.date)) &&
         dayKey(exam.date) >= BONUS_START_DAY &&
         isExamAvailableForEntry(exam) &&
         isExamOnOrAfterStudentRegistration(student, exam) &&
@@ -1231,7 +1247,7 @@ export function recalculateAcademicState(
       const gradeEventDate = dayKey(
         exam.date || grade.updatedAt || grade.createdAt || "",
       );
-      if (reactivationStartDate && gradeEventDate < reactivationStartDate) {
+      if (examOpenedBeforeReactivation(exam, gradeEventDate)) {
         traceNeutral(exam, `قبل إعادة التفعيل (${reactivationStartDate})، ما يحسب ولا يقطع`);
         continue;
       }

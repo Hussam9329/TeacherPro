@@ -188,7 +188,10 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
   assert.equal(telegramWindowResponse.status,200,JSON.stringify(telegramWindowResponse.data));
   assert.equal(new Date(telegramWindowResponse.data.exam.telegramOpenAt).toISOString(),'2026-09-13T20:00:00.000Z');
   assert.equal(new Date(telegramWindowResponse.data.exam.telegramCloseAt).toISOString(),'2026-09-13T22:00:00.000Z');
-  assert.equal(telegramWindowResponse.data.academicRecalculation,null,'Telegram-only edit does not recalculate academics');
+  assert.notEqual(telegramWindowResponse.data.academicRecalculation,null,'a new opening time recalculates: it decides which exams a pledge covers');
+  telegramWindowResponse=await put({id:'scope-exam',telegramCloseAt:'2026-09-14T02:00'});
+  assert.equal(telegramWindowResponse.status,200,JSON.stringify(telegramWindowResponse.data));
+  assert.equal(telegramWindowResponse.data.academicRecalculation,null,'a closing-time-only edit does not recalculate academics');
   telegramWindowResponse=await put({id:'scope-exam',telegramOpenAt:'2026-09-14T00:30'});
   assert.equal(telegramWindowResponse.status,200,'PUT compares a partial Baghdad-time patch with the stored UTC endpoint');
   assert.equal(new Date(telegramWindowResponse.data.exam.telegramOpenAt).toISOString(),'2026-09-13T21:30:00.000Z');
@@ -198,7 +201,7 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
   assert.equal(telegramWindowResponse.status,200,JSON.stringify(telegramWindowResponse.data));
   assert.equal(telegramWindowResponse.data.exam.telegramOpenAt,null);
   assert.equal(telegramWindowResponse.data.exam.telegramCloseAt,null);
-  assert.equal(telegramWindowResponse.data.academicRecalculation,null,'clearing Telegram access does not recalculate academics');
+  assert.notEqual(telegramWindowResponse.data.academicRecalculation,null,'clearing the opening time recalculates: the exam falls back to its calendar day');
   const before=await snapshot(),original=await row('exam','e9');
  // Consume the real listing token exactly as the UI does. Both listing
  // variants include examCourses; PUT reads the scalar Exam for its guard.

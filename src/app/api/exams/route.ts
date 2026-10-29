@@ -49,6 +49,7 @@ function academicExamSnapshot(exam: {
   noDiscount?: unknown;
   active?: unknown;
   scheduledActivateAt?: unknown;
+  telegramOpenAt?: unknown;
 }): Record<string, string> {
   return {
     type: String(exam.type ?? ''),
@@ -63,6 +64,8 @@ function academicExamSnapshot(exam: {
     noDiscount: String(parseBoolean(exam.noDiscount)),
     active: String(parseBoolean(exam.active)),
     scheduledActivateAt: canonicalDateTime(exam.scheduledActivateAt),
+    // A pledge covers the exams already open when it was recorded.
+    telegramOpenAt: canonicalDateTime(exam.telegramOpenAt),
   };
 }
 

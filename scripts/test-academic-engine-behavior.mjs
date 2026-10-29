@@ -941,4 +941,58 @@ console.log("✅ الخصم الافتراضي وتمييز المصدر الت�
   console.log("✅ مخالفة بعد التسوية تخصم من الرصيد المصحح لا من سقف الفصل");
 }
 
+{
+  // Exams run Saturday 16:00 to Sunday 08:00 Baghdad (UTC+3). A pledge
+  // covers every exam already open when it was recorded, to the second, so an
+  // absence entered late on Monday cannot spend the pledge's opportunities.
+  const wednesdayFinal = exam({ id: "pledge-wed", name: "فاينل الأربعاء", type: "فاينل", date: "2026-10-21T00:00:00.000Z" });
+  const wednesdayAbsence = grade({ id: "pledge-wed-grade", examId: "pledge-wed", status: "غائب", score: null, createdAt: "2026-10-21T15:00:00.000Z", updatedAt: "2026-10-21T15:00:00.000Z" });
+  const saturdayExam = (overrides = {}) => exam({
+    id: "pledge-sat",
+    name: "يومي السبت",
+    type: "يومي",
+    date: "2026-10-24T00:00:00.000Z",
+    telegramOpenAt: "2026-10-24T13:00:00.000Z",
+    telegramCloseAt: "2026-10-25T05:00:00.000Z",
+    ...overrides,
+  });
+  const mondayAbsence = grade({ id: "pledge-sat-grade", examId: "pledge-sat", status: "غائب", score: null, createdAt: "2026-10-26T16:00:00.000Z", updatedAt: "2026-10-26T16:00:00.000Z" });
+  const afterPledge = (pledgeDate, satExam = saturdayExam()) => recalculatedStudent(state({
+    students: [student({ opportunities: 2 })],
+    exams: [wednesdayFinal, satExam],
+    grades: [wednesdayAbsence, mondayAbsence],
+    opportunityLogs: [{
+      id: "pledge-grant",
+      studentId: "student-1",
+      examId: "",
+      action: "رصيد إعادة التفعيل",
+      ledgerVersion: 2,
+      amount: 2,
+      settledGradeIds: JSON.stringify(["pledge-wed-grade"]),
+      reason: "تم تعهد الطالب: إرجاعه إلى الحالة النشطة برصيد فرصتين بسبب التعهد",
+      date: pledgeDate,
+      chapterId: "chapter-1",
+    }],
+  }));
+
+  for (const [label, pledgeDate] of [
+    ["عند فتح الامتحان بالثانية", "2026-10-24T13:00:00.000Z"],
+    ["خلال الامتحان", "2026-10-24T17:00:00.000Z"],
+    ["الأحد 8:15 بعد انتهاء الامتحان", "2026-10-25T05:15:00.000Z"],
+  ]) {
+    const result = afterPledge(pledgeDate);
+    assert.equal(result.status, "نشط", label);
+    assert.equal(result.opportunities, 2, `تعهد ${label}: الغياب المسجل الاثنين ما يخصم`);
+  }
+
+  const beforeOpen = afterPledge("2026-10-24T12:59:59.000Z");
+  assert.equal(beforeOpen.status, "نشط");
+  assert.equal(beforeOpen.opportunities, 1, "a pledge one second before the exam opens leaves the exam counting");
+
+  const withoutOpenTime = saturdayExam({ telegramOpenAt: null, telegramCloseAt: null });
+  assert.equal(afterPledge("2026-10-24T17:00:00.000Z", withoutOpenTime).opportunities, 1, "an exam without an opening time keeps the calendar-day rule");
+  assert.equal(afterPledge("2026-10-25T05:15:00.000Z", withoutOpenTime).opportunities, 2);
+  console.log("✅ التعهد خلال الامتحان أو بعده (بالثانية من وقت الفتح) يحمي من غياب ذاك الامتحان حتى لو انكتب متأخر");
+}
+
 console.log("\nكل اختبارات المحرك الأكاديمي السلوكية نجحت.");
