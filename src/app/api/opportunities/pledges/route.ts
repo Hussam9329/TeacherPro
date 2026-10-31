@@ -32,6 +32,8 @@ export async function GET(req: NextRequest) {
       totalStudents: new Set(rows.map((row) => row.studentId)).size,
       totalPledges: rows.reduce((sum, row) => sum + row.count, 0),
       limitReached: rows.filter((row) => row.limitReached).length,
+      // Students who may still pledge in their current chapter.
+      withRemaining: rows.filter((row) => row.isActiveChapter && row.remaining > 0).length,
       limit: PLEDGE_LIMIT_PER_CHAPTER,
     });
   } catch (error) {

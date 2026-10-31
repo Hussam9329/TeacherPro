@@ -16,6 +16,7 @@ export type PledgeListResponse = {
   totalStudents: number;
   totalPledges: number;
   limitReached: number;
+  withRemaining: number;
   limit: number;
 };
 

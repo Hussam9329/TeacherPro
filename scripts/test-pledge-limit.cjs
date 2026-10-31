@@ -130,7 +130,7 @@ const writes = { migratedPendingGrades: 0 };
   }
   const db = adapter(pg);
   mocks.set("@/lib/db", { db });
-  mocks.set("@/lib/server-auth", { requirePermissionPrincipal: async () => principal });
+  mocks.set("@/lib/server-auth", { requirePermissionPrincipal: async () => principal, requireAnyPermission: async () => null });
   mocks.set("@/lib/grace-periods-server", { studentsWithGracePeriodsForResponse: async (rows) => rows });
   mocks.set("@/lib/student-opportunity-snapshot-server", { attachStudentOpportunitySnapshots: async (rows) => rows });
   mocks.set("@/lib/academic-recalculate-server", { recalculateStudentsAcademicState: async () => ({ automaticOpportunityLogs: [] }) });
@@ -139,7 +139,8 @@ const writes = { migratedPendingGrades: 0 };
 
   const { POST } = require(path.join(root, "src/app/api/students/status-action/route.ts"));
   const { attachStudentPledgeSummaries, loadPledgeList } = require(path.join(root, "src/lib/pledge-limit-server.ts"));
-  const { PLEDGE_BALANCE_REASON, PLEDGE_LIMIT_REACHED_REASON, isPledgeOpportunityLog } = require(path.join(root, "src/lib/pledge-limit.ts"));
+  const { GET: listPledges } = require(path.join(root, "src/app/api/opportunities/pledges/route.ts"));
+  const { PLEDGE_BALANCE_REASON, PLEDGE_LIMIT_REACHED_REASON, isPledgeOpportunityLog, pledgesRemaining, pledgeRemainingBadge } = require(path.join(root, "src/lib/pledge-limit.ts"));
 
   // One course: the first chapter is over, the second is active.
   await pg.exec(`
@@ -248,6 +249,29 @@ const writes = { migratedPendingGrades: 0 };
   rows = await loadPledgeList(db, { ...base, courseIds: ["other"] });
   assert.equal(rows.length, 0);
   console.log("PASS: «قائمة التعهدات» groups per student and chapter, filters, sorts and names who recorded each pledge");
+
+  // «تعهدات» in «الوصول السريع»: what is left of the limit.
+  assert.deepEqual([0, 1, 2, 3].map(pledgesRemaining), [2, 1, 0, 0], "limit − count, never below 0");
+  assert.deepEqual(pledgeRemainingBadge({ isActiveChapter: true, limitReached: false, remaining: 1 }), { label: "باقيله 1", tone: "success" });
+  assert.deepEqual(pledgeRemainingBadge({ isActiveChapter: true, limitReached: true, remaining: 0 }), { label: "نفد الحد", tone: "danger" });
+  assert.deepEqual(pledgeRemainingBadge({ isActiveChapter: false, limitReached: true, remaining: 0 }), { label: "فصل منتهي", tone: "muted" }, "an ended chapter has nothing left to count");
+  rows = await loadPledgeList(db, { ...base, chapterScope: "all" });
+  assert.deepEqual(
+    rows.map((r) => `${r.studentId}:${r.chapterId}:${r.count}:${r.remaining}:${pledgeRemainingBadge(r).label}`).sort(),
+    ["faris:ch1:1:1:فصل منتهي", "faris:ch2:2:0:نفد الحد", "faris:ch3:1:1:فصل منتهي", "ghina:ch2:3:0:نفد الحد"],
+  );
+  // One pledge in the active chapter: one left.
+  await student("hareth", "نشط");
+  await pledgeRow("hareth", "ch2", "2026-10-20T09:00:00Z");
+  const fetchList = async (search) => (await listPledges(new NextRequest(`http://localhost/api/opportunities/pledges?${search}`))).json();
+  let list = await fetchList("");
+  assert.deepEqual(list.rows.map((r) => [r.studentId, r.count, r.remaining]), [["ghina", 3, 0], ["faris", 2, 0], ["hareth", 1, 1]]);
+  assert.deepEqual([list.totalStudents, list.totalPledges, list.withRemaining, list.limitReached, list.limit], [3, 6, 1, 2, 2]);
+  list = await fetchList("chapter=all");
+  assert.equal(list.withRemaining, 1, "ended chapters are not counted as «باقيلهم تعهد»");
+  list = await fetchList("count=1");
+  assert.deepEqual(list.rows.map((r) => r.studentId), ["hareth"], "«تعهد واحد · باقيله 1»");
+  console.log("PASS: «تعهدات» shows used and remaining pledges, «نفد الحد», and counts who may still pledge");
 
   await pg.close();
 })().catch((error) => { console.error(error); process.exitCode = 1; });

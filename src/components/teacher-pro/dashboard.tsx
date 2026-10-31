@@ -11,6 +11,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   FilePlus2,
+  Handshake,
   ListChecks,
   LockKeyhole,
   MessageSquareText,
@@ -38,6 +39,7 @@ import { CodeClosuresDialog } from "./code-closures-dialog";
 import { MirmazProDialog } from "./mirmaz-pro-dialog";
 import { GracePeriodsDialog } from "./grace-periods-dialog";
 import { LeavesDialog, LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog";
+import { PledgeListDialog } from "./pledge-list-dialog";
 import { TextShortcutsDialog } from "./text-shortcuts-dialog";
 import { TopStudentsDialog } from "./top-students-dialog";
 import { StudentTrendChart } from "./student-trend-chart";
@@ -194,8 +196,8 @@ export function DashboardView({
 }: {
   onSectionLinkClick?: (event: MouseEvent<HTMLAnchorElement>, section: SectionId) => void;
 } = {}) {
-  const { canAccess, currentUser } = useTeacherStore(
-    useShallow((state) => ({ canAccess: state.canAccess, currentUser: state.currentUser, /* re-render when these change: */ users: state.users, currentUserId: state.currentUserId, isAuthenticated: state.isAuthenticated })),
+  const { canAccess, currentUser, courseName } = useTeacherStore(
+    useShallow((state) => ({ canAccess: state.canAccess, currentUser: state.currentUser, courseName: state.courseName, /* re-render when these change: */ users: state.users, currentUserId: state.currentUserId, isAuthenticated: state.isAuthenticated })),
   );
   const visibleShortcuts = dashboardShortcuts.filter((shortcut) => canAccess(shortcut.section));
   const canViewCallNotes = canAccess("follow-up-calls");
@@ -281,6 +283,9 @@ export function DashboardView({
     actor.permissions?.includes("grades.view")
   ));
   const [topStudentsOpen, setTopStudentsOpen] = useState(false);
+  // «تعهدات»: the same permissions as its route (opportunities.view or students.view).
+  const canViewPledges = canAccess("opportunities") || hasFullStudentsView;
+  const [pledgesOpen, setPledgesOpen] = useState(false);
   useEffect(() => {
     if (!canViewLeaves) return;
     const openFromLink = () => {
@@ -461,7 +466,7 @@ export function DashboardView({
         <StudentStatusDonut stats={stats} loading={initialLoading} />
       </div>
 
-      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canUseMirmazPro || canViewGracePeriods || canViewLeaves || canUseTextShortcuts || canViewTopStudents) && (
+      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canUseMirmazPro || canViewGracePeriods || canViewLeaves || canUseTextShortcuts || canViewTopStudents || canViewPledges) && (
         <nav aria-label="اختصارات لوحة التحكم" className="tp-dashboard__navigation">
           <h3 className="tp-dashboard__heading">
             <Zap aria-hidden="true" />
@@ -581,6 +586,22 @@ export function DashboardView({
                 </span>
               </button>
             )}
+            {canViewPledges && (
+              <button
+                type="button"
+                onClick={() => setPledgesOpen(true)}
+                aria-haspopup="dialog"
+                data-tone="danger"
+                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
+              >
+                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                  <Handshake />
+                </span>
+                <span className="tp-dashboard__shortcut-label">
+                  تعهدات
+                </span>
+              </button>
+            )}
             {canViewTopStudents && (
               <button
                 type="button"
@@ -615,6 +636,9 @@ export function DashboardView({
             )}
           </div>
         </nav>
+      )}
+      {canViewPledges && (
+        <PledgeListDialog key={`pledges-${actor?.id || ""}`} courseName={courseName} open={pledgesOpen} onOpenChange={setPledgesOpen} />
       )}
       {canViewTopStudents && (
         <TopStudentsDialog key={`top-${actor?.id || ""}`} open={topStudentsOpen} onOpenChange={setTopStudentsOpen} />

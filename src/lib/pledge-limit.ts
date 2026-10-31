@@ -43,6 +43,11 @@ export function isPledgeLimitReached(count: number): boolean {
   return count >= PLEDGE_LIMIT_PER_CHAPTER;
 }
 
+/** «باقيله»: pledges a student may still sign in the chapter, never below 0. */
+export function pledgesRemaining(count: number): number {
+  return Math.max(0, PLEDGE_LIMIT_PER_CHAPTER - count);
+}
+
 /** What a student card shows: his pledges in the active chapter of his course. */
 export type StudentPledgeSummary = {
   chapterId: string | null;
@@ -85,6 +90,18 @@ export type PledgeListRow = {
   count: number;
   limit: number;
   limitReached: boolean;
+  /** limit − count, never below 0. Meaningful only for the active chapter. */
+  remaining: number;
   pledges: PledgeListEntry[];
   lastDate: string;
 };
+
+/** «باقيله 1», «نفد الحد», or «فصل منتهي»: the count starts again each chapter. */
+export function pledgeRemainingBadge(row: Pick<PledgeListRow, "isActiveChapter" | "limitReached" | "remaining">): {
+  label: string;
+  tone: "success" | "danger" | "muted";
+} {
+  if (!row.isActiveChapter) return { label: "فصل منتهي", tone: "muted" };
+  if (row.limitReached) return { label: "نفد الحد", tone: "danger" };
+  return { label: `باقيله ${row.remaining}`, tone: "success" };
+}

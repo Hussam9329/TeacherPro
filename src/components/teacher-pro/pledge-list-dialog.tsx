@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { loadPledgeList, type PledgeListResponse } from "@/lib/pledge-list-client";
-import { PLEDGE_LIMIT_PER_CHAPTER, PLEDGE_LIMIT_REACHED_REASON } from "@/lib/pledge-limit";
+import { PLEDGE_LIMIT_PER_CHAPTER, PLEDGE_LIMIT_REACHED_REASON, pledgeRemainingBadge } from "@/lib/pledge-limit";
 import { useTeacherStore } from "@/lib/teacher-store";
 import { useShallow } from "zustand/react/shallow";
 import { pledgeDateLabel } from "./pledge-chip";
@@ -38,12 +38,24 @@ function SelectField({ label, value, onChange, children }: {
 
 /**
  * «قائمة التعهدات»: every student who pledged, one row per chapter, with the
- * count, each pledge's date and who recorded it, and whether «إرجاع الطالب»
- * is closed for him. Opened from «إدارة الفرص» and «إدارة المفصولين».
+ * count, what is left of the limit, each pledge's date and who recorded it,
+ * and whether «إرجاع الطالب» is closed for him. With its own button in
+ * «إدارة الفرص» and «إدارة المفصولين»; «تعهدات» in «الوصول السريع» passes
+ * open/onOpenChange and draws no button.
  */
-export function PledgeListDialog({ courseName }: { courseName: (courseId: string) => string }) {
+export function PledgeListDialog({ courseName, open: controlledOpen, onOpenChange }: {
+  courseName: (courseId: string) => string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const { courses } = useTeacherStore(useShallow((state) => ({ courses: state.courses })));
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlled ? controlledOpen : ownOpen;
+  const setOpen = (next: boolean) => {
+    if (!controlled) setOwnOpen(next);
+    onOpenChange?.(next);
+  };
   const [courseId, setCourseId] = useState("");
   const [chapter, setChapter] = useState<Chapter>("active");
   const [count, setCount] = useState("");
@@ -74,10 +86,12 @@ export function PledgeListDialog({ courseName }: { courseName: (courseId: string
 
   return (
     <>
-      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
-        <Handshake aria-hidden="true" />
-        قائمة التعهدات
-      </Button>
+      {!controlled && (
+        <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+          <Handshake aria-hidden="true" />
+          قائمة التعهدات
+        </Button>
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="tp-modal tp-pledges" dir="rtl">
           <div className="tp-modal__hero">
@@ -113,9 +127,9 @@ export function PledgeListDialog({ courseName }: { courseName: (courseId: string
                 </SelectField>
                 <SelectField label="عدد التعهدات" value={count} onChange={setCount}>
                   <option value="">الكل</option>
-                  <option value="1">تعهد واحد</option>
-                  <option value="2">تعهدين</option>
-                  <option value="limit">مستنفد ({PLEDGE_LIMIT_PER_CHAPTER} فأكثر)</option>
+                  <option value="1">تعهد واحد · باقيله 1</option>
+                  <option value="2">تعهدين · باقيله 0</option>
+                  <option value="limit">نفد الحد ({PLEDGE_LIMIT_PER_CHAPTER} فأكثر)</option>
                 </SelectField>
                 <SelectField label="الحالة" value={status} onChange={setStatus}>
                   <option value="">الكل</option>
@@ -140,13 +154,16 @@ export function PledgeListDialog({ courseName }: { courseName: (courseId: string
                 <dl className="tp-pledges__stats">
                   <div><dt>طلاب</dt><dd>{data.totalStudents}</dd></div>
                   <div><dt>تعهدات</dt><dd>{data.totalPledges}</dd></div>
-                  <div data-tone="danger"><dt>مستنفد</dt><dd>{data.limitReached}</dd></div>
+                  <div data-tone="success"><dt>باقيلهم تعهد</dt><dd>{data.withRemaining}</dd></div>
+                  <div data-tone="danger"><dt>نفد الحد</dt><dd>{data.limitReached}</dd></div>
                 </dl>
                 {data.rows.length === 0 ? (
                   <EmptyState title="ماكو تعهدات مطابقة" description="غيّر الفلترة أو اختار «كل الفصول»." />
                 ) : (
                   <ol className="tp-pledges__list">
-                    {data.rows.map((row, index) => (
+                    {data.rows.map((row, index) => {
+                      const badge = pledgeRemainingBadge(row);
+                      return (
                       <li key={row.key} className="tp-pledges__item" data-limit={row.limitReached || undefined}>
                         <span className="tp-pledges__rank" aria-hidden="true">{index + 1}</span>
                         <div className="tp-pledges__who">
@@ -166,12 +183,16 @@ export function PledgeListDialog({ courseName }: { courseName: (courseId: string
                             </li>
                           ))}
                         </ul>
-                        <div className="tp-pledges__count" title={row.limitReached && row.isActiveChapter ? PLEDGE_LIMIT_REACHED_REASON : undefined}>
-                          <b dir="ltr">{row.count}/{row.limit}</b>
-                          <small>{row.limitReached ? "مستنفد" : "تعهدات"}</small>
+                        <div className="tp-pledges__tally" title={row.limitReached && row.isActiveChapter ? PLEDGE_LIMIT_REACHED_REASON : undefined}>
+                          <div className="tp-pledges__count">
+                            <b dir="ltr">{row.count}/{row.limit}</b>
+                            <small>استهلك</small>
+                          </div>
+                          <span className="tp-pledges__left" data-tone={badge.tone}>{badge.label}</span>
                         </div>
                       </li>
-                    ))}
+                      );
+                    })}
                   </ol>
                 )}
               </div>

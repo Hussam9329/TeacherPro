@@ -8,6 +8,7 @@ import {
   emptyPledgeSummary,
   isPledgeLimitReached,
   pledgeLimitReachedMessage,
+  pledgesRemaining,
   type PledgeListRow,
   type StudentPledgeSummary,
 } from "./pledge-limit";
@@ -177,12 +178,14 @@ export async function loadPledgeList(reader: Reader, query: PledgeListQuery): Pr
       count: 0,
       limit: PLEDGE_LIMIT_PER_CHAPTER,
       limitReached: false,
+      remaining: PLEDGE_LIMIT_PER_CHAPTER,
       pledges: [],
       lastDate: "",
     };
     row.pledges.push({ date: log.date.toISOString(), recordedBy: recorders.get(log.id) || "" });
     row.count = row.pledges.length;
     row.limitReached = isPledgeLimitReached(row.count);
+    row.remaining = pledgesRemaining(row.count);
     row.lastDate = log.date.toISOString();
     rows.set(key, row);
   }

@@ -7,11 +7,12 @@
 .tp-pledges__results { display: grid; gap: 0.85rem; min-inline-size: 0; container: pledges / inline-size; transition: opacity 0.15s; }
 .tp-pledges__results[data-loading] { opacity: 0.55; }
 
-.tp-pledges__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; margin: 0; }
+.tp-pledges__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: 0.6rem; margin: 0; }
 .tp-pledges__stats > div { display: grid; gap: 0.15rem; padding: 0.7rem 0.85rem; border: 1px solid var(--tp-card-line); border-radius: 1rem; background: var(--tp-card); }
 .tp-pledges__stats dt { color: var(--tp-text-muted); font-size: 0.74rem; font-weight: 700; }
 .tp-pledges__stats dd { margin: 0; color: var(--tp-text); font-size: 1.35rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .tp-pledges__stats > div[data-tone="danger"] dd { color: var(--status-danger-fg); }
+.tp-pledges__stats > div[data-tone="success"] dd { color: var(--status-success-fg); }
 
 .tp-pledges__list { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
 .tp-pledges__item {
@@ -37,11 +38,17 @@
 .tp-pledges__dates bdi { font-weight: 750; font-variant-numeric: tabular-nums; }
 .tp-pledges__dates small { color: var(--tp-text-muted); font-size: 0.72rem; }
 
-.tp-pledges__count { grid-area: count; display: grid; justify-items: center; min-inline-size: 3.6rem; padding: 0.35rem 0.6rem; border-radius: 0.85rem; background: var(--tp-panel-strong); }
+.tp-pledges__tally { grid-area: count; display: flex; flex-direction: column; align-items: stretch; gap: 0.3rem; }
+.tp-pledges__count { display: grid; justify-items: center; min-inline-size: 3.6rem; padding: 0.35rem 0.6rem; border-radius: 0.85rem; background: var(--tp-panel-strong); }
 .tp-pledges__count b { color: var(--tp-text); font-size: 1.15rem; font-weight: 850; font-variant-numeric: tabular-nums; }
 .tp-pledges__count small { color: var(--tp-text-muted); font-size: 0.7rem; font-weight: 700; }
 .tp-pledges__item[data-limit] .tp-pledges__count { background: var(--status-danger-solid); }
 .tp-pledges__item[data-limit] .tp-pledges__count :is(b, small) { color: var(--status-danger-on); }
+
+/* «باقيله 1» green, «نفد الحد» red, «فصل منتهي» muted. */
+.tp-pledges__left { padding: 0.12rem 0.5rem; border: 1px solid var(--tp-border); border-radius: 999px; background: var(--tp-muted-tint); color: var(--tp-text-muted); font-size: 0.72rem; font-weight: 800; text-align: center; white-space: nowrap; }
+.tp-pledges__left[data-tone="success"] { border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success-fg); }
+.tp-pledges__left[data-tone="danger"] { border-color: var(--status-danger-border); background: var(--status-danger-bg); color: var(--status-danger-fg); }
 
 @container pledges (min-width: 44rem) {
   .tp-pledges__item { grid-template-columns: auto minmax(12rem, 1fr) auto auto; grid-template-areas: "rank who dates count"; }
