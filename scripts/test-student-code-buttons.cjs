@@ -75,15 +75,15 @@ const buttons = (html) => {
 const dismissed = { id: "s1", name: "طالب", phone: "07705550679", status: "مفصول", dismissedChecked: false, dismissedCheckEpoch: 3, closurePlatformEpoch: null };
 
 assert.deepEqual(buttons(render(dismissed)), { close: { disabled: false, done: false }, open: { disabled: true, done: false } }, "open code: ☢️ works, «فتح الكود» is off");
-assert.deepEqual(buttons(render({ ...dismissed, closurePlatformEpoch: 3 })), { close: { disabled: true, done: true }, open: { disabled: false, done: false } }, "closed code: ☢️ is off with its check, «فتح الكود» works");
-assert.deepEqual(buttons(render({ ...dismissed, dismissedChecked: true, closurePlatformEpoch: 3 })), { close: { disabled: true, done: true }, open: { disabled: false, done: false } });
+assert.deepEqual(buttons(render({ ...dismissed, closurePlatformEpoch: 3 })), { close: { disabled: false, done: true }, open: { disabled: false, done: false } }, "closed code: ☢️ keeps its check and still works, «فتح الكود» works");
+assert.deepEqual(buttons(render({ ...dismissed, dismissedChecked: true, closurePlatformEpoch: 3 })), { close: { disabled: false, done: true }, open: { disabled: false, done: false } });
 for (const status of ["نشط", "مؤرشف"]) assert.equal(render({ ...dismissed, status }), "", `no buttons for a ${status} student`);
 user = { username: "reg", roleId: "role_registrar" };
 assert.deepEqual(buttons(render(dismissed)), { close: { disabled: true, done: false }, open: { disabled: true, done: false } }, "without the right both are off");
 assert.match(render(dismissed), /للأدمن والمشرف فقط/);
 user = null;
 assert.deepEqual(buttons(render({ ...dismissed, closurePlatformEpoch: 3 })).open, { disabled: true, done: false });
-console.log("PASS: on a dismissed student's card only one button works at a time; other students show none; without the right both are off");
+console.log("PASS: on a dismissed student's card ☢️ always works and «فتح الكود» only once closed; other students show none; without the right both are off");
 
 // Every card that shows a student carries the same component.
 for (const file of [

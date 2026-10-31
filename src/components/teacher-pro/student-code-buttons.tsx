@@ -22,8 +22,8 @@ export type StudentCodeButtonsStudent = {
 
 /**
  * ☢️ «إغلاق الكود» and the green «فتح الكود» on every card of a dismissed
- * student, doing exactly what the «اغلاق الكودات» window does. Only one is
- * enabled at a time: ☢️ while the code is open, the green one once it is closed.
+ * student, doing exactly what the «اغلاق الكودات» window does. ☢️ always
+ * works (after its ✓ it only reopens the platform); the green one once closed.
  */
 export function StudentCodeButtons({ student }: { student: StudentCodeButtonsStudent }) {
   const allowed = useTeacherStore((state) => canUseStudentCodeButtons(state.currentUser()));
@@ -39,6 +39,8 @@ export function StudentCodeButtons({ student }: { student: StudentCodeButtonsStu
   async function press(action: "close" | "open", button: Element) {
     if (!allowed || pending) return;
     openMzCodePage(student, action, button);
+    // ☢️ again on a closed code only reopens the platform; the close is already saved.
+    if (action === "close" && closed) return;
     setPending(true);
     setLocal({ saved, closed: action === "close" });
     try {
@@ -65,10 +67,10 @@ export function StudentCodeButtons({ student }: { student: StudentCodeButtonsStu
         type="button"
         className="tp-code-buttons__close"
         data-done={closed || undefined}
-        disabled={locked || closed}
+        disabled={locked}
         onClick={(event) => void press("close", event.currentTarget)}
-        aria-label={closed ? `كود ${student.name} مغلق` : `إغلاق كود ${student.name} على المنصة ونسخ رقم هاتفه`}
-        title={!allowed ? "للأدمن والمشرف فقط" : closed ? "الكود مغلق؛ افتحه بالزر الأخضر حتى تگدر تغلقه مرة ثانية" : "إغلاق الكود: يفتح المنصة وينسخ رقم الطالب"}
+        aria-label={closed ? `كود ${student.name} مغلق — فتح المنصة مرة ثانية ونسخ رقم هاتفه` : `إغلاق كود ${student.name} على المنصة ونسخ رقم هاتفه`}
+        title={!allowed ? "للأدمن والمشرف فقط" : closed ? "تم إغلاق الكود؛ اضغط مرة ثانية لفتح المنصة من جديد" : "إغلاق الكود: يفتح المنصة وينسخ رقم الطالب"}
       >
         <Radiation aria-hidden="true" />
       </button>
