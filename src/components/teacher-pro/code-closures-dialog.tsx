@@ -263,8 +263,8 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
     else toast.success(`أرسل البوت تبليغ الفصل إلى ${student.name}`);
   }
 
-  // ☢️ closes the code (a contact step of the dismissal); its green twin opens
-  // it again and clears ☢️ and «الكود مغلق», so ☢️ can be pressed again.
+  // ☢️ closes the code (a contact step of the dismissal) and stays pressable
+  // after its ✓; its green twin opens the code again and clears ☢️ and «الكود مغلق».
   function closeCode(student: CodeClosureStudent, button: Element) {
     openMzCodePage(student, "close", button);
     markStep(student, "platform");
@@ -592,10 +592,9 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
                             type="button"
                             className="tp-closure-card__danger"
                             data-done={codeClosed || undefined}
-                            disabled={codeClosed}
                             onClick={(event) => closeCode(student, event.currentTarget)}
                             aria-label={`فتح المنصة لإغلاق كود ${student.name} ونسخ رقم هاتفه${codeClosed ? " — تم" : ""}`}
-                            title={codeClosed ? "الكود مغلق؛ افتحه بالزر الأخضر حتى تگدر تغلقه مرة ثانية" : "فتح المنصة لإغلاق كود الطالب ونسخ رقم هاتفه"}
+                            title={codeClosed ? "تم إغلاق الكود؛ اضغط مرة ثانية لفتح المنصة من جديد" : "فتح المنصة لإغلاق كود الطالب ونسخ رقم هاتفه"}
                           >
                             <Radiation aria-hidden="true" />
                           </button>
