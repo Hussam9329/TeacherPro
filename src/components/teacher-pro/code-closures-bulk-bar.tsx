@@ -171,7 +171,7 @@ export function CodeClosuresBulkBar({
             <AlertDialogDescription>
               {confirm === "bot"
                 ? `البوت يرسل التبليغ لـ: ${namesOf(botQueue)}.`
-                : `راح تنضاف «انسحاب» لأسمائهم وينأرشفون: ${namesOf(withdrawQueue)}. تكدر ترجع أي واحد بـ«استعادة من الأرشيف».`}
+                : `راح تنضاف «انسحاب» لأسمائهم وينأرشفون: ${namesOf(withdrawQueue)}. تگدر ترجع أي واحد بـ«الغاء الانسحاب».`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

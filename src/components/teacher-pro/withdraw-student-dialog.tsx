@@ -58,7 +58,7 @@ export function WithdrawStudentDialog({
           <AlertDialogTitle>انسحاب «{student?.name}»؟</AlertDialogTitle>
           <AlertDialogDescription>
             راح يصير اسمه «{student ? withdrawnName(student.name) : ""}» وينأرشف: يختفي من القوائم وفرصه تصير 0.
-            تكدر ترجعه بعدين بـ«استعادة من الأرشيف».
+            تگدر ترجعه بعدين بـ«الغاء الانسحاب».
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

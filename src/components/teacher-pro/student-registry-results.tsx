@@ -370,8 +370,8 @@ function studentMoreActions({
   onArchive,
 }: StudentActionsProps): RowAction[] {
   const actions: RowAction[] = [];
-  // An archived student is frozen: «استعادة من الأرشيف» (and «الغاء الانسحاب»
-  // for a withdrawn one) are its only actions.
+  // An archived student is frozen: «استعادة من الأرشيف» is its only action, or
+  // «الغاء الانسحاب» instead of it for a withdrawn one.
   if (canEdit && student.status !== ARCHIVED_STUDENT_STATUS) {
     actions.push({
       key: "edit",
@@ -381,7 +381,7 @@ function studentMoreActions({
       onSelect: () => onEdit(student),
     });
   }
-  if (canEdit && student.status === ARCHIVED_STUDENT_STATUS) {
+  if (canEdit && student.status === ARCHIVED_STUDENT_STATUS && !unwithdrawnStudentName(student.name)) {
     actions.push({
       key: "restore",
       label: "استعادة من الأرشيف",
