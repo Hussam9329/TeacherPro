@@ -31,6 +31,7 @@ import {
   FileText,
   HelpCircle,
   Info,
+  Laptop,
   PencilLine,
   Phone,
   PhoneCall,
@@ -1538,13 +1539,25 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
   // ── The short student card ──────────────────────────────────────────────
   const renderQrTile = (row: CallStudentRow, label: string, phone: string | null | undefined, icon: React.ReactNode) =>
     callPhoneQrValue(phone) ? (
-      <CallPhoneQr
-        studentName={row.student.name}
-        phoneLabel={label}
-        phone={phone}
-        icon={icon}
-        className="tp-qr-tile"
-      />
+      <div className="tp-qr-slot">
+        <CallPhoneQr
+          studentName={row.student.name}
+          phoneLabel={label}
+          phone={phone}
+          icon={icon}
+          className="tp-qr-tile"
+        />
+        {/* Windows hands the tel: link to «ارتباط الهاتف», which dials from the
+            paired phone's SIM. */}
+        <a
+          href={callPhoneQrValue(phone)}
+          className="tp-qr-laptop"
+          aria-label={`اتصال من اللابتوب برقم ${label} للطالب ${row.student.name} عبر الهاتف المربوط`}
+          title="يتصل عبر «ارتباط الهاتف» من الهاتف المربوط باللابتوب"
+        >
+          <Laptop aria-hidden="true" />اتصال من اللابتوب
+        </a>
+      </div>
     ) : (
       <div className="tp-qr-tile" data-empty="true">
         <span data-part="label">{icon}{label}</span>
