@@ -625,11 +625,11 @@ function selectCourse(view, value) {
   assert(view.errors.some((error) => error.includes('ماكو رقم هاتف صالح')));
 
   // The green twin beside ☢️ asks the tool to open the code again. Only one
-  // of the pair works at a time: ☢️ while open, green once closed.
+  // ☢️ always works; green once the code is closed.
   const restoreButtons = () => view.nodes('button').filter((node) => node.props.className === 'tp-closure-card__restore');
   assert.equal(restoreButtons().length, 2, 'every card has the green open-code button beside ☢️');
   assert(restoreButtons().every((node) => node.props.children.type === 'LockKeyholeOpen'));
-  assert.deepEqual(dangerButtons().map((node) => Boolean(node.props.disabled)), [true, true], 'a closed code cannot be closed again');
+  assert.deepEqual(dangerButtons().map((node) => Boolean(node.props.disabled)), [false, false], '☢️ stays pressable after its ✓, to open the platform again');
   assert.deepEqual(restoreButtons().map((node) => Boolean(node.props.disabled)), [false, false], 'and can be opened');
   const contactsBefore = view.contacts.length;
   restoreButtons()[0].props.onClick({ currentTarget: clicked });
@@ -643,7 +643,7 @@ function selectCourse(view, value) {
   await view.flush();
   view.reads.at(-1).resolve(response([{ ...dangerous, closurePlatformEpoch: null }, doneBefore]));
   await view.flush();
-  assert.equal(dangerButtons()[0].props.disabled, false, 'once opened, ☢️ works again');
+  assert.equal(Boolean(dangerButtons()[0].props.disabled), false, 'once opened, ☢️ works again');
   assert.equal(dangerButtons()[0].props['data-done'], undefined);
   assert.equal(restoreButtons()[0].props.disabled, true, 'and the green button waits for the next close');
 

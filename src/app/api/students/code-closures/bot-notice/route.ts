@@ -28,6 +28,10 @@ const FAILURE_MESSAGES: Record<Exclude<TelegramSendOutcome, { ok: true }>["reaso
   failed: "تعذر الوصول إلى تليگرام. تأكد من المحادثة قبل إعادة الإرسال حتى لا يصل التبليغ مرتين.",
 };
 
+/** Refusals caused by the student's own Telegram account, not by Telegram or our bot. */
+const STUDENT_ACCOUNT_REFUSALS = new Set<Exclude<TelegramSendOutcome, { ok: true }>["reason"]>(["not_started", "blocked", "deactivated"]);
+const TELEGRAM_ID_CLEARED_NOTE = " مُسح معرّف تليگرام (الآيدي) المحفوظ للطالب، ويبقى اليوزر.";
+
 /**
  * The student's Telegram chat id: the numeric id saved on the student, else
  * the chat their latest exam reached the bot from (Correction keeps it in the
@@ -137,16 +141,41 @@ export async function POST(req: NextRequest) {
 
     const sent = await sendTelegramMessage({ token, chatId, html: dismissalNoticeHtml(buildDismissalNotice(examName, outcome)) });
     if (!sent.ok) {
+      // The student's saved numeric Telegram id is what the bot cannot reach:
+      // clear it (and its unique key) so the card stops offering it and the
+      // student links the right account again. The username stays.
+      const savedId = telegramChatId(student.telegram);
+      const clearedTelegramId = savedId && STUDENT_ACCOUNT_REFUSALS.has(sent.reason)
+        ? await db.student.updateMany({
+          where: { id: student.id, status: "مفصول", dismissedCheckEpoch: epoch, telegram: student.telegram },
+          data: { telegram: null, telegramKey: null },
+        }).then((result) => (result.count > 0 ? savedId : ""), (error: unknown) => {
+          console.error("[code-closures] clearing the Telegram id after a refusal:", error);
+          return "";
+        })
+        : "";
       // Keep the line for the record, but it no longer counts as sent.
       await db.auditLog.update({
         where: { id: claim.lineId },
         data: {
           action: BOT_NOTICE_FAILED_ACTION,
-          details: JSON.stringify({ studentId: student.id, epoch, name: student.name, code: student.code, reason: sent.reason, telegram: sent.description }),
+          details: JSON.stringify({
+            studentId: student.id,
+            epoch,
+            name: student.name,
+            code: student.code,
+            reason: sent.reason,
+            telegram: sent.description,
+            ...(clearedTelegramId ? { clearedTelegramId } : {}),
+          }),
         },
       }).catch((error: unknown) => console.error("[code-closures] bot notice failure line:", error));
       const status = sent.reason === "rate_limited" ? 429 : sent.reason === "failed" || sent.reason === "bad_token" ? 502 : 422;
-      return NextResponse.json({ error: FAILURE_MESSAGES[sent.reason], reason: sent.reason }, { status, headers: { "Cache-Control": "no-store" } });
+      const message = FAILURE_MESSAGES[sent.reason] + (clearedTelegramId ? TELEGRAM_ID_CLEARED_NOTE : "");
+      return NextResponse.json(
+        { error: message, reason: sent.reason, telegramIdCleared: Boolean(clearedTelegramId) },
+        { status, headers: { "Cache-Control": "no-store" } },
+      );
     }
 
     // The card's Telegram step counts as done for this dismissal.

@@ -80,7 +80,9 @@ console.log("PASS: the notice becomes Telegram HTML, only numeric chat ids are u
     updateMany: async ({ where, data }) => {
       const row = rows.get(where.id);
       if (!row || row.status !== where.status || row.dismissedCheckEpoch !== where.dismissedCheckEpoch) return { count: 0 };
-      assert.deepEqual(Object.keys(data), ["closureTelegramEpoch"], "only the Telegram step is marked");
+      if ("telegram" in where && row.telegram !== where.telegram) return { count: 0 };
+      const keys = Object.keys(data).sort().join(",");
+      assert(keys === "closureTelegramEpoch" || keys === "telegram,telegramKey", `unexpected student write: ${keys}`);
       Object.assign(row, data);
       return { count: 1 };
     },
@@ -168,6 +170,35 @@ console.log("PASS: the notice becomes Telegram HTML, only numeric chat ids are u
   telegramReply = { ok: true, messageId: 2 };
   assert.equal((await post({ studentId: "s1", expectedEpoch: 3 })).status, 200, "after a refusal it can be sent again");
 
+  // The bot cannot reach a saved numeric id: the id (and its key) are cleared, the username stays.
+  for (const reason of ["not_started", "blocked", "deactivated"]) {
+    reset();
+    Object.assign(rows.get("s1"), { telegram: "987654321", telegramKey: "987654321", username: "student_user" });
+    telegramReply = { ok: false, reason, description: "Forbidden" };
+    const cleared = await post({ studentId: "s1", expectedEpoch: 3 });
+    assert.equal(cleared.status, 422);
+    assert.equal(cleared.data.telegramIdCleared, true, reason);
+    assert(cleared.data.error.includes("مُسح معرّف تليگرام"), reason);
+    assert.equal(rows.get("s1").telegram, null, `${reason}: the id is cleared`);
+    assert.equal(rows.get("s1").telegramKey, null, `${reason}: the id's key is cleared`);
+    assert.equal(rows.get("s1").username, "student_user", `${reason}: the username stays`);
+    assert.equal(JSON.parse(audits[0].details).clearedTelegramId, "987654321", "the cleared id is kept in the log");
+  }
+  // Telegram's own trouble never clears the id.
+  for (const reason of ["rate_limited", "failed", "bad_token"]) {
+    reset();
+    Object.assign(rows.get("s1"), { telegram: "987654321", telegramKey: "987654321" });
+    telegramReply = { ok: false, reason, description: "x" };
+    const kept = await post({ studentId: "s1", expectedEpoch: 3 });
+    assert.equal(kept.data.telegramIdCleared, false, reason);
+    assert.equal(rows.get("s1").telegram, "987654321", `${reason}: the id stays`);
+  }
+  // A username saved in the Telegram field is not an id, so it stays.
+  reset();
+  telegramReply = { ok: false, reason: "not_started", description: "Forbidden" };
+  assert.equal((await post({ studentId: "s1", expectedEpoch: 3 })).data.telegramIdCleared, false);
+  assert.equal(rows.get("s1").telegram, "@user");
+
   // A numeric id saved on the student is used directly; no id at all is explained.
   reset();
   rows.get("s1").telegram = "987654321";
@@ -183,7 +214,7 @@ console.log("PASS: the notice becomes Telegram HTML, only numeric chat ids are u
   reset();
   chatRows = new Error('relation "correction.telegram_exam_submissions" does not exist');
   assert.equal((await post({ studentId: "s1", expectedEpoch: 3 })).status, 422, "a database without Correction's table is not an error");
-  console.log("PASS: the bot notice needs edit permission, a token, the current dismissal and a known exam/result; it finds the chat id, sends once, records it, marks the step, and explains refusals");
+  console.log("PASS: the bot notice needs edit permission, a token, the current dismissal and a known exam/result; it finds the chat id, sends once, records it, marks the step, explains refusals, and clears an unreachable Telegram id");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;
