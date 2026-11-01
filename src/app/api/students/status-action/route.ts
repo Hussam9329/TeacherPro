@@ -14,10 +14,12 @@ import { restoreDismissedStudentManually, StudentActionError } from "@/lib/manua
 import { assertPledgeLimitNotReached } from "@/lib/pledge-limit-server";
 import { PLEDGE_AUDIT_ACTION, PLEDGE_BALANCE_REASON } from "@/lib/pledge-limit";
 import {
+  ArchiveRestoreError,
   chapterFromResolution,
   getActiveChapterForCourse,
   restoreArchivedStudentInTransaction,
 } from "@/lib/student-archive-restore-server";
+import { unwithdrawnStudentName, WITHDRAWAL_WORD } from "@/lib/withdrawal-rules";
 import {
   buildStudentMutationToken,
   withStudentMutationToken,
@@ -223,6 +225,14 @@ export async function POST(req: NextRequest) {
           expectedStatus,
           expectedMutationToken,
         );
+        // A withdrawn student returns only through «الغاء الانسحاب», which
+        // removes «انسحاب» from the name and restores the state before it.
+        if (unwithdrawnStudentName(student.name)) {
+          throw new ArchiveRestoreError(
+            `اسم الطالب ينتهي بكلمة «${WITHDRAWAL_WORD}»؛ أرجعه بـ«الغاء الانسحاب» حتى تنشال الكلمة ويرجع لحالته قبل الانسحاب.`,
+            "withdrawn-student",
+          );
+        }
         const {
           updatedStudent,
           activeChapter,

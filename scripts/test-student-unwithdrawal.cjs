@@ -195,12 +195,24 @@ const untouched = (tx) => tx.updates.length + tx.notes.length + tx.audits.length
       results.includes('label: "الغاء الانسحاب"'),
     "the action shows only on archived students whose name ends with «انسحاب»",
   );
+  assert.ok(
+    results.includes("canEdit && student.status === ARCHIVED_STUDENT_STATUS && !unwithdrawnStudentName(student.name)"),
+    "a withdrawn student has no «استعادة من الأرشيف», only «الغاء الانسحاب»",
+  );
+  assert.ok(
+    statusRoute.includes("if (unwithdrawnStudentName(student.name))") && statusRoute.includes('"withdrawn-student"'),
+    "the server refuses «استعادة من الأرشيف» for a withdrawn student",
+  );
+  for (const file of ["src/components/teacher-pro/withdraw-student-dialog.tsx", "src/components/teacher-pro/code-closures-bulk-bar.tsx"]) {
+    const text = fs.readFileSync(path.join(root, file), "utf8");
+    assert.ok(text.includes("بـ«الغاء الانسحاب»") && !text.includes("بـ«استعادة من الأرشيف»"), `${file} points to «الغاء الانسحاب»`);
+  }
   const registry = fs.readFileSync(path.join(root, "src/components/teacher-pro/student-registry.tsx"), "utf8");
   assert.ok(registry.includes("<UnwithdrawStudentDialog") && registry.includes("onUnwithdraw={setUnwithdrawStudent}"), "confirmed in a dialog");
   const dialog = fs.readFileSync(path.join(root, "src/components/teacher-pro/unwithdraw-student-dialog.tsx"), "utf8");
   assert.ok(dialog.includes("studentApi.unwithdraw(student.id)"));
 
-  console.log("PASS: «الغاء الانسحاب» removes only «انسحاب», returns the student to «مفصول» (same reason) or «نشط» through the shared restore in one write, records a note and audit line, and refuses untouched.");
+  console.log("PASS: «الغاء الانسحاب» removes only «انسحاب», returns the student to «مفصول» (same reason) or «نشط» through the shared restore in one write, records a note and audit line, and refuses untouched; a withdrawn student returns only through it.");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;
