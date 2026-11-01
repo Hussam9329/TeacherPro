@@ -50,24 +50,28 @@ assert.equal(other.fields.find((item) => item.key === "name").score, 0);
 assert.equal(other.fields.find((item) => item.key === "parentPhone").score, null, "an empty side is not compared");
 assert.equal(other.percent, 33);
 
-// The link to «تعديل الطالب» and back.
+// The kind of transfer, with the server's rules for «تعديل الطالب».
 const course = { courseId: "winter3", courseProgram: "منهج كامل", courseTerm: "", studyType: "مدمج", locationScope: "بغداد", baghdadMode: "عموم بغداد", subSite: "عموم بغداد" };
-const href = match.bulkTransferHref("s1", course);
-assert(href.startsWith("/?section=student-registry&"));
-assert.deepEqual(match.readBulkTransferIntent(href.slice(1)), { studentId: "s1", course });
-assert.equal(match.readBulkTransferIntent("?section=student-registry"), null);
-assert.equal(match.readBulkTransferIntent("?edit-student=s1&edit-course=%7Bbad"), null);
-assert.equal(match.readBulkTransferIntent(`?edit-student=s1&edit-course=${encodeURIComponent(JSON.stringify({ courseId: "" }))}`), null);
+const here = { ...existing, baghdadMode: "عموم بغداد" };
+assert.equal(match.bulkTransferKind(here, course), "course", "another course: a new file only");
+const sameCourse = { ...course, courseId: "summer", courseProgram: "كورسات", courseTerm: "الكورس الأول", studyType: "إلكتروني" };
+assert.equal(match.bulkTransferKind(here, sameCourse), "none", "nothing to move");
+assert.equal(match.bulkTransferKind(here, { ...sameCourse, studyType: "مدمج" }), "context", "same course, other study data: keep or new");
 
 // Wiring.
 const route = fs.readFileSync(path.join(root, "src/app/api/students/bulk/route.ts"), "utf8");
 assert(route.includes('const showMatches = previewOnly && hasPermission(principal, "students.view");'), "matches only in the preview, for those who may view students");
 assert(route.includes("...(showMatches && duplicateMessage ? { matches: matchesFor(row) } : {}),"));
 const bulk = fs.readFileSync(path.join(root, "src/components/teacher-pro/student-bulk-text-import.tsx"), "utf8");
-assert(bulk.includes("compareBulkDuplicate(") && bulk.includes("bulkTransferHref(match.id") && bulk.includes('target="_blank"'));
+assert(bulk.includes("compareBulkDuplicate(") && bulk.includes("<BulkDuplicateTransferDialog") && !bulk.includes('target="_blank"'), "the transfer happens on this page");
 assert(bulk.includes("{canEditStudents ? ("), "the transfer is for those who may edit students");
+assert(bulk.includes("void buildPreview(nextText);"), "a row done with leaves the text and the preview runs again");
+const dialog = fs.readFileSync(path.join(root, "src/components/teacher-pro/bulk-duplicate-transfer-dialog.tsx"), "utf8");
+assert(dialog.includes('const chosenPolicy: CourseTransferPolicy | "" = kind === "course" ? "reset" : policy;'), "another course is always a new file");
+assert(dialog.includes("studentApi.editSnapshot(target.match.id)") && dialog.includes("expectedMutationToken: current.mutationToken"), "the save carries the latest record's token");
+assert(dialog.includes("studentApi.update(current.id"), "the same request as «تعديل الطالب»");
+assert(/onRemoveRow\(target\.rowNumber\);\s*setPolicy\(""\);\s*onClose\(\);/.test(dialog), "the row leaves only after a successful save");
 const registry = fs.readFileSync(path.join(root, "src/components/teacher-pro/student-registry.tsx"), "utf8");
-assert(registry.includes("readBulkTransferIntent(window.location.search)") && registry.includes("studentApi.editSnapshot(studentId)"));
-assert(registry.includes("openEditDialog(student);\n        setEditDialog((current) => ({ ...current, form: { ...current.form, ...course } }));"), "the manual edit dialog, with the course filled in");
+assert(!registry.includes("readBulkTransferIntent"), "no link into «سجل الطلاب» anymore");
 
-console.log("PASS: a duplicate row shows its match field by field with a percentage, and «تحويل يدوي…» opens «تعديل الطالب» with the new course");
+console.log("PASS: a duplicate row shows its match field by field with a percentage, and «تحويل يدوي…» moves the student here with the edit's rules, then drops the row");

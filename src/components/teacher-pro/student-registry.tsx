@@ -24,11 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/lib/user-toast";
 import {
-  BULK_TRANSFER_COURSE_PARAM,
-  BULK_TRANSFER_STUDENT_PARAM,
-  readBulkTransferIntent,
-} from "@/lib/bulk-duplicate-match";
-import {
   getPhoneValidationError,
   sanitizePhoneInput,
   toLatinDigits,
@@ -1165,46 +1160,6 @@ export function StudentRegistryView() {
       form: getStudentEditForm(student),
     });
   };
-
-  // «تحويل يدوي…» from «إضافة طلاب جماعية» opens this tab with the student
-  // and the row's course in the link: open «تعديل الطالب» with that course
-  // filled in. The save is the manual edit, with its transfer choice and impact.
-  const [bulkTransferIntent, setBulkTransferIntent] = useState(() =>
-    typeof window === "undefined" ? null : readBulkTransferIntent(window.location.search),
-  );
-  useEffect(() => {
-    if (!bulkTransferIntent || typeof window === "undefined") return;
-    const url = new URL(window.location.href);
-    if (url.searchParams.has(BULK_TRANSFER_STUDENT_PARAM) || url.searchParams.has(BULK_TRANSFER_COURSE_PARAM)) {
-      url.searchParams.delete(BULK_TRANSFER_STUDENT_PARAM);
-      url.searchParams.delete(BULK_TRANSFER_COURSE_PARAM);
-      window.history.replaceState(window.history.state, "", url.toString());
-    }
-    // Wait for the signed-in user; without the right nothing opens.
-    if (!canEditStudents) return;
-    const { studentId, course } = bulkTransferIntent;
-    setBulkTransferIntent(null);
-    void studentApi.editSnapshot(studentId).then(
-      (response) => {
-        const student = response?.student as unknown as Student | undefined;
-        if (!student || student.id !== studentId || !student.mutationToken) {
-          toast.error("تعذر تحميل الطالب للتحويل. افتحه من «سجل الطلاب» وعدّل دورته يدوياً.");
-          return;
-        }
-        if (student.status === ARCHIVED_STUDENT_STATUS) {
-          toast.error(`${student.name} مؤرشف؛ استعده أو الغِ انسحابه أولاً.`);
-          return;
-        }
-        mergeStudentsCache([student]);
-        openEditDialog(student);
-        setEditDialog((current) => ({ ...current, form: { ...current.form, ...course } }));
-        toast.info(`راجع بيانات الدورة الجديدة لـ${student.name} ثم احفظ.`);
-      },
-      () => toast.error("تعذر تحميل الطالب للتحويل. تحقق من الاتصال وأعد فتح الرابط."),
-    );
-    // openEditDialog is recreated each render; the intent runs once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bulkTransferIntent, canEditStudents]);
 
   useEffect(() => {
     if (editRecoveryReason) {
