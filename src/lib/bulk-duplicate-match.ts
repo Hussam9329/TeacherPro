@@ -26,6 +26,7 @@ export type BulkDuplicateMatch = {
   courseTerm: string | null;
   studyType: string | null;
   locationScope: string | null;
+  baghdadMode: string | null;
   subSite: string | null;
 };
 
@@ -145,7 +146,7 @@ export function compareBulkDuplicate(incoming: BulkDuplicateIncoming, match: Bul
   return { fields, percent };
 }
 
-/** The course fields a bulk row carries into «تعديل الطالب» for a manual transfer. */
+/** The course fields a bulk row moves the existing student to. */
 export type BulkTransferCourse = {
   courseId: string;
   courseProgram: string;
@@ -156,41 +157,20 @@ export type BulkTransferCourse = {
   subSite: string;
 };
 
-export const BULK_TRANSFER_STUDENT_PARAM = "edit-student";
-export const BULK_TRANSFER_COURSE_PARAM = "edit-course";
-
-/** The «سجل الطلاب» link that opens «تعديل الطالب» with the row's course filled in. */
-export function bulkTransferHref(studentId: string, course: BulkTransferCourse): string {
-  const params = new URLSearchParams({
-    section: "student-registry",
-    [BULK_TRANSFER_STUDENT_PARAM]: studentId,
-    [BULK_TRANSFER_COURSE_PARAM]: JSON.stringify(course),
-  });
-  return `/?${params}`;
-}
-
-/** Reads that link back; null when it is missing or malformed. */
-export function readBulkTransferIntent(search: string): { studentId: string; course: BulkTransferCourse } | null {
-  const params = new URLSearchParams(search);
-  const studentId = text(params.get(BULK_TRANSFER_STUDENT_PARAM));
-  if (!studentId || studentId.length > 128) return null;
-  try {
-    const raw = JSON.parse(params.get(BULK_TRANSFER_COURSE_PARAM) || "null") as Record<string, unknown> | null;
-    if (!raw || typeof raw !== "object" || typeof raw.courseId !== "string" || !raw.courseId) return null;
-    const field = (key: keyof BulkTransferCourse) => (typeof raw[key] === "string" ? String(raw[key]).slice(0, 200) : "");
-    return {
-      studentId,
-      course: {
-        courseId: field("courseId"),
-        courseProgram: field("courseProgram"),
-        courseTerm: field("courseTerm"),
-        studyType: field("studyType"),
-        locationScope: field("locationScope"),
-        baghdadMode: field("baghdadMode"),
-        subSite: field("subSite"),
-      },
-    };
-  } catch {
-    return null;
-  }
+/**
+ * What the transfer is, with the server's rules for «تعديل الطالب»: another
+ * course («course», a new file only), the same course with other study data
+ * («context», keep the file or start a new one), or nothing to change.
+ */
+export function bulkTransferKind(match: BulkDuplicateMatch, course: BulkTransferCourse): "course" | "context" | "none" {
+  if (course.courseId !== match.courseId) return "course";
+  const pairs: Array<[string | null, string]> = [
+    [match.courseProgram, course.courseProgram],
+    [match.courseTerm, course.courseTerm],
+    [match.studyType, course.studyType],
+    [match.locationScope, course.locationScope],
+    [match.baghdadMode, course.baghdadMode],
+    [match.subSite, course.subSite],
+  ];
+  return pairs.some(([current, next]) => text(current) !== text(next)) ? "context" : "none";
 }

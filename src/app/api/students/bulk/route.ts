@@ -461,7 +461,7 @@ export async function POST(req: NextRequest) {
         select: {
           id: true, code: true, name: true, status: true, phone: true, parentPhone: true,
           telegram: true, username: true, school: true, gender: true, courseId: true,
-          courseProgram: true, courseTerm: true, studyType: true, locationScope: true, subSite: true,
+          courseProgram: true, courseTerm: true, studyType: true, locationScope: true, baghdadMode: true, subSite: true,
           course: { select: { name: true } },
         },
       })

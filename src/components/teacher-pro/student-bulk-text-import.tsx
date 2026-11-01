@@ -45,10 +45,10 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import {
-  bulkTransferHref,
   compareBulkDuplicate,
   type BulkDuplicateMatch,
 } from "@/lib/bulk-duplicate-match";
+import { BulkDuplicateTransferDialog, type BulkTransferTarget } from "./bulk-duplicate-transfer-dialog";
 import { ARCHIVED_STUDENT_STATUS, getStudentRegistryCapabilities } from "./student-registry-helpers";
 import { toLatinDigits, arabicCount, studentCount } from "@/lib/format";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
@@ -374,6 +374,7 @@ export function StudentBulkTextImportView() {
   const [rawText, setRawText] = useState("");
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [previewDone, setPreviewDone] = useState(false);
+  const [transferTarget, setTransferTarget] = useState<BulkTransferTarget | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -483,7 +484,8 @@ export function StudentBulkTextImportView() {
     }
   };
 
-  const buildPreview = async () => {
+  const buildPreview = async (textOverride?: string) => {
+    const sourceText = textOverride ?? rawText;
     if (isPreviewing) return;
     if (contextLoading) {
       toast.error("انتظر اكتمال تحميل بيانات التسجيل الجماعي");
@@ -497,7 +499,7 @@ export function StudentBulkTextImportView() {
       return;
     }
 
-    const parsedRows = splitRows(rawText);
+    const parsedRows = splitRows(sourceText);
     if (parsedRows.length === 0) {
       toast.error("الصق بيانات الطلاب أولاً");
       setPreviewRows([]);
@@ -926,9 +928,30 @@ export function StudentBulkTextImportView() {
     );
   };
 
+  // A row done with (moved to the existing student, or nothing to move) leaves
+  // the pasted text, and the preview runs again so the line numbers stay true.
+  const removeRow = (rowNumber: number) => {
+    let seen = 0;
+    const nextText = rawText
+      .split(/\r?\n/)
+      .filter((line) => {
+        if (line.trim().length === 0) return true;
+        seen += 1;
+        return seen !== rowNumber;
+      })
+      .join("\n");
+    setRawText(nextText);
+    if (splitRows(nextText).length === 0) {
+      setPreviewRows([]);
+      setPreviewDone(false);
+      return;
+    }
+    void buildPreview(nextText);
+  };
+
   // The existing student a duplicate row matches: how alike they are, field by
-  // field, and «تحويل يدوي…», which opens that student's «تعديل الطالب» in a
-  // new tab with the row's course filled in (this page keeps its text).
+  // field, and «تحويل يدوي…», which moves that student to the row's course
+  // here, with the rules of «تعديل الطالب».
   const renderDuplicateMatch = (row: PreviewRow, draft: BulkStudentDraft, match: BulkDuplicateMatch) => {
     const { fields, percent } = compareBulkDuplicate(
       {
@@ -977,9 +1000,18 @@ export function StudentBulkTextImportView() {
           archived ? (
             <p className="tp-bulk-match__note">الطالب مؤرشف؛ استعده أو الغِ انسحابه من «سجل الطلاب» أولاً.</p>
           ) : (
-            <Button asChild size="sm" variant="outline" className="tp-bulk-match__transfer">
-              <a
-                href={bulkTransferHref(match.id, {
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="tp-bulk-match__transfer"
+              disabled={isPreviewing || isImporting}
+              aria-label={`تحويل ${match.name} يدوياً إلى بيانات الدورة الجديدة`}
+              onClick={() => setTransferTarget({
+                rowNumber: row.rowNumber,
+                match,
+                newCourseName: newCourse,
+                course: {
                   courseId: draft.courseId,
                   courseProgram: draft.courseProgram || "",
                   courseTerm: draft.courseTerm || "",
@@ -987,14 +1019,11 @@ export function StudentBulkTextImportView() {
                   locationScope: draft.locationScope || "",
                   baghdadMode: draft.baghdadMode || "",
                   subSite: draft.subSite || "",
-                })}
-                target="_blank"
-                rel="noopener"
-                aria-label={`تحويل ${match.name} يدوياً إلى بيانات الدورة الجديدة`}
-              >
-                <ArrowLeftRight aria-hidden="true" className="size-4" />
-                تحويل يدوي…
-              </a>
+                },
+              })}
+            >
+              <ArrowLeftRight aria-hidden="true" className="size-4" />
+              تحويل يدوي…
             </Button>
           )
         ) : null}
@@ -1004,6 +1033,11 @@ export function StudentBulkTextImportView() {
 
   return (
     <div className="tp-management-page tp-bulk-import-page space-y-4">
+      <BulkDuplicateTransferDialog
+        target={transferTarget}
+        onClose={() => setTransferTarget(null)}
+        onRemoveRow={removeRow}
+      />
       <Card className="tp-management-action-card tp-bulk-import__input-card">
         <CardHeader>
           <div className="tp-bulk-import__heading">
@@ -1092,7 +1126,7 @@ export function StudentBulkTextImportView() {
               </Button>
               <Button
                 type="button"
-                onClick={buildPreview}
+                onClick={() => void buildPreview()}
                 disabled={isPreviewing || contextLoading || !registerContext}
               >
                 {isPreviewing ? (
