@@ -329,5 +329,31 @@
 .tp-bulk-row__line { margin: 0; color: var(--muted-foreground); font-size: 0.8rem; line-height: 1.7; overflow-wrap: anywhere; }
 .tp-bulk-row__problems { display: grid; gap: 0.1rem; margin: 0; padding-inline-start: 1rem; color: var(--tone-ink); font-size: 0.78rem; line-height: 1.7; }
 
+/* A duplicate row: the existing student it matches, field by field. */
+.tp-bulk-match { display: grid; gap: 0.4rem; margin-block-start: 0.35rem; padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: 0.75rem; background: color-mix(in srgb, var(--muted) 45%, transparent); }
+.tp-bulk-match__head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; }
+.tp-bulk-match__percent { padding: 0.05rem 0.6rem; border-radius: 999px; font-size: 0.78rem; font-weight: 900; background: var(--muted); color: var(--foreground); }
+.tp-bulk-match__percent[data-tone="danger"] { background: var(--status-danger-bg); color: var(--status-danger-fg); }
+.tp-bulk-match__percent[data-tone="warning"] { background: var(--status-warning-bg); color: var(--status-warning-fg); }
+.tp-bulk-match__who { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; min-inline-size: 0; font-size: 0.85rem; overflow-wrap: anywhere; }
+.tp-bulk-match__code { color: var(--muted-foreground); font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.75rem; }
+.tp-bulk-match__status { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 700; }
+.tp-bulk-match__course { margin: 0; font-size: 0.8rem; line-height: 1.7; overflow-wrap: anywhere; }
+.tp-bulk-match__fields { display: grid; gap: 0.15rem; margin: 0; padding: 0; list-style: none; font-size: 0.78rem; line-height: 1.7; }
+.tp-bulk-match__fields li { display: grid; grid-template-columns: 2.6rem 6.5rem minmax(0, 1fr); align-items: baseline; gap: 0.4rem; }
+.tp-bulk-match__mark { font-weight: 900; text-align: center; }
+.tp-bulk-match__fields li[data-state="same"] .tp-bulk-match__mark { color: var(--status-success-fg); }
+.tp-bulk-match__fields li[data-state="different"] .tp-bulk-match__mark { color: var(--status-danger-fg); }
+.tp-bulk-match__fields li[data-state="partial"] .tp-bulk-match__mark { color: var(--status-warning-fg); }
+.tp-bulk-match__fields li[data-state="empty"] { color: var(--muted-foreground); }
+.tp-bulk-match__label { font-weight: 800; }
+.tp-bulk-match__values { min-inline-size: 0; overflow-wrap: anywhere; }
+.tp-bulk-match__note { margin: 0; color: var(--muted-foreground); font-size: 0.78rem; }
+.tp-bulk-match__transfer { justify-self: start; }
+@media (max-width: 480px) {
+  .tp-bulk-match__fields li { grid-template-columns: 2.2rem minmax(0, 1fr); }
+  .tp-bulk-match__values { grid-column: 2; }
+}
+
 /* The preview no longer has a statistics column beside it. */
 .tp-management-page.tp-bulk-import-page .tp-management-workspace { grid-template-columns: minmax(0, 1fr); }

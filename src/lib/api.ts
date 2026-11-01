@@ -1,6 +1,7 @@
 import type { StoryAuditFacts } from "@/lib/student-story-audit";
 import type { AcademicBonusTrace, AcademicStaleRecord } from "@/lib/academic-types";
 import type { TextShortcut, TextShortcutInput } from "@/lib/text-shortcuts";
+import type { BulkDuplicateMatch } from "@/lib/bulk-duplicate-match";
 import { withReadDeadline } from "./read-deadline";
 import { getOutboxOwner, ownerHeaders, requestSessionCheck } from "./outbox-session";
 import {
@@ -1512,6 +1513,8 @@ export interface StudentBulkPreviewRow {
   rowNumber: number;
   duplicateMessage: string | null;
   warnings: string[];
+  /** Existing students this row duplicates (preview, for those who may view students). */
+  matches?: BulkDuplicateMatch[];
 }
 
 export interface StudentBulkPreviewResponse {

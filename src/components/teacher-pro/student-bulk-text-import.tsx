@@ -37,12 +37,19 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/lib/user-toast";
 import {
+  ArrowLeftRight,
   Copy,
   Eye,
   Loader2,
   PlusCircle,
   ShieldAlert,
 } from "lucide-react";
+import {
+  bulkTransferHref,
+  compareBulkDuplicate,
+  type BulkDuplicateMatch,
+} from "@/lib/bulk-duplicate-match";
+import { ARCHIVED_STUDENT_STATUS, getStudentRegistryCapabilities } from "./student-registry-helpers";
 import { toLatinDigits, arabicCount, studentCount } from "@/lib/format";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import {
@@ -107,6 +114,8 @@ type PreviewRow = {
   errors: string[];
   warnings: string[];
   activeChapterName?: string;
+  /** Existing students this row duplicates, from the server preview. */
+  matches?: BulkDuplicateMatch[];
 };
 
 type PreviewCategory =
@@ -358,9 +367,10 @@ export function StudentBulkTextImportView() {
     "bulk-import",
   ]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
-  const { loadFromServer } = useTeacherStore(
-    useShallow((state) => ({ loadFromServer: state.loadFromServer })),
+  const { loadFromServer, currentUser } = useTeacherStore(
+    useShallow((state) => ({ loadFromServer: state.loadFromServer, currentUser: state.currentUser })),
   );
+  const { canEditStudents } = getStudentRegistryCapabilities(currentUser());
   const [rawText, setRawText] = useState("");
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [previewDone, setPreviewDone] = useState(false);
@@ -780,6 +790,9 @@ export function StudentBulkTextImportView() {
             });
             return;
           }
+          if (serverRow.duplicateMessage && serverRow.matches?.length) {
+            row.matches = serverRow.matches;
+          }
           if (serverRow.duplicateMessage) {
             row.errors.push(
               serverRow.duplicateMessage.replace(
@@ -906,7 +919,86 @@ export function StudentBulkTextImportView() {
             {row.warnings.map((warning, index) => <li key={index}>{warning}</li>)}
           </ul>
         ) : null}
+        {row.student && row.matches?.length
+          ? row.matches.map((match) => renderDuplicateMatch(row, row.student as BulkStudentDraft, match))
+          : null}
       </li>
+    );
+  };
+
+  // The existing student a duplicate row matches: how alike they are, field by
+  // field, and «تحويل يدوي…», which opens that student's «تعديل الطالب» in a
+  // new tab with the row's course filled in (this page keeps its text).
+  const renderDuplicateMatch = (row: PreviewRow, draft: BulkStudentDraft, match: BulkDuplicateMatch) => {
+    const { fields, percent } = compareBulkDuplicate(
+      {
+        name: draft.name,
+        phone: draft.phone,
+        parentPhone: draft.parentPhone,
+        telegram: draft.telegram || draft.username,
+        school: draft.school,
+        gender: draft.gender,
+      },
+      match,
+    );
+    const tone = percent >= 80 ? "danger" : percent >= 50 ? "warning" : "muted";
+    const archived = match.status === ARCHIVED_STUDENT_STATUS;
+    const newCourse = row.rawCells[3] || "";
+    return (
+      <section key={match.id} className="tp-bulk-match" aria-label={`مطابقة ${draft.name} مع ${match.name}`}>
+        <div className="tp-bulk-match__head">
+          <span className="tp-bulk-match__percent" data-tone={tone}>تطابق {percent}%</span>
+          <span className="tp-bulk-match__who">
+            <b>{match.name}</b>
+            <span dir="ltr" className="tp-bulk-match__code">{match.code}</span>
+            <span className="tp-bulk-match__status">{match.status}</span>
+          </span>
+        </div>
+        <p className="tp-bulk-match__course">
+          الدورة الحالية: <b>{match.courseName || "—"}</b> ← الجديدة: <b>{newCourse || "—"}</b>
+        </p>
+        <ul className="tp-bulk-match__fields">
+          {fields.map((field) => {
+            const state = field.score === null ? "empty" : field.score === 1 ? "same" : field.score === 0 ? "different" : "partial";
+            const mark = state === "same" ? "✓" : state === "different" ? "✗" : state === "partial" ? `${Math.round((field.score ?? 0) * 100)}%` : "—";
+            return (
+              <li key={field.key} data-state={state}>
+                <span className="tp-bulk-match__mark" aria-hidden="true">{mark}</span>
+                <span className="tp-bulk-match__label">{field.label}</span>
+                <span className="tp-bulk-match__values">
+                  <span dir="auto">{field.current || "—"}</span>
+                  {state !== "same" ? <> ← <span dir="auto">{field.incoming || "—"}</span></> : null}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+        {canEditStudents ? (
+          archived ? (
+            <p className="tp-bulk-match__note">الطالب مؤرشف؛ استعده أو الغِ انسحابه من «سجل الطلاب» أولاً.</p>
+          ) : (
+            <Button asChild size="sm" variant="outline" className="tp-bulk-match__transfer">
+              <a
+                href={bulkTransferHref(match.id, {
+                  courseId: draft.courseId,
+                  courseProgram: draft.courseProgram || "",
+                  courseTerm: draft.courseTerm || "",
+                  studyType: draft.studyType || "",
+                  locationScope: draft.locationScope || "",
+                  baghdadMode: draft.baghdadMode || "",
+                  subSite: draft.subSite || "",
+                })}
+                target="_blank"
+                rel="noopener"
+                aria-label={`تحويل ${match.name} يدوياً إلى بيانات الدورة الجديدة`}
+              >
+                <ArrowLeftRight aria-hidden="true" className="size-4" />
+                تحويل يدوي…
+              </a>
+            </Button>
+          )
+        ) : null}
+      </section>
     );
   };
 

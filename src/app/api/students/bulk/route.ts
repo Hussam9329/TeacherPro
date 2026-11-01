@@ -2,7 +2,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermissionPrincipal } from "@/lib/server-auth";
+import { hasPermission, requirePermissionPrincipal } from "@/lib/server-auth";
+import type { BulkDuplicateMatch } from "@/lib/bulk-duplicate-match";
 import { db } from "@/lib/db";
 import {
   getPhoneValidationError,
@@ -428,7 +429,7 @@ export async function POST(req: NextRequest) {
     duplicateConditions.length
       ? db.student.findMany({
           where: { OR: duplicateConditions },
-          select: { id: true, name: true, phone: true, telegram: true },
+          select: { id: true, name: true, phone: true, telegram: true, nameKey: true, phoneKey: true },
         })
       : Promise.resolve([]),
     parentPhones.length
@@ -450,6 +451,33 @@ export async function POST(req: NextRequest) {
         })
       : Promise.resolve([]),
   ]);
+  // The preview shows whoever a row duplicates, so the match can be judged
+  // and the student moved to the row's course by hand («تعديل الطالب»).
+  // Only for someone allowed to see students.
+  const showMatches = previewOnly && hasPermission(principal, "students.view");
+  const matchDetails = showMatches && duplicateSource.length
+    ? await db.student.findMany({
+        where: { id: { in: duplicateSource.map((student) => student.id) } },
+        select: {
+          id: true, code: true, name: true, status: true, phone: true, parentPhone: true,
+          telegram: true, username: true, school: true, gender: true, courseId: true,
+          courseProgram: true, courseTerm: true, studyType: true, locationScope: true, subSite: true,
+          course: { select: { name: true } },
+        },
+      })
+    : [];
+  const matchesFor = (row: (typeof normalizedRows)[number]): BulkDuplicateMatch[] => {
+    const ids = new Set(
+      duplicateSource
+        .filter((student) =>
+          (row.uniqueKeys.nameKey && student.nameKey === row.uniqueKeys.nameKey) ||
+          (row.uniqueKeys.phoneKey && student.phoneKey === row.uniqueKeys.phoneKey))
+        .map((student) => student.id),
+    );
+    return matchDetails
+      .filter((student) => ids.has(student.id))
+      .map(({ course, ...student }) => ({ ...student, courseName: course?.name || "" }));
+  };
   const databasePreviewRows = normalizedRows.map((row) => {
     // التليگرام لم يعد مفتاحاً فريداً هنا، فلا يُمرر لرسالة الرفض —
     // التطابق على اليوزر يظهر كتحذير مستقل تحت.
@@ -473,6 +501,7 @@ export async function POST(req: NextRequest) {
     return {
       rowNumber: row.rowNo,
       duplicateMessage,
+      ...(showMatches && duplicateMessage ? { matches: matchesFor(row) } : {}),
       warnings: [
         ...(parentPhoneMatch
           ? [`رقم ولي الأمر موجود مسبقاً عند: ${parentPhoneMatch.name}`]
