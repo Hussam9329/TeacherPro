@@ -128,7 +128,7 @@ export function useTelegramExtractor({
     const kept = lines.filter((line) => line.includes("\t"));
     const chat = lines.filter((line) => !line.includes("\t")).join("\n");
     if (!looksLikeRegistrationText(chat)) {
-      toast.error("ما لكيت رسائل تسجيل بالمربع", { description: "انسخ المحادثة من التليگرام أو قالب التسجيل، والصقه بالمربع." });
+      toast.warning("ما لكيت رسائل تسجيل بالمربع", { description: "انسخ المحادثة من التليگرام أو قالب التسجيل، والصقه بالمربع." });
       return;
     }
     const settings = await currentSettings();
@@ -141,7 +141,7 @@ export function useTelegramExtractor({
       return;
     }
     if (!result.rows.length) {
-      toast.error("ما لكيت أي رسالة طالب", { description: "تأكد إن النص منسوخ ويا التاريخ واسم المرسل." });
+      toast.warning("ما لكيت أي رسالة طالب", { description: "تأكد إن النص منسوخ ويا التاريخ واسم المرسل." });
       return;
     }
     onExtracted({
@@ -153,7 +153,7 @@ export function useTelegramExtractor({
 
   const saveLinks = async () => {
     if (pendingLinks.some((draft) => !draft.course)) {
-      toast.error("اختر الدورة لكل رابط.");
+      toast.warning("اختر الدورة لكل رابط.");
       return;
     }
     const local = loadExtractorSettings();
