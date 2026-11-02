@@ -23,6 +23,7 @@ import { GOVERNORATES, type ExtractorSettings } from "./config";
 import { splitStudents, type StudentBlock } from "./parser";
 import { extractBlocks, type ExtractedFields } from "./rules";
 
+export { looksLikeRegistrationText } from "./parser";
 export { DEFAULT_EXTRACTOR_SETTINGS, GOVERNORATES, readExtractorLinks, type ExtractorLink, type ExtractorSettings } from "./config";
 
 const BAGHDAD = "بغداد";

@@ -26,6 +26,11 @@ const DIRECTION_MARKS = /[‎‏]/g;
 
 type Message = { sender: string; lines: string[]; isReply: boolean };
 
+/** True for registration messages: copied from Telegram ("[date] sender:" lines) or the management's template on its own. */
+export function looksLikeRegistrationText(text: string): boolean {
+  return TEMPLATE_MARK.test(text) || text.split(/\r?\n/).some((line) => HEADER.test(line.trim()));
+}
+
 export type StudentBlock = {
   blockId: number;
   /** The group link id, "" when none was found. */

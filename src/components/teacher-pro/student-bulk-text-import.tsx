@@ -51,7 +51,8 @@ import {
   type BulkDuplicateMatch,
 } from "@/lib/bulk-duplicate-match";
 import { BulkDuplicateTransferDialog, type BulkTransferTarget } from "./bulk-duplicate-transfer-dialog";
-import { looksLikeTelegramChat, useTelegramExtractor } from "./telegram-extract-dialog";
+import { looksLikeRegistrationText } from "@/lib/telegram-extractor";
+import { useTelegramExtractor } from "./telegram-extract-dialog";
 import { ARCHIVED_STUDENT_STATUS, getStudentRegistryCapabilities } from "./student-registry-helpers";
 import { toLatinDigits, arabicCount, studentCount } from "@/lib/format";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
@@ -1143,9 +1144,9 @@ export function StudentBulkTextImportView() {
               setPreviewDone(false);
             }}
             onPaste={(event) => {
-              // A chat copied from Telegram turns into rows straight away.
+              // Registration messages (a Telegram chat or the template alone) turn into rows straight away.
               const pasted = event.clipboardData.getData("text");
-              if (!looksLikeTelegramChat(pasted)) return;
+              if (!looksLikeRegistrationText(pasted)) return;
               event.preventDefault();
               const box = event.currentTarget;
               void telegram.extract(rawText.slice(0, box.selectionStart) + pasted + rawText.slice(box.selectionEnd));
