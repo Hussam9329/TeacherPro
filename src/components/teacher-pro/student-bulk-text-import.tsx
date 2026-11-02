@@ -44,7 +44,6 @@ import {
   PlusCircle,
   Settings2,
   ShieldAlert,
-  Wand2,
 } from "lucide-react";
 import {
   compareBulkDuplicate,
@@ -1064,15 +1063,6 @@ export function StudentBulkTextImportView() {
           <div className="tp-bulk-import__heading">
             <CardTitle className="text-base">بيانات الطلاب</CardTitle>
             <div className="tp-bulk-import__actions">
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => void telegram.extract(rawText)}
-                disabled={isPreviewing || isImporting}
-              >
-                <Wand2 className="size-4" />
-                استخراج من رسائل التليگرام
-              </Button>
               <Button
                 type="button"
                 size="icon"
