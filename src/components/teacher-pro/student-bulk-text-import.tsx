@@ -42,6 +42,7 @@ import {
   Eye,
   Loader2,
   PlusCircle,
+  Settings2,
   ShieldAlert,
   Wand2,
 } from "lucide-react";
@@ -50,7 +51,7 @@ import {
   type BulkDuplicateMatch,
 } from "@/lib/bulk-duplicate-match";
 import { BulkDuplicateTransferDialog, type BulkTransferTarget } from "./bulk-duplicate-transfer-dialog";
-import { TelegramExtractDialog } from "./telegram-extract-dialog";
+import { looksLikeTelegramChat, useTelegramExtractor } from "./telegram-extract-dialog";
 import { ARCHIVED_STUDENT_STATUS, getStudentRegistryCapabilities } from "./student-registry-helpers";
 import { toLatinDigits, arabicCount, studentCount } from "@/lib/format";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
@@ -377,7 +378,6 @@ export function StudentBulkTextImportView() {
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [previewDone, setPreviewDone] = useState(false);
   const [transferTarget, setTransferTarget] = useState<BulkTransferTarget | null>(null);
-  const [extractOpen, setExtractOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -475,6 +475,18 @@ export function StudentBulkTextImportView() {
     () => new Map(contextRows.map((row) => [row.id, row])),
     [contextRows],
   );
+
+  // Telegram registration chats become rows in the box, then the usual check shows them all.
+  const telegram = useTelegramExtractor({
+    courseNames: contextCourseNames,
+    onExtracted: ({ text, count, notes }) => {
+      setRawText(text);
+      toast.success(`انستخرج ${studentCount(count)} من رسائل التليگرام`, notes.length
+        ? { description: `راجع: ${notes.join(" • ")}`, duration: 20000 }
+        : undefined);
+      void buildPreview(text);
+    },
+  });
 
   const copyColumnHeaders = async () => {
     try {
@@ -1045,19 +1057,7 @@ export function StudentBulkTextImportView() {
         onClose={() => setTransferTarget(null)}
         onRemoveRow={removeRow}
       />
-      <TelegramExtractDialog
-        open={extractOpen}
-        onOpenChange={setExtractOpen}
-        courseNames={contextCourseNames}
-        onAddRows={(rowsText, count) => {
-          // The extracted students join whatever is already pasted, then the check runs.
-          const nextText = rawText.trim() ? `${rawText.trimEnd()}
-${rowsText}` : rowsText;
-          setRawText(nextText);
-          toast.success(`انضاف ${studentCount(count)} من رسائل التليگرام`);
-          void buildPreview(nextText);
-        }}
-      />
+      {telegram.dialog}
       <Card className="tp-management-action-card tp-bulk-import__input-card">
         <CardHeader>
           <div className="tp-bulk-import__heading">
@@ -1066,11 +1066,22 @@ ${rowsText}` : rowsText;
               <Button
                 type="button"
                 size="sm"
-                onClick={() => setExtractOpen(true)}
+                onClick={() => void telegram.extract(rawText)}
                 disabled={isPreviewing || isImporting}
               >
                 <Wand2 className="size-4" />
                 استخراج من رسائل التليگرام
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="size-8"
+                aria-label="إعدادات الاستخراج"
+                title="إعدادات الاستخراج"
+                onClick={telegram.openSettings}
+              >
+                <Settings2 className="size-4" />
               </Button>
               <Button
                 type="button"
@@ -1131,7 +1142,15 @@ ${rowsText}` : rowsText;
               setRawText(event.target.value);
               setPreviewDone(false);
             }}
-            placeholder="الصق بيانات الطلاب هنا، كل طالب في سطر مستقل…"
+            onPaste={(event) => {
+              // A chat copied from Telegram turns into rows straight away.
+              const pasted = event.clipboardData.getData("text");
+              if (!looksLikeTelegramChat(pasted)) return;
+              event.preventDefault();
+              const box = event.currentTarget;
+              void telegram.extract(rawText.slice(0, box.selectionStart) + pasted + rawText.slice(box.selectionEnd));
+            }}
+            placeholder="الصق بيانات الطلاب هنا، كل طالب في سطر مستقل… أو الصق رسائل التسجيل من التليگرام وتتحول لوحدها."
             className="tp-bulk-import__textarea"
           />
 
