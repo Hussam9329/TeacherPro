@@ -21,6 +21,7 @@
     "test:student-unwithdrawal": "node scripts/test-student-unwithdrawal.cjs",
     "test:mirmaz-background-tab": "node scripts/test-mirmaz-background-tab.cjs",
     "test:bulk-duplicate-match": "node scripts/test-bulk-duplicate-match.cjs",
+    "test:telegram-extractor": "node scripts/test-telegram-extractor.cjs",
     "test:top-students": "node scripts/test-top-students.cjs",
     "test:pledge-limit": "node scripts/test-pledge-limit.cjs",
     "test:pledges-shortcut": "node scripts/test-pledges-shortcut.cjs",
