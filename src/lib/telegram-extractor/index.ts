@@ -5,8 +5,9 @@
  *
  * 1. The text is split into one block per student (parser).
  * 2. Each block's fields are read from labels and line order (rules).
- * 3. The group link decides the course; fixed rules clean the rest; every row
- *    gets review warnings, and duplicates inside the batch are dropped.
+ * 3. The group link decides the course; fixed rules clean the rest, and
+ *    duplicates inside the batch are dropped. The bulk add's own check then
+ *    shows every row with its errors.
  */
 import {
   cleanName,
@@ -19,44 +20,17 @@ import {
   phonesInText,
 } from "./cleaning";
 import { GOVERNORATES, type ExtractorSettings } from "./config";
-import { FEMALE, MALE, nameKey } from "./names";
 import { splitStudents, type StudentBlock } from "./parser";
 import { extractBlocks, type ExtractedFields } from "./rules";
 
 export { DEFAULT_EXTRACTOR_SETTINGS, GOVERNORATES, readExtractorLinks, type ExtractorLink, type ExtractorSettings } from "./config";
-export { FEMALE, MALE } from "./names";
-export { genderFromRules } from "./cleaning";
 
 const BAGHDAD = "بغداد";
 
-/** The 15 columns, in order. */
-export const COL = {
-  name: 0,
-  school: 1,
-  gender: 2,
-  course: 3,
-  program: 4,
-  term: 5,
-  studyType: 6,
-  mainSite: 7,
-  subSite: 8,
-  status: 9,
-  chances: 10,
-  grace: 11,
-  phone: 12,
-  parentPhone: 13,
-  telegram: 14,
-} as const;
-
 export type ExtractedRow = {
   cells: string[];
-  /** The student's own messages, for checking a row by eye. */
-  source: string;
-  sender: string;
-  /** The reader's note for the reviewer (cleared once the name is edited). */
+  /** The reader's note for the reviewer (e.g. extra phone numbers in the message). */
   note: string;
-  /** Column index -> why it needs a look. */
-  warnings: Record<number, string>;
 };
 
 export type ExtractionResult = {
@@ -67,39 +41,11 @@ export type ExtractionResult = {
   skipped: number;
 };
 
-const firstName = (name: string) => collapseSpaces(name).split(" ")[0] ?? "";
-
-/** Remembers a gender typed by hand for this first name. Returns the key, or "" when nothing was learned. */
-export function learnGender(settings: ExtractorSettings, name: string, gender: string): string {
-  const key = nameKey(firstName(name));
-  if (!key || (gender !== FEMALE && gender !== MALE)) return "";
-  settings.learnedGenders[key] = gender;
-  return key;
-}
-
-/** Recomputes a row's review warnings; called again after a cell is edited. */
-export function checkRow(row: ExtractedRow): void {
-  const warnings: Record<number, string> = {};
-  const cells = row.cells;
-  if (cells[COL.name].split(" ").filter(Boolean).length < 3) warnings[COL.name] = "الاسم أقل من ثلاثي";
-  if (!cells[COL.gender]) warnings[COL.gender] = "الجنس مو واضح";
-  if (!cells[COL.mainSite]) warnings[COL.mainSite] = "المحافظة مو مذكورة";
-  for (const [col, label] of [[COL.phone, "رقم الطالب"], [COL.parentPhone, "رقم ولي الأمر"]] as const) {
-    const phone = cells[col];
-    if (!phone) warnings[col] = `${label} فارغ`;
-    else if (phone.length !== 10 || !phone.startsWith("7")) warnings[col] = `${label} طوله أو بدايته غير طبيعية`;
-  }
-  if (!cells[COL.telegram]) warnings[COL.telegram] = "ماكو معرف تليگرام";
-  if (row.note) warnings[COL.name] = [warnings[COL.name], row.note].filter(Boolean).join(" • ");
-  row.warnings = warnings;
-}
-
 function buildRow(block: StudentBlock, fields: ExtractedFields, settings: ExtractorSettings): ExtractedRow {
   const link = settings.links[block.link];
   const name = cleanName(fields.name);
   const school = cleanSchool(fields.school);
-  const learned = settings.learnedGenders[nameKey(firstName(name))] ?? "";
-  const gender = genderFromRules(name, school) || learned || fields.gender;
+  const gender = genderFromRules(name, school) || fields.gender;
   const governorate = normalizeGovernorate(fields.governorate, GOVERNORATES, settings.governorateAliases);
   const region = governorate === BAGHDAD ? link.baghdadRegion : "";
 
@@ -125,9 +71,7 @@ function buildRow(block: StudentBlock, fields: ExtractedFields, settings: Extrac
     parentPhone,
     cleanTelegram(fields.telegram),
   ];
-  const row: ExtractedRow = { cells, source: block.text, sender: block.sender, note: collapseSpaces(fields.note), warnings: {} };
-  checkRow(row);
-  return row;
+  return { cells, note: collapseSpaces(fields.note) };
 }
 
 export function extractStudents(text: string, settings: ExtractorSettings): ExtractionResult {

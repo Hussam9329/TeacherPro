@@ -43,8 +43,6 @@ export type ExtractorSettings = {
   status: string;
   chances: string;
   grace: string;
-  /** First names whose gender was set by hand: name key -> «ذكر»/«أنثى». Beats every list. */
-  learnedGenders: Record<string, string>;
   governorateAliases: Record<string, string>;
 };
 
@@ -57,7 +55,6 @@ export const DEFAULT_EXTRACTOR_SETTINGS: ExtractorSettings = {
   status: "نشط",
   chances: "0",
   grace: "0 يوم",
-  learnedGenders: {},
   governorateAliases: GOVERNORATE_ALIASES,
 };
 

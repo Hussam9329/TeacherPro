@@ -1,7 +1,7 @@
 /**
- * First names -> gender, for the Telegram extractor and the learned-names memory.
+ * First names -> gender, for the Telegram extractor.
  * The lists include first names from the center's student records (Nov 2026) that every record agreed on.
- * Matching ignores diacritics, أ/إ/آ, ة/ه and ى/ي. Order: learned names, عبد/ذو, the lists,
+ * Matching ignores diacritics, أ/إ/آ, ة/ه and ى/ي. Order: عبد/ذو, the lists,
  * then the ending rule (ة/ه or اء -> female; male names with those endings are in the male list).
  * Names used for both genders are left out on purpose so they stay for review.
  */
@@ -73,8 +73,7 @@ const MALE_NAMES = words(`
 اليم محمدعلي جعفرالصادق زانيار رقيم جون نورالحسين دانيال ئالان
 `);
 
-// Used for both genders: never decided by a list or ending; only the user's
-// own choice (learned names) sets them.
+// Used for both genders: never decided by a list or ending, so they stay for review.
 const UNISEX_NAMES = words(`
 وعد صباح جهاد نهاد فرات رضا براء ميلاد فيض اسلام عهد سرور جود نجاح ديار نورس
 `);
@@ -104,11 +103,9 @@ function fromLists(key: string): ExtractedGender {
 }
 
 /** «أنثى», «ذكر» or "" when nothing decides it. */
-export function genderOf(firstName: string, learned?: Record<string, string>): ExtractedGender {
+export function genderOf(firstName: string): ExtractedGender {
   const key = nameKey(firstName);
   if (!key) return "";
-  const known = learned?.[key];
-  if (known === FEMALE || known === MALE) return known;
   if (UNISEX_KEYS.has(key)) return "";
   if (key.startsWith("عبد") || key.startsWith("ذو")) return MALE;
   const found = fromLists(key) || (key.startsWith("ال") ? fromLists(key.slice(2)) : "");

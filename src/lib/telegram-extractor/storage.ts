@@ -18,7 +18,6 @@ export function loadExtractorSettings(): ExtractorSettings {
     if (typeof saved.chances === "string") settings.chances = saved.chances;
     if (typeof saved.grace === "string") settings.grace = saved.grace;
     if (isRecord(saved.links)) settings.links = saved.links as ExtractorSettings["links"];
-    if (isRecord(saved.learnedGenders)) settings.learnedGenders = saved.learnedGenders as Record<string, string>;
     if (isRecord(saved.governorateAliases)) settings.governorateAliases = saved.governorateAliases as Record<string, string>;
   } catch {
     // Blocked or broken storage: the defaults still work.

@@ -94,7 +94,6 @@ assert.deepEqual(one.rows[0].cells, [
   "حوراء منار صحو عبد", "اعدادية العقيدة للبنات", "أنثى", "الدورة الصيفية", "منهج كامل", "", "إلكتروني",
   "بغداد", "بغداد - عموم بغداد", "نشط", "0", "0 يوم", "7701234567", "7801234567", "hawra_1",
 ]);
-assert.deepEqual(one.rows[0].warnings, {});
 assert.equal(extractor.rowsToText(one.rows).split("\t").length, 15, "the desktop app's 15 columns");
 const bulkSource = fs.readFileSync(path.join(root, "src/components/teacher-pro/student-bulk-text-import.tsx"), "utf8");
 assert(bulkSource.includes("cells.length === EXPECTED_COLUMNS + 1") && bulkSource.includes("LEGACY_GRACE_COLUMN_INDEX = 11"),
@@ -116,12 +115,12 @@ assert.deepEqual(unknown.unknownLinks, ["NewLink123"]);
 assert.equal(unknown.rows.length, 0);
 assert.equal(unknown.skipped, 1);
 
-// A gender set by hand is remembered for the first name.
-const learned = withLinks();
-assert(extractor.learnGender(learned, "وعد علي حسن", "أنثى"));
-const waad = extractor.extractStudents(`${head}${ADMIN}: https://t.me/+WinterLink1\n${head}W: وعد كريم جاسم\nبغداد\n07701112233`, learned);
-assert.equal(waad.rows[0].cells[2], "أنثى");
-assert.equal(extractor.learnGender(learned, "علي", "غلط"), "");
+// A name used for both genders is left empty, so the bulk add's check flags it.
+const waad = extractor.extractStudents(`${head}${ADMIN}: https://t.me/+WinterLink1
+${head}W: وعد كريم جاسم
+بغداد
+07701112233`, withLinks());
+assert.equal(waad.rows[0].cells[2], "");
 
 // The full sample of the desktop app (kept outside this public repo: it holds
 // real students). Every student must come out exactly as the app did.
@@ -151,6 +150,7 @@ if (fs.existsSync(path.join(sample, "input.txt")) && fs.existsSync(desktopConfig
 
 // Wiring into «إضافة طلاب جماعية».
 const bulk = fs.readFileSync(path.join(root, "src/components/teacher-pro/student-bulk-text-import.tsx"), "utf8");
-assert(bulk.includes("<TelegramExtractDialog"), "the bulk add page opens the extractor");
+assert(bulk.includes("useTelegramExtractor(") && bulk.includes("{telegram.dialog}"), "the bulk add page runs the extractor");
+assert(/onPaste=\{[\s\S]*?looksLikeTelegramChat\(pasted\)[\s\S]*?telegram\.extract\(/.test(bulk), "a pasted Telegram chat turns into rows by itself");
 
 console.log("PASS: Telegram registration messages become bulk-add rows, as in «مستخرج الطلاب»");
