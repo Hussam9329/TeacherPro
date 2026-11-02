@@ -57,7 +57,7 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [day, setDay] = useState(""); // «كل الدرجات» narrowed to one arrival day (YYYY-MM-DD), or all
+  const [picked, setPicked] = useState<string[]>([]); // «كل الدرجات» narrowed to these arrival days (YYYY-MM-DD); none = all
   const requestRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async (which: MirmazView) => {
@@ -98,7 +98,7 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
       setData(null);
       setLedger(null);
       setSearch("");
-      setDay("");
+      setPicked([]);
     }
   }, [open, view, load]);
 
@@ -124,12 +124,12 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
     return [...byDay.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([key, entry]) => ({ key, count: entry.count, exams: entry.exams.size }));
   }, [ledger]);
 
-  // «كل الدرجات»: the chosen day only, then a group shows when its exam matches the search, else only its matching students.
+  // «كل الدرجات»: the chosen days only, then a group shows when its exam matches the search, else only its matching students.
   const visibleGroups = useMemo(() => {
     const query = normalizeForSearch(search);
     const groups = (ledger?.groups || []).flatMap((group) => {
-      if (!day) return [group];
-      const rows = group.rows.filter((row) => baghdadDateKey(row.arrivedAt) === day);
+      if (!picked.length) return [group];
+      const rows = group.rows.filter((row) => picked.includes(baghdadDateKey(row.arrivedAt)));
       return rows.length ? [{ ...group, rows }] : [];
     });
     if (!query) return groups;
@@ -138,7 +138,7 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
       const rows = group.rows.filter((row) => normalizeForSearch(`${row.studentName} ${row.tpStudentName || ""}`).includes(query));
       return rows.length ? [{ ...group, rows }] : [];
     });
-  }, [ledger, search, day]);
+  }, [ledger, search, picked]);
 
   const counts = view === "ALL" ? ledger?.counts : data?.counts;
   const loaded = view === "ALL" ? Boolean(ledger) : Boolean(data);
@@ -202,10 +202,16 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
               />
             ) : view === "ALL" ? (
               <>
-                <LedgerStats groups={visibleGroups} days={days} day={day} onDay={(key) => setDay((current) => (current === key ? "" : key))} />
+                <LedgerStats
+                  groups={visibleGroups}
+                  days={days}
+                  picked={picked}
+                  onDay={(key) => setPicked((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]))}
+                  onAll={() => setPicked([])}
+                />
                 <div className="tp-mirmaz__groups">
                   {visibleGroups.map((group, index) => (
-                    <LedgerGroup key={group.key} group={group} openAtStart={index === 0 || Boolean(search.trim()) || Boolean(day)} onHandle={() => setView("PENDING")} />
+                    <LedgerGroup key={group.key} group={group} openAtStart={index === 0 || Boolean(search.trim()) || picked.length > 0} onHandle={() => setView("PENDING")} />
                   ))}
                 </div>
               </>
@@ -520,12 +526,13 @@ function tally(rows: MirmazLedgerRow[]) {
   return { by, saved: by.SAVED + by.RESOLVED + by.ARCHIVED, average, highest: scores.length ? Math.max(...scores) : null, lowest: scores.length ? Math.min(...scores) : null };
 }
 
-// «كل الدرجات» at a glance: the totals (of the chosen day, when one is chosen), then every day with its count; a day narrows the list to it.
-function LedgerStats({ groups, days, day, onDay }: {
+// «كل الدرجات» at a glance: the totals (of the chosen days, when some are chosen), then every day with its count; each day pressed adds it to the list.
+function LedgerStats({ groups, days, picked, onDay, onAll }: {
   groups: MirmazLedgerGroup[];
   days: Array<{ key: string; count: number; exams: number }>;
-  day: string;
+  picked: string[];
   onDay: (key: string) => void;
+  onAll: () => void;
 }) {
   const all = tally(groups.flatMap((group) => group.rows));
   const cards: Array<{ label: string; value: number; tone?: "success" | "warning" }> = [
@@ -546,9 +553,15 @@ function LedgerStats({ groups, days, day, onDay }: {
       </div>
       {days.length > 0 && (
         <div className="tp-mirmaz__days" role="group" aria-label="حسب يوم الوصول">
-          <span className="tp-mirmaz__days-label">حسب اليوم{day ? " (اضغط اليوم مرة ثانية للكل)" : ""}</span>
+          <span className="tp-mirmaz__days-label">حسب اليوم (تكدر تختار أكثر من يوم)</span>
+          {picked.length > 0 && (
+            <button type="button" className="tp-mirmaz__day" onClick={onAll}>
+              <b>الكل</b>
+              <span>إلغاء الاختيار</span>
+            </button>
+          )}
           {days.map((entry) => (
-            <button key={entry.key} type="button" className="tp-mirmaz__day" aria-pressed={day === entry.key} onClick={() => onDay(entry.key)}>
+            <button key={entry.key} type="button" className="tp-mirmaz__day" aria-pressed={picked.includes(entry.key)} onClick={() => onDay(entry.key)}>
               <b>{formatAppDate(entry.key, entry.key)}</b>
               <span>{entry.count} درجة · {entry.exams} {entry.exams === 1 ? "امتحان" : "امتحانات"}</span>
             </button>
