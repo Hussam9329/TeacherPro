@@ -39,9 +39,10 @@ export type ExtractorSettings = {
   /** The management account's name as Telegram shows it on its messages. */
   adminSender: string;
   links: Record<string, ExtractorLink>;
-  /** «الحالة» and «الفرص» written for every student. */
+  /** «الحالة»، «الفرص» and «السماح» written for every student. */
   status: string;
   chances: string;
+  grace: string;
   /** First names whose gender was set by hand: name key -> «ذكر»/«أنثى». Beats every list. */
   learnedGenders: Record<string, string>;
   governorateAliases: Record<string, string>;
@@ -49,11 +50,29 @@ export type ExtractorSettings = {
 
 export const DEFAULT_EXTRACTOR_SETTINGS: ExtractorSettings = {
   adminSender: "اضافات الطلاب للاستاذ حسن فلاح",
-  // Group invite links stay out of the code (this repository is public): each
-  // one is set up the first time it shows up, and kept in the browser.
+  // Group invite links stay out of the code (this repository is public): the
+  // known ones come from the server (TELEGRAM_EXTRACTOR_LINKS), a new one is
+  // set up the first time it shows up and kept in the browser.
   links: {},
   status: "نشط",
   chances: "0",
+  grace: "0 يوم",
   learnedGenders: {},
   governorateAliases: GOVERNORATE_ALIASES,
 };
+
+const LINK_ID = /^[A-Za-z0-9_-]{4,64}$/;
+const LINK_FIELDS = ["course", "program", "term", "studyType", "baghdadRegion"] as const;
+
+/** Keeps only well-formed links ({ id: { course, program, term, studyType, baghdadRegion } }). */
+export function readExtractorLinks(value: unknown): Record<string, ExtractorLink> {
+  const links: Record<string, ExtractorLink> = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return links;
+  for (const [id, raw] of Object.entries(value)) {
+    if (!LINK_ID.test(id) || !raw || typeof raw !== "object") continue;
+    const config = raw as Record<string, unknown>;
+    if (!LINK_FIELDS.every((field) => typeof config[field] === "string") || !config.course) continue;
+    links[id] = Object.fromEntries(LINK_FIELDS.map((field) => [field, (config[field] as string).trim()])) as ExtractorLink;
+  }
+  return links;
+}

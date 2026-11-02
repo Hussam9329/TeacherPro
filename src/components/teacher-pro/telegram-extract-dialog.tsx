@@ -21,13 +21,14 @@ import {
 } from "@/lib/telegram-extractor";
 import { nameKey } from "@/lib/telegram-extractor/names";
 import { loadExtractorSettings, saveExtractorSettings } from "@/lib/telegram-extractor/storage";
+import { telegramExtractorApi } from "@/lib/api";
 import { toast } from "@/lib/user-toast";
 import "./tp-modal.css";
 import "./telegram-extract-dialog.css";
 
 const COLUMNS = [
   "اسم الطالب", "المدرسة", "الجنس", "اسم الدورة", "نظام الاشتراك", "الكورس المطلوب", "نظام الدراسة",
-  "الموقع الرئيسي", "الموقع الفرعي", "الحالة", "الفرص", "رقم هاتف الطالب", "رقم ولي الأمر", "معرف التليگرام",
+  "الموقع الرئيسي", "الموقع الفرعي", "الحالة", "الفرص", "السماح", "رقم هاتف الطالب", "رقم ولي الأمر", "معرف التليگرام",
 ];
 const LTR_COLUMNS = new Set<number>([COL.chances, COL.phone, COL.parentPhone, COL.telegram]);
 
@@ -126,13 +127,28 @@ export function TelegramExtractDialog({
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [view, setView] = useState<View>("main");
   const [pendingLinks, setPendingLinks] = useState<LinkDraft[]>([]);
-  const [settingsDraft, setSettingsDraft] = useState<{ adminSender: string; status: string; chances: string; aliases: string; links: LinkDraft[] } | null>(null);
+  const [settingsDraft, setSettingsDraft] = useState<{ adminSender: string; status: string; chances: string; grace: string; aliases: string; links: LinkDraft[] } | null>(null);
+  /** Links kept on the server; the ones set up in this browser come on top. */
+  const [serverLinks, setServerLinks] = useState<ExtractorSettings["links"]>({});
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open) setSettings(loadExtractorSettings());
+    if (!open) return;
+    setSettings(loadExtractorSettings());
+    let live = true;
+    void telegramExtractorApi.links().then((data) => {
+      if (live && data) setServerLinks(data.links);
+    });
+    return () => {
+      live = false;
+    };
   }, [open]);
+
+  const withServerLinks = (current: ExtractorSettings): ExtractorSettings => ({
+    ...current,
+    links: { ...serverLinks, ...current.links },
+  });
 
   const store = (next: ExtractorSettings) => {
     setSettings(next);
@@ -170,7 +186,7 @@ export function TelegramExtractDialog({
     }
     setBusy(true);
     try {
-      const result = extractStudents(text, current);
+      const result = extractStudents(text, withServerLinks(current));
       if (result.unknownLinks.length) {
         // Asked once per new group link, then remembered.
         setPendingLinks(result.unknownLinks.map((link) => emptyLink(link, courseNames[0] ?? "")));
@@ -278,8 +294,9 @@ export function TelegramExtractDialog({
       adminSender: settings.adminSender,
       status: settings.status,
       chances: settings.chances,
+      grace: settings.grace,
       aliases: Object.entries(settings.governorateAliases).map(([alias, name]) => `${alias} = ${name}`).join("\n"),
-      links: Object.entries(settings.links).map(([link, config]) => ({ link, ...config })),
+      links: Object.entries(withServerLinks(settings).links).map(([link, config]) => ({ link, ...config })),
     });
     setView("settings");
   };
@@ -287,8 +304,9 @@ export function TelegramExtractDialog({
     if (!settingsDraft) return;
     const links: ExtractorSettings["links"] = {};
     for (const { link, ...config } of settingsDraft.links) {
-      if (!config.course) continue;
-      links[cleanLinkId(link)] = config;
+      const id = cleanLinkId(link);
+      if (!config.course || JSON.stringify(serverLinks[id]) === JSON.stringify(config)) continue; // the server keeps those
+      links[id] = config;
     }
     const aliases: Record<string, string> = {};
     for (const line of settingsDraft.aliases.split(/\r?\n/)) {
@@ -303,6 +321,7 @@ export function TelegramExtractDialog({
       adminSender: settingsDraft.adminSender.trim(),
       status: settingsDraft.status.trim(),
       chances: settingsDraft.chances.trim(),
+      grace: settingsDraft.grace.trim(),
       links,
       governorateAliases: aliases,
     });
@@ -363,6 +382,9 @@ export function TelegramExtractDialog({
                 </Field>
                 <Field label="الفرص">
                   <input className="tp-tgx__control" dir="ltr" inputMode="numeric" value={settingsDraft.chances} onChange={(event) => setSettingsDraft({ ...settingsDraft, chances: event.target.value })} />
+                </Field>
+                <Field label="السماح">
+                  <input className="tp-tgx__control" value={settingsDraft.grace} onChange={(event) => setSettingsDraft({ ...settingsDraft, grace: event.target.value })} />
                 </Field>
               </div>
             </section>

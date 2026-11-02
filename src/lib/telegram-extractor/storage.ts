@@ -16,6 +16,7 @@ export function loadExtractorSettings(): ExtractorSettings {
     if (typeof saved.adminSender === "string") settings.adminSender = saved.adminSender;
     if (typeof saved.status === "string") settings.status = saved.status;
     if (typeof saved.chances === "string") settings.chances = saved.chances;
+    if (typeof saved.grace === "string") settings.grace = saved.grace;
     if (isRecord(saved.links)) settings.links = saved.links as ExtractorSettings["links"];
     if (isRecord(saved.learnedGenders)) settings.learnedGenders = saved.learnedGenders as Record<string, string>;
     if (isRecord(saved.governorateAliases)) settings.governorateAliases = saved.governorateAliases as Record<string, string>;
