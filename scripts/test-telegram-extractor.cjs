@@ -148,9 +148,23 @@ if (fs.existsSync(path.join(sample, "input.txt")) && fs.existsSync(desktopConfig
   console.log(`  full sample: ${expected.length} students match the desktop app`);
 }
 
+// What counts as registration messages when pasted into the bulk add box.
+const template = [
+  "السلام عليكم ، إدارة الأستاذ حسن فلاح", "1️⃣ تأكد من معلوماتك المسجلة عدنا:", "الاسم الرباعي: مصطفى كريم جواد سالم",
+  "رقم الطالب: 07700000011", "رقم ولي الأمر: 07800000022", "المحافظة: بغداد", "معرف التليكرام: @test_user7",
+  "المدرسة: ثانوية النموذج للبنين", "https://t.me/+WinterLink1",
+].join("\n");
+assert(extractor.looksLikeRegistrationText("[02-Nov-26 9:43 AM] احمد: مرحبا"), "a Telegram chat");
+assert(extractor.looksLikeRegistrationText(template), "the template pasted on its own");
+assert(!extractor.looksLikeRegistrationText("مراد سلمان سرحان\tالياسمين للبنين\tذكر"), "bulk add rows");
+assert.deepEqual(extractor.extractStudents(template, withLinks()).rows.map((row) => row.cells), [[
+  "مصطفى كريم جواد سالم", "ثانوية النموذج للبنين", "ذكر", "الدورة الشتوية الثالثة", "منهج كامل", "", "مدمج",
+  "بغداد", "", "نشط", "0", "0 يوم", "7700000011", "7800000022", "test_user7",
+]]);
+
 // Wiring into «إضافة طلاب جماعية».
 const bulk = fs.readFileSync(path.join(root, "src/components/teacher-pro/student-bulk-text-import.tsx"), "utf8");
 assert(bulk.includes("useTelegramExtractor(") && bulk.includes("{telegram.dialog}"), "the bulk add page runs the extractor");
-assert(/onPaste=\{[\s\S]*?looksLikeTelegramChat\(pasted\)[\s\S]*?telegram\.extract\(/.test(bulk), "a pasted Telegram chat turns into rows by itself");
+assert(/onPaste=\{[\s\S]*?looksLikeRegistrationText\(pasted\)[\s\S]*?telegram\.extract\(/.test(bulk), "a pasted Telegram chat turns into rows by itself");
 
 console.log("PASS: Telegram registration messages become bulk-add rows, as in «مستخرج الطلاب»");

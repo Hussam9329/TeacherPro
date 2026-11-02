@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import {
   extractStudents,
+  looksLikeRegistrationText,
   rowsToText,
   type ExtractorLink,
   type ExtractorSettings,
@@ -16,9 +17,6 @@ import { toast } from "@/lib/user-toast";
 import "./tp-modal.css";
 import "./telegram-extract-dialog.css";
 
-/** A Telegram export line: «[02-Nov-26 9:43 AM] sender: …». */
-const TELEGRAM_HEADER = /^\[\d{1,2}-[A-Za-z]{3}-\d{2,4}[^\]]*\]/m;
-
 type LinkDraft = ExtractorLink & { link: string };
 type SettingsDraft = { adminSender: string; status: string; chances: string; grace: string; aliases: string; links: LinkDraft[] };
 type Extracted = { text: string; count: number; notes: string[] };
@@ -28,9 +26,6 @@ const emptyLink = (link: string, course = ""): LinkDraft => ({
 });
 const linkLabel = (link: string) => (link ? `t.me/+${link}` : "طلاب بدون رابط كروب");
 const cleanLinkId = (value: string) => value.trim().replace(/^https?:\/\//, "").replace(/^t\.me\/\+/, "").replace(/^[/ ]+|[/ ]+$/g, "");
-
-/** True when the text holds messages copied from Telegram. */
-export const looksLikeTelegramChat = (text: string) => TELEGRAM_HEADER.test(text);
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -132,8 +127,8 @@ export function useTelegramExtractor({
     const lines = text.split(/\r?\n/);
     const kept = lines.filter((line) => line.includes("\t"));
     const chat = lines.filter((line) => !line.includes("\t")).join("\n");
-    if (!looksLikeTelegramChat(chat)) {
-      toast.error("ما لكيت رسائل تليگرام بالمربع", { description: "انسخ المحادثة من التليگرام ويا التاريخ واسم المرسل، والصقها بالمربع." });
+    if (!looksLikeRegistrationText(chat)) {
+      toast.error("ما لكيت رسائل تسجيل بالمربع", { description: "انسخ المحادثة من التليگرام أو قالب التسجيل، والصقه بالمربع." });
       return;
     }
     const settings = await currentSettings();
