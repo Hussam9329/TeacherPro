@@ -43,12 +43,14 @@ import {
   Loader2,
   PlusCircle,
   ShieldAlert,
+  Wand2,
 } from "lucide-react";
 import {
   compareBulkDuplicate,
   type BulkDuplicateMatch,
 } from "@/lib/bulk-duplicate-match";
 import { BulkDuplicateTransferDialog, type BulkTransferTarget } from "./bulk-duplicate-transfer-dialog";
+import { TelegramExtractDialog } from "./telegram-extract-dialog";
 import { ARCHIVED_STUDENT_STATUS, getStudentRegistryCapabilities } from "./student-registry-helpers";
 import { toLatinDigits, arabicCount, studentCount } from "@/lib/format";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
@@ -375,6 +377,7 @@ export function StudentBulkTextImportView() {
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [previewDone, setPreviewDone] = useState(false);
   const [transferTarget, setTransferTarget] = useState<BulkTransferTarget | null>(null);
+  const [extractOpen, setExtractOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -463,6 +466,10 @@ export function StudentBulkTextImportView() {
   const contextCourses = useMemo(
     () => contextRows.map(normalizeRegisterContextCourse),
     [contextRows],
+  );
+  const contextCourseNames = useMemo(
+    () => contextCourses.map((course) => course.name).filter(Boolean),
+    [contextCourses],
   );
   const contextRowByCourseId = useMemo(
     () => new Map(contextRows.map((row) => [row.id, row])),
@@ -1038,22 +1045,46 @@ export function StudentBulkTextImportView() {
         onClose={() => setTransferTarget(null)}
         onRemoveRow={removeRow}
       />
+      <TelegramExtractDialog
+        open={extractOpen}
+        onOpenChange={setExtractOpen}
+        courseNames={contextCourseNames}
+        onAddRows={(rowsText, count) => {
+          // The extracted students join whatever is already pasted, then the check runs.
+          const nextText = rawText.trim() ? `${rawText.trimEnd()}
+${rowsText}` : rowsText;
+          setRawText(nextText);
+          toast.success(`انضاف ${studentCount(count)} من رسائل التليگرام`);
+          void buildPreview(nextText);
+        }}
+      />
       <Card className="tp-management-action-card tp-bulk-import__input-card">
         <CardHeader>
           <div className="tp-bulk-import__heading">
             <CardTitle className="text-base">بيانات الطلاب</CardTitle>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setRawText(SAMPLE_TEXT);
-                setPreviewDone(false);
-              }}
-              disabled={isPreviewing}
-            >
-              وضع المثال
-            </Button>
+            <div className="tp-bulk-import__actions">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setExtractOpen(true)}
+                disabled={isPreviewing || isImporting}
+              >
+                <Wand2 className="size-4" />
+                استخراج من رسائل التليگرام
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setRawText(SAMPLE_TEXT);
+                  setPreviewDone(false);
+                }}
+                disabled={isPreviewing}
+              >
+                وضع المثال
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="tp-bulk-import__input">
