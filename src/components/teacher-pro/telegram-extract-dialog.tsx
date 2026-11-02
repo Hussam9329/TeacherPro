@@ -6,7 +6,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import {
   extractStudents,
-  looksLikeRegistrationText,
   rowsToText,
   type ExtractorLink,
   type ExtractorSettings,
@@ -127,10 +126,6 @@ export function useTelegramExtractor({
     const lines = text.split(/\r?\n/);
     const kept = lines.filter((line) => line.includes("\t"));
     const chat = lines.filter((line) => !line.includes("\t")).join("\n");
-    if (!looksLikeRegistrationText(chat)) {
-      toast.warning("ما لكيت رسائل تسجيل بالمربع", { description: "انسخ المحادثة من التليگرام أو قالب التسجيل، والصقه بالمربع." });
-      return;
-    }
     const settings = await currentSettings();
     const result = extractStudents(chat, settings);
     if (result.unknownLinks.length) {
