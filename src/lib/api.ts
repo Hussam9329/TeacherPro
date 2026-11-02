@@ -1,4 +1,5 @@
 import type { StoryAuditFacts } from "@/lib/student-story-audit";
+import type { ExtractorLink } from "@/lib/telegram-extractor/config";
 import type { AcademicBonusTrace, AcademicStaleRecord } from "@/lib/academic-types";
 import type { TextShortcut, TextShortcutInput } from "@/lib/text-shortcuts";
 import type { BulkDuplicateMatch } from "@/lib/bulk-duplicate-match";
@@ -1521,6 +1522,12 @@ export interface StudentBulkPreviewResponse {
   rows: StudentBulkPreviewRow[];
   source: "database";
 }
+
+/** Group links «استخراج من رسائل التليگرام» already knows (kept on the server, not in the code). */
+export const telegramExtractorApi = {
+  links: () =>
+    apiGet<{ links: Record<string, ExtractorLink> }>("telegram-extractor/links"),
+};
 
 export const studentRegisterApi = {
   context: () =>

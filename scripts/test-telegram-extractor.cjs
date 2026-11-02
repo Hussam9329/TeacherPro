@@ -92,10 +92,23 @@ const one = extractor.extractStudents(chat, withLinks());
 assert.equal(one.rows.length, 1);
 assert.deepEqual(one.rows[0].cells, [
   "حوراء منار صحو عبد", "اعدادية العقيدة للبنات", "أنثى", "الدورة الصيفية", "منهج كامل", "", "إلكتروني",
-  "بغداد", "بغداد - عموم بغداد", "نشط", "0", "7701234567", "7801234567", "hawra_1",
+  "بغداد", "بغداد - عموم بغداد", "نشط", "0", "0 يوم", "7701234567", "7801234567", "hawra_1",
 ]);
 assert.deepEqual(one.rows[0].warnings, {});
-assert.equal(extractor.rowsToText(one.rows).split("\t").length, 14, "14 columns, as the bulk add reads them");
+assert.equal(extractor.rowsToText(one.rows).split("\t").length, 15, "the desktop app's 15 columns");
+const bulkSource = fs.readFileSync(path.join(root, "src/components/teacher-pro/student-bulk-text-import.tsx"), "utf8");
+assert(bulkSource.includes("cells.length === EXPECTED_COLUMNS + 1") && bulkSource.includes("LEGACY_GRACE_COLUMN_INDEX = 11"),
+  "the bulk add reads the 15 columns and leaves «السماح» out");
+
+// Known links come from the server setting; anything malformed is dropped.
+const { readExtractorLinks } = extractor;
+const good = { course: "الدورة الشتوية الثالثة", program: "منهج كامل", term: "", studyType: "مدمج", baghdadRegion: "" };
+assert.deepEqual(readExtractorLinks({ WinterLink1: good, "bad link!": good, NoCourse1: { ...good, course: "" }, Short1: { course: "x" } }), { WinterLink1: good });
+assert.deepEqual(readExtractorLinks(null), {});
+assert.deepEqual(readExtractorLinks([good]), {});
+const linksRoute = fs.readFileSync(path.join(root, "src/app/api/telegram-extractor/links/route.ts"), "utf8");
+assert(linksRoute.includes('requirePermissionPrincipal(req, "students.add")') && linksRoute.includes("TELEGRAM_EXTRACTOR_LINKS"),
+  "the links reach only staff who add students");
 
 // An unknown link is reported and its students wait for it to be set up.
 const unknown = extractor.extractStudents(chat.replace("SummerLink1", "NewLink123"), withLinks());
@@ -125,13 +138,13 @@ if (fs.existsSync(path.join(sample, "input.txt")) && fs.existsSync(desktopConfig
   assert.equal(Object.keys(real.links).length, 4, "the desktop app's four links");
   const result = extractor.extractStudents(fs.readFileSync(path.join(sample, "input.txt"), "utf8"), real);
   const expected = fs.readFileSync(path.join(sample, "expected.tsv"), "utf8").split(/\r?\n/).filter(Boolean)
-    .map((line) => { const cells = line.split("\t"); cells.splice(11, 1); return cells; }); // no «السماح» column here
+    .map((line) => line.split("\t"));
   assert.equal(result.rows.length, expected.length);
   result.rows.forEach((row, index) => assert.deepEqual(row.cells, expected[index], `row ${index + 1}`));
   const template = fs.readFileSync(path.join(sample, "template_filled.txt"), "utf8");
   assert.deepEqual(extractor.extractStudents(template, real).rows.map((row) => row.cells), [[
     "حسين علي هادي كاظم", "خارجي", "ذكر", "الدورة الشتوية الثالثة", "منهج كامل", "", "مدمج",
-    "بغداد", "", "نشط", "0", "7708497299", "7700011656", "Hoidv",
+    "بغداد", "", "نشط", "0", "0 يوم", "7708497299", "7700011656", "Hoidv",
   ]]);
   console.log(`  full sample: ${expected.length} students match the desktop app`);
 }

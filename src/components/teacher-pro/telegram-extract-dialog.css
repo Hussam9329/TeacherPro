@@ -35,7 +35,7 @@
 .tp-tgx__link-head > .tp-modal__field { flex: 1; }
 
 @media (min-width: 640px) {
-  .tp-tgx__general { grid-template-columns: 2fr 1fr 1fr; }
+  .tp-tgx__general { grid-template-columns: 2fr 1fr 1fr 1fr; }
   .tp-tgx__link-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (min-width: 1024px) {

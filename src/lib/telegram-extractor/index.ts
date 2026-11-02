@@ -1,6 +1,7 @@
 /**
  * «استخراج من رسائل التليگرام»: turns registration messages copied from
- * Telegram into rows of «إضافة طلاب جماعية» (14 tab-separated columns).
+ * Telegram into rows of «إضافة طلاب جماعية»: the desktop app's 15 tab-separated
+ * columns («السماح» included; the bulk add reads it and leaves it out).
  *
  * 1. The text is split into one block per student (parser).
  * 2. Each block's fields are read from labels and line order (rules).
@@ -22,13 +23,13 @@ import { FEMALE, MALE, nameKey } from "./names";
 import { splitStudents, type StudentBlock } from "./parser";
 import { extractBlocks, type ExtractedFields } from "./rules";
 
-export { DEFAULT_EXTRACTOR_SETTINGS, GOVERNORATES, type ExtractorLink, type ExtractorSettings } from "./config";
+export { DEFAULT_EXTRACTOR_SETTINGS, GOVERNORATES, readExtractorLinks, type ExtractorLink, type ExtractorSettings } from "./config";
 export { FEMALE, MALE } from "./names";
 export { genderFromRules } from "./cleaning";
 
 const BAGHDAD = "بغداد";
 
-/** The 14 columns of «إضافة طلاب جماعية», in order. */
+/** The 15 columns, in order. */
 export const COL = {
   name: 0,
   school: 1,
@@ -41,9 +42,10 @@ export const COL = {
   subSite: 8,
   status: 9,
   chances: 10,
-  phone: 11,
-  parentPhone: 12,
-  telegram: 13,
+  grace: 11,
+  phone: 12,
+  parentPhone: 13,
+  telegram: 14,
 } as const;
 
 export type ExtractedRow = {
@@ -118,6 +120,7 @@ function buildRow(block: StudentBlock, fields: ExtractedFields, settings: Extrac
     region,
     settings.status,
     settings.chances,
+    settings.grace,
     phone,
     parentPhone,
     cleanTelegram(fields.telegram),
