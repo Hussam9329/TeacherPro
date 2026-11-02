@@ -88,7 +88,13 @@ function cleanLines(lines: string[], templateLines: Set<string>): string[] {
 }
 
 const fieldText = (line: string) => norm(line).replace(/^[ \-–ـ•*]+/, "");
-const fieldLines = (message: Message) => message.lines.filter((line) => FIELD_LINE.test(fieldText(line)));
+// A field left empty («المدرسة:») says nothing, so it is template text, not the student's answer.
+const hasValue = (line: string) => {
+  const text = fieldText(line);
+  const label = FIELD_LINE.exec(text);
+  return Boolean(label && text.slice(label[0].length).trim());
+};
+const fieldLines = (message: Message) => message.lines.filter(hasValue);
 const isFilled = (message: Message) => message.lines.some((line) => NAME_FILLED.test(fieldText(line)));
 const lastLink = (text: string) => {
   const found = [...text.matchAll(LINK)];

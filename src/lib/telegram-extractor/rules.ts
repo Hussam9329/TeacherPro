@@ -27,26 +27,34 @@ const LATIN = /[A-Za-z][A-Za-z0-9_]{2,}/;
 const ARABIC = /[ء-ي]/;
 
 const NAME_LABEL = /^(?:الاسم\s*الرباعي|الاسم\s*الثلاثي|الاسم|لاسم)(?=[\s:：\-/.]|$)[\s:：\-/.]*/;
-const SCHOOL_LABEL = /^(?:المدرسة|المدرسه)(?=[\s:：\-/.]|$)[\s:：\-/.]*/;
+// «المدرسة:», «مدرسه», «مدرستي», «اسم المدرسة هي» …
+const SCHOOL_LABEL = /^(?:اسم\s*)?(?:ال)?مدرس(?:ة|ه|تي)(?:\s*هي)?(?=[\s:：\-/.]|$)[\s:：\-/.]*/;
 const GOV_LABEL = /^(?:المحافظة|المحافظه)(?=[\s:：\-/.]|$)[\s:：\-/.]*/;
 const TG_LABEL = /^(?:معرف|يوزر)/;
 const SUB_LABEL = /^(?:نوع|الاشتراك|اشتراك|السعر|صورة|صوره|وصل|الوصل)/;
 
-const GUARDIAN_WORDS = ["ولي", "والد", "الاب", "الأب", "ابي", "أبي", "ابوي", "أبوي", "بابا", "الام", "الأم",
+// «والي» is the common misspelling of «ولي».
+const GUARDIAN_WORDS = ["ولي", "والي", "والد", "الاب", "الأب", "ابي", "أبي", "ابوي", "أبوي", "بابا", "الام", "الأم",
   "امي", "أمي", "ماما", "اهلي", "أهلي"];
 const FATHER_WORDS = ["والد", "الاب", "الأب", "ابي", "أبي", "ابوي", "أبوي", "بابا"];
 const STUDENT_LABEL = /(?:رقم\s*الطالب|رقم\s*طالب|رقمي|الشخصي|^رقم|^الرقم)/;
+// Says the number is the student's own, so it beats a bare «رقم».
+const OWN_NUMBER = /(?:رقم\s*الطالب|رقم\s*طالب|رقمي|الشخصي)/;
 
 // "كامل" is left out on purpose: it is also a common name ("منهج كامل" is still caught by "منهج").
 const NOISE_WORDS = new Set([
   "منهج", "المنهج", "حضوري", "مدمج", "دورة", "دوره", "الدورة", "الدوره", "اقساط", "احياء",
   "وصل", "الوصل", "صوره", "صورة", "ماستر", "مجاني", "التطبيق", "هسه", "ادز", "كورس", "دفعة", "دفعه",
   "جمعة", "جمعه", "الف", "السلام", "عليكم",
+  // Small talk around the details.
+  "مرحبا", "اهلا", "أهلا", "شكرا", "شكراً", "تمام", "اوكي", "حاضر", "ممنون", "ممنونة", "يعطيكم", "العافية", "العافيه",
 ]);
 const NOISE_STEMS = ["الكترون", "إلكترون", "الالكترون", "اكترون", "امتحان", "متحان", "اشتراك", "شتراك",
   "مرماز", "شتوي", "دفع", "تسجيل"];
-const SCHOOL_WORDS = ["اعدادية", "اعداديه", "إعدادية", "ثانوية", "ثانويه", "مدرسة", "مدرسه", "للبنات", "للبنين",
-  "اكاديمية", "أكاديمية", "متوسطة", "عدادية"];
+// Words that start a school's name; «للبنات»/«للبنين» end it, so they only mark the line.
+const SCHOOL_START = ["اعدادية", "اعداديه", "إعدادية", "ثانوية", "ثانويه", "مدرسة", "مدرسه", "اكاديمية", "أكاديمية",
+  "متوسطة", "متوسطه", "عدادية"];
+const SCHOOL_WORDS = [...SCHOOL_START, "للبنات", "للبنين"];
 
 const hasAny = (line: string, words: string[]) => words.some((word) => line.includes(word));
 const words = (line: string) => line.split(/[\s_/\-.,،:()]+/).filter(Boolean);
@@ -103,10 +111,12 @@ export function readBlock(text: string, aliases: Record<string, string>): Extrac
   let telegram = "";
   let weakTelegram = "";
   const students: string[] = [];
+  const ownNumbers: string[] = [];
   const guardians: string[] = [];
   const fathers: string[] = [];
   const unlabeled: string[] = [];
   const free: string[] = [];
+  const schoolLines: string[] = [];
   let note = "";
   let schoolLabeled = false;
 
@@ -145,7 +155,7 @@ export function readBlock(text: string, aliases: Record<string, string>): Extrac
         continue;
       }
       if (STUDENT_LABEL.test(line) && line.includes("رقم")) {
-        students.push(...phones);
+        (OWN_NUMBER.test(line) ? ownNumbers : students).push(...phones);
         continue;
       }
       if (phones.length) {
@@ -168,22 +178,27 @@ export function readBlock(text: string, aliases: Record<string, string>): Extrac
     }
 
     if (!ARABIC.test(line)) continue;
-    if (!looksLikeSchool(line)) {
-      const found = governorate(line, aliases);
-      if (found && words(line).length <= 3) {
-        gov = gov || found;
-        continue;
-      }
+    if (looksLikeSchool(line)) {
+      // Wherever the school is mentioned, even inside a sentence: from its first school word on.
+      const starts = SCHOOL_START.map((word) => line.indexOf(word)).filter((at) => at >= 0);
+      schoolLines.push(starts.length ? line.slice(Math.min(...starts)) : line);
+      continue;
+    }
+    const found = governorate(line, aliases);
+    if (found && words(line).length <= 3) {
+      gov = gov || found;
+      continue;
     }
     free.push(line);
   }
 
   if (free.length && !name) name = free.shift() ?? "";
-  if (free.length && !school && !schoolLabeled) school = free.shift() ?? "";
+  if (!school && !schoolLabeled) school = schoolLines[0] ?? free.shift() ?? "";
 
   // Phones: explicit labels first, then the written order.
-  const order = [...new Set(unlabeled)].filter((phone) => !students.includes(phone) && !guardians.includes(phone));
-  const student = students[0] ?? order.shift() ?? "";
+  const labeled = [...ownNumbers, ...students];
+  const order = [...new Set(unlabeled)].filter((phone) => !labeled.includes(phone) && !guardians.includes(phone));
+  const student = labeled[0] ?? order.shift() ?? "";
   let guardian = (fathers.length ? fathers : guardians)[0] ?? "";
   if (!guardian && order.length) guardian = order.shift() ?? "";
   if (order.length) note = "أكو أرقام زايدة بالرسالة، راجع توزيع الأرقام";
