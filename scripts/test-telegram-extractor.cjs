@@ -208,5 +208,8 @@ assert(/onPaste=\{[\s\S]*?looksLikeRegistrationText\(pasted\)[\s\S]*?telegram\.e
 const extractDialog = fs.readFileSync(path.join(root, "src/components/teacher-pro/telegram-extract-dialog.tsx"), "utf8");
 assert.deepEqual([...extractDialog.matchAll(/toast\.error\("([^"]+)"/g)].map((match) => match[1]),
   ["ما انحفظت الإعدادات بهذا المتصفح."], "only a real save failure is shown as «تعذر الحفظ»");
+// The server's links win: a stale copy in one browser can't give another course or study type.
+assert(extractDialog.includes("links: { ...local.links, ...server }"), "server links beat this browser's");
+assert(/if \(!config\.course \|\| id in server\) continue;/.test(extractDialog), "server links are never saved over in a browser");
 
 console.log("PASS: Telegram registration messages become bulk-add rows, as in «مستخرج الطلاب»");

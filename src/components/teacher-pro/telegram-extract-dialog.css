@@ -22,6 +22,7 @@
 
 .tp-tgx__general,
 .tp-tgx__link-fields { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+fieldset.tp-tgx__link-fields { min-inline-size: 0; margin: 0; padding: 0; border: 0; }
 .tp-tgx__link { display: grid; gap: 0.75rem; }
 .tp-tgx__link-id { margin: 0; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.8rem; font-weight: 650; text-align: start; overflow-wrap: anywhere; }
 .tp-tgx__link-head { display: flex; align-items: end; gap: 0.5rem; }

@@ -17,7 +17,12 @@ import "./tp-modal.css";
 import "./telegram-extract-dialog.css";
 
 type LinkDraft = ExtractorLink & { link: string };
-type SettingsDraft = { adminSender: string; status: string; chances: string; grace: string; aliases: string; links: LinkDraft[] };
+type SettingsDraft = {
+  adminSender: string; status: string; chances: string; grace: string; aliases: string;
+  links: LinkDraft[];
+  /** Links set on the server: shown as they are, never changed from a browser. */
+  serverLinks: LinkDraft[];
+};
 type Extracted = { text: string; count: number; notes: string[] };
 
 const emptyLink = (link: string, course = ""): LinkDraft => ({
@@ -39,15 +44,17 @@ function LinkFields({
   draft,
   courseNames,
   onChange,
+  locked = false,
 }: {
   draft: LinkDraft;
   courseNames: string[];
   onChange: (next: LinkDraft) => void;
+  locked?: boolean;
 }) {
   const set = (patch: Partial<LinkDraft>) => onChange({ ...draft, ...patch });
   const names = draft.course && !courseNames.includes(draft.course) ? [draft.course, ...courseNames] : courseNames;
   return (
-    <div className="tp-tgx__link-fields">
+    <fieldset className="tp-tgx__link-fields" disabled={locked}>
       <Field label="اسم الدورة">
         <select className="tp-tgx__control" value={draft.course} onChange={(event) => set({ course: event.target.value })}>
           <option value="">اختر الدورة</option>
@@ -81,7 +88,7 @@ function LinkFields({
           onChange={(event) => set({ baghdadRegion: event.target.value })}
         />
       </Field>
-    </div>
+    </fieldset>
   );
 }
 
@@ -104,7 +111,7 @@ export function useTelegramExtractor({
   const [pendingLinks, setPendingLinks] = useState<LinkDraft[]>([]);
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft | null>(null);
   const waiting = useRef("");
-  /** Links kept on the server; the ones set up in this browser come on top. */
+  /** Links kept on the server. They win over this browser's, which only add links the server doesn't know. */
   const serverLinks = useRef<Promise<ExtractorSettings["links"]> | null>(null);
 
   useEffect(() => {
@@ -114,7 +121,7 @@ export function useTelegramExtractor({
   const currentSettings = async (): Promise<ExtractorSettings> => {
     const local = loadExtractorSettings();
     const server = (await serverLinks.current) ?? {};
-    return { ...local, links: { ...server, ...local.links } };
+    return { ...local, links: { ...local.links, ...server } };
   };
 
   const store = (next: ExtractorSettings) => {
@@ -161,13 +168,16 @@ export function useTelegramExtractor({
 
   const openSettings = async () => {
     const settings = await currentSettings();
+    const server = (await serverLinks.current) ?? {};
+    const drafts = Object.entries(settings.links).map(([link, config]) => ({ link, ...config }));
     setSettingsDraft({
       adminSender: settings.adminSender,
       status: settings.status,
       chances: settings.chances,
       grace: settings.grace,
       aliases: Object.entries(settings.governorateAliases).map(([alias, name]) => `${alias} = ${name}`).join("\n"),
-      links: Object.entries(settings.links).map(([link, config]) => ({ link, ...config })),
+      links: drafts.filter((draft) => !(draft.link in server)),
+      serverLinks: drafts.filter((draft) => draft.link in server),
     });
     setView("settings");
   };
@@ -178,7 +188,7 @@ export function useTelegramExtractor({
     const links: ExtractorSettings["links"] = {};
     for (const { link, ...config } of settingsDraft.links) {
       const id = cleanLinkId(link);
-      if (!config.course || JSON.stringify(server[id]) === JSON.stringify(config)) continue; // the server keeps those
+      if (!config.course || id in server) continue; // the server keeps those
       links[id] = config;
     }
     const aliases: Record<string, string> = {};
@@ -267,6 +277,13 @@ export function useTelegramExtractor({
                   <Plus className="size-4" />إضافة رابط
                 </Button>
               </div>
+              {settingsDraft.serverLinks.map((draft) => (
+                <div key={draft.link} className="tp-modal__panel tp-tgx__link">
+                  <p className="tp-tgx__link-id" dir="ltr">{linkLabel(draft.link)}</p>
+                  <p className="tp-modal__muted">ثابت للكل من إعدادات الموقع.</p>
+                  <LinkFields draft={draft} courseNames={courseNames} onChange={() => undefined} locked />
+                </div>
+              ))}
               {settingsDraft.links.map((draft, index) => (
                 <div key={index} className="tp-modal__panel tp-tgx__link">
                   <div className="tp-tgx__link-head">
