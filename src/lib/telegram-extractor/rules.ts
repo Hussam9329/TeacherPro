@@ -27,8 +27,23 @@ const LATIN = /[A-Za-z][A-Za-z0-9_]{2,}/;
 const ARABIC = /[ء-ي]/;
 
 const NAME_LABEL = /^(?:الاسم\s*الرباعي|الاسم\s*الثلاثي|الاسم|لاسم)(?=[\s:：\-/.]|$)[\s:：\-/.]*/;
-// «المدرسة:», «مدرسه», «مدرستي», «اسم المدرسة هي» …
-const SCHOOL_LABEL = /^(?:اسم\s*)?(?:ال)?مدرس(?:ة|ه|تي)(?:\s*هي)?(?=[\s:：\-/.]|$)[\s:：\-/.]*/;
+// Words that say "my school is …" anywhere in a line: «المدرسة:», «مدرستي», «بمدرسة», «اداوم», «دوامي» …
+const SCHOOL_CUE = /(?:^|[\s،,.:：\-/])[وب]?(?:ال)?(?:مدرس(?:ة|ه|تي)|[اأ]داوم|دوامي)(?=[\s:：\-/.،,]|$)/;
+// What sits between the cue and the school's name: «اسمها», «هي», «اللي اداوم بيها» …
+const SCHOOL_FILLER = /^(?:[\s:：\-/.،,]+|(?:في|فيها|بيها|بها|اسمها|اسمه|هي|هو|اللي|الي|التي|[اأ]داوم|دوامي)(?=[\s:：\-/.،,]|$))/;
+// «بالاصيل», «بثانوية …»: the «ب» is "in", not part of the name.
+const SCHOOL_IN = /^ب(?=ال|ثانوي|[اإ]?عدادي|مدرس|متوسط|اكاديمي|أكاديمي)/;
+
+/** The school named after a cue word in `line`, or "" when the line has none. */
+function schoolAfterCue(line: string): string {
+  const cue = SCHOOL_CUE.exec(line);
+  if (!cue) return "";
+  let value = line.slice(cue.index + cue[0].length);
+  for (let filler = SCHOOL_FILLER.exec(value); filler && filler[0]; filler = SCHOOL_FILLER.exec(value)) {
+    value = value.slice(filler[0].length);
+  }
+  return value.replace(SCHOOL_IN, "").trim();
+}
 const GOV_LABEL = /^(?:المحافظة|المحافظه)(?=[\s:：\-/.]|$)[\s:：\-/.]*/;
 const TG_LABEL = /^(?:معرف|يوزر)/;
 const SUB_LABEL = /^(?:نوع|الاشتراك|اشتراك|السعر|صورة|صوره|وصل|الوصل)/;
@@ -130,9 +145,13 @@ export function readBlock(text: string, aliases: Record<string, string>): Extrac
       name = name || line.slice(match[0].length);
       continue;
     }
-    match = SCHOOL_LABEL.exec(line);
-    if (match) {
-      school = school || line.slice(match[0].length);
+    // A line with a number keeps it: the number is read below, not taken into the school.
+    const named = phones.length ? "" : schoolAfterCue(line);
+    if (named) {
+      school = school || named;
+      continue;
+    }
+    if (/^(?:اسم\s*)?(?:ال)?مدرس(?:ة|ه|تي)[\s:：\-/.]*$/.test(line)) {
       schoolLabeled = true; // "المدرسة:" left empty means no school, not "take the next line"
       continue;
     }
