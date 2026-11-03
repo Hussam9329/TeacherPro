@@ -149,6 +149,14 @@ assert.equal(schoolOf("زينب علي حسن\nاسم المدرسة هي الن
 assert.equal(schoolOf("زينب علي حسن\nمدرستي الفرات\n07701234567"), "الفرات");
 assert.equal(schoolOf("زينب علي حسن\nشكرا\nالوفاق للبنات\n07701234567"), "الوفاق للبنات");
 assert.equal(schoolOf("زينب علي حسن\nتمام\n07701234567"), "");
+// «مدرسة / مدرستي / المدرسة / اداوم / دوامي» are caught anywhere in a line.
+const cleanSchoolOf = (text) => c.cleanSchool(schoolOf(text));
+assert.equal(cleanSchoolOf("زينب علي حسن\nانا اداوم بالاصيل\n07701234567"), "الاصيل");
+assert.equal(cleanSchoolOf("زينب علي حسن\nاداوم بثانوية الرواد للبنات\n07701234567"), "الرواد للبنات");
+assert.equal(cleanSchoolOf("زينب علي حسن\nاسمي زينب ومدرستي الفرات\n07701234567"), "الفرات");
+assert.equal(cleanSchoolOf("زينب علي حسن\nالمدرسة اللي اداوم بيها النخبة\n07701234567"), "النخبة");
+assert.equal(cleanSchoolOf("زينب علي حسن\nدوامي بمدرسة الكوثر\n07701234567"), "الكوثر");
+assert.equal(cleanSchoolOf("زينب علي حسن\nانا بمدرسة اسمها الهدى\n07701234567"), "الهدى");
 
 // The full sample of the desktop app (kept outside this public repo: it holds
 // real students). Every student must come out exactly as the app did.
