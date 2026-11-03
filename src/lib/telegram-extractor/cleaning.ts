@@ -64,11 +64,16 @@ export function cleanName(raw: string): string {
 // The kind of school is dropped so only its name is kept: «ثانوية الزهور» -> «الزهور».
 const SCHOOL_KIND = /(?<=^|\s)(?:ال)?(?:مدرس[ةه]|[اإ]?عدادي[ةه]|ثانوي[ةه]|متوسط[ةه])(?=\s|$)/g;
 
+/** The school's name without its kind; "" when the text is only the kind («مدرسه»). */
+export function schoolNameOnly(text: string): string {
+  return stripChars(collapseSpaces(text.replace(SCHOOL_KIND, " ")), EDGE_PUNCT);
+}
+
 export function cleanSchool(raw: string): string {
   const school = stripChars(collapseSpaces(raw), EDGE_PUNCT);
   if (!school || school.includes("خارج")) return OUTSIDE_SCHOOL;
   // A school written only as its kind («اعدادية») keeps that word.
-  return stripChars(collapseSpaces(school.replace(SCHOOL_KIND, " ")), EDGE_PUNCT) || school;
+  return schoolNameOnly(school) || school;
 }
 
 export function govKey(text: string): string {

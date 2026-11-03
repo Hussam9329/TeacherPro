@@ -158,6 +158,22 @@ assert.equal(cleanSchoolOf("زينب علي حسن\nالمدرسة اللي اد
 assert.equal(cleanSchoolOf("زينب علي حسن\nدوامي بمدرسة الكوثر\n07701234567"), "الكوثر");
 assert.equal(cleanSchoolOf("زينب علي حسن\nانا بمدرسة اسمها الهدى\n07701234567"), "الهدى");
 
+// The newer template («أول شي: أرسل اسم مدرستك»): «واسم المدرسه» only announces it, «ثانوية …» names it;
+// «رقم الولد» (the father) replaces the guardian's number.
+const announced = extractor.extractStudents([
+  "[03-Nov-26 5:32 PM] اضافات الطلاب للاستاذ حسن فلاح: السلام عليكم ، إدارة الأستاذ حسن فلاح",
+  "1️⃣ ✍️ أول شي: أرسل اسم مدرستك هنا.", "2️⃣ تأكد من معلوماتك المسجلة عدنا:",
+  "الاسم الرباعي: سراج كريم جواد سالم", "رقم الطالب: 07700000033", "رقم ولي الأمر: 07700000033",
+  "المحافظة: نينوى", "معرف التليكرام: @test_s3", "https://t.me/+WinterLink1",
+  "[03-Nov-26 5:35 PM] سراج: رقم الولد 07700000044",
+  "[03-Nov-26 5:35 PM] سراج: واسم المدرسه",
+  "[03-Nov-26 5:35 PM] سراج: ثانوية اسيا",
+].join("\n"), withLinks());
+assert.deepEqual(announced.rows.map((row) => row.cells), [[
+  "سراج كريم جواد سالم", "اسيا", "ذكر", "الدورة الشتوية الثالثة", "منهج كامل", "", "مدمج",
+  "نينوى", "", "نشط", "0", "0 يوم", "7700000033", "7700000044", "test_s3",
+]]);
+
 // The full sample of the desktop app (kept outside this public repo: it holds
 // real students). Every student must come out exactly as the app did.
 const sample = process.env.STUDENT_EXTRACTOR_FIXTURES

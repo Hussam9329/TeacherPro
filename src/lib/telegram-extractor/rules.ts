@@ -3,7 +3,7 @@
  * order and word lists. No internet. Weaker on unlabeled schools and rare
  * names; the review warnings catch most of it.
  */
-import { cleanPhone, cleanTelegram, collapseSpaces, govKey, normalizeGovernorate, toAsciiDigits } from "./cleaning";
+import { cleanPhone, cleanTelegram, collapseSpaces, govKey, normalizeGovernorate, schoolNameOnly, toAsciiDigits } from "./cleaning";
 import { GOVERNORATES } from "./config";
 import { genderOf } from "./names";
 import type { StudentBlock } from "./parser";
@@ -49,9 +49,10 @@ const TG_LABEL = /^(?:معرف|يوزر)/;
 const SUB_LABEL = /^(?:نوع|الاشتراك|اشتراك|السعر|صورة|صوره|وصل|الوصل)/;
 
 // «والي» is the common misspelling of «ولي».
-const GUARDIAN_WORDS = ["ولي", "والي", "والد", "الاب", "الأب", "ابي", "أبي", "ابوي", "أبوي", "بابا", "الام", "الأم",
+// «الولد» is the common misspelling of «الوالد».
+const GUARDIAN_WORDS = ["ولي", "والي", "والد", "الولد", "الاب", "الأب", "ابي", "أبي", "ابوي", "أبوي", "بابا", "الام", "الأم",
   "امي", "أمي", "ماما", "اهلي", "أهلي"];
-const FATHER_WORDS = ["والد", "الاب", "الأب", "ابي", "أبي", "ابوي", "أبوي", "بابا"];
+const FATHER_WORDS = ["والد", "الولد", "الاب", "الأب", "ابي", "أبي", "ابوي", "أبوي", "بابا"];
 const STUDENT_LABEL = /(?:رقم\s*الطالب|رقم\s*طالب|رقمي|الشخصي|^رقم|^الرقم)/;
 // Says the number is the student's own, so it beats a bare «رقم».
 const OWN_NUMBER = /(?:رقم\s*الطالب|رقم\s*طالب|رقمي|الشخصي)/;
@@ -200,7 +201,9 @@ export function readBlock(text: string, aliases: Record<string, string>): Extrac
     if (looksLikeSchool(line)) {
       // Wherever the school is mentioned, even inside a sentence: from its first school word on.
       const starts = SCHOOL_START.map((word) => line.indexOf(word)).filter((at) => at >= 0);
-      schoolLines.push(starts.length ? line.slice(Math.min(...starts)) : line);
+      const candidate = starts.length ? line.slice(Math.min(...starts)) : line;
+      // «واسم المدرسه» only announces the school; its name comes on another line.
+      if (schoolNameOnly(candidate)) schoolLines.push(candidate);
       continue;
     }
     const found = governorate(line, aliases);
