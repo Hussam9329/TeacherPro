@@ -2152,6 +2152,10 @@
   }
 
   .tp-dashboard__stat {
+    position: relative;
+  }
+
+  .tp-dashboard__stat {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
@@ -2230,7 +2234,7 @@
 
   @container dashboard (min-width: 17rem) {
     .tp-dashboard__kpis {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .tp-dashboard__stat {
@@ -2241,9 +2245,6 @@
       text-align: center;
     }
 
-    .tp-dashboard__shortcuts {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
   }
 
   @container dashboard (min-width: 34rem) {
@@ -2262,22 +2263,8 @@
   }
 
   @container dashboard (min-width: 40rem) {
-    .tp-dashboard__kpis,
-    .tp-dashboard__shortcuts {
+    .tp-dashboard__kpis {
       gap: 0.75rem;
-    }
-
-    .tp-dashboard__shortcuts {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .tp-dashboard__shortcut {
-      gap: 0.75rem;
-      padding: 0.75rem;
-    }
-
-    .tp-dashboard__shortcut-label {
-      font-size: 0.875rem;
     }
   }
 }
@@ -3256,6 +3243,56 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
   box-shadow: 0 10px 20px -10px var(--tone);
 }
 .tp-dashboard__stat[data-tone] .tp-dashboard__stat-value { color: var(--tone-ink); }
+[data-tone="archived"] {
+  --tone: var(--sig-archived);
+  --tone-ink: color-mix(in srgb, var(--sig-archived) 35%, var(--foreground));
+  --tone-tint: color-mix(in srgb, var(--sig-archived) 16%, var(--card));
+  --tone-line: color-mix(in srgb, var(--sig-archived) 45%, var(--border));
+  --tone-solid: var(--sig-archived);
+  --tone-on: var(--tp-deep);
+}
+/* Each status's share of the total, beside its number. */
+.tp-dashboard__stat-share {
+  display: inline-block;
+  margin-inline-start: 0.5rem;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: var(--tone-tint);
+  color: var(--tone-ink);
+  box-shadow: inset 0 0 0 1px var(--tone-line);
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1.5;
+  vertical-align: middle;
+}
+/* «إجمالي الطلاب»: the rail's green-black, its gold icon, and the split by status. */
+.tp-dashboard__stat--total {
+  border-color: transparent;
+  background:
+    radial-gradient(18rem 10rem at 0% 0%, color-mix(in srgb, var(--tp-gold) 18%, transparent), transparent 70%),
+    linear-gradient(160deg, var(--tp-rail-top), var(--tp-rail-bottom));
+  box-shadow: 0 18px 36px -24px var(--tp-deep);
+}
+.tp-dashboard__stat--total .tp-dashboard__stat-icon {
+  background: var(--tp-gold-gradient);
+  color: var(--tp-deep);
+}
+.tp-dashboard__stat--total .tp-dashboard__stat-label { color: color-mix(in srgb, var(--sidebar-foreground) 72%, transparent); }
+.tp-dashboard__stat--total .tp-dashboard__stat-value { color: var(--sidebar-foreground); }
+.tp-dashboard__split {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 2px;
+  inline-size: 100%;
+  block-size: 0.45rem;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.tp-dashboard__split > span { flex-basis: 0; min-inline-size: 3px; }
+.tp-dashboard__split > [data-part="active"] { background: var(--chart-2); }
+.tp-dashboard__split > [data-part="dismissed"] { background: var(--chart-4); }
+.tp-dashboard__split > [data-part="archived"] { background: var(--chart-archived); }
+.tp-dashboard__split > [data-part="other"] { background: var(--tp-soft); }
 
 /* Dashboard shortcuts: a notification number in the corner when something
    there waits for someone. It sits inside the card's own corner (on a phone
@@ -3368,18 +3405,27 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
 
 .tp-dashboard { gap: 1.25rem; }
 
-.tp-dashboard__stat[data-tone] { border-radius: 1.25rem; }
+.tp-dashboard__stat[data-tone],
+.tp-dashboard__stat--total { border-radius: 1.25rem; }
 @container dashboard (min-width: 34rem) {
-  .tp-dashboard__stat[data-tone] { min-block-size: 6.25rem; padding: 1.1rem 1.35rem; gap: 1rem; }
-  .tp-dashboard__stat[data-tone] .tp-dashboard__stat-icon { inline-size: 3.4rem; block-size: 3.4rem; border-radius: 1rem; }
-  .tp-dashboard__stat[data-tone] .tp-dashboard__stat-icon svg { inline-size: 1.6rem; block-size: 1.6rem; }
-  .tp-dashboard__stat-label { color: var(--foreground); font-size: 0.95rem; font-weight: 750; }
+  .tp-dashboard__stat[data-tone],
+  .tp-dashboard__stat--total { min-block-size: 6.25rem; padding: 1.1rem 1.35rem; gap: 0.6rem 1rem; }
+  .tp-dashboard__stat[data-tone] .tp-dashboard__stat-icon,
+  .tp-dashboard__stat--total .tp-dashboard__stat-icon { inline-size: 3.4rem; block-size: 3.4rem; border-radius: 1rem; }
+  .tp-dashboard__stat[data-tone] .tp-dashboard__stat-icon svg,
+  .tp-dashboard__stat--total .tp-dashboard__stat-icon svg { inline-size: 1.6rem; block-size: 1.6rem; }
+  .tp-dashboard__stat[data-tone] .tp-dashboard__stat-label { color: var(--foreground); }
+  .tp-dashboard__stat-label { font-size: 0.95rem; font-weight: 750; }
   .tp-dashboard__stat-value { font-size: 2.1rem; }
+}
+@container dashboard (min-width: 52rem) {
+  .tp-dashboard__kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 .tp-dashboard__insights { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; min-inline-size: 0; }
 @container dashboard (min-width: 52rem) {
   .tp-dashboard__insights { grid-template-columns: minmax(0, 2.1fr) minmax(15rem, 1fr); }
+  .tp-dashboard__insights:not(:has(.tp-attention)) { grid-template-columns: minmax(0, 1fr); }
 }
 .tp-dashboard__panel {
   display: flex;
@@ -3436,67 +3482,86 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
 .tp-trend__message { display: grid; place-items: center; gap: 0.6rem; min-block-size: 280px; color: var(--muted-foreground); font-size: 0.9rem; font-weight: 650; text-align: center; }
 .tp-trend__retry { min-block-size: 2.5rem; padding-inline: 1rem; border: 1px solid var(--border); border-radius: 999px; color: var(--foreground); font-weight: 800; }
 
-/* «توزيع الطلبة حسب الحالة» */
-.tp-donut__body { display: grid; flex: 1; align-content: center; justify-items: center; gap: 1.4rem; }
-.tp-donut__ring { position: relative; inline-size: min(13.5rem, 100%); aspect-ratio: 1; }
-.tp-donut__ring svg { display: block; inline-size: 100%; block-size: 100%; overflow: visible; }
-.tp-donut__track { fill: none; stroke: color-mix(in srgb, var(--muted) 85%, var(--border)); }
-/* A soft inner disc lifts the numbers off the card. */
-.tp-donut__hub { fill: color-mix(in srgb, var(--muted) 45%, var(--card)); stroke: color-mix(in srgb, var(--border) 70%, transparent); stroke-width: 0.6; }
-.tp-donut__arc {
-  stroke: var(--card);
-  stroke-width: 0.8;
-  transform-box: view-box;
-  transform-origin: 90px 90px;
-  transition: opacity 180ms ease, transform 180ms ease, filter 180ms ease;
-  cursor: default;
-}
-.tp-donut__arc[data-dim] { opacity: 0.32; }
-.tp-donut__arc[data-on] { transform: scale(1.045); filter: drop-shadow(0 4px 8px color-mix(in srgb, var(--tp-deep) 22%, transparent)); }
-.tp-donut__center { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 0.1rem; text-align: center; pointer-events: none; }
-.tp-donut__total { color: var(--foreground); font-size: 2.1rem; font-weight: 900; line-height: 1.1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.tp-donut__caption { color: var(--muted-foreground); font-size: 0.82rem; font-weight: 750; }
-.tp-donut__share { margin-block-start: 0.15rem; padding: 0.05rem 0.5rem; border-radius: 999px; background: color-mix(in srgb, var(--muted) 70%, var(--card)); color: var(--foreground); font-size: 0.75rem; font-weight: 800; font-variant-numeric: tabular-nums; }
-.tp-donut__legend { display: grid; gap: 0.35rem; inline-size: 100%; margin: 0; padding: 0; list-style: none; }
-.tp-donut__legend li {
+/* «يحتاج انتباهك»: what waits, the biggest first and marked. */
+.tp-attention__list { display: grid; gap: 0.6rem; margin: 0; padding: 0; list-style: none; }
+.tp-attention__item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  grid-template-areas: "dot label value percent" "bar bar bar bar";
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  column-gap: 0.6rem;
-  row-gap: 0.4rem;
-  padding: 0.55rem 0.7rem;
-  border-radius: 0.85rem;
-  font-size: 0.9rem;
-  transition: background-color 160ms ease;
+  gap: 0.85rem;
+  inline-size: 100%;
+  min-block-size: 3.75rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--muted) 45%, var(--card));
+  color: var(--foreground);
+  text-align: start;
+  touch-action: manipulation;
+  transition: border-color 150ms, background-color 150ms;
 }
-.tp-donut__legend li[data-on] { background: color-mix(in srgb, var(--muted) 60%, var(--card)); }
-.tp-donut__dot { grid-area: dot; inline-size: 0.7rem; block-size: 0.7rem; border-radius: 0.2rem; }
-.tp-donut__label { grid-area: label; color: var(--foreground); font-weight: 700; }
-.tp-donut__value { grid-area: value; color: var(--foreground); font-weight: 900; font-variant-numeric: tabular-nums; }
-.tp-donut__percent { grid-area: percent; min-inline-size: 3.4rem; color: var(--muted-foreground); font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; text-align: end; }
-.tp-donut__bar { grid-area: bar; display: block; block-size: 0.3rem; border-radius: 999px; background: color-mix(in srgb, var(--muted) 85%, var(--border)); overflow: hidden; }
-.tp-donut__bar > span { display: block; block-size: 100%; border-radius: inherit; }
+.tp-attention__item:hover { border-color: color-mix(in srgb, var(--tp-gold) 55%, var(--border)); }
+.tp-attention__item:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.tp-attention__icon {
+  display: grid;
+  place-items: center;
+  inline-size: 2.6rem;
+  block-size: 2.6rem;
+  border-radius: 0.85rem;
+  background: linear-gradient(160deg, var(--tp-rail-top), var(--tp-rail-bottom));
+  color: var(--tp-gold-light);
+}
+.tp-attention__icon svg { inline-size: 1.2rem; block-size: 1.2rem; }
+.tp-attention__copy { display: grid; gap: 0.1rem; min-inline-size: 0; }
+.tp-attention__label { font-size: 0.95rem; font-weight: 800; overflow-wrap: anywhere; }
+.tp-attention__hint { color: var(--muted-foreground); font-size: 0.78rem; font-weight: 600; overflow-wrap: anywhere; }
+.tp-attention__count { color: var(--foreground); font-size: 1.6rem; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.tp-attention__item[data-lead] { border-color: var(--status-danger-border); background: var(--status-danger-bg); }
+.tp-attention__item[data-lead] .tp-attention__icon { background: var(--status-danger-solid); color: var(--status-danger-on); }
+.tp-attention__item[data-lead] .tp-attention__count { color: var(--status-danger-fg); }
 @media (prefers-reduced-motion: reduce) {
-  .tp-donut__arc, .tp-donut__legend li { transition: none; }
-  .tp-donut__arc[data-on] { transform: none; }
+  .tp-attention__item { transition: none; }
 }
 
 /* «الوصول السريع» */
 .tp-dashboard__heading { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0 0; color: var(--foreground); font-size: 1.2rem; font-weight: 900; }
 .tp-dashboard__heading svg { inline-size: 1.35rem; block-size: 1.35rem; }
 .tp-dashboard__navigation { gap: 0.9rem; }
-@container dashboard (min-width: 40rem) {
-  .tp-dashboard__shortcuts { grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: 0.9rem; }
-  .tp-dashboard__shortcut { min-block-size: 5rem; padding: 0.85rem 1.1rem; gap: 1rem; border-radius: 1.15rem; }
-  .tp-dashboard__shortcut-icon { inline-size: 3.1rem; block-size: 3.1rem; border-radius: 0.95rem; }
-  .tp-dashboard__shortcut-icon svg { inline-size: 1.45rem; block-size: 1.45rem; }
-  .tp-dashboard__shortcut-label { font-size: 1rem; font-weight: 800; }
+.tp-dashboard__groups { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+@container dashboard (min-width: 34rem) {
+  .tp-dashboard__groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-.tp-dashboard__shortcut[data-tone] {
-  background: linear-gradient(to left, color-mix(in srgb, var(--tone) 9%, var(--card)), var(--card) 78%);
-  box-shadow: 0 14px 30px -28px var(--tone);
+@container dashboard (min-width: 64rem) {
+  .tp-dashboard__groups { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+.tp-dashboard__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-inline-size: 0;
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  border-radius: 1.25rem;
+  background: var(--card);
+  box-shadow: 0 18px 40px -34px color-mix(in srgb, var(--tp-deep) 45%, transparent);
+}
+.tp-dashboard__group-title { margin: 0; padding: 0.3rem 0.6rem 0.45rem; color: var(--tone-ink); font-size: 0.8rem; font-weight: 900; }
+.tp-dashboard__shortcuts { gap: 0.15rem; }
+.tp-dashboard__shortcut {
+  min-block-size: 3rem;
+  padding: 0.5rem 0.6rem;
+  gap: 0.75rem;
+  border-color: transparent;
+  border-radius: 0.9rem;
+  background: transparent;
+}
+.tp-dashboard__shortcut[data-tone]:hover,
+.tp-dashboard__shortcut[data-tone]:focus-visible { background: color-mix(in srgb, var(--tone) 8%, var(--card)); }
+.tp-dashboard__shortcut-icon { inline-size: 2.25rem; block-size: 2.25rem; border-radius: 0.75rem; }
+.tp-dashboard__shortcut-icon svg { inline-size: 1.15rem; block-size: 1.15rem; }
+.tp-dashboard__shortcut-label { font-size: 0.9rem; font-weight: 800; }
+/* The waiting number sits at the row's end, centred on it. */
+.tp-dashboard__shortcut .tp-dashboard__alert { inset-block-start: 50%; translate: 0 -50%; }
 
 /* Dashboard shortcuts: tinted icon that fills with colour on hover. */
 .tp-dashboard__shortcut[data-tone] .tp-dashboard__shortcut-icon {
@@ -3505,8 +3570,6 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
   box-shadow: inset 0 0 0 1px var(--tone-line);
   transition: background-color 150ms, color 150ms, box-shadow 150ms;
 }
-.tp-dashboard__shortcut[data-tone]:hover,
-.tp-dashboard__shortcut[data-tone]:focus-visible { border-color: var(--tone-line); }
 .tp-dashboard__shortcut[data-tone]:hover .tp-dashboard__shortcut-icon,
 .tp-dashboard__shortcut[data-tone]:focus-visible .tp-dashboard__shortcut-icon {
   background: var(--tone-solid);

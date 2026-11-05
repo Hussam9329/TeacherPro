@@ -4,7 +4,7 @@ import { formatBaghdadDateTime } from "@/lib/baghdad-time";
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  BookOpen,
+  Archive,
   CalendarCheck,
   CalendarClock,
   ChartColumn,
@@ -17,13 +17,15 @@ import {
   MessageSquareText,
   PenLine,
   PhoneCall,
-  Shield,
   ShieldAlert,
   Target,
   Trophy,
+  UserCheck,
+  UserX,
   Users,
   UsersRound,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import { useShallow } from "zustand/react/shallow";
@@ -56,15 +58,29 @@ type DashboardStats = {
   generatedAt: string;
 };
 
+/** «الوصول السريع» in four groups, by the kind of work. */
+type ShortcutGroup = "students" | "exams" | "follow-up" | "admin";
+
 const dashboardShortcuts = [
-  { section: "student-registry", title: "سجل الطلاب", icon: ClipboardList, tone: "info" },
-  { section: "student-bulk-import", title: "إضافة الطلاب الجماعية", icon: UsersRound, tone: "success" },
-  { section: "opportunities", title: "إدارة الفرص", icon: Target, tone: "warning" },
-  { section: "dismissed-management", title: "إدارة المفصولين", icon: ShieldAlert, tone: "danger" },
-  { section: "grade-entry", title: "تسجيل الدرجات", icon: PenLine, tone: "info" },
-  { section: "grade-records", title: "سجل الدرجات", icon: ChartColumn, tone: "info" },
-  { section: "exam-new", title: "إضافة امتحان", icon: FilePlus2, tone: "success" },
+  { section: "student-registry", title: "سجل الطلاب", icon: ClipboardList, group: "students" },
+  { section: "student-bulk-import", title: "إضافة الطلاب الجماعية", icon: UsersRound, group: "students" },
+  { section: "dismissed-management", title: "إدارة المفصولين", icon: ShieldAlert, group: "students" },
+  { section: "exam-new", title: "إضافة امتحان", icon: FilePlus2, group: "exams" },
+  { section: "grade-entry", title: "تسجيل الدرجات", icon: PenLine, group: "exams" },
+  { section: "grade-records", title: "سجل الدرجات", icon: ChartColumn, group: "exams" },
+  { section: "opportunities", title: "إدارة الفرص", icon: Target, group: "follow-up" },
 ] as const;
+
+/** Each group has one colour, for its title and its icons. */
+const GROUP_TONE: Record<ShortcutGroup, "success" | "warning" | "info" | "danger"> = {
+  students: "success",
+  exams: "warning",
+  "follow-up": "info",
+  admin: "danger",
+};
+
+const SHORTCUT_CLASS =
+  "tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none";
 
 type AlertTone = "danger" | "warning" | "info";
 
@@ -85,108 +101,105 @@ function formatStatsTime(value?: string) {
   return formatBaghdadDateTime(value);
 }
 
-/** «توزيع الطلبة حسب الحالة»: a ring of the total, split by status. */
-function StudentStatusDonut({ stats, loading }: { stats: DashboardStats | null; loading: boolean }) {
+/**
+ * The student numbers: the total with its split by status, then each status
+ * with its share of the total.
+ */
+function StudentKpis({ stats, loading }: { stats: DashboardStats | null; loading: boolean }) {
   const total = stats?.totalStudents ?? 0;
-  const parts = stats
-    ? [
-        { key: "active", label: "نشطون", value: stats.activeStudents, color: "var(--chart-2)" },
-        { key: "dismissed", label: "مفصولون", value: stats.dismissedStudents, color: "var(--chart-4)" },
-        { key: "archived", label: "مؤرشفون", value: stats.archivedStudents ?? 0, color: "var(--chart-archived)" },
-        {
-          key: "other",
-          label: "حالات أخرى",
-          value: Math.max(0, stats.totalStudents - stats.activeStudents - stats.dismissedStudents - (stats.archivedStudents ?? 0)),
-          color: "var(--tp-soft)",
-        },
-      ].filter((part) => part.key !== "other" || part.value > 0)
-    : [];
-  const [focused, setFocused] = useState<string | null>(null);
-  const share = (value: number) => (total ? (value / total) * 100 : 0);
-  const percent = (value: number) => `${share(value).toFixed(1)}%`;
-
-  // Each part is a true ring sector (its real share), with a thin even gap
-  // between parts; a very small part still keeps a visible sliver.
-  const OUTER = 86;
-  const INNER = 64;
-  const shown = parts.filter((part) => part.value > 0);
-  const pad = shown.length > 1 ? 1.6 : 0;
-  const point = (r: number, degrees: number) => {
-    const radians = (degrees * Math.PI) / 180;
-    return `${(90 + r * Math.sin(radians)).toFixed(3)} ${(90 - r * Math.cos(radians)).toFixed(3)}`;
-  };
-  const sector = (from: number, to: number) => {
-    const large = to - from > 180 ? 1 : 0;
-    return `M ${point(OUTER, from)} A ${OUTER} ${OUTER} 0 ${large} 1 ${point(OUTER, to)} L ${point(INNER, to)} A ${INNER} ${INNER} 0 ${large} 0 ${point(INNER, from)} Z`;
-  };
-  let start = 0;
-  const arcs = shown.map((part) => {
-    const sweep = total ? (part.value / total) * 360 : 0;
-    const from = start + pad / 2;
-    const to = Math.max(from + 1.4, start + sweep - pad / 2);
-    start += sweep;
-    // A single part fills the ring: two halves, since one arc cannot close.
-    const d = sweep >= 359.9 ? `${sector(0, 180)} ${sector(180, 359.999)}` : sector(from, to);
-    return { ...part, d };
-  });
-  const active = parts.find((part) => part.key === focused) || null;
+  const archived = stats?.archivedStudents;
+  const show = (value: number | undefined) => (loading ? "…" : value === undefined ? "—" : value.toLocaleString("en-US"));
+  const share = (value: number | undefined) => (total && value !== undefined ? `${((value / total) * 100).toFixed(1)}%` : "");
+  const statuses = [
+    { key: "active", label: "طلاب نشطون", value: stats?.activeStudents, icon: UserCheck, tone: "success" },
+    { key: "dismissed", label: "طلاب مفصولون", value: stats?.dismissedStudents, icon: UserX, tone: "danger" },
+    { key: "archived", label: "طلاب مؤرشفون", value: archived, icon: Archive, tone: "archived" },
+  ] as const;
+  const other = stats ? Math.max(0, total - stats.activeStudents - stats.dismissedStudents - (archived ?? 0)) : 0;
+  const split = [
+    ...statuses.map((status) => ({ key: status.key, value: status.value ?? 0 })),
+    { key: "other", value: other },
+  ].filter((part) => part.value > 0);
 
   return (
-    <section className="tp-dashboard__panel tp-donut" aria-labelledby="tp-donut-title">
-      <header className="tp-dashboard__panel-head">
-        <h3 id="tp-donut-title" className="tp-dashboard__panel-title">توزيع الطلبة حسب الحالة</h3>
-      </header>
-      <div className="tp-donut__body">
-        <div className="tp-donut__ring" data-focused={focused || undefined} onMouseLeave={() => setFocused(null)}>
-          <svg viewBox="0 0 180 180" role="img" aria-label={parts.map((part) => `${part.label} ${part.value} (${percent(part.value)})`).join("، ")}>
-            <circle cx="90" cy="90" r={(OUTER + INNER) / 2} className="tp-donut__track" strokeWidth={OUTER - INNER} />
-            <circle cx="90" cy="90" r={INNER - 7} className="tp-donut__hub" />
-            {arcs.map((arc) => (
-              <path
-                key={arc.key}
-                d={arc.d}
-                fill={arc.color}
-                className="tp-donut__arc"
-                data-dim={focused && focused !== arc.key ? true : undefined}
-                data-on={focused === arc.key ? true : undefined}
-                onMouseEnter={() => setFocused(arc.key)}
-              />
+    <div className="tp-dashboard__kpis" role="group" aria-label="إحصائيات الطلاب">
+      <div className="tp-dashboard__stat tp-dashboard__stat--total" data-count-scope="system">
+        <span className="tp-dashboard__stat-icon" aria-hidden="true">
+          <Users />
+        </span>
+        <div className="tp-dashboard__stat-copy">
+          <p className="tp-dashboard__stat-label">إجمالي الطلاب</p>
+          <p className="tp-dashboard__stat-value">{show(stats?.totalStudents)}</p>
+        </div>
+        {!loading && total > 0 && (
+          <span className="tp-dashboard__split" aria-hidden="true">
+            {split.map((part) => (
+              <span key={part.key} data-part={part.key} style={{ flexGrow: part.value }} />
             ))}
-          </svg>
-          <div className="tp-donut__center" aria-hidden={active ? true : undefined}>
-            {active ? (
-              <>
-                <span className="tp-donut__total" style={{ color: active.color }}>{active.value.toLocaleString("en-US")}</span>
-                <span className="tp-donut__caption">{active.label}</span>
-                <span className="tp-donut__share">{percent(active.value)}</span>
-              </>
-            ) : (
-              <>
-                <span className="tp-donut__total">{loading && !stats ? "…" : total.toLocaleString("en-US")}</span>
-                <span className="tp-donut__caption">إجمالي الطلبة</span>
-              </>
-            )}
+          </span>
+        )}
+      </div>
+      {statuses.map(({ key, label, value, icon: Icon, tone }) => (
+        <div key={key} className="tp-dashboard__stat" data-count-scope="system" data-tone={tone}>
+          <span className="tp-dashboard__stat-icon" aria-hidden="true">
+            <Icon />
+          </span>
+          <div className="tp-dashboard__stat-copy">
+            <p className="tp-dashboard__stat-label text-muted-foreground">{label}</p>
+            <p className="tp-dashboard__stat-value">
+              {show(value)}
+              {!loading && share(value) && <span className="tp-dashboard__stat-share">{share(value)}</span>}
+            </p>
           </div>
         </div>
-        <ul className="tp-donut__legend">
-          {parts.map((part) => (
-            <li
-              key={part.key}
-              data-on={focused === part.key ? true : undefined}
-              onMouseEnter={() => setFocused(part.key)}
-              onMouseLeave={() => setFocused(null)}
+      ))}
+    </div>
+  );
+}
+
+type AttentionItem = {
+  key: string;
+  label: string;
+  hint: string;
+  count: number;
+  icon: LucideIcon;
+  onOpen: () => void;
+};
+
+/**
+ * «يحتاج انتباهك»: the waiting numbers of the shortcuts below, in one place,
+ * the biggest first. Each opens its window; with nothing waiting it is gone.
+ */
+function AttentionPanel({ items }: { items: AttentionItem[] }) {
+  const waiting = items.filter((item) => item.count > 0).sort((a, b) => b.count - a.count);
+  if (!waiting.length) return null;
+  return (
+    <section className="tp-dashboard__panel tp-attention" aria-labelledby="tp-attention-title">
+      <header className="tp-dashboard__panel-head">
+        <h3 id="tp-attention-title" className="tp-dashboard__panel-title">يحتاج انتباهك</h3>
+      </header>
+      <ul className="tp-attention__list">
+        {waiting.map(({ key, label, hint, count, icon: Icon, onOpen }, index) => (
+          <li key={key}>
+            <button
+              type="button"
+              className="tp-attention__item"
+              data-lead={index === 0 ? true : undefined}
+              onClick={onOpen}
+              aria-haspopup="dialog"
             >
-              <span className="tp-donut__dot" style={{ background: part.color }} aria-hidden="true" />
-              <span className="tp-donut__label">{part.label}</span>
-              <span className="tp-donut__value">{part.value.toLocaleString("en-US")}</span>
-              <span className="tp-donut__percent">{percent(part.value)}</span>
-              <span className="tp-donut__bar" aria-hidden="true">
-                <span style={{ inlineSize: `${Math.max(share(part.value), part.value > 0 ? 1.5 : 0)}%`, background: part.color }} />
+              <span className="tp-attention__icon" aria-hidden="true">
+                <Icon />
               </span>
-            </li>
-          ))}
-        </ul>
-      </div>
+              <span className="tp-attention__copy">
+                <span className="tp-attention__label">{label}</span>
+                <span className="tp-attention__hint">{hint}</span>
+              </span>
+              <span className="tp-attention__count">{count > 999 ? "999+" : count.toLocaleString("en-US")}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -361,26 +374,42 @@ export function DashboardView({
     void loadStats({ background: isBackgroundSync() });
   }, [isBackgroundSync, loadStats, syncKey]);
 
-  const kpiCards = [
-    {
-      label: "طلاب نشطون",
-      value: stats?.activeStudents,
-      icon: Users,
-      tone: "success",
-    },
-    {
-      label: "طلاب مفصولون",
-      value: stats?.dismissedStudents,
-      icon: Shield,
-      tone: "danger",
-    },
-    {
-      label: "إجمالي الطلاب",
-      value: stats?.totalStudents,
-      icon: BookOpen,
-      tone: "info",
-    },
+  const attentionItems: AttentionItem[] = [
+    ...(canViewCodeClosures
+      ? [{ key: "codes", label: "اغلاق الكودات", hint: "كودات بانتظار الإغلاق", count: alerts?.codeClosuresPending ?? 0, icon: LockKeyhole, onOpen: () => setCodeClosuresOpen(true) }]
+      : []),
+    ...(canViewCallNotes
+      ? [{ key: "call-notes", label: "ملاحظات المكالمات", hint: "ملاحظات بانتظار الإنجاز", count: alerts?.callNotesPending ?? 0, icon: ListChecks, onOpen: () => setCallNotesOpen(true) }]
+      : []),
+    ...(canUseMirmazPro
+      ? [{ key: "mirmaz", label: "مرماز برو", hint: "درجات بانتظار المعالجة", count: alerts?.mirmazHoldsPending ?? 0, icon: ClipboardCheck, onOpen: () => setMirmazProOpen(true) }]
+      : []),
   ];
+
+  const groupLinks = (group: ShortcutGroup) =>
+    visibleShortcuts
+      .filter((shortcut) => shortcut.group === group)
+      .map(({ section, title, icon: Icon }) => (
+        <a
+          key={section}
+          data-tone={GROUP_TONE[group]}
+          href={`/?section=${section}`}
+          onClick={(event) => onSectionLinkClick?.(event, section)}
+          className={SHORTCUT_CLASS}
+        >
+          <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+            <Icon />
+          </span>
+          <span className="tp-dashboard__shortcut-label">
+            {title}
+          </span>
+        </a>
+      ));
+  const hasLinks = (group: ShortcutGroup) => visibleShortcuts.some((shortcut) => shortcut.group === group);
+  const showStudentsGroup = hasLinks("students") || canViewTopStudents;
+  const showExamsGroup = hasLinks("exams") || canUseMirmazPro;
+  const showFollowUpGroup = canViewCallNotes || hasLinks("follow-up") || canViewPledges;
+  const showAdminGroup = canViewCodeClosures || canViewGracePeriods || canViewLeaves || canUseTextShortcuts;
 
   const initialLoading = statsLoading && !stats;
   const initialError = Boolean(statsError && !stats);
@@ -447,192 +476,141 @@ export function DashboardView({
         </div>
       )}
 
-      <div className="tp-dashboard__kpis" role="group" aria-label="إحصائيات الطلاب">
-        {kpiCards.map(({ label, value, icon: Icon, tone }) => (
-          <div key={label} className="tp-dashboard__stat" data-count-scope="system" data-tone={tone}>
-            <span className="tp-dashboard__stat-icon" aria-hidden="true">
-              <Icon />
-            </span>
-            <div className="tp-dashboard__stat-copy">
-              <p className="tp-dashboard__stat-label text-muted-foreground">{label}</p>
-              <p className="tp-dashboard__stat-value">{initialLoading ? "…" : value ?? "—"}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+      <StudentKpis stats={stats} loading={initialLoading} />
 
       <div className="tp-dashboard__insights">
         <StudentTrendChart syncKey={syncKey} />
-        <StudentStatusDonut stats={stats} loading={initialLoading} />
+        <AttentionPanel items={attentionItems} />
       </div>
 
-      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures || canUseMirmazPro || canViewGracePeriods || canViewLeaves || canUseTextShortcuts || canViewTopStudents || canViewPledges) && (
+      {(showStudentsGroup || showExamsGroup || showFollowUpGroup || showAdminGroup) && (
         <nav aria-label="اختصارات لوحة التحكم" className="tp-dashboard__navigation">
           <h3 className="tp-dashboard__heading">
             <Zap aria-hidden="true" />
             الوصول السريع
           </h3>
-          <div className="tp-dashboard__shortcuts">
-            {visibleShortcuts.map(({ section, title, icon: Icon, tone }) => (
-              <a
-                key={section}
-                data-tone={tone}
-                href={`/?section=${section}`}
-                onClick={(event) => onSectionLinkClick?.(event, section)}
-                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
-              >
-                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
-                  <Icon />
-                </span>
-                <span className="tp-dashboard__shortcut-label">
-                  {title}
-                </span>
-              </a>
-            ))}
-            {canViewCallNotes && (
-              <button
-                type="button"
-                onClick={() => setCallsOpen(true)}
-                aria-haspopup="dialog"
-                data-tone="success"
-                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
-              >
-                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
-                  <PhoneCall />
-                </span>
-                <span className="tp-dashboard__shortcut-label">إدارة المكالمات</span>
-              </button>
+          <div className="tp-dashboard__groups">
+            {showStudentsGroup && (
+              <div className="tp-dashboard__group" data-tone={GROUP_TONE.students} role="group" aria-labelledby="tp-group-students">
+                <h4 id="tp-group-students" className="tp-dashboard__group-title">الطلاب</h4>
+                <div className="tp-dashboard__shortcuts">
+                  {groupLinks("students")}
+                  {canViewTopStudents && (
+                    <button type="button" onClick={() => setTopStudentsOpen(true)} aria-haspopup="dialog" data-tone={GROUP_TONE.students} className={SHORTCUT_CLASS}>
+                      <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                        <Trophy />
+                      </span>
+                      <span className="tp-dashboard__shortcut-label">
+                        الطلبة المتميزين
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
-            {canViewCallNotes && (
-              <button
-                type="button"
-                onClick={() => setCallNotesOpen(true)}
-                aria-haspopup="dialog"
-                data-tone="success"
-                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
-              >
-                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
-                  <ListChecks />
-                </span>
-                <span className="tp-dashboard__shortcut-label">
-                  إدارة ملاحظات المكالمات
-                  <ShortcutAlert count={alerts?.callNotesPending} tone="danger" label="ملاحظة بانتظار الإنجاز" />
-                </span>
-              </button>
+            {showExamsGroup && (
+              <div className="tp-dashboard__group" data-tone={GROUP_TONE.exams} role="group" aria-labelledby="tp-group-exams">
+                <h4 id="tp-group-exams" className="tp-dashboard__group-title">الامتحانات والدرجات</h4>
+                <div className="tp-dashboard__shortcuts">
+                  {groupLinks("exams")}
+                  {canUseMirmazPro && (
+                    <button type="button" onClick={() => setMirmazProOpen(true)} aria-haspopup="dialog" data-tone={GROUP_TONE.exams} className={SHORTCUT_CLASS}>
+                      <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                        <ClipboardCheck />
+                      </span>
+                      <span className="tp-dashboard__shortcut-label">
+                        مرماز برو
+                        <ShortcutAlert count={alerts?.mirmazHoldsPending ?? null} tone="danger" label="درجة بانتظار المعالجة" />
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
-            {canViewCodeClosures && (
-              <button
-                type="button"
-                onClick={() => setCodeClosuresOpen(true)}
-                aria-haspopup="dialog"
-                data-tone="danger"
-                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
-              >
-                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
-                  <LockKeyhole />
-                </span>
-                <span className="tp-dashboard__shortcut-label">
-                  اغلاق الكودات
-                  <ShortcutAlert count={alerts?.codeClosuresPending} tone="danger" label="كود بانتظار الإغلاق" />
-                </span>
-              </button>
+            {showFollowUpGroup && (
+              <div className="tp-dashboard__group" data-tone={GROUP_TONE["follow-up"]} role="group" aria-labelledby="tp-group-follow-up">
+                <h4 id="tp-group-follow-up" className="tp-dashboard__group-title">المتابعة</h4>
+                <div className="tp-dashboard__shortcuts">
+                  {canViewCallNotes && (
+                    <button type="button" onClick={() => setCallsOpen(true)} aria-haspopup="dialog" data-tone={GROUP_TONE["follow-up"]} className={SHORTCUT_CLASS}>
+                      <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                        <PhoneCall />
+                      </span>
+                      <span className="tp-dashboard__shortcut-label">إدارة المكالمات</span>
+                    </button>
+                  )}
+                  {canViewCallNotes && (
+                    <button type="button" onClick={() => setCallNotesOpen(true)} aria-haspopup="dialog" data-tone={GROUP_TONE["follow-up"]} className={SHORTCUT_CLASS}>
+                      <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                        <ListChecks />
+                      </span>
+                      <span className="tp-dashboard__shortcut-label">
+                        إدارة ملاحظات المكالمات
+                        <ShortcutAlert count={alerts?.callNotesPending} tone="danger" label="ملاحظة بانتظار الإنجاز" />
+                      </span>
+                    </button>
+                  )}
+                  {groupLinks("follow-up")}
+                  {canViewPledges && (
+                    <button type="button" onClick={() => setPledgesOpen(true)} aria-haspopup="dialog" data-tone={GROUP_TONE["follow-up"]} className={SHORTCUT_CLASS}>
+                      <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                        <Handshake />
+                      </span>
+                      <span className="tp-dashboard__shortcut-label">
+                        تعهدات
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
-            {canUseMirmazPro && (
-              <button
-                type="button"
-                onClick={() => setMirmazProOpen(true)}
-                aria-haspopup="dialog"
-                data-tone="info"
-                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
-              >
-                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
-                  <ClipboardCheck />
-                </span>
-                <span className="tp-dashboard__shortcut-label">
-                  مرماز برو
-                  <ShortcutAlert count={alerts?.mirmazHoldsPending ?? null} tone="danger" label="درجة بانتظار المعالجة" />
-                </span>
-              </button>
-            )}
-            {canViewGracePeriods && (
-              <button
-                type="button"
-                onClick={() => setGracePeriodsOpen(true)}
-                aria-haspopup="dialog"
-                data-tone="warning"
-                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
-              >
-                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
-                  <CalendarClock />
-                </span>
-                <span className="tp-dashboard__shortcut-label">
-                  إدارة فترة السماح
-                </span>
-              </button>
-            )}
-            {canViewLeaves && (
-              <button
-                type="button"
-                onClick={() => setLeavesOpen(true)}
-                aria-haspopup="dialog"
-                data-tone="warning"
-                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
-              >
-                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
-                  <CalendarCheck />
-                </span>
-                <span className="tp-dashboard__shortcut-label">
-                  إدارة الإجازات
-                </span>
-              </button>
-            )}
-            {canViewPledges && (
-              <button
-                type="button"
-                onClick={() => setPledgesOpen(true)}
-                aria-haspopup="dialog"
-                data-tone="danger"
-                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
-              >
-                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
-                  <Handshake />
-                </span>
-                <span className="tp-dashboard__shortcut-label">
-                  تعهدات
-                </span>
-              </button>
-            )}
-            {canViewTopStudents && (
-              <button
-                type="button"
-                onClick={() => setTopStudentsOpen(true)}
-                aria-haspopup="dialog"
-                data-tone="warning"
-                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
-              >
-                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
-                  <Trophy />
-                </span>
-                <span className="tp-dashboard__shortcut-label">
-                  الطلبة المتميزين
-                </span>
-              </button>
-            )}
-            {canUseTextShortcuts && (
-              <button
-                type="button"
-                onClick={() => setTextShortcutsOpen(true)}
-                aria-haspopup="dialog"
-                data-tone="info"
-                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
-              >
-                <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
-                  <MessageSquareText />
-                </span>
-                <span className="tp-dashboard__shortcut-label">
-                  اختصارات
-                </span>
-              </button>
+            {showAdminGroup && (
+              <div className="tp-dashboard__group" data-tone={GROUP_TONE.admin} role="group" aria-labelledby="tp-group-admin">
+                <h4 id="tp-group-admin" className="tp-dashboard__group-title">الإدارة</h4>
+                <div className="tp-dashboard__shortcuts">
+                  {canViewCodeClosures && (
+                    <button type="button" onClick={() => setCodeClosuresOpen(true)} aria-haspopup="dialog" data-tone={GROUP_TONE.admin} className={SHORTCUT_CLASS}>
+                      <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                        <LockKeyhole />
+                      </span>
+                      <span className="tp-dashboard__shortcut-label">
+                        اغلاق الكودات
+                        <ShortcutAlert count={alerts?.codeClosuresPending} tone="danger" label="كود بانتظار الإغلاق" />
+                      </span>
+                    </button>
+                  )}
+                  {canViewGracePeriods && (
+                    <button type="button" onClick={() => setGracePeriodsOpen(true)} aria-haspopup="dialog" data-tone={GROUP_TONE.admin} className={SHORTCUT_CLASS}>
+                      <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                        <CalendarClock />
+                      </span>
+                      <span className="tp-dashboard__shortcut-label">
+                        إدارة فترة السماح
+                      </span>
+                    </button>
+                  )}
+                  {canViewLeaves && (
+                    <button type="button" onClick={() => setLeavesOpen(true)} aria-haspopup="dialog" data-tone={GROUP_TONE.admin} className={SHORTCUT_CLASS}>
+                      <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                        <CalendarCheck />
+                      </span>
+                      <span className="tp-dashboard__shortcut-label">
+                        إدارة الإجازات
+                      </span>
+                    </button>
+                  )}
+                  {canUseTextShortcuts && (
+                    <button type="button" onClick={() => setTextShortcutsOpen(true)} aria-haspopup="dialog" data-tone={GROUP_TONE.admin} className={SHORTCUT_CLASS}>
+                      <span className="tp-dashboard__shortcut-icon" aria-hidden="true">
+                        <MessageSquareText />
+                      </span>
+                      <span className="tp-dashboard__shortcut-label">
+                        اختصارات
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </nav>
