@@ -123,7 +123,8 @@ assert.equal(baghdadDayRange("11-10-2026"), null);
 const route = read("src/app/api/student-calls/daily-stats/route.ts");
 assert.ok(route.includes("if (!oversees(principal))"));
 assert.ok(route.includes('import { GET as callCandidates } from "../candidates/route";'));
-assert.ok(route.includes('callListCount(req, course.id, exam.id, "discounted")') && route.includes('callListCount(req, course.id, exam.id, "full")'));
+assert.ok(route.includes('callList(req, course.id, exam.id, "discounted")') && route.includes('callList(req, course.id, exam.id, "full")'));
+assert.ok(route.includes('idsOnly: "1"') && route.includes("fullStudentIds: full?.studentIds ?? null"), "the full-mark students are known per course");
 assert.ok(route.includes("type: { in: [...CALL_STATS_EXAM_TYPES] }"), "a daily exam is never a course's exam here");
 assert.ok(route.includes('ON CONFLICT ("courseId", "examId") DO UPDATE') && route.includes('GREATEST("CallExamTarget"."recorded", EXCLUDED."recorded")'), "the kept part only grows");
 assert.ok(route.includes('recorded: { not: null }') && route.includes('WHEN "CallExamTarget"."recorded" IS NULL THEN EXCLUDED."recorded"'), "rows from before the kept part are counted again");
@@ -137,6 +138,7 @@ assert.ok(route.includes('details: { contains: `"examId":${JSON.stringify(exam.i
 assert.ok(route.includes('resetKind: "course-transfer"') && route.includes("courseMoves,"));
 const candidates = read("src/app/api/student-calls/candidates/route.ts");
 assert.ok(candidates.includes('missingCount: sortedMatching.filter((item) => item.absenceSource === "missing").length,'));
+assert.ok(candidates.includes('const idsOnly = searchParams.get("idsOnly") === "1" && oversees(principal);'), "only the overseers ask for the bare list");
 assert.ok(!route.includes("callDailyTarget.upsert"), "no number per day any more");
 assert.ok(!route.includes("export async function PUT"), "nobody types the required number");
 assert.ok(route.includes('action: { in: [CALL_ACTION_SET, CALL_ACTION_CLEARED] }'));
@@ -161,7 +163,7 @@ assert.ok(migration.includes('CREATE TABLE "CallDailyTarget"') && !/\bDROP\b/i.t
 
 // «العدد المطلوب» follows the chosen groups: discounted, full grades, or both added.
 {
-  const course = (id, target, full, done) => ({ id, name: id, examId: "e", examName: "e", target, discounted: target, full, done, doneToday: 0, remaining: 0, rate: null });
+  const course = (id, target, full, done, doneFull = 0) => ({ id, name: id, examId: "e", examName: "e", target, discounted: target, full, done, doneToday: 0, doneDiscounted: done, doneDiscountedToday: 0, doneFull, doneFullToday: 0, remaining: 0, rate: null });
   const stats = { courses: [course("a", 456, 130, 0), course("b", 42, 53, 87), course("c", null, null, 0)], employees: [], totals: { target: 498, done: 87, doneToday: 0, remaining: 456, rate: null, discounted: 498, full: 183, actions: 0 } };
   const both = withChosenGroups(stats, { discounted: true, full: true });
   assert.deepEqual(both.courses.map((c) => c.target), [586, 95, null], "both chosen: discounted + full grades");
@@ -173,6 +175,33 @@ assert.ok(migration.includes('CREATE TABLE "CallDailyTarget"') && !/\bDROP\b/i.t
   assert.deepEqual(withChosenGroups(stats, { discounted: true, full: false }).courses.map((c) => c.target), [456, 42, null], "discounted only");
   assert.deepEqual(withChosenGroups(stats, { discounted: false, full: false }).courses.map((c) => c.target), [456, 42, null], "neither: the discounted number");
   assert.equal(stats.courses[0].target, 456, "the original numbers are not changed");
+}
+
+// «المنجز» counts the same group as «المطلوب»: a full-mark call is not work on
+// «المخصومين» (it once filled the gap and showed 100% with discounted students left).
+{
+  const grouped = buildCallDailyStats({
+    lines: [
+      line("2026-10-11T06:00:00Z", ali, "s1", "e1", "تم الاتصال"), // discounted
+      line("2026-10-11T06:10:00Z", ali, "s2", "e1", "تم الاتصال"), // full mark
+      line("2026-10-11T06:20:00Z", sara, "s3", "e1", "لم يرد"), // full mark
+      line("2026-10-10T06:20:00Z", sara, "s4", "e1", "لم يرد"), // discounted, the day before
+    ],
+    day, examTypes,
+    studentCourse: new Map([["s1", "c1"], ["s2", "c1"], ["s3", "c1"], ["s4", "c1"]]),
+    courses: [{ id: "c1", name: "أ" }],
+    courseExams: new Map([["c1", { examId: "e1", examName: "x", target: 3, discounted: 3, full: 2, fullStudentIds: ["s2", "s3"] }]]),
+  });
+  const [c1] = grouped.courses;
+  assert.deepEqual([c1.done, c1.doneToday, c1.remaining], [2, 1, 1], "«المخصومين»: the full marks are not counted");
+  assert.deepEqual([c1.doneFull, c1.doneFullToday], [2, 2]);
+  assert.equal(grouped.totals.actions, 3, "the employees still get every action, full marks too");
+  const fullOnly = withChosenGroups(grouped, { discounted: false, full: true });
+  assert.deepEqual([fullOnly.courses[0].target, fullOnly.courses[0].done, fullOnly.courses[0].remaining], [2, 2, 0]);
+  const both = withChosenGroups(grouped, { discounted: true, full: true });
+  assert.deepEqual([both.courses[0].target, both.courses[0].done, both.courses[0].doneToday, both.courses[0].remaining], [5, 4, 3, 1]);
+  assert.deepEqual([both.totals.done, both.totals.doneToday], [4, 3], "the totals follow the chosen groups");
+  assert.deepEqual([withChosenGroups(grouped, { discounted: true, full: false }).totals.done], [2]);
 }
 
 console.log("كل اختبارات إحصائيات المكالمات نجحت.");

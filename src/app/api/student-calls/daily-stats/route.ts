@@ -38,26 +38,26 @@ function readDay(value: unknown): string | null {
 }
 
 /**
- * The number «المكالمات» shows for a course and an exam with «المخصومين» or
- * «الدرجات الكاملة» chosen: the same list, asked for its count only — and how
- * many of them are there only because no grade is entered yet.
+ * The list «المكالمات» shows for a course and an exam with «المخصومين» or
+ * «الدرجات الكاملة» chosen: the same list, asked for its students only — how
+ * many, who, and how many are there only because no grade is entered yet.
  */
-async function callListCount(req: NextRequest, courseId: string, examId: string, statusFilter: "discounted" | "full"): Promise<{ total: number; missing: number } | null> {
+async function callList(req: NextRequest, courseId: string, examId: string, statusFilter: "discounted" | "full"): Promise<{ total: number; missing: number; studentIds: string[] } | null> {
   const url = new URL("/api/student-calls/candidates", req.url);
   url.search = new URLSearchParams({
     courseId,
     examId,
     statusFilter,
-    page: "1",
-    pageSize: "1",
+    idsOnly: "1",
     client: String(CALL_CLIENT_PROTOCOL),
   }).toString();
   const response = await callCandidates(new NextRequest(url, { headers: req.headers }));
   if (!response.ok) return null;
-  const body = (await response.json().catch(() => null)) as { totalCount?: unknown; missingCount?: unknown } | null;
+  const body = (await response.json().catch(() => null)) as { totalCount?: unknown; missingCount?: unknown; studentIds?: unknown } | null;
   if (typeof body?.totalCount !== "number") return null;
   const missing = typeof body.missingCount === "number" ? Math.min(body.missingCount, body.totalCount) : 0;
-  return { total: body.totalCount, missing };
+  const studentIds = Array.isArray(body.studentIds) ? body.studentIds.map(String) : [];
+  return { total: body.totalCount, missing, studentIds };
 }
 
 type StatsExam = { id: string; name: string; date: Date; courseIds: string };
@@ -134,8 +134,8 @@ export async function GET(req: NextRequest) {
         if (!exam) return null;
         const key = `${course.id}|${exam.id}`;
         const [discounted, full] = await Promise.all([
-          callListCount(req, course.id, exam.id, "discounted"),
-          callListCount(req, course.id, exam.id, "full"),
+          callList(req, course.id, exam.id, "discounted"),
+          callList(req, course.id, exam.id, "full"),
         ]);
         const kept = savedTarget.get(key) ?? null;
         const isLatest = current.get(course.id)?.id === exam.id;
@@ -169,7 +169,15 @@ export async function GET(req: NextRequest) {
         }
         // Students with no grade entered yet count as they are now.
         const target = stored === null ? null : stored + (discounted?.missing ?? 0);
-        return { examId: exam.id, examName: exam.name, target, discounted: discounted?.total ?? null, full: full?.total ?? null };
+        return {
+          examId: exam.id,
+          examName: exam.name,
+          target,
+          discounted: discounted?.total ?? null,
+          full: full?.total ?? null,
+          // A full-mark call counts for «الدرجات الكاملة», not for «المخصومين».
+          fullStudentIds: full?.studentIds ?? null,
+        };
       };
       await Promise.all(
         Array.from({ length: Math.min(3, courses.length) }, async () => {

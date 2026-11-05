@@ -521,6 +521,8 @@ export async function GET(req: NextRequest) {
     const wantsRelease = searchParams.get("release") === "1";
     // The export lists everyone, whoever holds them.
     const exportAll = searchParams.get("exportAll") === "1";
+    // «إحصائيات المكالمات» (the admin and the supervisors) needs who is in the list, not their cards.
+    const idsOnly = searchParams.get("idsOnly") === "1" && oversees(principal);
     // A calls page from before batches would list students other windows
     // hold, and nothing on it keeps two callers apart: it must reload first.
     const clientProtocol = Number(searchParams.get("client") || 0);
@@ -849,6 +851,13 @@ export async function GET(req: NextRequest) {
     const sortedMatching = matching;
 
     const totalCount = sortedMatching.length;
+    if (idsOnly) {
+      return NextResponse.json({
+        studentIds: sortedMatching.map((item) => item.student.id),
+        totalCount,
+        missingCount: sortedMatching.filter((item) => item.absenceSource === "missing").length,
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
     const paged = sortedMatching.slice((page - 1) * pageSize, page * pageSize);
     const pagedStudentIds = paged.map((item) => item.student.id);
