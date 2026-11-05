@@ -1549,6 +1549,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       chapterName: activeChapterForCourse(row.student.courseId)?.name || "",
       score: callValueText(item),
       absent: item.category === "absent",
+      fullMark: item.category === "full",
       // Only a deduction or dismissal is reported.
       action: (item.badges || []).filter((badge) => badge.tone === "deducted").map((badge) => badge.label).join("، "),
     });
