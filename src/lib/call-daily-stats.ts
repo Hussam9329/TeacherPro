@@ -12,7 +12,10 @@
  * Courses: each against its latest cumulative exam on the day. The required
  * number is one number for that exam (its «المخصومين»), and the work done is
  * every student of the course whose call on that exam has a status at the end
- * of the day, whoever set it and on whichever day — each student once.
+ * of the day, whoever set it and on whichever day — each student once, and in
+ * the same group as the required number: a full-mark call counts for
+ * «الدرجات الكاملة», any other for «المخصومين» (which keeps students whose
+ * deduction was removed after they were called).
  */
 
 export const CALL_ACTION_LOG_MODULE = "المكالمات";
@@ -43,6 +46,8 @@ export type CallCourseExam = {
   /** «المخصومين» and «الدرجات الكاملة» of the exam as the calls list shows them now. */
   discounted: number | null;
   full: number | null;
+  /** The students of «الدرجات الكاملة» now; null: not known (every call counts for «المخصومين»). */
+  fullStudentIds?: string[] | null;
 };
 
 export type CallDailyCourse = {
@@ -54,10 +59,15 @@ export type CallDailyCourse = {
   target: number | null;
   discounted: number | null;
   full: number | null;
-  /** Students of the course whose call on the exam has a status by the end of the day. */
+  /** Students of the required group whose call on the exam has a status by the end of the day. */
   done: number;
   /** Of them, the ones acted on during the day. */
   doneToday: number;
+  /** The work done by group: every call but the full marks, and the full marks. */
+  doneDiscounted: number;
+  doneDiscountedToday: number;
+  doneFull: number;
+  doneFullToday: number;
   remaining: number;
   rate: number | null;
 };
@@ -192,16 +202,25 @@ export function buildCallDailyStats(input: {
     actions += 1;
   }
 
-  // Each course's exam: its students whose call has a status at the end of the day.
-  const doneByCourse = new Map<string, { done: number; today: number }>();
+  // Each course's exam: its students whose call has a status at the end of the
+  // day, apart by group (a full mark, or any other call).
+  const fullStudents = new Map<string, Set<string>>();
+  for (const [courseId, exam] of input.courseExams) fullStudents.set(courseId, new Set(exam.fullStudentIds || []));
+  const doneByCourse = new Map<string, { discounted: number; discountedToday: number; full: number; fullToday: number }>();
   for (const [key, state] of callState) {
     if (!state.status) continue;
+    const studentId = key.slice(0, key.indexOf("|"));
     const examId = key.slice(key.indexOf("|") + 1);
     const courseId = state.courseId;
     if (input.courseExams.get(courseId)?.examId !== examId) continue;
-    const sum = doneByCourse.get(courseId) || { done: 0, today: 0 };
-    sum.done += 1;
-    if (state.today) sum.today += 1;
+    const sum = doneByCourse.get(courseId) || { discounted: 0, discountedToday: 0, full: 0, fullToday: 0 };
+    if (fullStudents.get(courseId)?.has(studentId)) {
+      sum.full += 1;
+      if (state.today) sum.fullToday += 1;
+    } else {
+      sum.discounted += 1;
+      if (state.today) sum.discountedToday += 1;
+    }
     doneByCourse.set(courseId, sum);
   }
 
@@ -213,7 +232,8 @@ export function buildCallDailyStats(input: {
   const courses: CallDailyCourse[] = courseIds.map((id) => {
     const exam = input.courseExams.get(id);
     const target = exam?.target ?? null;
-    const progress = doneByCourse.get(id) || { done: 0, today: 0 };
+    const progress = doneByCourse.get(id) || { discounted: 0, discountedToday: 0, full: 0, fullToday: 0 };
+    // The required number is «المخصومين» until other groups are chosen (withChosenGroups).
     return {
       id,
       name: courseName(id),
@@ -222,10 +242,14 @@ export function buildCallDailyStats(input: {
       target,
       discounted: exam?.discounted ?? null,
       full: exam?.full ?? null,
-      done: progress.done,
-      doneToday: progress.today,
-      remaining: target === null ? 0 : Math.max(0, target - progress.done),
-      rate: rateOf(progress.done, target),
+      done: progress.discounted,
+      doneToday: progress.discountedToday,
+      doneDiscounted: progress.discounted,
+      doneDiscountedToday: progress.discountedToday,
+      doneFull: progress.full,
+      doneFullToday: progress.fullToday,
+      remaining: target === null ? 0 : Math.max(0, target - progress.discounted),
+      rate: rateOf(progress.discounted, target),
     };
   });
 
@@ -274,8 +298,9 @@ export function baghdadDayRange(day: string): { from: Date; to: Date } | null {
  * «العدد المطلوب» follows the groups chosen above the table: «المخصومين»
  * (the kept number of the course's latest exam), «الدرجات الكاملة», or both
  * added together. With neither chosen it stays the discounted number. The
- * remaining count and the rate follow, per course and in the totals (a course
- * over its number adds only its number, as before).
+ * work done counts the same groups, and the remaining count and the rate
+ * follow, per course and in the totals (a course over its number adds only
+ * its number, as before).
  */
 export function withChosenGroups(stats: CallDailyStats, chosen: { discounted: boolean; full: boolean }): CallDailyStats {
   const pickTarget = (course: CallDailyCourse): number | null => {
@@ -285,13 +310,18 @@ export function withChosenGroups(stats: CallDailyStats, chosen: { discounted: bo
     );
     return parts.length ? parts.reduce((total, value) => total + value, 0) : null;
   };
+  const discounted = chosen.discounted || !chosen.full;
   const courses = stats.courses.map((course) => {
     const target = pickTarget(course);
+    const done = (discounted ? course.doneDiscounted : 0) + (chosen.full ? course.doneFull : 0);
+    const doneToday = (discounted ? course.doneDiscountedToday : 0) + (chosen.full ? course.doneFullToday : 0);
     return {
       ...course,
       target,
-      remaining: target === null ? 0 : Math.max(0, target - course.done),
-      rate: rateOf(course.done, target),
+      done,
+      doneToday,
+      remaining: target === null ? 0 : Math.max(0, target - done),
+      rate: rateOf(done, target),
     };
   });
   const sum = (pick: (course: CallDailyCourse) => number | null) => courses.reduce((total, course) => total + (pick(course) || 0), 0);
@@ -300,7 +330,14 @@ export function withChosenGroups(stats: CallDailyStats, chosen: { discounted: bo
   return {
     ...stats,
     courses,
-    totals: { ...stats.totals, target, remaining, rate: rateOf(target - remaining, target || null) },
+    totals: {
+      ...stats.totals,
+      target,
+      done: sum((course) => course.done),
+      doneToday: sum((course) => course.doneToday),
+      remaining,
+      rate: rateOf(target - remaining, target || null),
+    },
   };
 }
 
