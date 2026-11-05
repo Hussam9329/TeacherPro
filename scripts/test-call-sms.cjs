@@ -30,6 +30,7 @@ const base = {
   chapterName: "الفصل الثالث",
   score: "22/50",
   absent: false,
+  fullMark: false,
   action: "",
 };
 
@@ -54,6 +55,16 @@ assert.equal(
   "نود إعلام حضرتكم بأنه قد تم الاتصال على رقمكم الخاص بخصوص الطالب سارة كريم جواد، وذلك لإبلاغكم بنتيجة امتحان الفصل الثالث - نبات 4.",
 );
 
+// A full mark: praise instead of the warning, no action line.
+assert.equal(callSmsMessage({ ...base, score: "50/50", fullMark: true }), [
+  "السلام عليكم ورحمة الله وبركاته",
+  "يسرّنا إعلام حضرتكم بأنه قد تم الاتصال على رقمكم الخاص بخصوص الطالب سارة كريم جواد، وذلك لإبلاغكم بنتيجة امتحان الفصل الثالث - نبات 4 الذي أُجري بتاريخ 31 تشرين الأول 2026، والخاص بـالفصل الثالث.",
+  "حيث حصل الطالب على الدرجة الكاملة 50/50.",
+  "نبارك لحضرتكم هذا المستوى المتميز، ونثمّن اجتهاد الطالب والتزامه، ونتمنى له دوام التفوق في الامتحانات القادمة.",
+  "مع خالص الشكر والتقدير لتعاونكم واهتمامكم.",
+  "قسم المتابعة – الأستاذ حسن فلاح لمادة الأحياء",
+].join("\n"));
+
 // The link: the local dialling form, the message encoded; no number, no link.
 const href = callSmsHref("+9647701234567", "مرحبا\nسطر");
 assert.equal(href, `sms:07701234567?body=${encodeURIComponent("مرحبا\nسطر")}`);
@@ -64,5 +75,6 @@ assert.equal(callSmsHref("", "x"), "");
 const card = fs.readFileSync(path.join(root, "src/components/teacher-pro/follow-up.tsx"), "utf8");
 assert(/اتصال من اللابتوب[\s\S]{0,400}row\.focusItem && \([\s\S]{0,200}callSmsHref\(phone, callSmsText\(row\)\)/.test(card));
 assert(card.includes('badge.tone === "deducted"'), "only a deduction or dismissal is reported");
+assert(card.includes('fullMark: item.category === "full"'), "a full mark gets the praise message");
 
 console.log("PASS: «إرسال رسالة نصية» fills the follow-up text and opens «ارتباط الهاتف»");
