@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { LatinDigitsScript } from "@/components/latin-digits-script";
 
 export const metadata: Metadata = {
-  title: "TP",
+  title: "TeacherPro",
   description: "نظام إدارة الطلاب والامتحانات والفُرص - TeacherPro",
   icons: {
     icon: "/logo.svg",

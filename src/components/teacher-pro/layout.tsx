@@ -53,7 +53,7 @@ import {
   Search,
   UserRound,
 } from "lucide-react";
-import { BrandMark, BrandName } from "./brand-mark";
+import { BrandWordmark } from "./brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -461,7 +461,7 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
           <div className="tp-login-header">
             <div className="min-w-0">
               <h1 className="tp-login-title" dir="ltr">
-                <BrandName teacherClassName="tp-login-title__teacher" />
+                <BrandWordmark />
               </h1>
               <p className="tp-login-subtitle">تسجيل دخول مدير النظام</p>
             </div>
@@ -833,7 +833,7 @@ export function TeacherProLayout() {
       : !isAuthenticated
         ? "تسجيل الدخول"
         : menuItems.find((item) => item.id === currentSection)?.title || "لوحة النظام";
-    document.title = pageTitle ? `TP - ${pageTitle}` : "TP";
+    document.title = pageTitle ? `TeacherPro - ${pageTitle}` : "TeacherPro";
   }, [authChecked, isAuthenticated, currentSection]);
 
   // تحميل البيانات من النظام عند بدء التطبيق
@@ -1335,11 +1335,10 @@ export function TeacherProLayout() {
           sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
         )}
       >
-        {/* The logo large on its own line, the name centred under it. */}
+        {/* The logo: the name alone, centred. */}
         <div className="tp-sidebar-brand relative">
-          <BrandMark className="tp-sidebar-brand__mark" />
           <h1 className="tp-sidebar-brand__name" dir="ltr">
-            <BrandName />
+            <BrandWordmark />
           </h1>
           <Button
             variant="ghost"
