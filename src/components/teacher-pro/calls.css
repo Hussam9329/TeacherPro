@@ -468,6 +468,9 @@ a.tp-qr-tile:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in s
 .tp-qr-laptop svg { flex-shrink: 0; inline-size: 1rem; block-size: 1rem; }
 .tp-qr-laptop:hover { background: var(--status-success-solid); color: var(--status-success-on); }
 .tp-qr-laptop:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 45%, transparent); }
+/* «إرسال رسالة نصية»: the same shape, in the info colours so it reads apart from the call. */
+.tp-qr-sms { border-color: var(--status-info-border); background: var(--status-info-bg); color: var(--status-info-fg); }
+.tp-qr-sms:hover { background: var(--status-info-solid); color: var(--status-info-on); }
 @media (prefers-reduced-motion: reduce) { .tp-qr-laptop { transition: none; } }
 
 /* Note editor (card and window) */

@@ -32,6 +32,7 @@ import {
   HelpCircle,
   Info,
   Laptop,
+  MessageSquareText,
   PencilLine,
   Phone,
   PhoneCall,
@@ -49,6 +50,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { callPhoneQrValue } from "@/lib/call-phone-qr";
+import { callSmsHref, callSmsMessage } from "@/lib/call-sms";
 import { EmptyState, ListPagination } from "./ui-kit";
 import { ListToolbar } from "./list-toolbar";
 import { Button } from "@/components/ui/button";
@@ -1536,6 +1538,22 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
     </div>
   );
 
+  // The follow-up text about the card's exam, sent after (or instead of) the call.
+  const callSmsText = (row: CallStudentRow) => {
+    const item = row.focusItem;
+    if (!item) return "";
+    return callSmsMessage({
+      studentName: row.student.name,
+      examName: item.exam.name,
+      examDate: formatAppDate(item.exam.date, ""),
+      chapterName: activeChapterForCourse(row.student.courseId)?.name || "",
+      score: callValueText(item),
+      absent: item.category === "absent",
+      // Only a deduction or dismissal is reported.
+      action: (item.badges || []).filter((badge) => badge.tone === "deducted").map((badge) => badge.label).join("، "),
+    });
+  };
+
   // ── The short student card ──────────────────────────────────────────────
   const renderQrTile = (row: CallStudentRow, label: string, phone: string | null | undefined, icon: React.ReactNode) =>
     callPhoneQrValue(phone) ? (
@@ -1557,6 +1575,17 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
         >
           <Laptop aria-hidden="true" />اتصال من اللابتوب
         </a>
+        {/* The same number in «ارتباط الهاتف»'s messages, the follow-up text filled in. */}
+        {row.focusItem && (
+          <a
+            href={callSmsHref(phone, callSmsText(row))}
+            className="tp-qr-laptop tp-qr-sms"
+            aria-label={`إرسال رسالة نصية لرقم ${label} للطالب ${row.student.name} عبر الهاتف المربوط`}
+            title="يفتح «ارتباط الهاتف» برسالة نتيجة الامتحان جاهزة للإرسال"
+          >
+            <MessageSquareText aria-hidden="true" />إرسال رسالة نصية
+          </a>
+        )}
       </div>
     ) : (
       <div className="tp-qr-tile" data-empty="true">
