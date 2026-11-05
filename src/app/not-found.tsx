@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "TP - الصفحة غير موجودة" };
+export const metadata: Metadata = { title: "TeacherPro - الصفحة غير موجودة" };
 
 export default function NotFound() {
   return (

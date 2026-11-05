@@ -167,6 +167,12 @@
   --tp-gold-deep: #9a6c2b;
   --tp-gold-ink: #8a5f22;
   --tp-gold-gradient: linear-gradient(135deg, #fbe6ab 0%, #e2b965 40%, #c28c3a 72%, #94672a 100%);
+  /* The logo's own colours: the same by day and night. */
+  --tp-brand-green: #0f3d36;
+  --tp-brand-sage: #8fb9a1;
+  --tp-brand-pro: #c8694c;
+  --tp-brand-pro-deep: #b0563b;
+  --tp-brand-on: #ffffff;
   /* The rail: the logo's tile, a soft glow at its top over green-black. */
   --tp-rail-glow: #1b4237;
   --tp-rail-top: #10302a;
@@ -3304,8 +3310,7 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
   }
   .tp-app-sidebar { background: transparent; }
 }
-/* The rail's head: the logo large on its own line, the name centred under
-   it, and a fine gold rule closing the block. */
+/* The rail's head: the name alone, centred, and a fine gold rule closing the block. */
 .tp-sidebar-brand {
   flex-direction: column;
   align-items: center;
@@ -3323,34 +3328,53 @@ tr[data-dismissed="true"] > td:first-child { box-shadow: inset -4px 0 0 var(--st
   background: linear-gradient(90deg, transparent, var(--tp-gold) 50%, transparent);
   opacity: 0.55;
 }
-.tp-sidebar-brand__mark {
-  flex: none;
-  inline-size: 4.4rem;
-  block-size: 4.4rem;
-  filter: drop-shadow(0 12px 22px rgb(0 0 0 / 0.45)) drop-shadow(0 0 16px rgb(217 173 92 / 0.18));
-}
 .tp-sidebar-brand .tp-sidebar-brand__name {
   flex: none;
+  max-inline-size: 100%;
   overflow: visible;
-  color: var(--tp-bg);
-  font-size: 1.25rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-size: 1.3rem;
   line-height: 1.2;
   text-align: center;
   text-overflow: clip;
 }
+/* On the green-black rail «Teacher» is cream; on the page it is the logo's green. */
+.tp-sidebar-brand .tp-wordmark__teacher { color: var(--tp-bg); }
 .tp-sidebar-brand__close { position: absolute; inset-block-start: 0.5rem; inset-inline-end: 0.4rem; }
-.tp-brand-gold {
-  background: var(--tp-gold-gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+/* The logo: «Teacher», then «Pro» on a terracotta tile, over a soft green arc. */
+.tp-wordmark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.12em;
+  padding-block-end: 0.32em;
+  font-family: "Inter", sans-serif;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  white-space: nowrap;
 }
+.tp-wordmark::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 8%;
+  inline-size: 52%;
+  inset-block-end: 0.04em;
+  block-size: 0.16em;
+  border-block-start: 0.07em solid var(--tp-brand-sage);
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+}
+.tp-wordmark__teacher { color: var(--tp-brand-green); }
+.tp-wordmark__pro {
+  padding: 0.08em 0.24em 0.1em 0.2em;
+  border-radius: 0.24em;
+  background: linear-gradient(135deg, var(--tp-brand-pro), var(--tp-brand-pro-deep));
+  color: var(--tp-brand-on);
+}
+.dark .tp-wordmark__teacher { color: var(--tp-bg); }
 .tp-sidebar-link[aria-current="page"] .tp-sidebar-link__icon { color: var(--tp-gold-ink); }
 .tp-theme-switch[aria-checked="true"] .tp-theme-switch__track { background: var(--tp-gold-gradient); }
 .tp-login-card__accent { background: var(--tp-gold-gradient); }
-.tp-login-title .tp-login-title__teacher { color: var(--foreground); }
 
 /* On wide screens the page title keeps clear of the sheet's curved top
    corner (unlayered: it must win over the header's px-* utilities). */
