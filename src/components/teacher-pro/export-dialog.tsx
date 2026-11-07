@@ -1039,6 +1039,48 @@ function serializeForInlineScript(value: unknown): string {
     .replaceAll("\u2029", "\\u2029");
 }
 
+/**
+ * Packs the report's data for the HTML file so the file stays small: every
+ * distinct value is written once (`v`), every list of object keys once (`k`),
+ * and the data (`d`) refers to them by number. A leaf is a number (its index
+ * in `v`); an array is `[0, ...items]`; an object is `[keyListIndex + 1, ...values]`.
+ * REPORT_PAYLOAD_UNPACK_JS rebuilds exactly what JSON.parse(JSON.stringify(value))
+ * would give.
+ */
+export function packReportPayload(value: unknown): { v: unknown[]; k: string[][]; d: unknown } {
+  const values: unknown[] = [];
+  const valueAt = new Map<string, number>();
+  const keyLists: string[][] = [];
+  const keyListAt = new Map<string, number>();
+  const pack = (input: unknown): unknown => {
+    if (input === null || typeof input !== "object") {
+      const id = JSON.stringify(input);
+      let index = valueAt.get(id);
+      if (index === undefined) {
+        index = values.length;
+        values.push(input);
+        valueAt.set(id, index);
+      }
+      return index;
+    }
+    if (Array.isArray(input)) return [0, ...input.map(pack)];
+    const keys = Object.keys(input);
+    const id = JSON.stringify(keys);
+    let index = keyListAt.get(id);
+    if (index === undefined) {
+      index = keyLists.length;
+      keyLists.push(keys);
+      keyListAt.set(id, index);
+    }
+    const record = input as Record<string, unknown>;
+    return [index + 1, ...keys.map((key) => pack(record[key]))];
+  };
+  return { v: values, k: keyLists, d: pack(JSON.parse(JSON.stringify(value ?? null))) };
+}
+
+/** Inside the HTML file: the reverse of packReportPayload. */
+export const REPORT_PAYLOAD_UNPACK_JS = "function tpUnpack(p){var v=p.v,k=p.k;function u(x){var i,o,keys;if(typeof x==='number')return v[x];if(x[0]===0){o=[];for(i=1;i<x.length;i++)o.push(u(x[i]));return o;}keys=k[x[0]-1];o={};for(i=0;i<keys.length;i++){if(keys[i]==='__proto__')Object.defineProperty(o,keys[i],{value:u(x[i+1]),enumerable:true,writable:true,configurable:true});else o[keys[i]]=u(x[i+1]);}return o;}return u(p.d);}";
+
 function escapeJsString(value: string): string {
   return serializeForInlineScript(String(value ?? ""));
 }
@@ -1144,11 +1186,13 @@ export function buildHtml<T>(
     ? `<script>document.title=${escapeJsString(documentTitle)};try{window.history.replaceState(null,document.title,${escapeJsString(printableHistoryPath)});}catch(e){}</script>`
     : "";
 
+  // The data goes in packed (each repeated text once) and the file unpacks it
+  // as it opens, before anything reads it.
   const detailsDataScript = interactiveMode
-    ? `<script>window.STUDENT_DETAILS=${serializeForInlineScript(reportDetails)};</script>`
+    ? `<script>window.STUDENT_DETAILS=tpUnpack(${serializeForInlineScript(packReportPayload(reportDetails))});</script>`
     : "";
   const studentListScript = interactiveMode
-    ? `<script>window.STUDENT_LIST=${serializeForInlineScript(reportStudents)};</script>`
+    ? `<script>${REPORT_PAYLOAD_UNPACK_JS}</script><script>window.STUDENT_LIST=tpUnpack(${serializeForInlineScript(packReportPayload(reportStudents))});</script>`
     : "";
   const detailsModalHtml = interactiveMode ? DETAILS_MODAL_HTML : "";
   const detailsModalJs = interactiveMode ? DETAILS_MODAL_JS : "";
