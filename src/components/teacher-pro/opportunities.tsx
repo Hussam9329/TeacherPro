@@ -10,6 +10,7 @@ import {
   opportunityStatsApi,
   studentApi,
   studentProfileLogApi,
+  studentReportDetailsApi,
   type OpportunityStatsResponse,
   type OpportunityBulkTargetsResponse,
 } from "@/lib/api";
@@ -630,8 +631,9 @@ export function OpportunitiesView() {
 
   /**
    * يجلب تفاصيل كل طالب (درجاته في كل الامتحانات + سجل فرصه مع الأسباب)
-   * عبر profile-log، ويُرجع لقطة مُختصرة فقط — بدون ملاحظات أو مكالمات
-   * أو سجل تدقيق — لتبقى أحجام ملفات HTML صغيرة وقابلة للفتح أوفلاين.
+   * عبر report-details: دفعات من 100 طالب بالطلب، عدة دفعات بنفس الوقت،
+   * فيبقى التقرير سريعاً مهما كبر العدد. نفس حقول التقرير من profile-log
+   * لكل طالب — بدون ملاحظات أو مكالمات أو سجل تدقيق.
    *
    * التحويل نفسه (buildStudentDetailsFromProfileLog) يُستخدم أيضاً من زر
    * تليگرام في إدارة المفصولين حتى يبقى مصدر الرسالة ومصدر ملف HTML
@@ -648,39 +650,47 @@ export function OpportunitiesView() {
     const result: StudentDetailsMap = {};
     let loaded = 0;
 
-    const loadOne = async (studentId: string): Promise<boolean> => {
+    const BATCH = 100;
+    // A batch of students in one read; returns the ids that did not load.
+    const loadBatch = async (ids: string[]): Promise<string[]> => {
       try {
-        const profile = await studentProfileLogApi.get(studentId);
-        if (!profile) return false;
-        result[studentId] = buildStudentDetailsFromProfileLog(profile);
-        const snapshot = result[studentId].studentSnapshot;
-        if (snapshot && profile.student?.courseId) snapshot.courseName = courseName(String(profile.student.courseId));
-        return true;
+        const response = await studentReportDetailsApi.get(ids);
+        if (!response) return ids;
+        const failed: string[] = [];
+        for (const studentId of ids) {
+          const profile = response.students?.[studentId];
+          if (!profile) {
+            failed.push(studentId);
+            continue;
+          }
+          result[studentId] = buildStudentDetailsFromProfileLog(profile);
+          const snapshot = result[studentId].studentSnapshot;
+          if (snapshot && profile.student?.courseId) snapshot.courseName = courseName(String(profile.student.courseId));
+          loaded += 1;
+        }
+        onProgress(loaded, total);
+        return failed;
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") throw error;
-        console.error(`[opportunities] profile-log failed for ${studentId}:`, error);
-        return false;
+        console.error("[opportunities] report-details failed:", error);
+        return ids;
       }
     };
 
-    // One pass over the students still missing; returns those that failed.
+    // One pass over the students still missing, in batches; returns those that failed.
     const runPass = async (ids: string[], concurrency: number): Promise<string[]> => {
-      const queue = [...ids];
+      const queue: string[][] = [];
+      for (let index = 0; index < ids.length; index += BATCH) queue.push(ids.slice(index, index + BATCH));
       const failed: string[] = [];
       const worker = async () => {
         while (queue.length > 0) {
-          const studentId = queue.shift();
-          if (!studentId) break;
+          const batch = queue.shift();
+          if (!batch) break;
           if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-          if (await loadOne(studentId)) {
-            loaded += 1;
-            onProgress(loaded, total);
-          } else {
-            failed.push(studentId);
-          }
+          failed.push(...(await loadBatch(batch)));
         }
       };
-      await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, ids.length)) }, () => worker()));
+      await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, queue.length)) }, () => worker()));
       return failed;
     };
 

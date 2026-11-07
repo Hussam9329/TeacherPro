@@ -24,55 +24,21 @@ import {
   studentProfileSectionAccess,
   studentProfileStudentForAccess,
 } from "@/lib/student-profile-server";
+import {
+  buildStudentReportContext,
+  PROFILE_EXAM_SELECT,
+  PROFILE_GRADE_SELECT,
+  PROFILE_LEAVE_SELECT,
+  PROFILE_NOTE_SELECT,
+  PROFILE_OPPORTUNITY_LOG_SELECT,
+} from "@/lib/student-report-details-server";
 
-const GRADE_SELECT = {
-  id: true,
-  status: true,
-  score: true,
-  notes: true,
-  academicAccountingChecked: true,
-  academicEffectExcluded: true,
-  academicEffectExclusionReason: true,
-  academicEffectExclusionSource: true,
-  smartNoteId: true,
-  createdAt: true,
-  updatedAt: true,
-  studentId: true,
-  examId: true,
-} as const;
-
-const OPPORTUNITY_LOG_SELECT = {
-  id: true,
-  action: true,
-  amount: true,
-  requestedAmount: true,
-  appliedAmount: true,
-  balanceBefore: true,
-  balanceAfter: true,
-  reversalOfLogId: true,
-  ledgerVersion: true,
-  settledGradeIds: true,
-  reason: true,
-  date: true,
-  chapterId: true,
-  chapterNameSnapshot: true,
-  studentId: true,
-  examId: true,
-} as const;
-
-const LEAVE_SELECT = {
-  id: true,
-  studentId: true,
-  examId: true,
-  leaveType: true,
-  reason: true,
-  studyType: true,
-  date: true,
-  dateFrom: true,
-  dateTo: true,
-  notes: true,
-  createdAt: true,
-} as const;
+// The same rows as the HTML report's batch read (/api/students/report-details).
+const GRADE_SELECT = PROFILE_GRADE_SELECT;
+const OPPORTUNITY_LOG_SELECT = PROFILE_OPPORTUNITY_LOG_SELECT;
+const LEAVE_SELECT = PROFILE_LEAVE_SELECT;
+const NOTE_SELECT = PROFILE_NOTE_SELECT;
+const EXAM_SELECT = PROFILE_EXAM_SELECT;
 
 const CALL_SELECT = {
   id: true,
@@ -89,39 +55,6 @@ const CALL_SELECT = {
   createdAt: true,
   actedAt: true,
   actedByName: true,
-} as const;
-
-const NOTE_SELECT = {
-  id: true,
-  studentId: true,
-  kind: true,
-  text: true,
-  date: true,
-  sourceType: true,
-  sourceId: true,
-  dismissalKey: true,
-  dismissalReason: true,
-  dismissalDate: true,
-} as const;
-
-const EXAM_SELECT = {
-  examCourses: { select: { courseId: true, chapterId: true } },
-  id: true,
-  name: true,
-  type: true,
-  courseIds: true,
-  mainSite: true,
-  date: true,
-  fullMark: true,
-  passMark: true,
-  discountMark: true,
-  opportunitiesPenalty: true,
-  dismissalGrade: true,
-  noDiscount: true,
-  active: true,
-  scheduledActivateAt: true,
-  telegramOpenAt: true,
-  telegramCloseAt: true,
 } as const;
 
 /**
@@ -407,31 +340,8 @@ export async function GET(req: NextRequest) {
         pendingGrades: pendingGradeNotes,
       },
       // What the student report needs to compute a correct result, whatever
-      // sections the exporter may read: the status, the registration day,
-      // the days of each leave and the recorded dismissals. Only facts used
-      // for the calculation — no leave reason, note, phone or call.
-      reportContext: access.grades || access.opportunities
-        ? {
-            status: student.status,
-            registeredAt: student.createdAt,
-            leaves: studentLeaves.map((leave) => ({
-              examId: leave.examId,
-              leaveType: leave.leaveType,
-              date: leave.date,
-              dateFrom: leave.dateFrom,
-              dateTo: leave.dateTo,
-            })),
-            dismissals: studentNotes
-              .filter((note) => note.kind === "إجراء" && /^(?:تم )?فصل الطالب/u.test(String(note.text || "")))
-              .map((note) => ({
-                date: note.dismissalDate || note.date,
-                reason: String(note.dismissalReason || "").trim(),
-              })),
-            pendingGrades: access.grades
-              ? pendingGradeNotes.map((note) => ({ examId: note.examId, score: note.score, category: note.category }))
-              : [],
-          }
-        : null,
+      // sections the exporter may read (one builder with the batch read).
+      reportContext: buildStudentReportContext(student, studentLeaves, studentNotes, pendingGradeNotes, access),
       sections: access,
       snapshotVersion,
       source: "database" as const,
