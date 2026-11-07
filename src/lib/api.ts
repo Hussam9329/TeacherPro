@@ -1878,6 +1878,17 @@ export const studentProfileLogApi = {
   },
 };
 
+/**
+ * The HTML report's details of many students in one read (up to 100 ids):
+ * per student, the same report fields /api/students/profile-log returns.
+ */
+export const studentReportDetailsApi = {
+  get: (studentIds: string[]) =>
+    apiGet<{ students: Record<string, StudentProfileLogResponse>; missing: string[] }>(
+      `students/report-details?${new URLSearchParams({ ids: studentIds.join(",") }).toString()}`,
+    ),
+};
+
 export const syncVersionApi = {
   get: () => apiGet<SyncVersionResponse>("sync/version"),
 };
