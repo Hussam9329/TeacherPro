@@ -333,6 +333,8 @@ const {
   sanitizeStudentDetailsForHtml,
   getHtmlReportExams,
   selectHtmlReportExams,
+  packReportPayload,
+  REPORT_PAYLOAD_UNPACK_JS,
 } = loadExportDialogModule();
 
 const rows = [{ id: "s1", name: "طالب اعتيادي" }];
@@ -2032,6 +2034,35 @@ check("تفاصيل الطالب للموظفين: المكافأة غير ال�
     "3 − 3 + 2 − 1 + 1 = 2, her balance",
   );
   assert.equal(staffOpportunityReason("السبب: تعويض غياب مبرر [academic-reactivation-link:x]"), "تعويض غياب مبرر");
+});
+
+check("بيانات الملف تنضغط وترجع حرفياً مثل ما كانت، بكل أنواع القيم", () => {
+  const unpack = vm.runInNewContext(`${REPORT_PAYLOAD_UNPACK_JS};tpUnpack`);
+  const tricky = {
+    s1: { activeChapterName: "الفصل </script><script>alert(1)</script>", grades: [
+      { score: 0, fullMark: 20, status: "غائب", duringDismissal: false, outcome: "", delta: null, after: -1 },
+      { score: "0", fullMark: 20.5, status: "غائب", duringDismissal: true, outcome: "ناجح", delta: 1e21, after: 2 },
+    ], timelineEvents: [], sum: null, empty: {}, nested: [[], [null, true, "\u2028"]] },
+    ["__proto__"]: { polluted: true },
+    "": "مفتاح فارغ",
+    undefinedField: undefined,
+  };
+  const expected = JSON.parse(JSON.stringify(tricky));
+  const decoded = JSON.parse(JSON.stringify(unpack(JSON.parse(JSON.stringify(packReportPayload(tricky))))));
+  assert.deepEqual(decoded, expected);
+  assert.equal(Object.prototype.polluted, undefined, "a __proto__ key never reaches the prototype");
+  for (const value of [null, 0, "", [], {}, "نص"]) {
+    const back = unpack(JSON.parse(JSON.stringify(packReportPayload(value))));
+    assert.equal(JSON.stringify(back), JSON.stringify(value));
+  }
+  // Each repeated text is written once.
+  const many = Object.fromEntries(Array.from({ length: 50 }, (_, index) => [`id${index}`, { examName: "امتحان مكرر", status: "غائب" }]));
+  const packed = packReportPayload(many);
+  assert.equal(packed.v.filter((value) => value === "امتحان مكرر").length, 1);
+  assert.equal(packed.k.length, 2, "one key list for the 50 rows, one for the top");
+  const html = buildHtml(rows, columns, "تقرير", { studentList: [{ id: "id0", name: "طالب" }], studentDetails: { id0: { grades: [], opportunityLogs: [] } } });
+  assert.match(html, /window\.STUDENT_DETAILS=tpUnpack\(/);
+  assert.equal((html.match(/function tpUnpack/g) || []).length, 1, "the unpacker is in the file once");
 });
 
 if (failures > 0) {
