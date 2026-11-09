@@ -216,6 +216,9 @@ const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
 // from the store MUST NOT be listed here, otherwise the store stays empty and
 // the UI renders every course as "بدون فصل نشط". See exam-records, grade-entry,
 // opportunities, student-registry and the follow-up family.
+const IDLE_BACKGROUND_CHECK_PAUSE_MS = 15 * 60 * 1000;
+const SESSION_CHECK_INTERVAL_MS = 10 * 60 * 1000;
+
 const PAGE_OWNED_SYNC_SECTIONS = new Set<SectionId>([
   "dashboard",
   "courses",
@@ -877,6 +880,27 @@ export function TeacherProLayout() {
   const serverVersionCheckRef = useRef<
     ((options?: { force?: boolean; rebaselineOnly?: boolean }) => Promise<void>) | null
   >(null);
+  // Background checks pause on a screen nobody is using, so Neon can scale the
+  // database to zero (nights, a PC left on). The first input after the pause
+  // runs every check at once, so the user never sees stale data.
+  const lastUserActivityAtRef = useRef(Date.now());
+  const idleResumeHandlersRef = useRef(new Set<() => void>());
+
+  useEffect(() => {
+    const onActivity = () => {
+      if (document.hidden) return;
+      const wasIdle = Date.now() - lastUserActivityAtRef.current > IDLE_BACKGROUND_CHECK_PAUSE_MS;
+      lastUserActivityAtRef.current = Date.now();
+      if (wasIdle) idleResumeHandlersRef.current.forEach((handler) => handler());
+    };
+    const windowEvents = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart", "focus"] as const;
+    windowEvents.forEach((name) => window.addEventListener(name, onActivity, { passive: true }));
+    document.addEventListener("visibilitychange", onActivity);
+    return () => {
+      windowEvents.forEach((name) => window.removeEventListener(name, onActivity));
+      document.removeEventListener("visibilitychange", onActivity);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -1030,6 +1054,7 @@ export function TeacherProLayout() {
     } = {}) => {
       if (stopped || inFlight) return;
       if (!options.force && typeof document !== "undefined" && document.hidden) return;
+      if (!options.force && Date.now() - lastUserActivityAtRef.current > IDLE_BACKGROUND_CHECK_PAUSE_MS) return;
       inFlight = true;
       try {
         const result = await syncVersionApi.get();
@@ -1077,6 +1102,8 @@ export function TeacherProLayout() {
       12_000,
     );
     const onWake = () => void checkServerVersion({ force: true });
+    const idleResumeHandlers = idleResumeHandlersRef.current;
+    idleResumeHandlers.add(onWake);
     const unsubscribeLocalMutation = subscribeTeacherProLocalMutation(() => {
       // The API mutation has already completed; update only the version baseline.
       if (snapshotRebaselineTimerRef.current) {
@@ -1095,6 +1122,7 @@ export function TeacherProLayout() {
     return () => {
       stopped = true;
       serverVersionCheckRef.current = null;
+      idleResumeHandlers.delete(onWake);
       unsubscribeLocalMutation();
       window.clearInterval(interval);
       window.removeEventListener("focus", onWake);
@@ -1108,10 +1136,24 @@ export function TeacherProLayout() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    const timer = window.setInterval(() => {
+    // Only a visible, recently used page re-checks the session. A page that was
+    // hidden or idle catches up as soon as it is back, if a check is due.
+    let lastCheckAt = Date.now();
+    const checkIfDue = () => {
+      if (document.hidden || Date.now() - lastUserActivityAtRef.current > IDLE_BACKGROUND_CHECK_PAUSE_MS) return;
+      if (Date.now() - lastCheckAt < SESSION_CHECK_INTERVAL_MS) return;
+      lastCheckAt = Date.now();
       void restoreSession();
-    }, 10 * 60 * 1000);
-    return () => window.clearInterval(timer);
+    };
+    const timer = window.setInterval(checkIfDue, 60 * 1000);
+    const idleResumeHandlers = idleResumeHandlersRef.current;
+    idleResumeHandlers.add(checkIfDue);
+    document.addEventListener("visibilitychange", checkIfDue);
+    return () => {
+      window.clearInterval(timer);
+      idleResumeHandlers.delete(checkIfDue);
+      document.removeEventListener("visibilitychange", checkIfDue);
+    };
   }, [isAuthenticated, restoreSession]);
 
   // A request was refused with 401: check the session right away. If it is
