@@ -61,6 +61,7 @@ import {
   type CallAbsenceSource,
 } from "@/lib/call-absence";
 import { isStudentExamCall } from "@/lib/call-identity";
+import { isCallDeductedImpact as isDeductedImpact } from "@/lib/call-deduction-server";
 
 export type CallStatusFilter = "all" | "discounted" | "full";
 
@@ -231,16 +232,6 @@ function toClientExam(exam: DbExamLite) {
 
 function hasAbsentStatus(grade: Pick<DbGradeLite, "status"> | undefined): boolean {
   return grade?.status === "غائب";
-}
-
-function isDeductedImpact(kind: GradeClassificationKind): boolean {
-  return (
-    kind === "absent-deducted" ||
-    kind === "absent-dismissal" ||
-    kind === "discounted" ||
-    kind === "dismissal" ||
-    kind === "cheating"
-  );
 }
 
 function classifyCallImpact(

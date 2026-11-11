@@ -1,3 +1,4 @@
+import { loadCallDeductedCases } from "@/lib/call-deduction-server";
 import { annotateGradeSettlementEffects } from "@/lib/grade-settlement-server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -402,6 +403,51 @@ function predictedMissingActionText(
   return "يُحدد الإجراء عند تسجيل الغياب";
 }
 
+async function deductedExportRows(
+  students: CompleteExportStudent[],
+  exams: CompleteExportExam[],
+  filters: { courseId: string; examId: string; nameLetter: string; query: string },
+): Promise<CompleteGradeExportRow[]> {
+  const cases = await loadCallDeductedCases({
+    courseId: filters.courseId || undefined,
+    examId: filters.examId || undefined,
+  });
+  const studentById = new Map(students.map((student) => [student.id, student]));
+  const examById = new Map(exams.map((exam) => [exam.id, exam]));
+  const gradeIds = cases.flatMap((item) => (item.grade ? [item.grade.id] : []));
+  const storedGrades = gradeIds.length
+    ? await db.grade.findMany({ where: { id: { in: gradeIds } } })
+    : [];
+  await annotateGradeSettlementEffects(storedGrades);
+  const gradeById = new Map(storedGrades.map((grade) => [grade.id, grade]));
+
+  const rows: CompleteGradeExportRow[] = [];
+  for (const item of cases) {
+    const student = studentById.get(item.studentId);
+    const exam = examById.get(item.examId);
+    if (!student || !exam) continue;
+    const grade = item.grade ? gradeById.get(item.grade.id) || null : null;
+    if (!studentMatchesExportNameLetter(student, filters.nameLetter)) continue;
+    if (!completeExportRowMatchesQuery(filters.query, student, exam, grade)) continue;
+    const gradeKind = grade
+      ? exportClassificationKind({ ...grade, student, exam } as GradeWithRelations)
+      : null;
+    rows.push({
+      grade,
+      student,
+      exam,
+      statusText: grade?.status || "لم يمتحن",
+      predictedActionText: gradeKind !== null
+        ? protectedGradeActionText(gradeKind)
+        : predictedMissingActionText(student, exam),
+    });
+  }
+  rows.sort((a, b) =>
+    new Date(b.exam.date).getTime() - new Date(a.exam.date).getTime() ||
+    a.student.name.localeCompare(b.student.name, "ar"));
+  return rows;
+}
+
 async function completeGradeExportRows(searchParams: URLSearchParams) {
   const requestedExamId = normalizeListFilter(searchParams.get("examId"));
   const requestedCourseId = normalizeListFilter(searchParams.get("courseId"));
@@ -423,6 +469,15 @@ async function completeGradeExportRows(searchParams: URLSearchParams) {
   ]);
 
   await attachExportGracePeriods(students);
+  // «المخصومين»: exactly the students the calls list for each exam.
+  if (statusFilter === "discounted") {
+    return deductedExportRows(students, examCandidates, {
+      courseId: requestedCourseId,
+      examId: requestedExamId,
+      nameLetter,
+      query,
+    });
+  }
   const exams = examCandidates.filter((exam) => {
     const courseIds = completeExportExamCourseIds(exam);
     return !requestedCourseId || courseIds.includes(requestedCourseId);

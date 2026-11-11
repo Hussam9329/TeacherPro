@@ -26,6 +26,7 @@ import {
   gradeStatusFilterWhere,
 } from "@/lib/grade-status-filter-server";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
+import { loadCallDeductedCases } from "@/lib/call-deduction-server";
 import {
   archivedStudentLockedResponse,
   assertStudentsNotArchived,
@@ -434,6 +435,41 @@ type StudentGradeCounts = {
  * appear (a student appears once, however many exams they sat); the counts
  * always describe the student's whole grade record. Newest activity first.
  */
+async function callDeductedStudentIds(searchParams: URLSearchParams): Promise<string[]> {
+  const courseId = normalizeListFilter(searchParams.get("courseId"));
+  const examId = normalizeListFilter(searchParams.get("examId"));
+  const courseProgram = normalizeListFilter(searchParams.get("courseProgram"));
+  const courseTerm = normalizeListFilter(searchParams.get("courseTerm"));
+  const studyType = normalizeListFilter(searchParams.get("studyType"));
+  const nameLetter = normalizeListFilter(searchParams.get("nameLetter"));
+  const search = String(searchParams.get("q") || "").trim();
+  const cases = await loadCallDeductedCases({ courseId: courseId || undefined, examId: examId || undefined });
+  const ids = [...new Set(cases.map((item) => item.studentId))];
+  if (ids.length === 0) return [];
+  const studentAnd: Prisma.StudentWhereInput[] = [
+    { id: { in: ids } },
+    { status: { not: STUDENT_STATUS_ARCHIVED } },
+  ];
+  if (courseProgram) studentAnd.push({ courseProgram });
+  if (courseProgram === "كورسات" && courseTerm) studentAnd.push({ courseTerm });
+  if (studyType) studentAnd.push({ studyType });
+  const students = await db.student.findMany({
+    where: { AND: studentAnd },
+    select: { id: true, name: true, code: true, phone: true, parentPhone: true, username: true, telegram: true, school: true },
+  });
+  const letter = nameLetter && nameLetter !== "all" ? normalizeArabicText(nameLetter).slice(0, 1) : "";
+  const words = normalizeArabicText(search.replace(/(^|\s)@+/g, "$1")).split(" ").filter(Boolean);
+  return students
+    .filter((student) => !letter || normalizeArabicText(student.name).startsWith(letter))
+    .filter((student) => {
+      if (!words.length) return true;
+      const values = [student.name, student.code, student.phone, student.parentPhone, student.username, student.telegram, student.school]
+        .map((value) => normalizeArabicText(value));
+      return words.every((word) => values.some((value) => value.includes(word)));
+    })
+    .map((student) => student.id);
+}
+
 async function listGradesGroupedByStudent(
   searchParams: URLSearchParams,
   page: number,
@@ -459,7 +495,10 @@ async function listGradesGroupedByStudent(
   ]).then(([all, hasGrade, absent, cheating]) => ({ all, hasGrade, absent, cheating }));
 
   let matchingStudentIds: string[];
-  if (gradeStatusFilterIsExact(statusFilter)) {
+  if (statusFilter === "discounted") {
+    // «المخصومين»: the same students the calls list, with or without a grade.
+    matchingStudentIds = await callDeductedStudentIds(searchParams);
+  } else if (gradeStatusFilterIsExact(statusFilter)) {
     const rows = await db.grade.groupBy({
       by: ["studentId"],
       where: { AND: [baseWhere, gradeStatusFilterWhere(statusFilter)!] },
