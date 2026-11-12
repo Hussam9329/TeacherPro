@@ -2124,7 +2124,7 @@ export const studentLeaveApi = {
   remove: (id: string) => apiDelete("student-leaves", id),
 };
 
-type CallWindowBeat = { windowId: string; courseId: string; examId: string; away?: boolean; hold?: string; seenStatus?: string };
+type CallWindowBeat = { windowId: string; courseId: string; examId: string; away?: boolean; hold?: string; seenStatus?: string; takeOver?: boolean };
 export type CallWindowBeatResult = {
   /** The students this window holds on the exam now. */
   held: string[];
@@ -2136,6 +2136,8 @@ export type CallWindowBeatResult = {
   status: string;
   /** The build the server runs; a different one means the page is out of date. */
   build: string;
+  /** «خذه من فلان»: the colleague the student was taken from. */
+  takenFrom?: string;
 };
 
 export type LiveCallWindowRow = {

@@ -39,6 +39,7 @@
     "test:courses-integrity": "node scripts/test-courses-integrity.mjs",
     "test:chapters-integrity": "node scripts/test-chapters-integrity.mjs && node --test scripts/test-course-chapter-attach-behavior.mjs && node scripts/test-course-chapter-activation-behavior.cjs",
     "test:opportunities-integrity": "node scripts/test-opportunities-integrity.mjs && npm run test:opportunities-html-behavior",
+    "test:call-take-over": "node scripts/test-call-take-over.mjs",
     "test:deducted-shared-rule": "node scripts/test-deducted-shared-rule.mjs",
     "test:report-details-batch": "node scripts/test-report-details-batch.cjs",
     "test:opportunities-html-behavior": "node scripts/test-report-opportunity-context.cjs && node scripts/test-report-timeline.cjs && node scripts/test-opportunities-html-behavior.mjs && node scripts/test-profile-opportunity-commands.cjs",
