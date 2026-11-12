@@ -869,7 +869,8 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
 
   // «خذه للاتصال»: outside «دفعتي» a student is called only once this window
   // holds them, so two callers never dial the same student.
-  const takeCallCase = async (row: CallStudentRow) => {
+  // takeOver: «خذه من فلان», the student moves from a colleague's batch.
+  const takeCallCase = async (row: CallStudentRow, takeOver = false) => {
     if (!callCourseId || !callExamId || callTakingIds[row.student.id]) return;
     setCallTakingIds((current) => ({ ...current, [row.student.id]: true }));
     const result = await callWindowApi.hold({
@@ -878,6 +879,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       examId: callExamId,
       studentId: row.student.id,
       seenStatus: callStatusForLog(callLogForRow(row)),
+      takeOver,
     });
     setCallTakingIds((current) => {
       const next = { ...current };
@@ -888,6 +890,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
       const me = callActor?.name || callActor?.username || "";
       setCallRowsFromDb((rows) => rows.map((current) =>
         current.student.id === row.student.id ? { ...current, heldBy: { userName: me, mine: true } } : current));
+      if (result.takenFrom) toast.success(`صار ${row.student.name} إلك بدل ${result.takenFrom}.`);
       return;
     }
     if (result?.changed) {
@@ -1637,7 +1640,17 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
               </span>
             )}
           </div>
-          <Button type="button" variant="outline" className="tp-call-card__details" onClick={() => setDetailsRow(row)}>
+          <Button
+            type="button"
+            variant="outline"
+            className="tp-call-card__details"
+            onClick={() => {
+              // Found by search and opened: the student becomes this caller's,
+              // even from a colleague's batch.
+              if (callUsesBatches && debouncedCallGeneralSearch.trim() && !row.heldBy?.mine) void takeCallCase(row, true);
+              setDetailsRow(row);
+            }}
+          >
             <FileText aria-hidden="true" />التفاصيل
           </Button>
         </header>
@@ -1742,7 +1755,7 @@ export function CallsWorkspace({ variant = "page" }: { variant?: "page" | "windo
           ) : (
             <aside className="tp-call-card__qr tp-call-card__take" aria-label="الاتصال بالطالب">
               {row.heldBy ? (
-                <p><Users aria-hidden="true" />بدفعة <b>{row.heldBy.userName}</b> هسه، هو يتصل بيه.</p>
+                <p><Users aria-hidden="true" />بدفعة <b>{row.heldBy.userName}</b> هسه. ابحث عنه وافتح «التفاصيل» حتى يصير إلك.</p>
               ) : (
                 <>
                   <p>حتى محد غيرك يتصل بيه بنفس الوقت، خذه أول وبعدين يطلع رقمه.</p>

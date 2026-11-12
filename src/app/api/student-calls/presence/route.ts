@@ -11,14 +11,17 @@ import { parseCallWindowId } from "@/lib/call-batch";
 import {
   closeCallWindow,
   currentCallStatus,
+  dropCallHold,
   heldByCallWindow,
   holdCallCase,
+  liveCallHolders,
   liveCallWindows,
   releaseStaleCallWindows,
   retryCallTransaction,
   touchCallWindow,
 } from "@/lib/call-reservations-server";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
+import { writeRequestAuditLog } from "@/lib/audit-log-server";
 
 /**
  * «دفعات» in إدارة المكالمات. POST: an open window beats (or says it went to
@@ -26,7 +29,8 @@ import { baghdadTodayKey } from "@/lib/baghdad-time";
  * answers with the students the window still holds, so the page drops any
  * that went to someone else, and with the running build, so a page left open
  * across an update asks to be reloaded. `hold`: «خذه للاتصال» holds one
- * student for this window unless someone else does. GET: the admin's
+ * student for this window unless someone else does; with `takeOver` it takes
+ * the student from the colleague who holds them (logged). GET: the admin's
  * «منو شغال هسه».
  */
 const RUNNING_BUILD = process.env.VERCEL_GIT_COMMIT_SHA || process.env.NEXT_PUBLIC_APP_BUILD || "";
@@ -47,6 +51,8 @@ export async function POST(req: NextRequest) {
     if (!courseId || !examId) return validationError("اختر الدورة والامتحان أولاً.");
     const holdStudentId = typeof body?.hold === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(body.hold) ? body.hold : "";
     const seenStatus = typeof body?.seenStatus === "string" ? body.seenStatus.trim() : null;
+    // «خذه من فلان»: any caller may take a student held by a colleague.
+    const takeOver = body?.takeOver === true && Boolean(holdStudentId);
     const now = new Date();
     const result = await withDatabaseSchema(() => retryCallTransaction(() => db.$transaction(async (tx) => {
       await releaseStaleCallWindows(tx, now);
@@ -55,21 +61,37 @@ export async function POST(req: NextRequest) {
       let holdOk: boolean | undefined;
       let changed = false;
       let status = "";
+      let takenFrom = "";
       if (holdStudentId) {
         // A student called after the page loaded is not taken over a stale
         // card: the page gets the new status and reloads instead.
         const current = await currentCallStatus(tx, holdStudentId, examId);
         status = current || "";
         changed = current !== null && seenStatus !== null && seenStatus !== current;
+        if (current !== null && !changed && takeOver) {
+          const holder = (await liveCallHolders(tx, examId, now)).find((item) => item.studentId === holdStudentId);
+          if (holder && holder.windowId !== windowId) {
+            await dropCallHold(tx, holdStudentId, examId);
+            takenFrom = holder.userName;
+          }
+        }
         holdOk = current !== null && !changed &&
           await holdCallCase(tx, { id: windowId, ownerId: owner.id }, holdStudentId, examId, now);
       }
       const held = await heldByCallWindow(tx, windowId, examId, now);
       // Already this window's own: taking it again is fine.
       if (holdStudentId && !holdOk && !changed) holdOk = held.includes(holdStudentId);
-      return { held, holdOk, changed, status };
+      return { held, holdOk, changed, status, takenFrom };
     })), "CallWindow");
     if (!result) return NextResponse.json({ error: "هذه النافذة لحساب آخر." }, { status: 409 });
+    if (result.takenFrom && result.holdOk) {
+      await writeRequestAuditLog(req, "المكالمات", "أخذ طالب من دفعة موظف آخر", {
+        studentId: holdStudentId,
+        examId,
+        from: result.takenFrom,
+        to: owner.name,
+      });
+    }
     return NextResponse.json({ ok: true, ...result, build: RUNNING_BUILD });
   } catch (error) {
     return routeErrorResponse(error, "تعذر تحديث نافذة المكالمات.");
