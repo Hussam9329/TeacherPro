@@ -158,8 +158,9 @@ check('واجهة سجل الطلاب تستخدم statusAction للفصل وا�
 check('الواجهة توقف التعديل والفصل والأرشفة عند عرض نسخة محلية مؤقتة', registry.includes('registryServerUnavailable') && registry.includes('لا يمكن أرشفة طالب أثناء عرض نسخة محلية مؤقتة') && registry.includes('لا يمكن فصل طالب أثناء عرض نسخة محلية مؤقتة'));
 check('أرشفة الطالب في API محفوظة داخل transaction ومقيدة ببصمة علاقاتها', studentsRoute.includes('withSerializableTransaction') && studentsRoute.includes('previewToken !== impact.previewToken') && deleteImpact.includes('buildMutationPreviewToken') && studentsRoute.includes('studentNote.create') && studentsRoute.includes('auditLog.create'));
 check(
-  'إلغاء ربط التليگرام زر في ملف الطالب وليس في السجل، ولا يعاد تشغيله تلقائياً',
+  'إلغاء ربط التليگرام زر على بطاقة الطالب بمكوّنه الخاص، ولا يعاد تشغيله تلقائياً',
   fs.existsSync(path.join(root, 'src/app/api/students/unlink-telegram/route.ts')) &&
+    registryResults.includes('<TelegramUnlinkButton') &&
     !registry.includes('unlinkTelegram') &&
     api.includes('unlinkTelegram') &&
     !mutationReplayPolicy.includes('unlink-telegram'),

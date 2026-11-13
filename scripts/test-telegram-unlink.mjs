@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // «إلغاء ربط التليگرام»: the open-exam rule (behaviour) and the wiring of the
-// button, the route and the edit window (integrity).
+// card button, the route and the edit window (integrity).
 // Run: node --experimental-strip-types --test scripts/test-telegram-unlink.mjs
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -80,8 +80,13 @@ test("the edit window obeys the same open-exam rule", () => {
   assert.ok(route.includes("data.telegramKey = identityKeys.telegramKey"));
 });
 
-test("the button sits in the student profile and is never replayed", () => {
-  assert.ok(read("src/components/teacher-pro/student-profile-dialog.tsx").includes("<TelegramUnlinkButton student={profileStudent} onUnlinked={() => setManualRefreshKey((key) => key + 1)} />"));
+test("the button sits on the student card itself and is never replayed", () => {
+  const results = read("src/components/teacher-pro/student-registry-results.tsx");
+  // Once on the card and once in the table row's actions, both outside the «التفاصيل» fold.
+  assert.equal(results.split("<TelegramUnlinkButton student={student}").length - 1, 2);
+  assert.ok(results.indexOf("<TelegramUnlinkButton student={student} onUnlinked={() => actionProps") < results.indexOf('<div className="tp-scard__more"'));
+  assert.ok(!read("src/components/teacher-pro/student-profile-dialog.tsx").includes("TelegramUnlinkButton"));
+  assert.ok(read("src/components/teacher-pro/student-registry.tsx").includes("[field]: value ?? \"\""), "the card drops the link at once");
   const button = read("src/components/teacher-pro/telegram-unlink-button.tsx");
   assert.ok(button.includes("getStudentRegistryCapabilities(currentUser()).isAdmin"));
   assert.ok(button.includes("studentApi.unlinkTelegram(student.id, telegram)"));

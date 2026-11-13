@@ -39,6 +39,7 @@ import { unwithdrawnStudentName } from "@/lib/withdrawal-rules";
 import { RowActionsMenu, type RowAction } from "./row-actions-menu";
 import { StudentCodeButtons } from "./student-code-buttons";
 import { StudentContactEdit, type StudentContactField } from "./student-contact-edit";
+import { TelegramUnlinkButton } from "./telegram-unlink-button";
 import "./student-registry-results.css";
 import "./student-card.css";
 
@@ -353,7 +354,8 @@ type StudentActionsProps = {
   onUnwithdraw: (student: Student) => void;
   onArchive: (student: Student) => void;
   /** A number fixed right on the card: the list shows it at once. */
-  onContactSaved?: (studentId: string, field: StudentContactField, value: string | null) => void;
+  /** A contact fixed on the card, or the Telegram link removed from it («telegram»). */
+  onContactSaved?: (studentId: string, field: StudentContactField | "telegram", value: string | null) => void;
 };
 
 function studentMoreActions({
@@ -436,6 +438,7 @@ function StudentActions(props: StudentActionsProps) {
         ملف الطالب
       </Button>
       <RowActionsMenu label={`إجراءات أخرى لـ${student.name}`} actions={studentMoreActions(props)} />
+      <TelegramUnlinkButton student={student} onUnlinked={() => props.onContactSaved?.(student.id, "telegram", "")} />
     </>
   );
 }
@@ -771,6 +774,9 @@ function StudentRegistryRow({
           {missingContacts.length ? <li data-tone="warning">ناقص {missingContacts.join(" و")}</li> : null}
         </ul>
       ) : null}
+
+      {/* On the card itself: staff unlink a student many times a day. */}
+      <TelegramUnlinkButton student={student} onUnlinked={() => actionProps.onContactSaved?.(student.id, "telegram", "")} />
 
       {open ? (
         <div className="tp-scard__more" id={moreId}>

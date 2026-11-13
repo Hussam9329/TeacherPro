@@ -47,7 +47,6 @@ import { displayOpportunityAction, isRetiredFollowupNote } from "@/lib/retired-f
 import { buildStudentStory, type StoryCategory, type StoryEvent } from "@/lib/student-story";
 import { storyDay, storyStamp, storyTime, type StoryPart } from "@/lib/student-story-format";
 import { StudentCodeButtons } from "./student-code-buttons";
-import { TelegramUnlinkButton } from "./telegram-unlink-button";
 
 type StudentProfileDialogProps = {
   student: Student | null;
@@ -1282,7 +1281,6 @@ export function StudentProfileDialog({
                           ))}
                         </div>
                       ) : null}
-                      <TelegramUnlinkButton student={profileStudent} onUnlinked={() => setManualRefreshKey((key) => key + 1)} />
                       {missingProfileFacts.length ? (
                         <p className="rounded-xl border border-warning-line bg-warning-soft px-3 py-2 text-xs font-bold text-warning">
                           ناقص: {missingProfileFacts.join("، ")}

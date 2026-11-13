@@ -17,7 +17,7 @@ const BUTTON =
  */
 export function TelegramUnlinkButton({ student, onUnlinked }: {
   student: { id: string; name: string; code?: string | null; telegram?: string | null };
-  /** The open profile reloads itself here; a local change never refreshes it on its own. */
+  /** The card clears its own copy of the link here; a local change never refreshes it on its own. */
   onUnlinked?: () => void;
 }) {
   const currentUser = useTeacherStore((state) => state.currentUser);
