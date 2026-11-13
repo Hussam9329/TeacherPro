@@ -158,12 +158,10 @@ check('واجهة سجل الطلاب تستخدم statusAction للفصل وا�
 check('الواجهة توقف التعديل والفصل والأرشفة عند عرض نسخة محلية مؤقتة', registry.includes('registryServerUnavailable') && registry.includes('لا يمكن أرشفة طالب أثناء عرض نسخة محلية مؤقتة') && registry.includes('لا يمكن فصل طالب أثناء عرض نسخة محلية مؤقتة'));
 check('أرشفة الطالب في API محفوظة داخل transaction ومقيدة ببصمة علاقاتها', studentsRoute.includes('withSerializableTransaction') && studentsRoute.includes('previewToken !== impact.previewToken') && deleteImpact.includes('buildMutationPreviewToken') && studentsRoute.includes('studentNote.create') && studentsRoute.includes('auditLog.create'));
 check(
-  'تم حذف ميزة فك ارتباط تليگرام بكل جذورها: لا مسار API ولا زر ولا نافذة تأكيد ولا سياسة إعادة تشغيل',
-  !fs.existsSync(path.join(root, 'src/app/api/students/unlink-telegram')) &&
+  'إلغاء ربط التليگرام زر في ملف الطالب وليس في السجل، ولا يعاد تشغيله تلقائياً',
+  fs.existsSync(path.join(root, 'src/app/api/students/unlink-telegram/route.ts')) &&
     !registry.includes('unlinkTelegram') &&
-    !registry.includes('فك الارتباط') &&
-    !registry.includes('فك ارتباط') &&
-    !api.includes('unlinkTelegram') &&
+    api.includes('unlinkTelegram') &&
     !mutationReplayPolicy.includes('unlink-telegram'),
 );
 check(

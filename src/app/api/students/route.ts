@@ -3,6 +3,8 @@ export const dynamic = "force-dynamic";
 
 import { studentEditChanges, studentEditChangesSuffix } from "@/lib/student-edit-changes";
 import { NextRequest, NextResponse } from "next/server";
+import { OPEN_BOT_EXAM_MESSAGE } from "@/lib/telegram-bot-session";
+import { hasOpenBotExam } from "@/lib/telegram-bot-session-server";
 import {
   hasPermission,
   oversees,
@@ -746,6 +748,11 @@ export async function PUT(req: NextRequest) {
         { error: "تعديل ارتباط تليگرام متاح لمدير النظام والمشرفين فقط." },
         { status: 403 },
       );
+    }
+    // The bot delivers an open exam's answer through this link, so the edit
+    // window obeys the same rule as the unlink button.
+    if (data.telegram !== currentTelegram && (await hasOpenBotExam(currentTelegram))) {
+      return NextResponse.json({ error: OPEN_BOT_EXAM_MESSAGE }, { status: 409 });
     }
   }
   if (data.username !== undefined) {

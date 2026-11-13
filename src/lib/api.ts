@@ -1535,6 +1535,9 @@ export const studentRegisterApi = {
 };
 
 export const studentApi = {
+  /** Unlinks the student from the bot's Telegram account; the username stays. */
+  unlinkTelegram: (studentId: string, expectedTelegram: string) =>
+    apiPost("students/unlink-telegram", { studentId, expectedTelegram }),
   /** «ملاحظات الفصل» of a dismissed student (the general edit never writes them). */
   updateDismissalNotes: (id: string, dismissalNotes: string, expectedMutationToken = "") =>
     apiPut("students/dismissal-notes", { studentId: id, dismissalNotes, expectedMutationToken }),
