@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTeacherStore } from "@/lib/teacher-store";
 import { studentApi } from "@/lib/api";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { getStudentRegistryCapabilities } from "./student-registry-helpers";
 
 const BUTTON =
@@ -14,8 +15,10 @@ const BUTTON =
  * supervisors see it, and only for a linked student. The server refuses while
  * the student has an exam open in the bot.
  */
-export function TelegramUnlinkButton({ student }: {
+export function TelegramUnlinkButton({ student, onUnlinked }: {
   student: { id: string; name: string; code?: string | null; telegram?: string | null };
+  /** The open profile reloads itself here; a local change never refreshes it on its own. */
+  onUnlinked?: () => void;
 }) {
   const currentUser = useTeacherStore((state) => state.currentUser);
   const [confirming, setConfirming] = useState(false);
@@ -35,6 +38,10 @@ export function TelegramUnlinkButton({ student }: {
     setBusy(false);
     setConfirming(false);
     const message = (response.data as { message?: string } | null)?.message;
+    if (response.ok) {
+      onUnlinked?.();
+      emitTeacherProDataChanged({ reason: "إلغاء ربط تليگرام", scopes: response.syncScopes });
+    }
     setResult(response.ok
       ? { ok: true, text: message || "تم إلغاء ربط تليگرام." }
       : { ok: false, text: response.error || "تعذر إلغاء ربط تليگرام حالياً." });

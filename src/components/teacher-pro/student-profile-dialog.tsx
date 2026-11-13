@@ -1282,7 +1282,7 @@ export function StudentProfileDialog({
                           ))}
                         </div>
                       ) : null}
-                      <TelegramUnlinkButton student={profileStudent} />
+                      <TelegramUnlinkButton student={profileStudent} onUnlinked={() => setManualRefreshKey((key) => key + 1)} />
                       {missingProfileFacts.length ? (
                         <p className="rounded-xl border border-warning-line bg-warning-soft px-3 py-2 text-xs font-bold text-warning">
                           ناقص: {missingProfileFacts.join("، ")}

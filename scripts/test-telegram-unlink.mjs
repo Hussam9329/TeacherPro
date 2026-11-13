@@ -81,7 +81,7 @@ test("the edit window obeys the same open-exam rule", () => {
 });
 
 test("the button sits in the student profile and is never replayed", () => {
-  assert.ok(read("src/components/teacher-pro/student-profile-dialog.tsx").includes("<TelegramUnlinkButton student={profileStudent} />"));
+  assert.ok(read("src/components/teacher-pro/student-profile-dialog.tsx").includes("<TelegramUnlinkButton student={profileStudent} onUnlinked={() => setManualRefreshKey((key) => key + 1)} />"));
   const button = read("src/components/teacher-pro/telegram-unlink-button.tsx");
   assert.ok(button.includes("getStudentRegistryCapabilities(currentUser()).isAdmin"));
   assert.ok(button.includes("studentApi.unlinkTelegram(student.id, telegram)"));
