@@ -110,7 +110,8 @@
     "test:correction-integration-integrity": "node scripts/test-correction-integration-integrity.mjs",
     "test:student-code-buttons": "node scripts/test-student-code-buttons.cjs",
     "test:mirmaz-integration": "node scripts/test-mirmaz-integration-integrity.mjs && node --experimental-strip-types --test scripts/test-mirmaz-name-match.mjs",
-    "test:database-error": "node scripts/test-database-error.cjs"
+    "test:database-error": "node scripts/test-database-error.cjs",
+    "test:database-url": "node scripts/test-database-url.cjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^6.19.3",
