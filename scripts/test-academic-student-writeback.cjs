@@ -4,7 +4,7 @@ const path = require('node:path');
 const ts = require('typescript');
 const { PGlite } = require('@electric-sql/pglite');
 const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
-const { Prisma } = require('@prisma/client');
+const { datamodel } = require('./prisma-datamodel.cjs');
 
 require.extensions['.ts'] = (module, filename) => module._compile(
   ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
@@ -22,7 +22,7 @@ const { persistAcademicStudentResults } = require('../src/lib/academic-student-w
       const filename = path.join('prisma/migrations', directory, 'migration.sql');
       if (fs.existsSync(filename)) await pg.exec(fs.readFileSync(filename, 'utf8'));
     }
-    assert.ok(!Prisma.dmmf.datamodel.models.find(model => model.name === 'Student').fields.some(field => field.isUpdatedAt),
+    assert.ok(!datamodel.models.find(model => model.name === 'Student').fields.some(field => field.isUpdatedAt),
       'Student has no Prisma automatic update timestamp; revisit writeback if that schema contract changes');
 
     await pg.exec(`

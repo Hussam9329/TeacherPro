@@ -24,6 +24,18 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Prisma's runtime folder ships query files for every database it supports,
+  // and file tracing copies all of them into each function. The schema is
+  // PostgreSQL only, so the other databases' files are left out (~43 MB per
+  // function).
+  outputFileTracingExcludes: {
+    "*": [
+      "node_modules/@prisma/client/runtime/*cockroachdb*",
+      "node_modules/@prisma/client/runtime/*mysql*",
+      "node_modules/@prisma/client/runtime/*sqlserver*",
+      "node_modules/@prisma/client/runtime/*sqlite*",
+    ],
+  },
   // The build a page was loaded from; the calls page compares it with the
   // server's to ask for a reload after an update.
   env: {

@@ -17,9 +17,10 @@
 // ============================================================================
 
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 
 const db = new PrismaClient({
-  datasources: { db: { url: process.env.DATABASE_URL } },
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
 
 const ALLOWED_STATUSES = ['درجة', 'غائب', 'غش', 'مجاز', 'ضمن فترة السماح', 'قبل تسجيل الطالب'];

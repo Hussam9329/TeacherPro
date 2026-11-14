@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { CALL_WINDOW_AWAY_MS, CALL_WINDOW_TTL_MS, callCaseOpenForBatch, pickCallBatch } from "@/lib/call-batch";
 import { CALL_STUDENT_NOTE_CATEGORY } from "@/lib/call-notes-filter";
+import { databaseErrorCode, databaseErrorMessage } from "@/lib/database-error";
 
 /**
  * The database side of «دفعات» in إدارة المكالمات (rules: call-batch.ts).
@@ -272,9 +273,10 @@ export async function retryCallTransaction<T>(run: () => Promise<T>, attempts = 
     try {
       return await run();
     } catch (error) {
-      const code = String((error as { meta?: { code?: unknown }; code?: unknown })?.meta?.code ?? "");
-      const message = String((error as { message?: unknown })?.message ?? "");
-      const retryable = code === "40P01" || code === "40001" || /deadlock detected|could not serialize/.test(message);
+      const code = databaseErrorCode(error);
+      const message = databaseErrorMessage(error);
+      const retryable = (error as { code?: unknown } | null | undefined)?.code === "P2034"
+        || code === "40P01" || code === "40001" || /deadlock detected|could not serialize/.test(message);
       if (!retryable || attempt >= attempts) throw error;
       await new Promise((resolve) => setTimeout(resolve, 20 * attempt + Math.floor(Math.random() * 30)));
     }

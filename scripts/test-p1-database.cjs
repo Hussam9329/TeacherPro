@@ -4,7 +4,7 @@ const fs = require('node:fs'), path = require('node:path'), Module = require('no
 process.env.TZ = 'UTC';
 const { PGlite } = require('@electric-sql/pglite');
 const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
-const { Prisma } = require('@prisma/client');
+const { datamodel } = require('./prisma-datamodel.cjs');
 const resolve=Module._resolveFilename;
 Module._resolveFilename=function(r,p,...args){return resolve.call(this,r.startsWith('@/')?path.join(process.cwd(),'src',r.slice(2)):r,p,...args)};
 require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
@@ -43,7 +43,7 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
 
  // A SQL-backed Prisma-shaped adapter exercises the actual backup HTTP handlers
  // against PostgreSQL constraints and triggers; it is not a Prisma engine test.
- const modelMap=Object.fromEntries(Prisma.dmmf.datamodel.models.map(m=>[m.name[0].toLowerCase()+m.name.slice(1),m]));
+ const modelMap=Object.fromEntries(datamodel.models.map(m=>[m.name[0].toLowerCase()+m.name.slice(1),m]));
  const bind=v=>v instanceof Date?v.toISOString():v!==null&&typeof v==='object'?JSON.stringify(v):v;
  const sql=(parts,values)=>typeof parts==='object'&&!Array.isArray(parts)&&parts.sql ? {text:parts.sql,values:parts.values||[]} : {text:parts.map((p,i)=>p+(i<values.length?`$${i+1}`:'')).join(''),values:values.map(bind)};
  let failModel=null;const isolation=[];

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { databaseErrorCode, databaseErrorMessage } from "@/lib/database-error";
 import { requireAnyPermission, requireAnyPermissionPrincipal } from "@/lib/server-auth";
 import { GRACE_MANAGE_PERMISSIONS, GRACE_VIEW_PERMISSIONS } from "@/lib/permission-catalog";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
@@ -129,9 +130,8 @@ export async function POST(req: NextRequest) {
     if (error instanceof GraceChangeError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    const code = (error as { code?: string; meta?: { code?: string } })?.meta?.code ||
-      (error as { code?: string })?.code;
-    if (code === "23P01" || String((error as Error)?.message || "").includes("GRACE_PERIOD_OVERLAP")) {
+    const code = databaseErrorCode(error) || (error as { code?: string })?.code;
+    if (code === "23P01" || databaseErrorMessage(error).includes("GRACE_PERIOD_OVERLAP")) {
       return NextResponse.json(
         { error: "يوجد للطالب فترة سماح تتداخل مع الفترة المحددة. يرجى تعديل الفترة الموجودة بدلاً من إنشاء فترة جديدة." },
         { status: 409 },

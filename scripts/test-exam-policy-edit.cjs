@@ -3,7 +3,7 @@
 // PGlite's timestamp parser uses the process timezone; Prisma DateTimes are UTC.
 process.env.TZ='UTC';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module');
-const {randomUUID}=require('node:crypto'),{PGlite}=require('@electric-sql/pglite'),{Prisma}=require('@prisma/client'),ts=require('typescript');
+const {randomUUID}=require('node:crypto'),{PGlite}=require('@electric-sql/pglite'),{datamodel}=require('./prisma-datamodel.cjs'),ts=require('typescript');
 const { pg_trgm } = require('@electric-sql/pglite/contrib/pg_trgm'); // the migrations index searches with pg_trgm, as production does
 const root=process.cwd(),resolve=Module._resolveFilename,load=Module._load,mocks=new Map();
 Module._resolveFilename=function(r,p,...a){return resolve.call(this,r.startsWith('@/')?path.join(root,'src',r.slice(2)):r,p,...a)};
@@ -15,7 +15,7 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  for(const dir of fs.readdirSync('prisma/migrations').sort()){
   const f=`prisma/migrations/${dir}/migration.sql`;if(fs.existsSync(f))await pg.exec(fs.readFileSync(f,'utf8'));
  }
- const models=new Map(Prisma.dmmf.datamodel.models.map(m=>[m.name[0].toLowerCase()+m.name.slice(1),m]));
+ const models=new Map(datamodel.models.map(m=>[m.name[0].toLowerCase()+m.name.slice(1),m]));
  let failWrite=null,deny=false;const statements=[],audits=[];
  const bind=v=>v instanceof Date?v.toISOString():v;
  const query=async(text,values=[])=>{statements.push(text);return pg.query(text,values.map(bind));};

@@ -109,9 +109,11 @@
     "test:text-shortcuts": "node scripts/test-text-shortcuts.mjs",
     "test:correction-integration-integrity": "node scripts/test-correction-integration-integrity.mjs",
     "test:student-code-buttons": "node scripts/test-student-code-buttons.cjs",
-    "test:mirmaz-integration": "node scripts/test-mirmaz-integration-integrity.mjs && node --experimental-strip-types --test scripts/test-mirmaz-name-match.mjs"
+    "test:mirmaz-integration": "node scripts/test-mirmaz-integration-integrity.mjs && node --experimental-strip-types --test scripts/test-mirmaz-name-match.mjs",
+    "test:database-error": "node scripts/test-database-error.cjs"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^6.19.3",
     "@prisma/client": "^6.19.3",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-checkbox": "^1.3.2",
@@ -140,6 +142,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
+    "@prisma/prisma-schema-wasm": "7.1.1-3.c2990dca591cba766e3b7ef5d9e8a84796e47ab7",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^25.9.1",
     "@types/react": "^19",

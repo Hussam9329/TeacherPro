@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { uniqueConstraintTarget } from "@/lib/database-error";
 
 function normalizeCount(value: number): number {
   if (!Number.isFinite(value)) return 1;
@@ -33,12 +34,8 @@ export async function allocateStudentCodes(
 }
 
 export function isStudentCodeUniqueConflict(error: unknown): boolean {
-  const prismaError = error as { code?: string; meta?: { target?: unknown } };
-  if (prismaError?.code !== "P2002") return false;
-  const targetValue = prismaError.meta?.target;
-  const target = Array.isArray(targetValue)
-    ? targetValue.join(",")
-    : String(targetValue ?? "");
+  if ((error as { code?: string } | null | undefined)?.code !== "P2002") return false;
+  const target = uniqueConstraintTarget(error);
   return (
     /(^|[,._-])code($|[,._-])/i.test(target) || /Student_code/i.test(target)
   );
