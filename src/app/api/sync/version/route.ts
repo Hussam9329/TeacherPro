@@ -56,10 +56,12 @@ function toIso(value: unknown): string {
 
 // One statement, so a poll sees either the rows before the fold or the
 // folded total, never both or neither: the counter does not move.
+// make_interval takes integer minutes; the parameter is cast because a JS
+// number may be sent as bigint, which has no make_interval overload.
 const FOLD_SQL = Prisma.sql`
   WITH "old" AS (
     DELETE FROM "SyncChange"
-    WHERE "at" < CURRENT_TIMESTAMP - make_interval(mins => ${FOLD_AFTER_MINUTES})
+    WHERE "at" < CURRENT_TIMESTAMP - make_interval(mins => ${FOLD_AFTER_MINUTES}::integer)
     RETURNING "scope", "at"
   ),
   "agg" AS (
