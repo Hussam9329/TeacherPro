@@ -1,14 +1,11 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { databaseErrorCode, databaseErrorMessage } from "@/lib/database-error";
 
 function isRetryableTransactionConflict(error: unknown): boolean {
-  const candidate = error as {
-    code?: string;
-    message?: string;
-    meta?: { code?: string; database_error?: string };
-  };
-  const databaseCode = String(candidate?.meta?.code || "");
-  const message = `${candidate?.message || ""} ${candidate?.meta?.database_error || ""}`;
+  const candidate = error as { code?: string } | null | undefined;
+  const databaseCode = databaseErrorCode(error);
+  const message = databaseErrorMessage(error);
   return (
     candidate?.code === "P2034" ||
     databaseCode === "40001" ||

@@ -1,11 +1,12 @@
-import { Prisma } from '@prisma/client';
 import pg from 'pg';
+import prismaDatamodel from './prisma-datamodel.cjs';
+const { datamodel } = prismaDatamodel;
 const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
 try {
  await client.connect(); await client.query('BEGIN READ ONLY');
  const rows=(await client.query("SELECT table_name,column_name,is_nullable FROM information_schema.columns WHERE table_schema='public'")).rows;
  const columns=new Map(rows.map(r=>[`${r.table_name}.${r.column_name}`,r]));
- for(const model of Prisma.dmmf.datamodel.models) for(const field of model.fields.filter(f=>f.kind!=='object')) {
+ for(const model of datamodel.models) for(const field of model.fields.filter(f=>f.kind!=='object')) {
   const key=`${model.dbName||model.name}.${field.dbName||field.name}`;
   if(!columns.has(key)) throw new Error(`Current runtime schema missing ${key}`);
   if(field.isRequired && columns.get(key).is_nullable!=='NO') throw new Error(`Current runtime schema permits unexpected null: ${key}`);

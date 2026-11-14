@@ -1,5 +1,9 @@
+// engineType "client": queries are planned by a small WebAssembly compiler and
+// sent through the `pg` driver (src/lib/db.ts), instead of shipping the ~20 MB
+// native query engine inside every Vercel function.
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  engineType = "client"
 }
 
 datasource db {

@@ -5,7 +5,7 @@ const ts = require("typescript");
 process.env.TZ = "UTC";
 const { PGlite } = require("@electric-sql/pglite");
 const { pg_trgm } = require("@electric-sql/pglite/contrib/pg_trgm");
-const { Prisma } = require("@prisma/client");
+const { datamodel } = require("./prisma-datamodel.cjs");
 const { NextRequest } = require("next/server");
 
 // «حد التعهدات»: two pledges per chapter, then «إرجاع الطالب» in «إدارة
@@ -20,8 +20,8 @@ require.extensions[".ts"] = (m, f) => m._compile(ts.transpileModule(fs.readFileS
 // A Prisma-shaped client over PostgreSQL: rows come from SQL, the where/select
 // semantics the code under test uses (AND/OR, in, null, contains, gte/lte,
 // relation filters and nested selects) are applied on them.
-const models = Object.fromEntries(Prisma.dmmf.datamodel.models.map((m) => [m.name[0].toLowerCase() + m.name.slice(1), m]));
-const modelByName = Object.fromEntries(Prisma.dmmf.datamodel.models.map((m) => [m.name, m]));
+const models = Object.fromEntries(datamodel.models.map((m) => [m.name[0].toLowerCase() + m.name.slice(1), m]));
+const modelByName = Object.fromEntries(datamodel.models.map((m) => [m.name, m]));
 const keyOf = (name) => name[0].toLowerCase() + name.slice(1);
 const bind = (v) => (v instanceof Date ? v.toISOString() : v);
 const same = (a, b) => (a instanceof Date && b instanceof Date ? a.getTime() === b.getTime() : a === b);

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { toLatinDigits } from '@/lib/format';
+import { databaseErrorCode, databaseErrorMessage } from '@/lib/database-error';
 
 export function validationError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -78,14 +79,10 @@ export function isDatabaseMigrationRequiredError(error: unknown): boolean {
 }
 
 export function isMissingDatabaseObjectError(error: unknown): boolean {
-  const err = error as {
-    code?: string;
-    message?: string;
-    meta?: { code?: string; database_error?: string };
-  };
+  const err = error as { code?: string; message?: string };
   const message = String(err?.message || error || '').toLowerCase();
-  const databaseCode = String(err?.meta?.code || '');
-  const databaseMessage = String(err?.meta?.database_error || '').toLowerCase();
+  const databaseCode = databaseErrorCode(error);
+  const databaseMessage = databaseErrorMessage(error).toLowerCase();
 
   return err?.code === 'P2021'
     || err?.code === 'P2022'

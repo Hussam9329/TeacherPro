@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hasPermission, requirePermissionPrincipal } from "@/lib/server-auth";
 import type { BulkDuplicateMatch } from "@/lib/bulk-duplicate-match";
 import { db } from "@/lib/db";
+import { uniqueConstraintTarget } from "@/lib/database-error";
 import {
   getPhoneValidationError,
   sanitizePhoneInput,
@@ -111,12 +112,9 @@ function getPrismaStudentErrorResponse(error: unknown) {
       { status: error.status },
     );
   }
-  const prismaError = error as { code?: string; meta?: { target?: unknown } };
+  const prismaError = error as { code?: string };
   if (prismaError.code === "P2002") {
-    const targetValue = prismaError.meta?.target;
-    const target = Array.isArray(targetValue)
-      ? targetValue.join(",")
-      : String(targetValue ?? "");
+    const target = uniqueConstraintTarget(error);
     if (target.includes("telegramKey")) {
       return NextResponse.json(
         { error: "معرف التليگرام مسجل مسبقاً لطالب آخر" },

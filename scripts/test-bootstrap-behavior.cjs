@@ -78,8 +78,8 @@ const reset = (permissions, admin = false) => {
   const { examCourses: _relations, ...scalarExam } = fixtures.exam[0];
   assert.equal(payload.exams[0].mutationToken, buildExamMutationToken(scalarExam), 'bootstrap token matches the scalar PUT read');
   assert.equal(payload.exams[0].mutationToken, buildExamMutationToken({ ...scalarExam, examCourses: [{ id: 'relation' }], mutationToken: 'display-only' }));
-  const { Prisma } = require('@prisma/client');
-  for (const field of Prisma.dmmf.datamodel.models.find(model => model.name === 'Exam').fields.filter(field => field.kind !== 'object')) {
+  const { datamodel } = require('./prisma-datamodel.cjs');
+  for (const field of datamodel.models.find(model => model.name === 'Exam').fields.filter(field => field.kind !== 'object')) {
     assert.notEqual(buildExamMutationToken(scalarExam), buildExamMutationToken({ ...scalarExam, [field.name]: 'changed-' + field.name }), 'actual change invalidates token: ' + field.name);
   }
 

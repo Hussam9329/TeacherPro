@@ -1,12 +1,16 @@
 import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
+// The schema uses engineType "client", so Prisma talks to Postgres through the
+// `pg` driver given here instead of its native query engine.
 export const db =
   globalForPrisma.prisma ??
   new PrismaClient({
+    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
     log: process.env.NODE_ENV === 'production' ? ['error'] : ['warn', 'error'],
   })
 
@@ -18,7 +22,7 @@ export const db =
 //
 // This is safe because:
 // 1. DATABASE_URL uses Neon's Pooler endpoint which manages connection limits.
-// 2. Prisma 6+ handles connection pooling internally with sensible defaults.
+// 2. The `pg` pool inside PrismaPg reuses connections between invocations.
 // 3. The globalThis pattern is the official Prisma recommendation for
 //    serverless environments: https://pris.ly/d/serverless-best-practices
 globalForPrisma.prisma = db

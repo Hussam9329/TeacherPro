@@ -4,11 +4,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import {
   buildCallHistoryMigrationPlan,
 } from "./call-history-migration-core.mjs";
 
-const db = new PrismaClient();
+const db = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const jsonOutput = args.includes("--json");
