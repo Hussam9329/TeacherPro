@@ -132,19 +132,23 @@ export function toAuthPrincipal(user: NonNullable<DbUserWithRole>): AuthPrincipa
   };
 }
 
-/** `maxAgeSeconds`: a shorter life for a session used once by a server (Correction). */
-export async function createSessionToken(userId: string, maxAgeSeconds = SESSION_MAX_AGE_SECONDS): Promise<string> {
-  const user = await findUserById(userId);
-  if (!user || !user.active) throw new Error("Account unavailable");
+async function signSessionToken(userId: string, sessionVersion: number, maxAgeSeconds: number): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const payload: SignedSessionPayload = {
     sub: userId,
-    version: user.sessionVersion,
+    version: sessionVersion,
     iat: now,
     exp: now + Math.max(1, Math.min(SESSION_MAX_AGE_SECONDS, Math.trunc(maxAgeSeconds))),
   };
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   return `${encodedPayload}.${await sign(encodedPayload)}`;
+}
+
+/** `maxAgeSeconds`: a shorter life for a session used once by a server (Correction). */
+export async function createSessionToken(userId: string, maxAgeSeconds = SESSION_MAX_AGE_SECONDS): Promise<string> {
+  const user = await findUserById(userId);
+  if (!user || !user.active) throw new Error("Account unavailable");
+  return signSessionToken(userId, user.sessionVersion, maxAgeSeconds);
 }
 
 async function readSessionPayload(req: NextRequest): Promise<SignedSessionPayload | null> {
@@ -162,26 +166,52 @@ async function readSessionPayload(req: NextRequest): Promise<SignedSessionPayloa
   }
 }
 
-export async function getAuthPrincipal(req: NextRequest): Promise<AuthPrincipal | null> {
+/** The account row behind the request's session cookie, or null when the session is not valid. */
+async function findSessionUser(req: NextRequest) {
   const payload = await readSessionPayload(req);
   if (!payload) return null;
   const expectedOwner = req.headers.get('x-teacherpro-owner-id');
   if (expectedOwner && expectedOwner !== payload.sub) return null;
   const user = await findUserById(payload.sub);
   if (!user || !user.active || (payload.version ?? 0) !== user.sessionVersion) return null;
-  return toAuthPrincipal(user);
+  return user;
 }
 
-export async function setAuthCookie(res: NextResponse, userId: string): Promise<void> {
+export async function getAuthPrincipal(req: NextRequest): Promise<AuthPrincipal | null> {
+  const user = await findSessionUser(req);
+  return user ? toAuthPrincipal(user) : null;
+}
+
+function writeAuthCookie(res: NextResponse, token: string): void {
   res.cookies.set({
     name: AUTH_COOKIE_NAME,
-    value: await createSessionToken(userId),
+    value: token,
     httpOnly: true,
     sameSite: 'lax',
     secure: readEnv('NODE_ENV') === 'production',
     path: '/',
     maxAge: SESSION_MAX_AGE_SECONDS,
   });
+}
+
+export async function setAuthCookie(res: NextResponse, userId: string): Promise<void> {
+  writeAuthCookie(res, await createSessionToken(userId));
+}
+
+/**
+ * The session check: the signed-in account, and a way to renew its cookie
+ * for a full period from the account row already read (no second lookup).
+ */
+export async function getAuthSession(
+  req: NextRequest,
+): Promise<{ principal: AuthPrincipal; renewCookie: (res: NextResponse) => Promise<void> } | null> {
+  const user = await findSessionUser(req);
+  if (!user) return null;
+  return {
+    principal: toAuthPrincipal(user),
+    renewCookie: async (res) =>
+      writeAuthCookie(res, await signSessionToken(user.id, user.sessionVersion, SESSION_MAX_AGE_SECONDS)),
+  };
 }
 
 export function clearAuthCookie(res: NextResponse): void {
