@@ -96,7 +96,7 @@
     "db:schema-contract": "node scripts/check-current-schema.mjs",
     "db:bootstrap-admin": "node scripts/bootstrap-admin.cjs",
     "typecheck": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
-    "test:loading": "node scripts/test-read-loading.cjs && node scripts/test-bootstrap-behavior.cjs",
+    "test:loading": "node scripts/test-read-loading.cjs && node scripts/test-bootstrap-behavior.cjs && node scripts/test-chunk-recovery.cjs",
     "test:manual-restoration": "node scripts/test-manual-student-restoration.cjs",
     "test:archived-pending-schema": "node scripts/test-archived-pending-smart-note-schema.cjs",
     "test:retained-dismissals": "node scripts/test-automatic-log-chapter-guard.cjs && node scripts/test-retained-dismissals-planner.cjs && node scripts/test-retained-dismissals-repair.cjs",

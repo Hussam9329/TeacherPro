@@ -389,8 +389,9 @@ import dynamic from "next/dynamic";
 import "./section-styles";
 import { useShortcutAlerts } from "@/hooks/use-shortcut-alerts";
 import { LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog-link";
-import { EmptyState, LoadingState } from "./ui-kit";
+import { EmptyState, ErrorState, LoadingState } from "./ui-kit";
 import { arabicCount } from "@/lib/format";
+import { withChunkRecovery } from "@/lib/chunk-recovery";
 
 // Each page is its own chunk, downloaded when it is first opened (or when its
 // sidebar link is pointed at), so the login screen and the first page do not
@@ -419,23 +420,35 @@ function SectionChunkLoading() {
   return dbLoading ? null : <LoadingState />;
 }
 
+/** Shown only when a page's chunk cannot be downloaded even after a reload. */
+function SectionChunkFailed() {
+  return (
+    <ErrorState
+      message="تعذر تحميل الصفحة. تأكد من الاتصال بالإنترنت ثم أعد المحاولة."
+      onRetry={() => window.location.reload()}
+    />
+  );
+}
+
+const recoverable = <Section,>(load: () => Promise<Section>) => withChunkRecovery(load, SectionChunkFailed);
+
 const DashboardView = dynamic<{
   onSectionLinkClick?: (event: React.MouseEvent<HTMLAnchorElement>, section: SectionId) => void;
-}>(sectionLoaders.dashboard, { loading: SectionChunkLoading });
-const CoursesView = dynamic(sectionLoaders.courses, { loading: SectionChunkLoading });
-const ChaptersView = dynamic(sectionLoaders.chapters, { loading: SectionChunkLoading });
-const StudentRegisterView = dynamic(sectionLoaders["student-register"], { loading: SectionChunkLoading });
-const StudentBulkTextImportView = dynamic(sectionLoaders["student-bulk-import"], { loading: SectionChunkLoading });
-const StudentRegistryView = dynamic(sectionLoaders["student-registry"], { loading: SectionChunkLoading });
-const DismissedManagementView = dynamic(sectionLoaders["dismissed-management"], { loading: SectionChunkLoading });
-const ExamNewView = dynamic(sectionLoaders["exam-new"], { loading: SectionChunkLoading });
-const GradeEntryView = dynamic(sectionLoaders["grade-entry"], { loading: SectionChunkLoading });
-const ExamRecordsView = dynamic(sectionLoaders["exam-records"], { loading: SectionChunkLoading });
-const GradeRecordsView = dynamic(sectionLoaders["grade-records"], { loading: SectionChunkLoading });
-const OpportunitiesView = dynamic(sectionLoaders.opportunities, { loading: SectionChunkLoading });
-const FollowUpCallsView = dynamic(sectionLoaders["follow-up-calls"], { loading: SectionChunkLoading });
-const AccountsView = dynamic(sectionLoaders.accounts, { loading: SectionChunkLoading });
-const LogsView = dynamic(sectionLoaders.logs, { loading: SectionChunkLoading });
+}>(recoverable(sectionLoaders.dashboard), { loading: SectionChunkLoading });
+const CoursesView = dynamic(recoverable(sectionLoaders.courses), { loading: SectionChunkLoading });
+const ChaptersView = dynamic(recoverable(sectionLoaders.chapters), { loading: SectionChunkLoading });
+const StudentRegisterView = dynamic(recoverable(sectionLoaders["student-register"]), { loading: SectionChunkLoading });
+const StudentBulkTextImportView = dynamic(recoverable(sectionLoaders["student-bulk-import"]), { loading: SectionChunkLoading });
+const StudentRegistryView = dynamic(recoverable(sectionLoaders["student-registry"]), { loading: SectionChunkLoading });
+const DismissedManagementView = dynamic(recoverable(sectionLoaders["dismissed-management"]), { loading: SectionChunkLoading });
+const ExamNewView = dynamic(recoverable(sectionLoaders["exam-new"]), { loading: SectionChunkLoading });
+const GradeEntryView = dynamic(recoverable(sectionLoaders["grade-entry"]), { loading: SectionChunkLoading });
+const ExamRecordsView = dynamic(recoverable(sectionLoaders["exam-records"]), { loading: SectionChunkLoading });
+const GradeRecordsView = dynamic(recoverable(sectionLoaders["grade-records"]), { loading: SectionChunkLoading });
+const OpportunitiesView = dynamic(recoverable(sectionLoaders.opportunities), { loading: SectionChunkLoading });
+const FollowUpCallsView = dynamic(recoverable(sectionLoaders["follow-up-calls"]), { loading: SectionChunkLoading });
+const AccountsView = dynamic(recoverable(sectionLoaders.accounts), { loading: SectionChunkLoading });
+const LogsView = dynamic(recoverable(sectionLoaders.logs), { loading: SectionChunkLoading });
 
 /** Starts a page's download early, when its link gets the pointer or focus. */
 function preloadSection(section: SectionId) {
