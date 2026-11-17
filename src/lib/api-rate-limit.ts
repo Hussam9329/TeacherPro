@@ -24,6 +24,9 @@ function readEnv(name: string): string | undefined {
 const UPSTASH_URL = readEnv('UPSTASH_REDIS_REST_URL')?.trim();
 const UPSTASH_TOKEN = readEnv('UPSTASH_REDIS_REST_TOKEN')?.trim();
 const REDIS_ENABLED = Boolean(UPSTASH_URL && UPSTASH_TOKEN);
+// A stalled Upstash must not hold the request: after this the count falls
+// back to the database, as it does for any other Upstash failure.
+const UPSTASH_TIMEOUT_MS = 3000;
 
 function hashValue(value: string): string {
   return createHash('sha256').update(value).digest('hex').slice(0, 24);
@@ -46,6 +49,7 @@ async function redisCommand<T = unknown>(...args: (string | number)[]): Promise<
     const response = await fetch(`${UPSTASH_URL!}/${args.map((arg) => encodeURIComponent(String(arg))).join('/')}`, {
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN!}` },
       cache: 'no-store',
+      signal: AbortSignal.timeout(UPSTASH_TIMEOUT_MS),
     });
     if (!response.ok) {
       if (!redisWarningLogged) {
