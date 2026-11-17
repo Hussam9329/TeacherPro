@@ -2,6 +2,8 @@
 
 Commit measured: `39ceeac` (origin/main), measured 2026-11-17 on the owner's Windows 11 laptop.
 
+> This first run was taken while the laptop was also busy with another measurement session, so its times are slower than a quiet machine gives. `perf/REPORT.md` compares against a second run of the same commit taken back to back with the after build; the byte, request and round-trip counts below are the same in both.
+
 ## What was measured, and how
 
 Everything in this file is **measured** unless a line says otherwise.
