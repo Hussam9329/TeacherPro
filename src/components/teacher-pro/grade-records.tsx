@@ -83,8 +83,6 @@ import {
   gradeStatusFilterOptions,
   type GradeStatusFilter,
 } from "@/lib/grade-status-filters";
-import "./tp-modal.css";
-import "./grade-records.css";
 
 type GradeStatus = "درجة" | "غائب" | "غش" | "مجاز";
 

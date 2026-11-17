@@ -30,7 +30,6 @@ import {
   normalizeStudyLocationConfig,
   validateCourseForm,
 } from "./course-builder";
-import "./courses.css";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";

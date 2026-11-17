@@ -12,8 +12,6 @@ import { useTeacherStore } from "@/lib/teacher-store";
 import { useShallow } from "zustand/react/shallow";
 import { pledgeDateLabel } from "./pledge-chip";
 import { EmptyState, ErrorState, LoadingState } from "./ui-kit";
-import "./tp-modal.css";
-import "./pledge-list-dialog.css";
 
 type Chapter = "active" | "all";
 type Sort = "count" | "last" | "name";

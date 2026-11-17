@@ -7,7 +7,8 @@ import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { normalizeArabicText, routeErrorResponse } from "@/lib/route-helpers";
-import { parseCourseIds, isGradeEnteredUnified } from "@/lib/grade-classification";
+import { parseCourseIds } from "@/lib/grade-classification";
+import { enteredGradeWhere } from "@/lib/grade-status-filter-server";
 import { mergeStudentWhere, studentScopeWhere } from "@/lib/student-scope";
 import {
   isExamOnOrAfterStudentRegistration,
@@ -174,24 +175,24 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const grades = await db.grade.findMany({
+    // Which of these students have an entered grade is decided by the
+    // database: one row per student comes back, not every grade they have.
+    const fullMarks = selectedExam
+      ? [selectedExam.fullMark]
+      : (await db.exam.findMany({ distinct: ["fullMark"], select: { fullMark: true } })).map((exam) => exam.fullMark);
+    const enteredStudents = await db.grade.groupBy({
+      by: ["studentId"],
       where: {
-        studentId: { in: scopedStudentIds },
-        ...(selectedExam ? { examId: selectedExam.id } : {}),
-      },
-      select: {
-        studentId: true,
-        status: true,
-        score: true,
-        exam: { select: { fullMark: true } },
+        AND: [
+          {
+            studentId: { in: scopedStudentIds },
+            ...(selectedExam ? { examId: selectedExam.id } : {}),
+          },
+          enteredGradeWhere(fullMarks),
+        ],
       },
     });
-
-    const enteredStudentIds = new Set<string>();
-    grades.forEach((grade) => {
-      if (isGradeEnteredUnified(grade, grade.exam))
-        enteredStudentIds.add(grade.studentId);
-    });
+    const enteredStudentIds = new Set(enteredStudents.map((row) => row.studentId));
 
     const withGrade = scopedStudents.filter((student) =>
       enteredStudentIds.has(student.id),

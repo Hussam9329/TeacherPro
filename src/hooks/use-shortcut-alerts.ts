@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 /** Mirrors GET /api/stats/alerts. null = this account cannot open that window. */
@@ -55,8 +55,16 @@ export function useShortcutAlerts(enabled = true): ShortcutAlerts | null {
     };
   }, []);
 
+  // Signing in and every data change reload the numbers. A screen that opens
+  // beside one already showing them (the dashboard, after the sidebar) reuses
+  // the copy unless it is stale.
+  const firstRun = useRef(true);
   useEffect(() => {
-    if (enabled) void refreshShortcutAlerts();
+    const opening = firstRun.current;
+    firstRun.current = false;
+    if (!enabled) return;
+    if (opening && current && Date.now() - loadedAt <= FOCUS_STALE_MS) return;
+    void refreshShortcutAlerts();
   }, [enabled, syncKey]);
 
   useEffect(() => {

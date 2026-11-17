@@ -73,7 +73,6 @@ import {
   sanitizeTelegramInput,
 } from "@/lib/student-utils";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
-import "./student-bulk-text-import.css";
 
 const EXPECTED_COLUMNS = 14;
 // Older sheets had a «فترة السماح» column after «الفرص». It is ignored now:

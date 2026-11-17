@@ -10,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import "./tp-list.css";
 
 export type ListChipTone = "success" | "warning" | "danger" | "info" | "muted";
 

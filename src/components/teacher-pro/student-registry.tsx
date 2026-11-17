@@ -97,7 +97,6 @@ import { StudentRegistryEditDialog } from "./student-registry-edit-dialog";
 import { StudentRegistryFilters } from "./student-registry-filters";
 import { StudentRegistryStatusDialogs } from "./student-registry-status-dialogs";
 import { UnwithdrawStudentDialog } from "./unwithdraw-student-dialog";
-import "./student-registry.css";
 
 export function StudentRegistryView() {
   const {
@@ -462,6 +461,13 @@ export function StudentRegistryView() {
     setLoadedLocationFilterContextKey("");
   }, [registryStateStorageKey]);
 
+  // The location options come from the server; the students in memory are
+  // only its fallback, so a new page of the list must not ask for them again.
+  const studentsRef = useRef(students);
+  useEffect(() => {
+    studentsRef.current = students;
+  }, [students]);
+
   useEffect(() => {
     if (!registryStateHydrated) return;
     setLoadedLocationFilterContextKey("");
@@ -478,8 +484,8 @@ export function StudentRegistryView() {
     const fallbackLocations = () =>
       getAcademicLocationFilterOptions(
         filterGender
-          ? students.filter((student) => student.gender === filterGender)
-          : students,
+          ? studentsRef.current.filter((student) => student.gender === filterGender)
+          : studentsRef.current,
         {
           courseId: filterCourseId,
           courseProgram: filterCourseProgram,
@@ -531,7 +537,6 @@ export function StudentRegistryView() {
   }, [
     registryStateHydrated,
     registryStateStorageKey,
-    students,
     filterStatus,
     filterGender,
     filterCourseId,

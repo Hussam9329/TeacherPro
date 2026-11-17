@@ -7,7 +7,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import "./tp-modal.css";
 
 type HeroIcon = ComponentType<{ className?: string }>;
 

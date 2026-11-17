@@ -8,7 +8,6 @@ import { openMzCodePage } from "@/lib/code-closure-open";
 import { useTeacherStore } from "@/lib/teacher-store";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
-import "./student-code-buttons.css";
 
 export type StudentCodeButtonsStudent = {
   id: string;

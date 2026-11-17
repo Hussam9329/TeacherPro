@@ -141,16 +141,18 @@ export async function GET(req: NextRequest) {
       q: searchParams.get("q"),
     });
 
-    const filtered = await collectOpportunityCounts(filters);
-    const system = filters.length
-      ? await collectOpportunityCounts([])
-      : filtered;
-    const statusCounts = await collectStatusCounts(buildOpportunityFilters({
-      courseId: searchParams.get("courseId"),
-      status: null,
-      opportunityCount: searchParams.get("opportunityCount"),
-      q: searchParams.get("q"),
-    }));
+    // The three groups of numbers do not depend on each other: read together.
+    const [filtered, unfilteredSystem, statusCounts] = await Promise.all([
+      collectOpportunityCounts(filters),
+      filters.length ? collectOpportunityCounts([]) : null,
+      collectStatusCounts(buildOpportunityFilters({
+        courseId: searchParams.get("courseId"),
+        status: null,
+        opportunityCount: searchParams.get("opportunityCount"),
+        q: searchParams.get("q"),
+      })),
+    ]);
+    const system = unfilteredSystem ?? filtered;
 
     return NextResponse.json({
       ...filtered,

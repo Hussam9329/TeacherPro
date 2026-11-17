@@ -159,10 +159,12 @@ export async function GET(req: NextRequest) {
     const overviewPromise = reuseOverview && logsOverviewCache
       ? Promise.resolve(logsOverviewCache)
       : Promise.all([
-          db.auditLog.count(),
-          db.auditLog.findMany({ distinct: ['module'], select: { module: true }, orderBy: { module: 'asc' } }),
-          db.auditLog.findMany({ distinct: ['userName'], select: { userName: true }, orderBy: { userName: 'asc' } }),
-        ]).then(([systemTotal, modules, users]) => {
+          // Grouped by the database: one row per section and per user comes
+          // back, not every log row. The sections' counts add up to the total.
+          db.auditLog.groupBy({ by: ['module'], _count: { _all: true }, orderBy: { module: 'asc' } }),
+          db.auditLog.groupBy({ by: ['userName'], orderBy: { userName: 'asc' } }),
+        ]).then(([modules, users]) => {
+          const systemTotal = modules.reduce((sum, group) => sum + group._count._all, 0);
           logsOverviewCache = { at: Date.now(), systemTotal, modules, users };
           return logsOverviewCache;
         });

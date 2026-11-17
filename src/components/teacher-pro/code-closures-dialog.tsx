@@ -26,8 +26,6 @@ import { formatAppDate } from "@/lib/format";
 import { DateInput } from "@/components/ui/date-input";
 import { displayReasonText } from "@/lib/reason-display";
 import { EmptyState, LoadingState } from "./ui-kit";
-import "./tp-modal.css";
-import "./code-closures-dialog.css";
 
 type Props = {
   open: boolean;

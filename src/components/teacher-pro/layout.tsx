@@ -385,25 +385,76 @@ function readSectionFromLocation(): SectionId | null {
   return sectionIds.has(value as SectionId) ? (value as SectionId) : null;
 }
 
+import dynamic from "next/dynamic";
+import "./section-styles";
 import { useShortcutAlerts } from "@/hooks/use-shortcut-alerts";
-import { DashboardView } from "./dashboard";
-import { CoursesView } from "./courses";
-import { ChaptersView } from "./chapters";
-import { StudentRegisterView } from "./student-register";
-import { StudentBulkTextImportView } from "./student-bulk-text-import";
-import { StudentRegistryView } from "./student-registry";
-import { DismissedManagementView } from "./dismissed-management";
-import { ExamNewView } from "./exam-new";
-import { GradeEntryView } from "./grade-entry";
-import { ExamRecordsView } from "./exam-records";
-import { GradeRecordsView } from "./grade-records";
-import { OpportunitiesView } from "./opportunities";
-import { FollowUpCallsView } from "./follow-up";
-import { LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog";
-import { AccountsView } from "./accounts";
-import { LogsView } from "./logs";
-import { EmptyState, LoadingState } from "./ui-kit";
+import { LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog-link";
+import { EmptyState, ErrorState, LoadingState } from "./ui-kit";
 import { arabicCount } from "@/lib/format";
+import { withChunkRecovery } from "@/lib/chunk-recovery";
+
+// Each page is its own chunk, downloaded when it is first opened (or when its
+// sidebar link is pointed at), so the login screen and the first page do not
+// wait for the code of every other page.
+const sectionLoaders = {
+  dashboard: () => import("./dashboard").then((module) => module.DashboardView),
+  courses: () => import("./courses").then((module) => module.CoursesView),
+  chapters: () => import("./chapters").then((module) => module.ChaptersView),
+  "student-register": () => import("./student-register").then((module) => module.StudentRegisterView),
+  "student-bulk-import": () => import("./student-bulk-text-import").then((module) => module.StudentBulkTextImportView),
+  "student-registry": () => import("./student-registry").then((module) => module.StudentRegistryView),
+  "dismissed-management": () => import("./dismissed-management").then((module) => module.DismissedManagementView),
+  "exam-new": () => import("./exam-new").then((module) => module.ExamNewView),
+  "grade-entry": () => import("./grade-entry").then((module) => module.GradeEntryView),
+  "exam-records": () => import("./exam-records").then((module) => module.ExamRecordsView),
+  "grade-records": () => import("./grade-records").then((module) => module.GradeRecordsView),
+  opportunities: () => import("./opportunities").then((module) => module.OpportunitiesView),
+  "follow-up-calls": () => import("./follow-up").then((module) => module.FollowUpCallsView),
+  accounts: () => import("./accounts").then((module) => module.AccountsView),
+  logs: () => import("./logs").then((module) => module.LogsView),
+};
+
+/** While a page's chunk downloads; the first data load already shows its own. */
+function SectionChunkLoading() {
+  const dbLoading = useTeacherStore((state) => state.dbLoading);
+  return dbLoading ? null : <LoadingState />;
+}
+
+/** Shown only when a page's chunk cannot be downloaded even after a reload. */
+function SectionChunkFailed() {
+  return (
+    <ErrorState
+      message="تعذر تحميل الصفحة. تأكد من الاتصال بالإنترنت ثم أعد المحاولة."
+      onRetry={() => window.location.reload()}
+    />
+  );
+}
+
+const recoverable = <Section,>(load: () => Promise<Section>) => withChunkRecovery(load, SectionChunkFailed);
+
+const DashboardView = dynamic<{
+  onSectionLinkClick?: (event: React.MouseEvent<HTMLAnchorElement>, section: SectionId) => void;
+}>(recoverable(sectionLoaders.dashboard), { loading: SectionChunkLoading });
+const CoursesView = dynamic(recoverable(sectionLoaders.courses), { loading: SectionChunkLoading });
+const ChaptersView = dynamic(recoverable(sectionLoaders.chapters), { loading: SectionChunkLoading });
+const StudentRegisterView = dynamic(recoverable(sectionLoaders["student-register"]), { loading: SectionChunkLoading });
+const StudentBulkTextImportView = dynamic(recoverable(sectionLoaders["student-bulk-import"]), { loading: SectionChunkLoading });
+const StudentRegistryView = dynamic(recoverable(sectionLoaders["student-registry"]), { loading: SectionChunkLoading });
+const DismissedManagementView = dynamic(recoverable(sectionLoaders["dismissed-management"]), { loading: SectionChunkLoading });
+const ExamNewView = dynamic(recoverable(sectionLoaders["exam-new"]), { loading: SectionChunkLoading });
+const GradeEntryView = dynamic(recoverable(sectionLoaders["grade-entry"]), { loading: SectionChunkLoading });
+const ExamRecordsView = dynamic(recoverable(sectionLoaders["exam-records"]), { loading: SectionChunkLoading });
+const GradeRecordsView = dynamic(recoverable(sectionLoaders["grade-records"]), { loading: SectionChunkLoading });
+const OpportunitiesView = dynamic(recoverable(sectionLoaders.opportunities), { loading: SectionChunkLoading });
+const FollowUpCallsView = dynamic(recoverable(sectionLoaders["follow-up-calls"]), { loading: SectionChunkLoading });
+const AccountsView = dynamic(recoverable(sectionLoaders.accounts), { loading: SectionChunkLoading });
+const LogsView = dynamic(recoverable(sectionLoaders.logs), { loading: SectionChunkLoading });
+
+/** Starts a page's download early, when its link gets the pointer or focus. */
+function preloadSection(section: SectionId) {
+  const load = (sectionLoaders as Partial<Record<SectionId, () => Promise<unknown>>>)[section];
+  if (load) void load().catch(() => {});
+}
 
 const sectionComponents: Record<SectionId, React.ComponentType> = {
   dashboard: DashboardView,
@@ -828,6 +879,12 @@ export function TeacherProLayout() {
       active = false;
     };
   }, [restoreSession]);
+
+  // The page about to open downloads while the session is being checked,
+  // not after it.
+  useEffect(() => {
+    preloadSection(readSectionFromLocation() ?? useTeacherStore.getState().currentSection);
+  }, []);
 
   // Browser tab: «TP - <the page you are on>».
   useEffect(() => {
@@ -1416,6 +1473,8 @@ export function TeacherProLayout() {
                   key={item.id}
                   href={sectionHref(item.id)}
                   onClick={(event) => handleSectionLinkClick(event, item.id)}
+                  onPointerEnter={() => preloadSection(item.id)}
+                  onFocus={() => preloadSection(item.id)}
                   aria-current={isActive ? "page" : undefined}
                   className="tp-sidebar-link group flex min-h-11 w-full touch-manipulation items-center gap-2.5 text-right"
                 >
@@ -1595,6 +1654,8 @@ export function TeacherProLayout() {
                     key={item.id}
                     href={sectionHref(item.id)}
                     onClick={(event) => handleSectionLinkClick(event, item.id)}
+                    onPointerEnter={() => preloadSection(item.id)}
+                    onFocus={() => preloadSection(item.id)}
                     aria-current={currentSection === item.id ? "page" : undefined}
                     data-kind={item.kind}
                     className="tp-section-group__item"

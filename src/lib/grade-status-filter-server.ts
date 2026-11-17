@@ -50,6 +50,24 @@ const ENTERED_GRADE_WHERE: Prisma.GradeWhereInput = {
 };
 
 /**
+ * isGradeEnteredUnified as a database filter: a recorded status, or a score
+ * from 0 to the full mark of its own exam. `fullMarks` are the distinct full
+ * marks of the exams in scope (one condition each; they are few).
+ */
+export function enteredGradeWhere(fullMarks: readonly number[]): Prisma.GradeWhereInput {
+  return {
+    OR: [
+      { status: { in: ["غائب", "غش", "مجاز", "قبل تسجيل الطالب"] } },
+      ...[...new Set(fullMarks)].map((fullMark) => ({
+        status: "درجة",
+        score: { gte: 0, lte: fullMark },
+        exam: { is: { fullMark } },
+      })),
+    ],
+  };
+}
+
+/**
  * The part of a filter the database can apply. "has-grade" depends only on the
  * status and score, so it is exact; the score-based results can only come from
  * a numeric grade, so the rest of their rows are never read.

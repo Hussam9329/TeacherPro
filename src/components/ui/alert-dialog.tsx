@@ -7,7 +7,6 @@ import { CircleHelp, TriangleAlert } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
-import "@/components/teacher-pro/tp-modal.css"
 
 /**
  * While a confirmation's action is still running (its onClick returned a

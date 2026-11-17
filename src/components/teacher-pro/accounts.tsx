@@ -30,7 +30,6 @@ import { validatePasswordPolicy } from '@/lib/password-policy';
 import { searchAny } from '@/lib/validation';
 import { formatAuditLogDisplay } from '@/lib/audit-log-display';
 import { humanizeTeacherProText } from '@/lib/teacherpro-language';
-import './tp-list.css';
 import { arabicCount } from "@/lib/format";
 
 // ─── Permission categories for grouping ──────────────────────────────────────

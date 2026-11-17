@@ -53,7 +53,6 @@ import {
 } from "@/lib/validation";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { LoadingState, EmptyState } from "./ui-kit";
-import "./student-register.css";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
 import {

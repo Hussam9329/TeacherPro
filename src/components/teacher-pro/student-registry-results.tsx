@@ -40,8 +40,6 @@ import { RowActionsMenu, type RowAction } from "./row-actions-menu";
 import { StudentCodeButtons } from "./student-code-buttons";
 import { StudentContactEdit, type StudentContactField } from "./student-contact-edit";
 import { TelegramUnlinkButton } from "./telegram-unlink-button";
-import "./student-registry-results.css";
-import "./student-card.css";
 
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
 
