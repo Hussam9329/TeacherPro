@@ -867,6 +867,12 @@ export function TeacherProLayout() {
     };
   }, [restoreSession]);
 
+  // The page about to open downloads while the session is being checked,
+  // not after it.
+  useEffect(() => {
+    preloadSection(readSectionFromLocation() ?? useTeacherStore.getState().currentSection);
+  }, []);
+
   // Browser tab: «TP - <the page you are on>».
   useEffect(() => {
     const pageTitle = !authChecked
