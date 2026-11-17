@@ -86,8 +86,6 @@ import {
 } from "@/lib/call-identity";
 import { shortGradeNoteText } from "@/lib/grade-note-banners";
 import { refreshShortcutAlerts } from "@/hooks/use-shortcut-alerts";
-import "./tp-modal.css";
-import "./calls.css";
 import { StudentCodeButtons } from "./student-code-buttons";
 
 type CallCategory =

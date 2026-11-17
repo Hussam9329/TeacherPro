@@ -62,8 +62,6 @@ import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
 import { describeTelegramHandle } from "./student-registry-helpers";
 import { EmptyState } from "./ui-kit";
-import "./tp-modal.css";
-import "./grace-periods-dialog.css";
 
 type Props = {
   open: boolean;

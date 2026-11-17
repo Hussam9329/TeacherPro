@@ -31,7 +31,6 @@ import {
   Plus,
   SlidersHorizontal,
 } from "lucide-react";
-import "./exam-new.css";
 import { EmptyState, LoadingState } from "./ui-kit";
 import { Label } from "@/components/ui/label";
 import {

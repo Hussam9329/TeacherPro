@@ -3,7 +3,6 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight, Loader2, RotateCcw, SearchX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import './tp-list.css';
 
 type IconComponent = React.ComponentType<{ className?: string }>;
 

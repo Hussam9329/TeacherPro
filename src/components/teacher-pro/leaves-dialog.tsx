@@ -53,8 +53,6 @@ import {
 } from "@/lib/student-leave-status";
 import { describeTelegramHandle } from "./student-registry-helpers";
 import { EmptyState } from "./ui-kit";
-import "./tp-modal.css";
-import "./leaves-dialog.css";
 
 export { LEAVES_DIALOG_OPEN_EVENT, LEAVES_DIALOG_QUERY } from "./leaves-dialog-link";
 

@@ -13,8 +13,6 @@ import {
 import { loadExtractorSettings, saveExtractorSettings } from "@/lib/telegram-extractor/storage";
 import { telegramExtractorApi } from "@/lib/api";
 import { toast } from "@/lib/user-toast";
-import "./tp-modal.css";
-import "./telegram-extract-dialog.css";
 
 type LinkDraft = ExtractorLink & { link: string };
 type SettingsDraft = {

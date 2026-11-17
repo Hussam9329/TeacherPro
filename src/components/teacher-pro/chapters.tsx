@@ -20,7 +20,6 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import "./chapters.css";
 import { FormDialogHero } from "./form-dialog";
 import { EmptyState } from "./ui-kit";
 import { ListToolbar } from "./list-toolbar";

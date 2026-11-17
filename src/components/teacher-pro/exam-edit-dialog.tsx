@@ -31,7 +31,6 @@ import {
   type ExamValidationResult,
 } from "@/lib/exam-form-validation";
 import { FormDialogHero } from "./form-dialog";
-import "./exam-new.css";
 
 export type ExamStatusMode = "نشط" | "تفعيل مجدول" | "معطل";
 

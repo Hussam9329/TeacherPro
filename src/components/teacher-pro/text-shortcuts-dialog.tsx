@@ -28,8 +28,6 @@ import {
 } from "@/lib/text-shortcuts";
 import { toast } from "@/lib/user-toast";
 import { EmptyState, LoadingState } from "./ui-kit";
-import "./tp-modal.css";
-import "./text-shortcuts-dialog.css";
 
 type Draft = { mode: "add"; id: string; label: string; text: string } | { mode: "edit"; shortcut: TextShortcut; label: string; text: string };
 

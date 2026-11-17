@@ -24,8 +24,6 @@ import { normalizeForSearch } from "@/lib/validation";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { formatAppDate } from "@/lib/format";
 import { EmptyState, LoadingState } from "./ui-kit";
-import "./tp-modal.css";
-import "./mirmaz-pro-dialog.css";
 
 type Props = { open: boolean; onOpenChange: (open: boolean) => void };
 

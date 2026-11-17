@@ -2,9 +2,11 @@
 //
 // The pages themselves are separate chunks (see layout.tsx), but their styles
 // are not: several of these files style classes used on other pages, and which
-// rule wins between two files depends on the order they load in. Loading them
-// with whichever page is opened first would change that order from visit to
-// visit, so the order below (the one the single bundle had) is kept here.
+// rule wins between two files depends on the order they load in. Loading a
+// file with whichever page is opened first would change that order from visit
+// to visit, so components do not import their stylesheets themselves: every
+// stylesheet is listed here once, in the order the single bundle had. A new
+// stylesheet goes at the end of this list.
 import "./tp-modal.css";
 import "./tp-list.css";
 import "./code-closures-dialog.css";

@@ -18,7 +18,6 @@ import { copyText, mzCodeActionUrl, mzPlatformPhone, type MzCodeAction } from "@
 import { describeTelegramHandle } from "./student-registry-helpers";
 import { StudentContactEdit, type StudentContactField } from "./student-contact-edit";
 import { EmptyState, LoadingState } from "./ui-kit";
-import "./code-closures-dialog.css";
 
 type Props = {
   open: boolean;

@@ -88,7 +88,6 @@ import {
   Send,
   User,
 } from "lucide-react";
-import "./student-card.css";
 
 const PAGE_SIZE = 24;
 /** How long the Telegram notice shows before the chat opens. */

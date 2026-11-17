@@ -29,7 +29,6 @@ import {
   MapPin,
   Monitor,
 } from "lucide-react";
-import "./course-builder.css";
 
 export type CourseFormState = {
   name: string;

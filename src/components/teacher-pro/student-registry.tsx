@@ -97,7 +97,6 @@ import { StudentRegistryEditDialog } from "./student-registry-edit-dialog";
 import { StudentRegistryFilters } from "./student-registry-filters";
 import { StudentRegistryStatusDialogs } from "./student-registry-status-dialogs";
 import { UnwithdrawStudentDialog } from "./unwithdraw-student-dialog";
-import "./student-registry.css";
 
 export function StudentRegistryView() {
   const {

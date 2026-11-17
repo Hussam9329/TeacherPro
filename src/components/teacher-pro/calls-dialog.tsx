@@ -5,8 +5,6 @@ import { BarChart3, PhoneCall } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CallsWorkspace } from "./follow-up";
 import { CallsStatsPanel } from "./calls-stats-panel";
-import "./tp-modal.css";
-import "./calls.css";
 
 type Props = {
   open: boolean;

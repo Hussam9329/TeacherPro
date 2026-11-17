@@ -46,7 +46,6 @@ import { TextShortcutsDialog } from "./text-shortcuts-dialog";
 import { TopStudentsDialog } from "./top-students-dialog";
 import { StudentTrendChart } from "./student-trend-chart";
 // One look for the management windows opened from here.
-import "./tp-modal.css";
 
 type DashboardStats = {
   activeStudents: number;

@@ -14,8 +14,6 @@ import { degreeTone, type TopStudentExamResult, type TopStudentRow, type TopStud
 import { topStudentsApi, type TopStudentsQuery, type TopStudentsResponse } from "@/lib/top-students-client";
 import { toast } from "@/lib/user-toast";
 import { EmptyState, ErrorState, LoadingState } from "./ui-kit";
-import "./tp-modal.css";
-import "./top-students-dialog.css";
 
 const LAST_COUNTS = [2, 3, 4, 5, 10];
 const LIMITS = [10, 20, 50];

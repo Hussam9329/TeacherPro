@@ -48,7 +48,6 @@ import { PledgeListDialog } from "./pledge-list-dialog";
 import type { StudentPledgeSummary } from "@/lib/pledge-limit";
 import { STAFF_ROW_ICONS, staffRowNote } from "./opportunity-row-icons";
 import { BookOpen, Building2, CalendarDays, ChevronDown, ChevronRight, CircleMinus, CirclePlus, Clock, FileText, Folder, GraduationCap, MessageCircle, Phone, RotateCcw, Send, Target, User } from "lucide-react";
-import "./student-card.css";
 
 import { FormDialogHero } from "./form-dialog";
 import { EmptyState, ErrorState, LoadingState, ListPagination } from "./ui-kit";
