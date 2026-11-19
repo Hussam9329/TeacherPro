@@ -954,7 +954,8 @@ export async function recalculateStudentsAcademicState(
     preserveHistoricalLogs?: boolean;
     previousPolicyExam?: AcademicExam;
     previousExamState?: AcademicStateInput;
-    examEditReview?: { beforeState: AcademicStateInput; examId: string };
+    /** gradeCorrection: the edit is to one student's grade on the exam, not to the exam itself. */
+    examEditReview?: { beforeState: AcademicStateInput; examId: string; gradeCorrection?: boolean };
   } = {},
 ): Promise<AcademicServerRecalculationResult> {
   const transaction = options.tx;
@@ -1022,7 +1023,9 @@ export async function recalculateStudentsAcademicState(
       await client.studentNote.createMany({ data: group.map(student => ({
         studentId: student.id,
         kind: "إجراء",
-        text: `استعادة الطالب بعد تعديل الامتحان «${examName}» وزوال سبب الفصل المرتبط به. الرصيد المحسوب: ${student.opportunities}؛ دون منح فرص إضافية.`,
+        text: options.examEditReview?.gradeCorrection
+          ? `استعادة الطالب بعد تصحيح درجته في «${examName}» وزوال سبب الفصل المرتبط بها. الرصيد المحسوب: ${student.opportunities}؛ دون منح فرص إضافية.`
+          : `استعادة الطالب بعد تعديل الامتحان «${examName}» وزوال سبب الفصل المرتبط به. الرصيد المحسوب: ${student.opportunities}؛ دون منح فرص إضافية.`,
         date: new Date(),
         ...cancelledDismissal(student.id),
       })) });
