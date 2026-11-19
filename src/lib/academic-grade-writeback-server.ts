@@ -7,6 +7,7 @@ import {
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
 import {
+  loadAcademicStateForStudents,
   recalculateStudentsAcademicState,
   type AcademicServerRecalculationResult,
 } from "@/lib/academic-recalculate-server";
@@ -620,6 +621,13 @@ export async function syncAcademicGradeWriteback(
         score === null
       ));
 
+  // Correcting the grade a dismissal rests on: the state before the edit is
+  // the proof the review needs to return the student when the cause is gone.
+  const dismissalReviewState =
+    student.status === "مفصول" && existingGrade && !input.deferAcademicRecalculation
+      ? await loadAcademicStateForStudents(client, [studentId])
+      : null;
+
   const grade = await client.grade.upsert({
     where: { studentId_examId: { studentId, examId } },
     update: {
@@ -651,7 +659,12 @@ export async function syncAcademicGradeWriteback(
       }
     : await recalculateStudentsAcademicState(
         [studentId],
-        input.tx ? { tx: input.tx } : {},
+        {
+          ...(input.tx ? { tx: input.tx } : {}),
+          ...(dismissalReviewState
+            ? { examEditReview: { beforeState: dismissalReviewState, examId, gradeCorrection: true } }
+            : {}),
+        },
       );
 
   return {

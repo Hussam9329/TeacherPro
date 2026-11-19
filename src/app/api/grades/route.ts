@@ -367,7 +367,13 @@ async function inspectNumericGradeAttempt(
   // المشكلة التي أصلحناها. الإجازة كذلك: الدرجة الرقمية تمر مباشرة إلى
   // syncAcademicGradeWriteback الذي ينهي الإجازة ويحفظ الدرجة.
   let bonusReturn = false;
-  if (!beforeRegistration && student.status === "مفصول") {
+  // A dismissed student who already has a result on this exam is being
+  // corrected, not examined while dismissed: the score replaces that result
+  // and the recalculation settles what followed from it.
+  const correctsExistingResult = student.status === "مفصول" && Boolean(
+    await tx.grade.findUnique({ where: { studentId_examId: { studentId: student.id, examId: exam.id } }, select: { id: true } }),
+  );
+  if (!beforeRegistration && student.status === "مفصول" && !correctsExistingResult) {
     // «فرصة مكافأة»: a late pass for an exam before the dismissal that would
     // have kept the student above zero is a real grade, and returns them.
     bonusReturn = allowBonusReturn && await bonusReturnsDismissedStudent(tx, student.id, exam.id, score);

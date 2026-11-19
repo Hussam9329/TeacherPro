@@ -273,4 +273,51 @@ test('batch review changes only proved target students and preserves unrelated r
     ordinary.opportunityLogs.filter(l => l.studentId === id));
 });
 
+// ── Correcting one student's grade (the same review, from the grade edit) ──
+function regrade(before, examId, patch) {
+  return { ...before, grades: before.grades.map(g => g.examId === examId ? { ...g, ...patch } : g) };
+}
+const fourAbsences = () => persist(fixture([exam('e1', '01'), exam('e2', '02'), exam('e3', '03'), exam('e9', '09')]));
+
+test('a passing score in place of the dismissing absence returns the student with no grant', () => {
+  const before = fourAbsences();
+  assert.equal(student(before).status, 'مفصول');
+  const { result, ordinary } = review(before, regrade(before, 'e9', { status: 'درجة', score: 15 }), 'e9');
+  assert.equal(student(ordinary).status, 'مفصول', 'the ordinary replay alone keeps a stored dismissal');
+  assert.deepEqual([student(result).status, student(result).opportunities, student(result).dismissalReason], ['نشط', 0, '']);
+});
+
+test('a score inside the deduction mark keeps the dismissal', () => {
+  const before = fourAbsences();
+  const { result } = review(before, regrade(before, 'e9', { status: 'درجة', score: 5 }), 'e9');
+  assert.equal(student(result).status, 'مفصول');
+});
+
+test('correcting an earlier absence that led to the dismissal returns the student too', () => {
+  const before = fourAbsences();
+  const { result } = review(before, regrade(before, 'e1', { status: 'درجة', score: 18 }), 'e1');
+  assert.deepEqual([student(result).status, student(result).opportunities], ['نشط', 0]);
+});
+
+test('a grade edit on an exam that played no part in the dismissal changes nothing', () => {
+  const before = persist(fixture([exam('e1', '01'), exam('e2', '02'), exam('e3', '03'), exam('e9', '09'), exam('e10', '10')],
+    { gradeOverrides: { e10: { status: 'درجة', score: 12 } } }));
+  assert.equal(student(before).status, 'مفصول');
+  const { result } = review(before, regrade(before, 'e10', { score: 19 }), 'e10');
+  assert.equal(student(result).status, 'مفصول');
+});
+
+// The grade edit hands the review its proof, and grade entry corrects an existing result.
+{
+  const writeback = fs.readFileSync('src/lib/academic-grade-writeback-server.ts', 'utf8');
+  const route = fs.readFileSync('src/app/api/grades/route.ts', 'utf8');
+  assert.ok(writeback.includes('student.status === "مفصول" && existingGrade && !input.deferAcademicRecalculation'));
+  assert.ok(writeback.indexOf('await loadAcademicStateForStudents(client, [studentId])') < writeback.indexOf('const grade = await client.grade.upsert('),
+    'the state is read before the grade changes');
+  assert.ok(writeback.includes('examEditReview: { beforeState: dismissalReviewState, examId, gradeCorrection: true }'));
+  assert.ok(route.includes('if (!beforeRegistration && student.status === "مفصول" && !correctsExistingResult) {'),
+    'a dismissed student with a result on the exam is corrected, not held');
+  checks++;
+}
+
 console.log(`PASS: ${checks} exam-dismissal review scenarios against the real academic engine.`);
