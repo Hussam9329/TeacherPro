@@ -31,7 +31,14 @@ const fakeDb = {
     },
   },
   gradeSmartNote: { count: async (args) => { queries.push(["gradeSmartNote", args]); return 4; } },
-  student: { count: async (args) => { queries.push(["student", args]); return args.where.dismissedChecked === false ? 2 : 3; } },
+  student: {
+    count: async (args) => { queries.push(["student", args]); return args.where.dismissedChecked === false ? 2 : 3; },
+    // «رجعوا وكودهم مغلق»: one returned student whose code is still closed.
+    findMany: async (args) => {
+      queries.push(["codeReopens", args]);
+      return [{ id: "r1", name: "طالب راجع", code: "T-9", phone: "07700000009", dismissedCheckEpoch: 4, closurePlatformEpoch: 3, course: { name: "دورة" } }];
+    },
+  },
   studentLeave: {
     findMany: async () => [
       { studentId: "a", leaveType: "period", date: null, dateFrom: new Date("2026-09-20T00:00:00Z"), dateTo: new Date("2099-01-01T00:00:00Z"), exam: null },
@@ -72,6 +79,10 @@ const call = async () => {
   assert.equal(all.currentLeaves, 1, "an ended leave is not a current leave");
   assert.equal(all.currentGracePeriods, 1);
   assert.equal(all.mirmazHoldsPending, 5);
+  assert.deepEqual(all.codeReopens, [{ id: "r1", name: "طالب راجع", code: "T-9", phone: "07700000009", courseName: "دورة", dismissedCheckEpoch: 4 }]);
+  const reopenWhere = queries.find(([name]) => name === "codeReopens")[1].where;
+  assert.equal(reopenWhere.status, "نشط", "only students who are active again");
+  assert.deepEqual(reopenWhere.closurePlatformEpoch, { not: null }, "only codes never marked open");
   assert.deepEqual(queries.find(([name]) => name === "mirmazHold")[1], { where: { status: "PENDING" } }, "only grades still waiting");
   const callQuery = queries.find(([name]) => name === "studentCall")[1];
   assert.equal(callQuery.where.noteResolved, false, "only notes not marked done");

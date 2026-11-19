@@ -13,6 +13,8 @@ export type ShortcutAlerts = {
   currentGracePeriods: number | null;
   /** Older servers do not send it. */
   mirmazHoldsPending?: number | null;
+  /** «رجعوا وكودهم مغلق»; older servers do not send it. */
+  codeReopens?: Array<{ id: string; name: string; code: string; phone: string | null; courseName: string; dismissedCheckEpoch: number }> | null;
   generatedAt: string;
 };
 
@@ -41,6 +43,22 @@ export function refreshShortcutAlerts(): Promise<void> {
       inflight = null;
     });
   return inflight;
+}
+
+/**
+ * The numbers as the page already has them, with no loading of its own: for
+ * the many cards on a screen, while the sidebar keeps the copy fresh.
+ */
+export function useShortcutAlertsSnapshot(): ShortcutAlerts | null {
+  const [alerts, setAlerts] = useState<ShortcutAlerts | null>(current);
+  useEffect(() => {
+    listeners.add(setAlerts);
+    if (current) setAlerts(current);
+    return () => {
+      listeners.delete(setAlerts);
+    };
+  }, []);
+  return alerts;
 }
 
 export function useShortcutAlerts(enabled = true): ShortcutAlerts | null {

@@ -188,6 +188,8 @@ function harness() {
     './withdraw-student-dialog': named(['WithdrawStudentDialog']),
     './code-closures-bulk-bar': named(['CodeClosuresBulkBar']),
     './ui-kit': named(['EmptyState', 'LoadingState']),
+    '@/hooks/use-shortcut-alerts': { useShortcutAlertsSnapshot: () => null },
+    './student-code-buttons': named(['StudentCodeButtons']),
     '@/lib/baghdad-time': loadHelper('@/lib/baghdad-time'),
     '@/lib/format': loadHelper('@/lib/format'),
     '@/lib/reason-display': loadHelper('@/lib/reason-display'),

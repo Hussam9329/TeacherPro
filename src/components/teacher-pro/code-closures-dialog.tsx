@@ -26,6 +26,8 @@ import { formatAppDate } from "@/lib/format";
 import { DateInput } from "@/components/ui/date-input";
 import { displayReasonText } from "@/lib/reason-display";
 import { EmptyState, LoadingState } from "./ui-kit";
+import { useShortcutAlertsSnapshot } from "@/hooks/use-shortcut-alerts";
+import { StudentCodeButtons } from "./student-code-buttons";
 
 type Props = {
   open: boolean;
@@ -49,6 +51,8 @@ const STATUS_FILTERS: Array<{ key: StatusFilter; label: string; tone?: "success"
 
 export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditContacts = false, canWithdraw = false }: Props) {
   const [withdrawTarget, setWithdrawTarget] = useState<{ id: string; name: string } | null>(null);
+  // «رجعوا وكودهم مغلق»: active again, the platform code not marked open yet.
+  const codeReopens = useShortcutAlertsSnapshot()?.codeReopens || [];
   // Cards ticked for the bulk actions; only the ones still shown count.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const filterId = useId();
@@ -484,6 +488,27 @@ export function CodeClosuresDialog({ open, onOpenChange, canManage, canEditConta
               )}
             </div>
           </div>
+
+          {codeReopens.length > 0 && (
+            <section className="tp-modal__section tp-closures__returned" aria-labelledby="tp-closures-returned-title">
+              <h3 id="tp-closures-returned-title" className="tp-modal__title">
+                <LockKeyholeOpen aria-hidden="true" />رجعوا وكودهم مغلق
+                <span className="tp-closures__returned-count">{codeReopens.length}</span>
+              </h3>
+              <p className="tp-closures__returned-hint">انشال عنهم الفصل ورجعوا نشطين. افتح كود كل واحد على المنصة حتى يختفي من القائمة.</p>
+              <ul className="tp-closures__returned-list">
+                {codeReopens.map((student) => (
+                  <li key={student.id}>
+                    <span className="tp-closures__returned-name">
+                      <b>{student.name}</b>
+                      <span><span dir="ltr">{student.code}</span>{student.courseName ? ` · ${student.courseName}` : ""}</span>
+                    </span>
+                    <StudentCodeButtons student={{ id: student.id, name: student.name, phone: student.phone, status: "نشط" }} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {error && <div role="alert" className="tp-modal__error"><AlertCircle aria-hidden="true" /><p>{error}</p></div>}
           {pendingIds.size > 0 && <p role="status" className="tp-modal__status"><Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />جاري حفظ اغلاق الكود...</p>}

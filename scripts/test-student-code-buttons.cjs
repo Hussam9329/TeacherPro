@@ -45,6 +45,8 @@ console.log("PASS: a code is closed by ☢️ in this dismissal or by «الكو
 
 // ── The buttons on a card ─────────────────────────────────────────────────
 let user = { username: "sup", roleId: "role_supervisor" };
+// «رجعوا وكودهم مغلق» as the page holds it.
+let alertsSnapshot = null;
 const calls = [];
 const { StudentCodeButtons } = compile("src/components/teacher-pro/student-code-buttons.tsx", (name) => {
   const mocks = {
@@ -57,6 +59,7 @@ const { StudentCodeButtons } = compile("src/components/teacher-pro/student-code-
     "@/lib/teacher-store": { useTeacherStore: (select) => select({ currentUser: () => user }) },
     "@/lib/teacherpro-sync": { emitTeacherProDataChanged: () => null },
     "@/lib/user-toast": { toast: { error: () => {}, success: () => {} } },
+    "@/hooks/use-shortcut-alerts": { useShortcutAlertsSnapshot: () => alertsSnapshot, refreshShortcutAlerts: async () => calls.push(["refresh"]) },
     "./student-code-buttons.css": {},
   };
   assert(name in mocks, `unexpected dependency: ${name}`);
@@ -78,6 +81,13 @@ assert.deepEqual(buttons(render(dismissed)), { close: { disabled: false, done: f
 assert.deepEqual(buttons(render({ ...dismissed, closurePlatformEpoch: 3 })), { close: { disabled: false, done: true }, open: { disabled: false, done: false } }, "closed code: ☢️ keeps its check and still works, «فتح الكود» works");
 assert.deepEqual(buttons(render({ ...dismissed, dismissedChecked: true, closurePlatformEpoch: 3 })), { close: { disabled: false, done: true }, open: { disabled: false, done: false } });
 for (const status of ["نشط", "مؤرشف"]) assert.equal(render({ ...dismissed, status }), "", `no buttons for a ${status} student`);
+// Returned with the code still closed: the green button alone, until pressed.
+alertsSnapshot = { codeReopens: [{ id: "s1", name: "طالب", code: "T-1", phone: "07705550679", courseName: "", dismissedCheckEpoch: 4 }] };
+assert.deepEqual(buttons(render({ ...dismissed, status: "نشط" })), { open: { disabled: false, done: false } }, "a returned student keeps «فتح الكود» alone");
+assert.match(render({ ...dismissed, status: "نشط" }), /رجع نشطاً وكوده مغلق/);
+assert.equal(render({ ...dismissed, id: "other", status: "نشط" }), "", "an active student not in the list shows nothing");
+assert.deepEqual(buttons(render(dismissed)), { close: { disabled: false, done: false }, open: { disabled: true, done: false } }, "a dismissed student is unchanged by the list");
+alertsSnapshot = null;
 user = { username: "reg", roleId: "role_registrar" };
 assert.deepEqual(buttons(render(dismissed)), { close: { disabled: true, done: false }, open: { disabled: true, done: false } }, "without the right both are off");
 assert.match(render(dismissed), /للأدمن والمشرف فقط/);
@@ -116,6 +126,8 @@ console.log("PASS: سجل الطلاب، المفصولين، الفرص، مل�
     rows.set("s1", { id: "s1", name: "طالب", code: "BIO-1", status: "مفصول", dismissedChecked: true, dismissedCheckEpoch: 3, closurePlatformEpoch: 3, closureTelegramEpoch: 3, opportunities: 0 });
     rows.set("open", { id: "open", name: "مفتوح", code: "BIO-3", status: "مفصول", dismissedChecked: false, dismissedCheckEpoch: 5, closurePlatformEpoch: 4, closureTelegramEpoch: null, opportunities: 0 });
     rows.set("active", { id: "active", name: "نشط", code: "BIO-2", status: "نشط", dismissedChecked: false, dismissedCheckEpoch: 4, closurePlatformEpoch: null, closureTelegramEpoch: null, opportunities: 2 });
+    // Active again, the code closed in the dismissal that ended (episode 3) never marked open.
+    rows.set("returned", { id: "returned", name: "راجع", code: "BIO-4", status: "نشط", dismissedChecked: false, dismissedCheckEpoch: 4, closurePlatformEpoch: 3, closureTelegramEpoch: 3, opportunities: 2 });
   };
   const pick = (row, select) => Object.fromEntries(Object.keys(select).map((key) => [key, row[key]]));
   const tx = {
@@ -124,7 +136,8 @@ console.log("PASS: سجل الطلاب، المفصولين، الفرص، مل�
       updateMany: async ({ where, data }) => {
         const row = rows.get(where.id);
         if (!row || row.status !== where.status || row.dismissedCheckEpoch !== where.dismissedCheckEpoch) return { count: 0 };
-        assert.deepEqual(Object.keys(data).sort(), ["closurePlatformEpoch", "dismissedChecked"], "only ☢️ and «الكود مغلق» are written");
+        assert.deepEqual(Object.keys(data).sort(), row.status === "نشط" ? ["closurePlatformEpoch"] : ["closurePlatformEpoch", "dismissedChecked"],
+          "only ☢️ and «الكود مغلق» are written; a returned student has only the ☢️ mark");
         Object.assign(row, data);
         return { count: 1 };
       },
@@ -164,9 +177,21 @@ console.log("PASS: سجل الطلاب، المفصولين، الفرص، مل�
   assert.equal((await put({ studentId: "s1" })).status, 409, "an episode is required");
   assert.equal((await put({ studentId: "missing", expectedEpoch: 3 })).status, 404);
   assert.equal((await put({ studentId: "s1", expectedEpoch: 2 })).status, 409, "a stale card cannot open the current dismissal");
-  assert.equal((await put({ studentId: "active", expectedEpoch: 4 })).status, 409, "only dismissed students");
+  assert.equal((await put({ studentId: "active", expectedEpoch: 4 })).status, 200, "an active student with no mark: nothing to open");
+  assert.equal((await put({ studentId: "returned", expectedEpoch: 3 })).status, 409, "a stale card cannot open a returned student's code");
+  assert.equal(rows.get("returned").closurePlatformEpoch, 3);
   assert.equal(rows.get("s1").dismissedChecked, true);
   assert.equal(audits.length, 0);
+
+  // «رجعوا وكودهم مغلق»: opening clears the mark the ended dismissal left, with its own audit line.
+  const returnedBefore = { ...rows.get("returned") };
+  const reopened = await put({ studentId: "returned", expectedEpoch: 4 });
+  assert.equal(reopened.status, 200);
+  assert.deepEqual(rows.get("returned"), { ...returnedBefore, closurePlatformEpoch: null }, "status, balance and the notice mark are untouched");
+  assert.deepEqual(audits.map((entry) => entry.action), ["فتح كود الطالب بعد رجوعه"]);
+  assert.equal((await put({ studentId: "returned", expectedEpoch: 4 })).status, 200, "pressing again writes nothing");
+  assert.equal(audits.length, 1);
+  audits.length = 0;
 
   const before = { ...rows.get("s1") };
   const opened = await put({ studentId: "s1", expectedEpoch: 3 });

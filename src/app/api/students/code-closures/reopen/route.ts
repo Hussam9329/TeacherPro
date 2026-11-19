@@ -8,11 +8,14 @@ import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 
 const CODE_REOPENED_ACTION = "فتح كود الطالب المفصول على المنصة";
+const RETURNED_CODE_REOPENED_ACTION = "فتح كود الطالب بعد رجوعه";
 
 /**
  * The green «فتح الكود» button: the code was opened again on the platform, so
  * this dismissal's ☢️ mark and the «الكود مغلق» tick are cleared together and
  * ☢️ can be pressed again. The Telegram notice mark stays (it was sent).
+ * For a student who is active again («رجعوا وكودهم مغلق») it clears the mark
+ * left by the dismissal that closed the code.
  */
 export async function PUT(req: NextRequest) {
   const principal = await requirePermissionPrincipal(req, "students.edit");
@@ -33,6 +36,25 @@ export async function PUT(req: NextRequest) {
         select: { id: true, name: true, code: true, status: true, dismissedChecked: true, dismissedCheckEpoch: true, closurePlatformEpoch: true },
       });
       if (!student) return { status: 404 as const };
+      if (student.status === "نشط" && student.dismissedCheckEpoch === epoch) {
+        if (student.closurePlatformEpoch === null) return { student };
+        const cleared = await tx.student.updateMany({
+          where: { id: student.id, status: "نشط", dismissedCheckEpoch: epoch },
+          data: { closurePlatformEpoch: null },
+        });
+        if (cleared.count !== 1) return { status: 409 as const };
+        await tx.auditLog.create({
+          data: {
+            module: "سجل الطلاب",
+            action: RETURNED_CODE_REOPENED_ACTION,
+            userId: principal.id,
+            userName: principal.name,
+            details: JSON.stringify({ studentId: student.id, name: student.name, code: student.code,
+              before: { closurePlatformEpoch: student.closurePlatformEpoch }, after: { closurePlatformEpoch: null } }),
+          },
+        });
+        return { student: { ...student, closurePlatformEpoch: null } };
+      }
       if (student.status !== "مفصول" || student.dismissedCheckEpoch !== epoch) return { status: 409 as const };
       // Already open: nothing to write or audit.
       if (!student.dismissedChecked && student.closurePlatformEpoch !== epoch) return { student };
