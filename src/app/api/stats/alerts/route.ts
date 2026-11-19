@@ -10,6 +10,7 @@ import { studentScopeWhere } from "@/lib/student-scope";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
 import { graceDateColumn } from "@/lib/grace-periods-server";
 import { summarizeStudentLeaves, summaryMatchesFilter } from "@/lib/student-leave-status";
+import { AWAITING_CODE_REOPEN_SELECT, awaitingCodeReopenWhere } from "@/lib/code-reopen-server";
 
 /**
  * GET /api/stats/alerts
@@ -32,7 +33,18 @@ export type ShortcutAlerts = {
   currentGracePeriods: number | null;
   /** Mirmaz Pro grades waiting to be placed («مرماز برو»). */
   mirmazHoldsPending: number | null;
+  /** «رجعوا وكودهم مغلق»: active again, the platform code not marked open yet. */
+  codeReopens: CodeReopenStudent[] | null;
   generatedAt: string;
+};
+
+export type CodeReopenStudent = {
+  id: string;
+  name: string;
+  code: string;
+  phone: string | null;
+  courseName: string;
+  dismissedCheckEpoch: number;
 };
 
 function can(principal: AuthPrincipal, permissions: string[]) {
@@ -45,7 +57,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const today = baghdadTodayKey();
-    const [callNotesPending, gradeReviewsPending, dismissedStudents, codeClosuresPending, currentLeaves, currentGracePeriods, mirmazHoldsPending] =
+    const [callNotesPending, gradeReviewsPending, dismissedStudents, codeClosuresPending, currentLeaves, currentGracePeriods, mirmazHoldsPending, codeReopens] =
       await Promise.all([
         can(principal, ["follow-up.calls.view", "follow-up.view"])
           ? db.studentCall.findMany({
@@ -93,6 +105,20 @@ export async function GET(req: NextRequest) {
         can(principal, ["grades.add"])
           ? db.mirmazHold.count({ where: { status: "PENDING" } })
           : null,
+        can(principal, ["students.view"])
+          ? db.student.findMany({
+              where: awaitingCodeReopenWhere(),
+              select: AWAITING_CODE_REOPEN_SELECT,
+              orderBy: [{ name: "asc" }, { id: "asc" }],
+            }).then((students) => students.map((student): CodeReopenStudent => ({
+              id: student.id,
+              name: student.name,
+              code: student.code,
+              phone: student.phone,
+              courseName: student.course?.name || "",
+              dismissedCheckEpoch: student.dismissedCheckEpoch,
+            })))
+          : null,
       ]);
 
     const alerts: ShortcutAlerts = {
@@ -103,6 +129,7 @@ export async function GET(req: NextRequest) {
       currentLeaves,
       currentGracePeriods,
       mirmazHoldsPending,
+      codeReopens,
       generatedAt: new Date().toISOString(),
     };
     return NextResponse.json(alerts, { headers: { "Cache-Control": "private, no-store, max-age=0" } });

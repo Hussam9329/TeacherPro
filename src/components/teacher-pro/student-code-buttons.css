@@ -55,6 +55,19 @@
 .tp-code-buttons__open:not(:disabled):hover { background: var(--status-success-solid); color: var(--status-success-on); }
 .tp-code-buttons__open:disabled { opacity: 0.4; filter: grayscale(0.6); }
 
+/* Returned with the code still closed: the green button alone, with its words. */
+.tp-code-buttons > .tp-code-buttons__open--returned {
+  display: inline-flex;
+  gap: 0.4rem;
+  inline-size: auto;
+  min-block-size: 2.4rem;
+  padding-inline: 0.85rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 /* Without the right, both stay visible but quiet. */
 .tp-code-buttons__close:disabled:not([data-done]) { opacity: 0.45; filter: grayscale(0.5); box-shadow: none; }
 

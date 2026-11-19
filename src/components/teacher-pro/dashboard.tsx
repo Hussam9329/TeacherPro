@@ -14,6 +14,7 @@ import {
   Handshake,
   ListChecks,
   LockKeyhole,
+  LockKeyholeOpen,
   MessageSquareText,
   PenLine,
   PhoneCall,
@@ -376,6 +377,9 @@ export function DashboardView({
   const attentionItems: AttentionItem[] = [
     ...(canViewCodeClosures
       ? [{ key: "codes", label: "اغلاق الكودات", hint: "كودات بانتظار الإغلاق", count: alerts?.codeClosuresPending ?? 0, icon: LockKeyhole, onOpen: () => setCodeClosuresOpen(true) }]
+      : []),
+    ...(canViewCodeClosures
+      ? [{ key: "code-reopens", label: "فتح كودات الراجعين", hint: "رجعوا نشطين وكودهم مغلق", count: alerts?.codeReopens?.length ?? 0, icon: LockKeyholeOpen, onOpen: () => setCodeClosuresOpen(true) }]
       : []),
     ...(canViewCallNotes
       ? [{ key: "call-notes", label: "ملاحظات المكالمات", hint: "ملاحظات بانتظار الإنجاز", count: alerts?.callNotesPending ?? 0, icon: ListChecks, onOpen: () => setCallNotesOpen(true) }]

@@ -464,3 +464,14 @@ a.tp-closure-card__telegram[data-done]::after {
   .tp-closures__bulk-actions { margin-inline-start: 0; inline-size: 100%; }
   .tp-closures__bulk-btn { flex: 1 1 auto; justify-content: center; }
 }
+
+/* «رجعوا وكودهم مغلق»: returned students whose platform code still waits to be opened. */
+.tp-closures__returned { border: 1px solid var(--status-success-border); border-radius: 1rem; background: color-mix(in srgb, var(--status-success-bg) 55%, var(--card)); padding: 0.9rem 1rem; }
+.tp-closures__returned .tp-modal__title { display: flex; align-items: center; gap: 0.5rem; color: var(--status-success-fg); }
+.tp-closures__returned .tp-modal__title svg { inline-size: 1.15rem; block-size: 1.15rem; }
+.tp-closures__returned-count { min-inline-size: 1.5rem; padding: 0.05rem 0.45rem; border-radius: 999px; background: var(--status-success-solid); color: var(--status-success-on); font-size: 0.75rem; font-weight: 900; text-align: center; font-variant-numeric: tabular-nums; }
+.tp-closures__returned-hint { margin: 0.25rem 0 0.6rem; color: var(--muted-foreground); font-size: 0.82rem; }
+.tp-closures__returned-list { display: grid; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+.tp-closures__returned-list li { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-inline-size: 0; padding: 0.5rem 0.65rem; border: 1px solid color-mix(in srgb, var(--border) 85%, transparent); border-radius: 0.8rem; background: var(--card); }
+.tp-closures__returned-name { display: grid; min-inline-size: 0; font-size: 0.9rem; overflow-wrap: anywhere; }
+.tp-closures__returned-name > span { color: var(--muted-foreground); font-size: 0.78rem; }
