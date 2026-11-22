@@ -40,9 +40,21 @@ export type MirmazHold = {
   createdAt: string;
   /** When the grade arrived from Mirmaz (its latest arrival while it waits). */
   arrivedAt: string;
+  /** When the corrector sent it on Mirmaz Pro; null for a grade that came without it. */
+  correctedAt: string | null;
+  /** How long the correction took, in seconds; null when unknown. */
+  correctionSeconds: number | null;
 };
 
 export type MirmazHoldsResponse = { holds: MirmazHold[]; counts: Partial<Record<MirmazView, number>>; generatedAt: string };
+
+/** The grade's moment for «من / إلى» and «حسب اليوم»: when it was corrected, or (unknown) when it arrived. */
+export const mirmazGradeMoment = (grade: { correctedAt: string | null; arrivedAt: string }): string => grade.correctedAt ?? grade.arrivedAt;
+
+/** "3:20 د" for a correction that took 200 seconds. */
+export function formatCorrectionDuration(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")} د`;
+}
 
 /** «كل الدرجات» plus the three hold views. */
 export type MirmazView = "ALL" | MirmazHoldStatus;
@@ -63,6 +75,8 @@ export type MirmazLedgerRow = {
   at: string;
   /** When it arrived from Mirmaz: the day it counts on in the stats. */
   arrivedAt: string;
+  correctedAt: string | null;
+  correctionSeconds: number | null;
   /** The grade on the student in TeacherPro now (it may have been changed since). */
   current: { status: string; score: number | null } | null;
 };

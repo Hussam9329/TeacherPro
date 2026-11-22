@@ -390,6 +390,10 @@ model MirmazHold {
   examFullMark      Int?
   mzExamId          String    @default("")
   correctedBy       String    @default("")
+  /// When the corrector sent the paper on Mirmaz Pro (its clock); null for a grade that came without it.
+  correctedAt       DateTime?
+  /// How long the correction took, in seconds; null when unknown.
+  correctionSeconds Int?
   /// JSON: the students the name could be, closest first.
   candidates        String    @default("[]")
   /// JSON: the exams it could be.

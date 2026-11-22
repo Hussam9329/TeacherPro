@@ -4,6 +4,7 @@ import { AUTH_COOKIE_NAME, findUserByUsername, hasPermission, toAuthPrincipal, t
 import { readServerEnv } from "@/lib/bot-integration-auth";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { mintCorrectionSession } from "@/lib/correction-integration-server";
+import { correctionTimeData, type MirmazCorrectionTime } from "@/lib/mirmaz-correction-time";
 import { findStudentsByName } from "@/lib/mirmaz-name-match";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 import { upsertGradeSmartNote } from "@/lib/grade-smart-notes-server";
@@ -225,6 +226,7 @@ export type HoldInput = {
   studentName: string;
   exam: MirmazExam;
   correctedBy: string;
+  time: MirmazCorrectionTime;
   candidates: StudentCandidate[];
   examCandidates: ExamCandidate[];
 };
@@ -235,6 +237,7 @@ export type SavedInput = {
   studentName: string;
   exam: MirmazExam;
   correctedBy: string;
+  time: MirmazCorrectionTime;
   studentId: string;
   examId: string;
   /** Shown with it in «كل الدرجات»: "" for a plain grade, else what happened (a pending note, already there). */
@@ -258,6 +261,7 @@ export async function recordSavedMirmazGrade(input: SavedInput): Promise<void> {
     examFullMark: input.exam.fullMark,
     mzExamId: input.exam.id.slice(0, 40),
     correctedBy: input.correctedBy.slice(0, 120),
+    ...correctionTimeData(input.time),
     candidates: "[]",
     examCandidates: "[]",
     resolvedStudentId: input.studentId,
@@ -285,6 +289,7 @@ export async function holdMirmazGrade(input: HoldInput): Promise<void> {
     examFullMark: input.exam.fullMark,
     mzExamId: input.exam.id.slice(0, 40),
     correctedBy: input.correctedBy.slice(0, 120),
+    ...correctionTimeData(input.time),
     candidates: JSON.stringify(input.candidates),
     examCandidates: JSON.stringify(input.examCandidates),
     resolvedStudentId: null,

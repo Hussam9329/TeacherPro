@@ -14,6 +14,7 @@ import {
   releaseCorrectionKey,
 } from "@/lib/correction-integration-server";
 import { writeAuditLog } from "@/lib/audit-log-server";
+import { readCorrectionTime } from "@/lib/mirmaz-correction-time";
 import {
   earlierPlacement,
   holdMirmazGrade,
@@ -36,7 +37,8 @@ import {
  * that day; then saves it with the grade entry screen's own handler as the
  * «mirmaz» account. Anything not certain is held for «مرماز برو».
  *
- * Body: { answerId, score, student: { name }, exam: { id, name, datetime, fullMark }, correctedBy }
+ * Body: { answerId, score, student: { name }, exam: { id, name, datetime, fullMark }, correctedBy,
+ *         correctedAt?, durationSeconds? } (when the corrector sent it, ISO; how long the correction took)
  * Reply: { ok, stored: "grade" | "already" | "hold", studentName?, examName?, reasonText? }
  * The same paper and score again never saves twice.
  */
@@ -60,6 +62,7 @@ export async function POST(req: NextRequest) {
       fullMark: Number.isInteger(fullMark) && fullMark > 0 ? fullMark : null,
     };
     const correctedBy = readText(body?.correctedBy, 120);
+    const time = readCorrectionTime(body);
     if (!/^\d+$/.test(answerId)) return validationError("answerId مطلوب.");
     if (!studentName) return validationError("اسم الطالب مطلوب.");
     if (!exam.name) return validationError("اسم الامتحان مطلوب.");
@@ -68,7 +71,7 @@ export async function POST(req: NextRequest) {
     }
 
     const hold = async (reason: string, reasonText: string, candidates: StudentCandidate[] = [], examCandidates: ExamCandidate[] = []) => {
-      await holdMirmazGrade({ answerId, reason, reasonText, score, studentName, exam, correctedBy, candidates, examCandidates });
+      await holdMirmazGrade({ answerId, reason, reasonText, score, studentName, exam, correctedBy, time, candidates, examCandidates });
       return NextResponse.json({ ok: true, answerId, stored: "hold", reason, reasonText });
     };
 
@@ -92,7 +95,7 @@ export async function POST(req: NextRequest) {
     const before = await correctionSnapshot(db, studentId, examId);
     const current = before.grade;
     if (current && current.status === "درجة" && current.score === score) {
-      await recordSavedMirmazGrade({ answerId, score, studentName, exam, correctedBy, studentId, examId, note: "الدرجة كانت موجودة أصلاً بنفس القيمة" });
+      await recordSavedMirmazGrade({ answerId, score, studentName, exam, correctedBy, time, studentId, examId, note: "الدرجة كانت موجودة أصلاً بنفس القيمة" });
       return NextResponse.json({ ok: true, answerId, stored: "already" });
     }
     const hasResult = current && (current.score !== null || current.status !== "درجة");
@@ -139,7 +142,7 @@ export async function POST(req: NextRequest) {
     const done = await finishCorrectionKey(key, { status: 200, body: reply });
     key = "";
     await recordSavedMirmazGrade({
-      answerId, score, studentName, exam, correctedBy, studentId, examId,
+      answerId, score, studentName, exam, correctedBy, time, studentId, examId,
       note: pending ? "انحفظت كملاحظة معلّقة (حسب قواعد TeacherPro)" : "",
     });
     await writeAuditLog(account.principal, "الدرجات", "درجة من Mirmaz Pro", { answerId, studentId, examId, score, correctedBy, stored: reply.stored });
