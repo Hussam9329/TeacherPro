@@ -64,6 +64,16 @@ type LedgerRow = {
 };
 
 /**
+ * When the paper's grade arrived from Mirmaz, to the minute. A saved or waiting
+ * row is rewritten on every arrival (its latest); one placed or set aside by
+ * hand keeps its first.
+ */
+function holdArrivedAt(hold: { status: string; resolvedAt: Date | null; updatedAt: Date; createdAt: Date }): Date {
+  if (hold.status === "SAVED") return hold.resolvedAt ?? hold.updatedAt;
+  return hold.status === "PENDING" ? hold.updatedAt : hold.createdAt;
+}
+
+/**
  * Grades that placed themselves before each paper kept its own row (status
  * SAVED): read from their receipts, the newest per paper.
  */
@@ -110,8 +120,7 @@ async function allGrades() {
     examId: hold.resolvedExamId,
     byName: hold.resolvedByName,
     at: (hold.resolvedAt ?? hold.updatedAt).toISOString(),
-    // A saved or waiting row is rewritten on every arrival; one placed or set aside by hand keeps its first.
-    arrivedAt: (hold.status === "SAVED" ? hold.resolvedAt ?? hold.updatedAt : hold.status === "PENDING" ? hold.updatedAt : hold.createdAt).toISOString(),
+    arrivedAt: holdArrivedAt(hold).toISOString(),
   }));
   rows.push(...(await savedBeforeRows(new Set(rows.map((row) => row.answerId)))));
 
@@ -228,6 +237,7 @@ export async function GET(req: NextRequest) {
         examCandidates: parseJson(hold.examCandidates, []),
         resolvedStudentName: hold.resolvedStudentId ? nameOf.get(hold.resolvedStudentId) ?? null : null,
         resolvedExamName: hold.resolvedExamId ? nameOf.get(hold.resolvedExamId) ?? null : null,
+        arrivedAt: holdArrivedAt(hold).toISOString(),
       })),
       counts,
       generatedAt: new Date().toISOString(),

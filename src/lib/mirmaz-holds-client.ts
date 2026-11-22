@@ -38,6 +38,8 @@ export type MirmazHold = {
   resolvedByName: string | null;
   resolvedAt: string | null;
   createdAt: string;
+  /** When the grade arrived from Mirmaz (its latest arrival while it waits). */
+  arrivedAt: string;
 };
 
 export type MirmazHoldsResponse = { holds: MirmazHold[]; counts: Partial<Record<MirmazView, number>>; generatedAt: string };
