@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import {
   MirmazHoldError,
+  formatCorrectionDuration,
+  mirmazGradeMoment,
   mirmazHoldsApi,
   type MirmazArchivedOption,
   type MirmazExamOption,
@@ -18,6 +20,13 @@ import {
   type MirmazStudentOption,
   type MirmazView,
 } from "@/lib/mirmaz-holds-client";
+
+/** "صُححت 22 نوفمبر 2026 · 6:14 م · مدة 3:20 د" and what joins it to the next part; "" for a grade that came without its correction time. */
+function correctedText(grade: { correctedAt: string | null; correctionSeconds: number | null }, joiner = " · "): string {
+  if (!grade.correctedAt) return "";
+  const took = grade.correctionSeconds === null ? "" : ` · مدة ${formatCorrectionDuration(grade.correctionSeconds)}`;
+  return `صُححت ${formatBaghdadDateTime(grade.correctedAt, "")}${took}${joiner}`;
+}
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
 import { normalizeForSearch } from "@/lib/validation";
@@ -107,14 +116,14 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
 
   const visible = useMemo(() => {
     const query = normalizeForSearch(search);
-    const holds = (data?.holds || []).filter((hold) => withinBaghdadRange(hold.arrivedAt, range));
+    const holds = (data?.holds || []).filter((hold) => withinBaghdadRange(mirmazGradeMoment(hold), range));
     return query ? holds.filter((hold) => normalizeForSearch(`${hold.studentName} ${hold.examName}`).includes(query)) : holds;
   }, [data, search, range]);
 
   // «كل الدرجات» inside «من / إلى»; the days, the numbers and the list all follow it.
   const rangedGroups = useMemo(() => (ledger?.groups || []).flatMap((group) => {
     if (!ranged) return [group];
-    const rows = group.rows.filter((row) => withinBaghdadRange(row.arrivedAt, range));
+    const rows = group.rows.filter((row) => withinBaghdadRange(mirmazGradeMoment(row), range));
     return rows.length ? [{ ...group, rows }] : [];
   }), [ledger, range, ranged]);
 
@@ -123,7 +132,7 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
     const byDay = new Map<string, { count: number; exams: Set<string> }>();
     for (const group of rangedGroups) {
       for (const row of group.rows) {
-        const key = baghdadDateKey(row.arrivedAt);
+        const key = baghdadDateKey(mirmazGradeMoment(row));
         if (!key) continue;
         const entry = byDay.get(key) ?? { count: 0, exams: new Set<string>() };
         entry.count += 1;
@@ -139,7 +148,7 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
     const query = normalizeForSearch(search);
     const groups = rangedGroups.flatMap((group) => {
       if (!picked.length) return [group];
-      const rows = group.rows.filter((row) => picked.includes(baghdadDateKey(row.arrivedAt)));
+      const rows = group.rows.filter((row) => picked.includes(baghdadDateKey(mirmazGradeMoment(row))));
       return rows.length ? [{ ...group, rows }] : [];
     });
     if (!query) return groups;
@@ -198,9 +207,9 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
             ))}
           </div>
 
-          <div className="tp-mirmaz__range" role="group" aria-label="حسب وقت الوصول">
+          <div className="tp-mirmaz__range" role="group" aria-label="حسب وقت التصحيح، أو الوصول إذا ما معروف">
             <label className="tp-mirmaz__range-field">
-              <span>وصلت من</span>
+              <span>صُححت من</span>
               <Input type="datetime-local" dir="ltr" value={range.from} max={range.to || undefined} onChange={(event) => setRange((current) => ({ ...current, from: event.target.value }))} />
             </label>
             <label className="tp-mirmaz__range-field">
@@ -224,7 +233,7 @@ export function MirmazProDialog({ open, onOpenChange }: Props) {
             ) : loaded && empty ? (
               <EmptyState
                 icon={search.trim() ? Search : view === "PENDING" ? CheckCheck : Inbox}
-                title={search.trim() ? "ماكو نتائج للبحث" : ranged ? "ماكو درجات وصلت بهذا الوقت" : view === "PENDING" ? "ماكو درجات بانتظار المعالجة" : view === "ALL" ? "ما وصلت درجات من مرماز بعد" : "ماكو شي هنا"}
+                title={search.trim() ? "ماكو نتائج للبحث" : ranged ? "ماكو درجات بهذا الوقت" : view === "PENDING" ? "ماكو درجات بانتظار المعالجة" : view === "ALL" ? "ما وصلت درجات من مرماز بعد" : "ماكو شي هنا"}
               />
             ) : view === "ALL" ? (
               <>
@@ -528,7 +537,7 @@ function HoldCard({ hold, onHandled }: { hold: MirmazHold; onHandled: (message: 
           {busy === "reject" ? <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <X className="size-4" aria-hidden="true" />}
           ترك
         </Button>
-        <span className="tp-mirmaz__when">وصلت {formatBaghdadDateTime(hold.arrivedAt, "")}</span>
+        <span className="tp-mirmaz__when">{correctedText(hold)}وصلت {formatBaghdadDateTime(hold.arrivedAt, "")}</span>
       </div>
     </article>
   );
@@ -645,6 +654,7 @@ function LedgerRowItem({ row, onHandle }: { row: MirmazLedgerRow; onHandle: () =
         <small>
           {row.tpStudentName && row.studentName && normalizeForSearch(row.studentName) !== normalizeForSearch(row.tpStudentName) && <span>بمرماز: {row.studentName}</span>}
           {row.correctedBy && <span>صححها: {row.correctedBy}</span>}
+          {row.correctedAt && <span>{correctedText(row, "")}</span>}
           <span>وصلت {formatBaghdadDateTime(row.arrivedAt, "")}</span>
           {(row.status === "RESOLVED" || row.status === "REJECTED") && <span>عولجت {formatBaghdadDateTime(row.at, "")}</span>}
         </small>
@@ -677,7 +687,7 @@ function DoneCard({ hold }: { hold: MirmazHold }) {
           : <>انتركت</>}
         {hold.resolvedByName && <> · {hold.resolvedByName}</>}
         {hold.resolvedAt && <> · {formatBaghdadDateTime(hold.resolvedAt, "")}</>}
-        <> · وصلت {formatBaghdadDateTime(hold.arrivedAt, "")}</>
+        <> · {correctedText(hold)}وصلت {formatBaghdadDateTime(hold.arrivedAt, "")}</>
       </p>
     </article>
   );

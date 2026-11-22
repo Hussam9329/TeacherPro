@@ -11,7 +11,7 @@ import {
  * column used by the application. Keep this in sync with the newest migration.
  */
 export const REQUIRED_DATABASE_MIGRATION =
-  '20261027120000_archived_pending_smart_note';
+  '20261122120000_mirmaz_corrected_at';
 
 const SCHEMA_NOT_READY_MESSAGE =
   'نسخة قاعدة البيانات أقدم من نسخة النظام. يلزم مسؤول النظام تطبيق تحديثات قاعدة البيانات قبل إعادة المحاولة.';

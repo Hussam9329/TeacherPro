@@ -61,6 +61,9 @@ type LedgerRow = {
   at: string;
   /** When the grade arrived from Mirmaz (its latest arrival, for a paper corrected again): the day it counts on in the stats. */
   arrivedAt: string;
+  /** When the corrector sent it on Mirmaz Pro, and how long the correction took; null when it came without them. */
+  correctedAt: string | null;
+  correctionSeconds: number | null;
 };
 
 /**
@@ -97,6 +100,7 @@ async function savedBeforeRows(known: Set<string>): Promise<LedgerRow[]> {
       note: stored.body?.stored === "pending_note" ? "انحفظت كملاحظة معلّقة (حسب قواعد TeacherPro)" : "",
       studentId: receipt.studentId, examId: receipt.examId, byName: "تلقائي",
       at: receipt.createdAt.toISOString(), arrivedAt: receipt.createdAt.toISOString(),
+      correctedAt: null, correctionSeconds: null,
     });
   }
   return rows;
@@ -121,6 +125,8 @@ async function allGrades() {
     byName: hold.resolvedByName,
     at: (hold.resolvedAt ?? hold.updatedAt).toISOString(),
     arrivedAt: holdArrivedAt(hold).toISOString(),
+    correctedAt: hold.correctedAt?.toISOString() ?? null,
+    correctionSeconds: hold.correctionSeconds,
   }));
   rows.push(...(await savedBeforeRows(new Set(rows.map((row) => row.answerId)))));
 
