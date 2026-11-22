@@ -233,3 +233,8 @@
   .tp-mirmaz__cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tp-mirmaz__row-side { justify-content: flex-start; }
 }
+
+/* «وصلت من / إلى»: the arrival time, to the minute. */
+.tp-mirmaz__range { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem; }
+.tp-mirmaz__range-field { display: grid; gap: 0.25rem; flex: 1 1 12rem; min-inline-size: 0; font-size: 0.8rem; font-weight: 700; color: var(--muted-foreground); }
+.tp-mirmaz__range-field input { min-inline-size: 0; font-variant-numeric: tabular-nums; }

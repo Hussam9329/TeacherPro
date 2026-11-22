@@ -19,6 +19,7 @@
     "test:calls-integrity": "node scripts/test-calls-integrity.mjs && node --test scripts/test-call-absence-behavior.mjs && node scripts/test-call-batches-behavior.cjs && npm run test:call-history-migration",
     "test:student-withdrawal": "node scripts/test-student-withdrawal.cjs",
     "test:student-unwithdrawal": "node scripts/test-student-unwithdrawal.cjs",
+    "test:mirmaz-arrival-times": "node scripts/test-mirmaz-arrival-times.cjs",
     "test:mirmaz-background-tab": "node scripts/test-mirmaz-background-tab.cjs",
     "test:bulk-duplicate-match": "node scripts/test-bulk-duplicate-match.cjs",
     "test:telegram-extractor": "node scripts/test-telegram-extractor.cjs",
